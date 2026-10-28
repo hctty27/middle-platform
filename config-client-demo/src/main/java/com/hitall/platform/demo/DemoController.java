@@ -20,7 +20,7 @@ public class DemoController {
 
     @GetMapping("/nodes")
     public List<Map<String, Object>> nodes() {
-        return jdbc.queryForList("SELECT id,parent_id,node_type,code,name,status FROM config_node ORDER BY id");
+        return jdbc.queryForList("SELECT id,game_id,region_id,server_group_id,channel_id,node_type,code,name,status FROM config_node ORDER BY id");
     }
 
     @GetMapping("/revision")

@@ -103,13 +103,16 @@ public class ClientSynchronizer {
 
     private void upsert(Node node) {
         jdbc.update("""
-                INSERT INTO config_node(id,parent_id,node_type,code,name,status,config,remark,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?)
-                ON DUPLICATE KEY UPDATE parent_id=VALUES(parent_id),node_type=VALUES(node_type),
-                    code=VALUES(code),name=VALUES(name),status=VALUES(status),config=VALUES(config),
-                    remark=VALUES(remark),created_at=VALUES(created_at),updated_at=VALUES(updated_at)
-                """, node.id(), node.parentId(), node.nodeType(), node.code(), node.name(),
-                node.status(), node.config(), node.remark(), node.createdAt(), node.updatedAt());
+                INSERT INTO config_node(id,game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE game_id=VALUES(game_id),region_id=VALUES(region_id),
+                    server_group_id=VALUES(server_group_id),channel_id=VALUES(channel_id),
+                    node_type=VALUES(node_type),code=VALUES(code),name=VALUES(name),
+                    status=VALUES(status),config=VALUES(config),remark=VALUES(remark),
+                    created_at=VALUES(created_at),updated_at=VALUES(updated_at)
+                """, node.id(), node.gameId(), node.regionId(), node.serverGroupId(), node.channelId(),
+                node.nodeType(), node.code(), node.name(), node.status(), node.config(), node.remark(),
+                node.createdAt(), node.updatedAt());
     }
 
     public record State(String epoch, long revision) {}
@@ -117,7 +120,9 @@ public class ClientSynchronizer {
     public record Snapshot(String epoch, long revision, List<Node> nodes) {}
     public record Event(long revision, long nodeId, String operation, LocalDateTime createdAt) {}
     public record Ids(List<Long> ids) {}
-    public record Node(long id, long parentId, String nodeType, String code, String name,
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public record Node(long id, String nodeType, Long gameId, Long regionId,
+                       Long serverGroupId, Long channelId, String code, String name,
                        int status, String config, String remark,
                        LocalDateTime createdAt, LocalDateTime updatedAt) {}
 }

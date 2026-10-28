@@ -2,13 +2,11 @@ package com.hitall.platform.config.node;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -35,8 +33,11 @@ public class ConfigNodeService {
 
     private static final RowMapper<ConfigNode> NODE_MAPPER = (rs, row) -> new ConfigNode(
             rs.getLong("id"),
-            rs.getLong("parent_id"),
             rs.getString("node_type"),
+            rs.getObject("game_id", Long.class),
+            rs.getObject("region_id", Long.class),
+            rs.getObject("server_group_id", Long.class),
+            rs.getObject("channel_id", Long.class),
             rs.getString("code"),
             rs.getString("name"),
             rs.getInt("status"),
@@ -46,18 +47,21 @@ public class ConfigNodeService {
             rs.getTimestamp("updated_at").toLocalDateTime()
     );
 
-    private static final RowMapper<NodeSummary> SUMMARY_MAPPER = (rs, row) -> new NodeSummary(
-            rs.getLong("id"),
-            rs.getLong("parent_id"),
-            rs.getString("node_type"),
-            rs.getString("code"),
-            rs.getString("name"),
-            rs.getInt("status"),
-            "server_group".equals(rs.getString("node_type"))
-    );
+    private static final RowMapper<NodeSummary> SUMMARY_MAPPER = (rs, row) -> {
+        String type = rs.getString("node_type");
+        return new NodeSummary(
+                rs.getLong("id"),
+                ConfigNode.parentId(type, rs.getObject("game_id", Long.class),
+                        rs.getObject("region_id", Long.class),
+                        rs.getObject("server_group_id", Long.class),
+                        rs.getObject("channel_id", Long.class)),
+                type, rs.getString("code"), rs.getString("name"),
+                rs.getInt("status"), "server_group".equals(type)
+        );
+    };
 
     private static final String SUMMARY_COLUMNS =
-            "n.id,n.parent_id,n.node_type,n.code,n.name,n.status";
+            "n.id,n.node_type,n.game_id,n.region_id,n.server_group_id,n.channel_id,n.code,n.name,n.status";
 
     private final JdbcTemplate jdbc;
 
@@ -72,25 +76,49 @@ public class ConfigNodeService {
     /**
      * 管理端导航仅加载前三层的轻量节点，不读取 JSON 配置。
      */
-    public List<NodeSummary> treeChildren(long parentId) {
+    /**
+     * 根据节点类型解析直属子项的固定层级条件，不再读取 parent_id 列。
+     */
+    private ChildScope childScope(long parentId) {
         validateParentId(parentId);
+        if (parentId == 0) return new ChildScope("n.node_type='game'", List.of());
+        List<String> types = jdbc.query("SELECT node_type FROM config_node WHERE id=?",
+                (rs, row) -> rs.getString(1), parentId);
+        if (types.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Parent not found");
+        return switch (types.getFirst()) {
+            case "game" -> new ChildScope("n.node_type='region' AND n.game_id=?", List.of(parentId));
+            case "region" -> new ChildScope("n.node_type='server_group' AND n.region_id=?", List.of(parentId));
+            case "server_group" -> new ChildScope("n.node_type='channel' AND n.server_group_id=?", List.of(parentId));
+            case "channel" -> new ChildScope("n.node_type='sdk_app' AND n.channel_id=?", List.of(parentId));
+            case "sdk_app" -> new ChildScope("1=0", List.of());
+            default -> throw badRequest("Invalid parent node type");
+        };
+    }
+
+    private record ChildScope(String condition, List<Object> params) {}
+
+    /**
+     * 管理端导航仅加载前三层的轻量节点，不读取 JSON 配置。
+     */
+    public List<NodeSummary> treeChildren(long parentId) {
+        ChildScope scope = childScope(parentId);
         return jdbc.query("SELECT " + SUMMARY_COLUMNS +
-                        " FROM config_node n WHERE n.parent_id=? AND n.node_type IN ('game','region','server_group')" +
-                        " ORDER BY n.id", SUMMARY_MAPPER, parentId);
+                " FROM config_node n WHERE " + scope.condition() +
+                " AND n.node_type IN ('game','region','server_group') ORDER BY n.id",
+                SUMMARY_MAPPER, scope.params().toArray());
     }
 
     /**
      * 仅查询直属子项，支持关键词过滤及服务端分页。
      */
     public NodePage children(long parentId, int page, int size, String keyword) {
-        validateParentId(parentId);
         if (page < 1 || size < 1 || size > 100) throw badRequest("Invalid pagination");
         String word = keyword == null ? "" : keyword.trim();
         if (word.length() > 128) throw badRequest("Keyword too long");
 
-        String condition = " FROM config_node n WHERE n.parent_id=?";
-        List<Object> params = new ArrayList<>();
-        params.add(parentId);
+        ChildScope scope = childScope(parentId);
+        String condition = " FROM config_node n WHERE " + scope.condition();
+        List<Object> params = new ArrayList<>(scope.params());
         if (!word.isEmpty()) {
             condition += " AND (n.name LIKE ? ESCAPE '!' OR n.code LIKE ? ESCAPE '!')";
             String pattern = "%" + word.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
@@ -141,22 +169,29 @@ public class ConfigNodeService {
             throw badRequest("Invalid code");
         }
         lockRevision();
-        validateParent(input.parentId(), input.nodeType());
+        Ancestry ancestry = ancestryFromParent(input.parentId(), input.nodeType());
         KeyHolder key = new GeneratedKeyHolder();
-        jdbc.update(connection -> {
-            PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO config_node(parent_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
-                    "VALUES (?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            statement.setLong(1, input.parentId());
-            statement.setString(2, input.nodeType());
-            statement.setString(3, input.code());
-            statement.setString(4, input.name());
-            statement.setInt(5, input.status());
-            statement.setString(6, input.config());
-            statement.setString(7, input.remark());
-            return statement;
-        }, key);
+        try {
+            jdbc.update(connection -> {
+                PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO config_node(game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                        Statement.RETURN_GENERATED_KEYS);
+                statement.setObject(1, ancestry.gameId());
+                statement.setObject(2, ancestry.regionId());
+                statement.setObject(3, ancestry.serverGroupId());
+                statement.setObject(4, ancestry.channelId());
+                statement.setString(5, input.nodeType());
+                statement.setString(6, input.code());
+                statement.setString(7, input.name());
+                statement.setInt(8, input.status());
+                statement.setString(9, input.config());
+                statement.setString(10, input.remark());
+                return statement;
+            }, key);
+        } catch (DuplicateKeyException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate sibling code", exception);
+        }
         long id = key.getKey().longValue();
         recordChange(id, "UPSERT");
         return get(id);
@@ -183,8 +218,10 @@ public class ConfigNodeService {
     public void delete(long id) {
         lockRevision();
         get(id);
+        ChildScope scope = childScope(id);
         Long children = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM config_node WHERE parent_id=?", Long.class, id);
+                "SELECT COUNT(*) FROM config_node n WHERE " + scope.condition(),
+                Long.class, scope.params().toArray());
         if (children != null && children > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Delete children first");
         }
@@ -218,19 +255,28 @@ public class ConfigNodeService {
                 after, limit);
     }
 
-    // 父节点类型必须匹配 game → region → server_group → channel → sdk_app。
-    private void validateParent(long parentId, String nodeType) {
+    private record Ancestry(Long gameId, Long regionId, Long serverGroupId, Long channelId) {}
+
+    // 父节点只作为创建接口参数；数据库保存的是由服务端推导的完整祖先路径。
+    private Ancestry ancestryFromParent(long parentId, String nodeType) {
         if ("game".equals(nodeType)) {
             if (parentId != 0) throw badRequest("Game parentId must be 0");
-            return;
+            return new Ancestry(null, null, null, null);
         }
         String expected = PARENTS.get(nodeType);
         if (expected == null || parentId <= 0) throw badRequest("Invalid nodeType/parentId");
-        List<String> parents = jdbc.query("SELECT node_type FROM config_node WHERE id=?",
-                (rs, row) -> rs.getString(1), parentId);
-        if (parents.isEmpty() || !expected.equals(parents.getFirst())) {
+        List<ConfigNode> parents = jdbc.query("SELECT * FROM config_node WHERE id=?", NODE_MAPPER, parentId);
+        if (parents.isEmpty() || !expected.equals(parents.getFirst().nodeType())) {
             throw badRequest("Invalid parent node type");
         }
+        ConfigNode parent = parents.getFirst();
+        return switch (nodeType) {
+            case "region" -> new Ancestry(parent.id(), null, null, null);
+            case "server_group" -> new Ancestry(parent.gameId(), parent.id(), null, null);
+            case "channel" -> new Ancestry(parent.gameId(), parent.regionId(), parent.id(), null);
+            case "sdk_app" -> new Ancestry(parent.gameId(), parent.regionId(), parent.serverGroupId(), parent.id());
+            default -> throw badRequest("Invalid node type");
+        };
     }
 
     private void validateFields(String name, Integer status, String json, String remark) {
