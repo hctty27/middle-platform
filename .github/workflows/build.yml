@@ -15,7 +15,78 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      java: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.java == 'true' || steps.filter.outputs.shared == 'true' || steps.filter.outputs.unknown == 'true' }}
+      admin: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.admin == 'true' || steps.filter.outputs.shared == 'true' || steps.filter.outputs.unknown == 'true' }}
+      integration: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.integration == 'true' || steps.filter.outputs.shared == 'true' || steps.filter.outputs.unknown == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Identify affected modules
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          base: ${{ github.ref }}
+          predicate-quantifier: some-with-excludes
+          filters: |
+            java:
+              - 'config-center-server/**'
+              - 'config-client-starter/**'
+              - 'config-client-demo/**'
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle.properties'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'gradlew.bat'
+            admin:
+              - 'config-center-admin/**'
+            integration:
+              - 'config-center-server/**'
+              - 'config-client-starter/**'
+              - 'config-client-demo/**'
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle.properties'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - 'scripts/**'
+              - 'deploy/**'
+            shared:
+              - '.github/**'
+              - '.gitignore'
+            unknown:
+              - '**'
+              - '!config-center-admin/**'
+              - '!config-center-server/**'
+              - '!config-client-starter/**'
+              - '!config-client-demo/**'
+              - '!build.gradle.kts'
+              - '!settings.gradle.kts'
+              - '!gradle.properties'
+              - '!gradle/**'
+              - '!gradlew'
+              - '!gradlew.bat'
+              - '!scripts/**'
+              - '!deploy/**'
+              - '!.github/**'
+              - '!.gitignore'
+              - '!README.md'
+              - '!docs/**'
+
   java:
+    needs: changes
+    if: ${{ needs.changes.outputs.java == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -27,6 +98,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - run: ./gradlew build --no-daemon
   admin:
+    needs: changes
+    if: ${{ needs.changes.outputs.admin == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -41,6 +114,8 @@ jobs:
       - run: npm run build
         working-directory: config-center-admin
   integration:
+    needs: changes
+    if: ${{ needs.changes.outputs.integration == 'true' }}
     name: MySQL + multi-instance + Webhook E2E
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -80,3 +155,56 @@ jobs:
         run: ./gradlew :config-center-server:bootJar :config-client-demo:bootJar --no-daemon
       - name: Test two config-center instances, MySQL, callback and recovery
         run: python3 scripts/ci_smoke.py
+
+  ci-gate:
+    name: CI Gate
+    needs: [changes, java, admin, integration]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify required jobs succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          JAVA_EXPECTED: ${{ needs.changes.outputs.java }}
+          JAVA_RESULT: ${{ needs.java.result }}
+          ADMIN_EXPECTED: ${{ needs.changes.outputs.admin }}
+          ADMIN_RESULT: ${{ needs.admin.result }}
+          INTEGRATION_EXPECTED: ${{ needs.changes.outputs.integration }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "::error::Change detection failed: $CHANGES_RESULT"
+            exit 1
+          fi
+
+          check_job() {
+            local label="$1" expected="$2" result="$3"
+            case "$expected" in
+              true)
+                if [[ "$result" != "success" ]]; then
+                  echo "::error::$label must pass, but was $result"
+                  return 1
+                fi
+                ;;
+              false)
+                if [[ "$result" != "skipped" ]]; then
+                  echo "::error::$label should be skipped, but was $result"
+                  return 1
+                fi
+                ;;
+              *)
+                echo "::error::$label has an invalid change-detection result: $expected"
+                return 1
+                ;;
+            esac
+            echo "$label: $result (required=$expected)"
+          }
+
+          status=0
+          check_job "Java" "$JAVA_EXPECTED" "$JAVA_RESULT" || status=1
+          check_job "Vue" "$ADMIN_EXPECTED" "$ADMIN_RESULT" || status=1
+          check_job "MySQL/Webhook E2E" "$INTEGRATION_EXPECTED" "$INTEGRATION_RESULT" || status=1
+          exit "$status"
