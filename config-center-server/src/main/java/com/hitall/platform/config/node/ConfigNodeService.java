@@ -2,8 +2,6 @@ package com.hitall.platform.config.node;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -191,7 +189,7 @@ public class ConfigNodeService {
                 statement.setString(10, input.remark());
                 return statement;
             }, key);
-            } catch (DuplicateKeyException exception) {
+        } catch (DuplicateKeyException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate sibling code", exception);
         }
         long id = key.getKey().longValue();
