@@ -10,6 +10,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * 接收配置中心的 Webhook 通知。
+ * 先校验时间戳与 HMAC 签名，再触发接入方主动同步配置。
+ */
 @RestController
 public class ConfigCallbackController {
     private final ClientSynchronizer synchronizer;
@@ -21,6 +25,7 @@ public class ConfigCallbackController {
         this.properties = properties;
     }
 
+    // 通知只作为同步触发信号，不直接信任请求体中的配置数据。
     @PostMapping("/internal/config/callback")
     public void notify(@RequestHeader("X-Config-Timestamp") String timestamp,
                        @RequestHeader("X-Config-Signature") String signature,
@@ -29,6 +34,7 @@ public class ConfigCallbackController {
         synchronizer.synchronize();
     }
 
+    // 拒绝时间偏差超过 5 分钟的请求，并使用常量时间比较验证签名。
     private void verify(String timestamp, String signature, Notification notification) {
         try {
             long sentAt = Long.parseLong(timestamp);

@@ -52,6 +52,7 @@ const nextType: Partial<Record<NodeType, NodeType>> = {
   game: 'region', region: 'server_group', server_group: 'channel', channel: 'sdk_app'
 }
 
+// 将平铺的节点列表组装为树形结构，节点层级由 parentId 确定。
 const tree = computed<TreeNode[]>(() => {
   const byId = new Map<number, TreeNode>()
   for (const n of nodes.value) byId.set(n.id, { ...n, children: [] })
@@ -63,6 +64,7 @@ const tree = computed<TreeNode[]>(() => {
   }
   return roots
 })
+// 搜索命中子节点时仍保留其父节点，确保搜索结果具备完整导航路径。
 const filteredTree = computed(() => {
   if (!search.value.trim()) return tree.value
   const word = search.value.trim().toLowerCase()
@@ -75,6 +77,7 @@ const filteredTree = computed(() => {
 })
 const pathInfo = computed(() => selected.value ? labels[selected.value.nodeType] + ' / ' + selected.value.code : '新建配置')
 
+// 同时读取配置节点与全局版本，刷新后尽量保留当前选中的节点。
 async function refresh() {
   loading.value = true
   try {
@@ -104,6 +107,7 @@ function newGame() {
   editing.value = true
   Object.assign(form, { parentId: 0, nodeType: 'game', code: '', name: '', status: 1, config: '{}', remark: '' })
 }
+// 新建子节点只能选择当前节点类型允许的下一层级。
 function newChild() {
   if (!selected.value) return
   const type = nextType[selected.value.nodeType]
@@ -113,6 +117,7 @@ function newChild() {
   editing.value = true
   Object.assign(form, { parentId: id, nodeType: type, code: '', name: '', status: 1, config: '{}', remark: '' })
 }
+// 保存前先校验 JSON；新建与更新接口分别提交不同字段。
 async function save() {
   if (!form.name.trim() || (editing.value && !form.code.trim())) {
     ElMessage.warning('请填写名称和编码')
@@ -149,6 +154,7 @@ async function remove() {
     ElMessage.error('删除失败，请先删除子节点')
   }
 }
+// 接入方列表包含已确认版本和失败次数，用于排查同步状态。
 async function loadSubscribers() {
   try {
     subscribers.value = (await api.get<Subscriber[]>('/admin/subscribers')).data

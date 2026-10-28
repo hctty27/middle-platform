@@ -2,6 +2,10 @@ package com.hctty.platform.client;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * 接入服务的配置中心连接参数。
+ * baseUrl 指向配置中心，webhookSecret 用于验证回调请求签名。
+ */
 @ConfigurationProperties(prefix = "config.client")
 public class ConfigClientProperties {
     private boolean enabled;

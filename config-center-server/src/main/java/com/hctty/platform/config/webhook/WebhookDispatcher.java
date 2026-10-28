@@ -13,6 +13,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * 定时发送配置变更通知。
+ * Webhook 只携带 epoch 和 revision，接入方收到通知后主动拉取配置。
+ */
 @Component
 public class WebhookDispatcher {
     private final DeliveryRepository repository;
@@ -27,6 +31,7 @@ public class WebhookDispatcher {
                 .followRedirects(HttpClient.Redirect.NEVER).build();
     }
 
+    // 每个实例均可执行轮询；实际投递由数据库租约协调，失败留待下次重试。
     @Scheduled(fixedDelayString = "${config.webhook.poll-delay-ms:3000}")
     public void dispatch() {
         repository.claim().ifPresent(delivery -> {
@@ -39,6 +44,7 @@ public class WebhookDispatcher {
         });
     }
 
+    // 签名内容为 timestamp.epoch.revision，接收端使用共享密钥校验请求。
     private void send(DeliveryRepository.Delivery delivery) throws Exception {
         long timestamp = Instant.now().getEpochSecond();
         String body = "{\"epoch\":\"" + delivery.epoch() + "\",\"revision\":" + delivery.revision() + "}";
@@ -53,6 +59,7 @@ public class WebhookDispatcher {
                 .header("X-Config-Signature", "sha256=" + signature)
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build();
         HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
+        // 只有 2xx 才视为成功，其他 HTTP 状态交由投递仓储记录失败并重试。
         if (response.statusCode() / 100 != 2) {
             throw new IllegalStateException("HTTP " + response.statusCode());
         }

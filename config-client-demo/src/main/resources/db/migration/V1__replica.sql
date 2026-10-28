@@ -1,3 +1,4 @@
+-- 接入方本地配置副本，由 Starter 根据快照和增量事件维护。
 CREATE TABLE config_node (
     id BIGINT NOT NULL PRIMARY KEY,
     parent_id BIGINT NOT NULL,
@@ -12,6 +13,7 @@ CREATE TABLE config_node (
     KEY idx_config_node_parent (parent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 本地同步游标：epoch 与 revision 必须和副本数据一起提交。
 CREATE TABLE config_sync_state (
     id TINYINT NOT NULL PRIMARY KEY,
     epoch CHAR(36),

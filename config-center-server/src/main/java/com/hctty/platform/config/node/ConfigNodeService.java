@@ -18,8 +18,13 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * 配置节点的读写与版本管理。
+ * 配置变更与全局版本、变更日志在同一事务中提交，供接入方增量同步。
+ */
 @Service
 public class ConfigNodeService {
+    // 各节点类型的合法父类型；game 为根节点，其 parentId 必须为 0。
     private static final Map<String, String> PARENTS = Map.of(
             "region", "game",
             "server_group", "region",
@@ -64,6 +69,9 @@ public class ConfigNodeService {
                 NODE_MAPPER, ids.toArray());
     }
 
+    /**
+     * 创建配置节点，校验层级关系后写入节点，并记录一次 UPSERT 变更。
+     */
     @Transactional
     public ConfigNode create(CreateNodeRequest input) {
         validateFields(input.name(), input.status(), input.config(), input.remark());
@@ -92,6 +100,9 @@ public class ConfigNodeService {
         return get(id);
     }
 
+    /**
+     * 更新节点的可编辑属性；不允许通过该接口改变层级和节点编码。
+     */
     @Transactional
     public ConfigNode update(long id, UpdateNodeRequest input) {
         validateFields(input.name(), input.status(), input.config(), input.remark());
@@ -103,6 +114,9 @@ public class ConfigNodeService {
         return get(id);
     }
 
+    /**
+     * 删除叶子节点并记录 DELETE 事件；存在子节点时拒绝删除。
+     */
     @Transactional
     public void delete(long id) {
         lockRevision();
@@ -116,6 +130,9 @@ public class ConfigNodeService {
         recordChange(id, "DELETE");
     }
 
+    /**
+     * 读取同一事务视图下的版本号和全部节点，用于客户端全量初始化或恢复。
+     */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ConfigSnapshot snapshot() {
         RevisionInfo info = revision();
@@ -127,6 +144,9 @@ public class ConfigNodeService {
                 (rs, row) -> new RevisionInfo(rs.getString("epoch"), rs.getLong("revision")));
     }
 
+    /**
+     * 按版本顺序分页返回变更事件；调用方以 revision 为游标连续拉取。
+     */
     public List<ChangeEvent> changes(long after, int limit) {
         if (after < 0 || limit < 1 || limit > 500) throw badRequest("Invalid cursor or limit");
         return jdbc.query("SELECT revision,node_id,operation,created_at FROM config_change_log " +
@@ -136,6 +156,7 @@ public class ConfigNodeService {
                 after, limit);
     }
 
+    // 父节点类型必须匹配 game → region → server_group → channel → sdk_app。
     private void validateParent(long parentId, String nodeType) {
         if ("game".equals(nodeType)) {
             if (parentId != 0) throw badRequest("Game parentId must be 0");
@@ -159,10 +180,12 @@ public class ConfigNodeService {
         if (isValid == null || isValid != 1) throw badRequest("Invalid JSON");
     }
 
+    // 写事务先锁定单行版本记录，保证并发变更按顺序分配全局 revision。
     private long lockRevision() {
         return jdbc.queryForObject("SELECT revision FROM config_revision WHERE id=1 FOR UPDATE", Long.class);
     }
 
+    // 版本递增与事件入库在调用方的写事务内完成，避免节点变更与日志脱节。
     private void recordChange(long nodeId, String operation) {
         jdbc.update("UPDATE config_revision SET revision=revision+1 WHERE id=1");
         Long revision = jdbc.queryForObject("SELECT revision FROM config_revision WHERE id=1", Long.class);

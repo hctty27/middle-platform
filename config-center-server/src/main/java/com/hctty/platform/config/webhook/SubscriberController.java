@@ -15,6 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * 接入方订阅配置管理接口。
+ * 创建订阅者时校验回调目标，并初始化该订阅者的投递状态。
+ */
 @RestController
 @RequestMapping("/api/v1/admin/subscribers")
 public class SubscriberController {
@@ -41,6 +45,7 @@ public class SubscriberController {
                         rs.getInt(6), rs.getString(7)));
     }
 
+    // 回调仅允许白名单主机；非本机地址必须使用 HTTPS，避免任意回调目标。
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
@@ -63,6 +68,7 @@ public class SubscriberController {
                         "VALUES(?,?,?,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
                 request.code(), request.callbackUrl(), request.secret());
         Long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        // 为新订阅者建立独立游标，后续由投递任务判断是否有未通知版本。
         jdbc.update("INSERT INTO config_delivery_state(subscriber_id,next_attempt_at,updated_at) " +
                 "VALUES(?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))", id);
     }
