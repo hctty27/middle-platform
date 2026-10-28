@@ -1,4 +1,4 @@
-package com.hctty.platform.client;
+package com.hitall.platform.client;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

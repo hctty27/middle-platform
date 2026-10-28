@@ -1,4 +1,4 @@
-package com.hctty.platform.demo;
+package com.hitall.platform.demo;
 
 import java.util.List;
 import java.util.Map;

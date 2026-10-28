@@ -1,4 +1,4 @@
-package com.hctty.platform.demo;
+package com.hitall.platform.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -1,4 +1,4 @@
-package com.hctty.platform.client;
+package com.hitall.platform.client;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

@@ -1,4 +1,4 @@
-package com.hctty.platform.client;
+package com.hitall.platform.client;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
