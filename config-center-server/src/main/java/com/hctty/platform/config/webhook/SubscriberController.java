@@ -52,9 +52,10 @@ public class SubscriberController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid callback URI");
         }
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme();
         if (!allowedHosts.contains(host) || uri.getUserInfo() != null ||
-                !(uri.getScheme().equalsIgnoreCase("https") ||
-                        (uri.getScheme().equalsIgnoreCase("http") &&
+                !(scheme.equalsIgnoreCase("https") ||
+                        (scheme.equalsIgnoreCase("http") &&
                                 Set.of("localhost", "127.0.0.1").contains(host)))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Callback host not allowlisted or HTTPS required");
         }
