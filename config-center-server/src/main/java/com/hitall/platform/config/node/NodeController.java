@@ -24,6 +24,26 @@ public class NodeController {
         return service.list();
     }
 
+    @GetMapping("/admin/nodes/tree")
+    public List<ConfigNodeService.NodeSummary> treeChildren(
+            @RequestParam(defaultValue = "0") long parentId) {
+        return service.treeChildren(parentId);
+    }
+
+    @GetMapping("/admin/nodes/children")
+    public ConfigNodeService.NodePage children(
+            @RequestParam long parentId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "") String keyword) {
+        return service.children(parentId, page, size, keyword);
+    }
+
+    @GetMapping("/admin/nodes/{id}")
+    public ConfigNode detail(@PathVariable long id) {
+        return service.get(id);
+    }
+
     @PostMapping("/admin/nodes")
     @ResponseStatus(HttpStatus.CREATED)
     public ConfigNode create(@Valid @RequestBody CreateNodeRequest request) {
