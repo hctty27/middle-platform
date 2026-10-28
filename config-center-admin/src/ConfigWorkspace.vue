@@ -185,6 +185,9 @@ async function searchAll() {
 
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
+  searchController?.abort()
+  ++searchSequence
+  searchMatches.value = []
   if (!searchWord.value.trim()) {
     void searchAll()
     return
@@ -431,7 +434,7 @@ onBeforeUnmount(() => {
           <small>Code: {{ match.node.code }}</small>
         </button>
       </div>
-      <div v-else ref="treeScrollRef" class="tree-scroll">
+      <div v-show="!searchWord.trim()" ref="treeScrollRef" class="tree-scroll">
         <el-tree :key="treeVersion" ref="treeRef" node-key="id" lazy :load="loadTree"
                  :props="treeProps" :default-expanded-keys="expandedKeys"
                  :current-node-key="selected?.id" highlight-current
