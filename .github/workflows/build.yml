@@ -26,3 +26,45 @@ jobs:
         working-directory: config-center-admin
       - run: npm run build
         working-directory: config-center-admin
+  integration:
+    name: MySQL + multi-instance + Webhook E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: integration-test
+          MYSQL_DATABASE: config_center
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pintegration-test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=25
+    env:
+      CONFIG_DB_URL: jdbc:mysql://127.0.0.1:3306/config_center?connectionTimeZone=UTC
+      CONFIG_DB_USER: root
+      CONFIG_DB_PASSWORD: integration-test
+      DEMO_DB_URL: jdbc:mysql://127.0.0.1:3306/config_demo?connectionTimeZone=UTC
+      DEMO_DB_USER: root
+      DEMO_DB_PASSWORD: integration-test
+      CONFIG_CENTER_URL: http://127.0.0.1:8080
+      CONFIG_WEBHOOK_SECRET: ci-signed-webhook-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
+      - name: Prepare isolated demo database
+        run: |
+          docker exec "$(docker ps --filter 'ancestor=mysql:8.4' --format '{{.ID}}' | head -n 1)" mysql -uroot -pintegration-test -e "CREATE DATABASE config_demo CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+      - name: Package executable services
+        run: gradle :config-center-server:bootJar :config-client-demo:bootJar --no-daemon
+      - name: Test two config-center instances, MySQL, callback and recovery
+        run: python3 scripts/ci_smoke.py
