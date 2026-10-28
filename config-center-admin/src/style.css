@@ -1,0 +1,13 @@
+:root{font-family:Inter,"PingFang SC","Microsoft Yahei",sans-serif;color:#172033;background:#f6f8fc;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}body{margin:0}.shell{display:flex;min-height:100vh}.sidebar{width:220px;background:#111d31;color:#e1e8f4;display:flex;flex-direction:column;padding:24px 12px;flex-shrink:0}
+.brand{display:flex;gap:11px;align-items:center;padding:4px 14px 32px}.brand-mark{width:36px;height:36px;border-radius:10px;background:#3c74f4;color:white;display:grid;place-items:center;font-weight:800}
+.brand strong{font-size:17px;display:block}.brand small{font-size:10px;letter-spacing:1.5px;color:#8b9bb6;display:block;margin-top:4px}
+.group-title{padding:0 14px 12px;color:#7286a8;font-size:12px}.sidebar button{background:transparent;border:0;color:#b1c0d9;text-align:left;border-radius:9px;padding:12px 14px;cursor:pointer;font-size:14px;margin:2px 0}
+.sidebar button:hover,.sidebar button.active{background:#233954;color:#fff}.sidebar-bottom{margin-top:auto;padding:18px 12px 0;font-size:11px;color:#8297b2}.main{flex:1;min-width:0}
+.topbar{height:80px;background:white;border-bottom:1px solid #e7eaf0;display:flex;justify-content:space-between;align-items:center;padding:0 30px}.topbar strong{font-size:18px}.subline{font-size:12px;color:#8c96a5;margin-left:18px}.top-right{display:flex;align-items:center;gap:12px}
+.workspace{display:grid;grid-template-columns:330px minmax(0,1fr);gap:20px;padding:24px;min-height:calc(100vh - 80px)}.tree-panel,.editor-panel,.content-panel{background:#fff;border:1px solid #e8ecf2;border-radius:14px;box-shadow:0 3px 16px #22365a08;padding:23px}
+.panel-title{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.muted{color:#8a97a8;font-size:12px;margin-top:5px}.tip{margin:-10px 0 20px}
+.node-row{display:flex;justify-content:space-between;width:100%;align-items:center;padding-right:8px;font-size:13px}.tree-panel .el-tree{margin-top:22px}.tree-panel .el-tree-node__content{height:36px;border-radius:6px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 18px}.node-form{max-width:960px}.actions{display:flex;justify-content:flex-end}.content-panel{margin:24px;min-height:350px}
+.json-input textarea{font-family:"JetBrains Mono",Consolas,monospace!important;line-height:1.7;background:#f9fafc}
+@media(max-width:1000px){.sidebar{width:170px}.workspace{grid-template-columns:1fr}.tree-panel{min-height:250px}.subline{display:none}}

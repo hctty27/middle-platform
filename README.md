@@ -1,7 +1,25 @@
 # Middle Platform · 研发中台
 
-配置中心采用 JDK 25 + Spring Boot 4 + Gradle 9、单 MySQL 权威库、无状态多实例、Webhook 轻量版本通知、客户端按需拉取变更节点。
+基于 **JDK 25 + Spring Boot 4.1.2 + Gradle 9.8.2 + MySQL** 的研发中台配置中心。前端使用 Vue 3。
 
-管理端采用 Vue 3，不提供登录、账号和角色权限功能。**管理 API 必须只允许通过可信内网或受控网关访问，严禁无防护公开暴露。**
+## 组成
 
-模块规划：`config-center-server`、`config-center-admin`、`config-client-starter`、`config-client-demo`。
+- `config-center-server`：多实例无状态服务，共用一个权威 MySQL，管理五级配置树与变更日志。
+- `config-center-admin`：无需登录的管理页（仅限可信网络部署）。
+- `config-client-starter`：接入工程，Webhook 触发拉取、增量补偿、本地副本。
+- `config-client-demo`：接入示例工程。
+
+## 同步协议
+
+配置变更与单调递增 `revision`、`config_change_log` 同事务提交。Webhook 仅发送 `epoch` 和最新 `revision`；接入方查询变更 ID 并批量读取最新节点，事务更新本地副本和游标。删除使用 `DELETE` 事件。持久化投递、失败重试、断线补偿、全量初始化。详见 `docs/architecture.md`。
+
+## 本地启动
+
+1. JDK 25，MySQL 8.0+。
+2. 使用 Gradle 9.8.2：`gradle :config-center-server:bootRun`。配置 `CONFIG_DB_URL`、`CONFIG_DB_USER` 和 `CONFIG_DB_PASSWORD`。
+3. 管理页：`cd config-center-admin && npm install && npm run dev`。
+4. Demo 使用独立数据库，通过 `CONFIG_CENTER_URL` 访问服务。参考各模块配置。
+
+**重要：不实现用户登录和角色权限。所有配置管理接口相当于管理员级权限，必须限制到受信任的内网/网关。Webhook 必须由接入方验证签名，禁止任意内网回调 URL。**
+
+当前开发分支的实现状态以 PR 和测试结果为准。
