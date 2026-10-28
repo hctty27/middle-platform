@@ -50,7 +50,8 @@ public class ClientSynchronizer {
             Set<Long> ids = new LinkedHashSet<>();
             for (Event event : events) {
                 if (event.revision() != ++cursor) {
-                    throw new IllegalStateException("Missing revision after " + (cursor - 1));
+                    resetFromSnapshot();
+                    return;
                 }
                 ids.add(event.nodeId());
             }
@@ -68,8 +69,16 @@ public class ClientSynchronizer {
             if (events.length < 200) break;
         }
         if (cursor < head.revision()) {
-            throw new IllegalStateException("Change history missing, full rebuild required");
+            resetFromSnapshot();
         }
+    }
+
+    private void resetFromSnapshot() {
+        Snapshot snapshot = remote.get().uri("/api/v1/sync/snapshot").retrieve().body(Snapshot.class);
+        if (snapshot == null) throw new IllegalStateException("Missing snapshot");
+        jdbc.update("DELETE FROM config_node");
+        for (Node node : snapshot.nodes()) upsert(node);
+        moveCursor(snapshot.epoch(), snapshot.revision());
     }
 
     private void moveCursor(String epoch, long revision) {
