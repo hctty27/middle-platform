@@ -16,8 +16,8 @@
 ## 本地启动
 
 1. JDK 25，MySQL 8.0+。
-2. 使用 Gradle 9.8.2：`gradle :config-center-server:bootRun`。配置 `CONFIG_DB_URL`、`CONFIG_DB_USER` 和 `CONFIG_DB_PASSWORD`。
-3. 管理页：`cd config-center-admin && npm install && npm run dev`。
+2. 通过 Gradle Wrapper 启动：Linux/macOS 执行 `./gradlew :config-center-server:bootRun`，Windows 执行 `gradlew.bat :config-center-server:bootRun`。首次运行会自动下载 Gradle 9.8.2。配置 `CONFIG_DB_URL`、`CONFIG_DB_USER` 和 `CONFIG_DB_PASSWORD`。
+3. 管理页：`cd config-center-admin && npm ci && npm run dev`。
 4. Demo 使用独立数据库，通过 `CONFIG_CENTER_URL` 访问服务。参考各模块配置。
 
 **重要：不实现用户登录和角色权限。所有配置管理接口相当于管理员级权限，必须限制到受信任的内网/网关。Webhook 必须由接入方验证签名，禁止任意内网回调 URL。**
