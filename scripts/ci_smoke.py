@@ -10,7 +10,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 
 PROCESSES = []
 LOGS = []
@@ -34,10 +33,12 @@ def request(port, path, method="GET", data=None, expected=200):
     return json.loads(body) if body else None
 
 
-def wait_until(label, predicate, seconds=75):
+def wait_until(label, predicate, seconds=75, process=None):
     end = time.monotonic() + seconds
     last = None
     while time.monotonic() < end:
+        if process is not None and process.poll() is not None:
+            raise AssertionError(f"{label}: process exited with code {process.returncode}")
         try:
             result = predicate()
             if result:
@@ -117,12 +118,20 @@ def synchronized_nodes(count, revision):
 
 def main():
     center1 = start("center-1", "config-center-server", 8080)
-    wait_until("primary config-center ready", lambda: request(8080, "/actuator/health")["status"] == "UP")
-    center2 = start("center-2", "config-center-server", 8082)
-    wait_until("second config-center ready", lambda: request(8082, "/actuator/health")["status"] == "UP")
+    wait_until("primary config-center ready",
+               lambda: request(8080, "/actuator/health")["status"] == "UP",
+               process=center1)
 
+    # The primary instance has completed schema migration; the second instance
+    # and demo use separate databases and can initialize concurrently.
+    center2 = start("center-2", "config-center-server", 8082)
     demo = start("demo", "config-client-demo", 8081)
-    wait_until("client demo ready", lambda: request(8081, "/demo/revision") is not None)
+    wait_until("second config-center ready",
+               lambda: request(8082, "/actuator/health")["status"] == "UP",
+               process=center2)
+    wait_until("client demo ready",
+               lambda: request(8081, "/demo/revision") is not None,
+               process=demo)
     request(8080, "/api/v1/admin/subscribers", "POST", {
         "code": "ci-demo",
         "callbackUrl": "http://127.0.0.1:8081/internal/config/callback",
@@ -173,7 +182,7 @@ def main():
     wait_until("offline client catches up to authority",
                lambda: any(row["id"] == ids[0] and row["name"] == "changed-while-offline"
                            for row in replica()) and subscriber()["acknowledgedRevision"] >= latest,
-               seconds=90)
+               seconds=90, process=demo)
 
     # Deletion must remove the local replica, not just disappear from batch-get.
     request(8082, f"/api/v1/admin/nodes/{ids[-1]}", "DELETE", expected=204)
