@@ -1,0 +1,15 @@
+server:
+  port: ${CONFIG_CLIENT_PORT:8081}
+spring:
+  application:
+    name: config-client-demo
+  datasource:
+    url: ${DEMO_DB_URL:jdbc:mysql://localhost:3306/config_demo?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC}
+    username: ${DEMO_DB_USER:root}
+    password: ${DEMO_DB_PASSWORD:}
+config:
+  client:
+    enabled: true
+    base-url: ${CONFIG_CENTER_URL:http://localhost:8080}
+    webhook-secret: ${CONFIG_WEBHOOK_SECRET:change-me-in-development}
+    reconcile-ms: 300000

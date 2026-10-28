@@ -16,5 +16,6 @@ management:
         include: health,info
 config:
   webhook:
+    allowed-hosts: ${WEBHOOK_ALLOWED_HOSTS:localhost,127.0.0.1}
     poll-delay-ms: 3000
     request-timeout-seconds: 5
