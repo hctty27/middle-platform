@@ -40,13 +40,7 @@ public class ClientSynchronizer {
         // 首次接入、epoch 改变或本地版本超前时，旧游标不可复用，必须全量重建。
         if (state.epoch() == null || !state.epoch().equals(head.epoch()) ||
                 state.revision() > head.revision()) {
-            Snapshot snapshot = remote.get().uri("/api/v1/sync/snapshot")
-                    .retrieve().body(Snapshot.class);
-            if (snapshot == null) throw new IllegalStateException("Missing snapshot");
-            jdbc.update("DELETE FROM config_node");
-            for (Node node : snapshot.nodes()) upsert(node);
-            moveCursor(snapshot.epoch(), snapshot.revision());
-            state = new State(snapshot.epoch(), snapshot.revision());
+            state = resetFromSnapshot();
         }
 
         // 正常情况按 revision 顺序分页读取事件，每次最多处理 200 条。
@@ -88,12 +82,13 @@ public class ClientSynchronizer {
     }
 
     // 全量恢复时先清空本地副本，再写入服务端快照及对应游标。
-    private void resetFromSnapshot() {
+    private State resetFromSnapshot() {
         Snapshot snapshot = remote.get().uri("/api/v1/sync/snapshot").retrieve().body(Snapshot.class);
         if (snapshot == null) throw new IllegalStateException("Missing snapshot");
         jdbc.update("DELETE FROM config_node");
         for (Node node : snapshot.nodes()) upsert(node);
         moveCursor(snapshot.epoch(), snapshot.revision());
+        return new State(snapshot.epoch(), snapshot.revision());
     }
 
     private void moveCursor(String epoch, long revision) {

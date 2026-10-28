@@ -72,7 +72,6 @@ let originalForm = ''
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let childTimer: ReturnType<typeof setTimeout> | undefined
 let searchSequence = 0
-let selectionSequence = 0
 let detailSequence = 0
 let childSequence = 0
 let searchController: AbortController | undefined
@@ -225,7 +224,6 @@ async function loadChildren() {
 
 async function choose(node: NodeSummary, path: NodeSummary[]) {
   if (!(await confirmDiscard())) return false
-  ++selectionSequence
   ++detailSequence
   detailController?.abort()
   drawerVisible.value = false

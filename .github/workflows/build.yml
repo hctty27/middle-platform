@@ -153,6 +153,8 @@ jobs:
           docker exec "$(docker ps --filter 'ancestor=mysql:8.4' --format '{{.ID}}' | head -n 1)" mysql -uroot -pintegration-test -e "CREATE DATABASE config_demo CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
       - name: Package executable services
         run: ./gradlew :config-center-server:bootJar :config-client-demo:bootJar --no-daemon
+      - name: Test V1 legacy schema and ancestor migration
+        run: python3 scripts/ci_migration_smoke.py
       - name: Test two config-center instances, MySQL, callback and recovery
         run: python3 scripts/ci_smoke.py
 

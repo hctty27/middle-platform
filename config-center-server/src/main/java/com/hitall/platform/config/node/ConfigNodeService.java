@@ -74,9 +74,6 @@ public class ConfigNodeService {
     }
 
     /**
-     * 管理端导航仅加载前三层的轻量节点，不读取 JSON 配置。
-     */
-    /**
      * 根据节点类型解析直属子项的固定层级条件，不再读取 parent_id 列。
      */
     private ChildScope childScope(long parentId) {
@@ -204,7 +201,14 @@ public class ConfigNodeService {
     public ConfigNode update(long id, UpdateNodeRequest input) {
         validateFields(input.name(), input.status(), input.config(), input.remark());
         lockRevision();
-        get(id);
+        ConfigNode current = get(id);
+        Boolean unchanged = jdbc.queryForObject("""
+                SELECT (name <=> ?) AND (status <=> ?) AND (remark <=> ?)
+                       AND (config = CAST(? AS JSON))
+                  FROM config_node WHERE id=?
+                """, Boolean.class, input.name(), input.status(), input.remark(), input.config(), id);
+        if (Boolean.TRUE.equals(unchanged)) return current;
+
         jdbc.update("UPDATE config_node SET name=?,status=?,config=?,remark=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?",
                 input.name(), input.status(), input.config(), input.remark(), id);
         recordChange(id, "UPSERT");
