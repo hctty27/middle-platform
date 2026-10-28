@@ -29,7 +29,9 @@ public class DeliveryRepository {
                 FROM config_delivery_state d
                 JOIN config_subscriber s ON s.id=d.subscriber_id
                 JOIN config_revision r ON r.id=1
-                WHERE s.enabled=1 AND d.acknowledged_revision<r.revision
+                WHERE s.enabled=1
+                  AND (d.acknowledged_epoch IS NULL OR d.acknowledged_epoch<>r.epoch
+                       OR d.acknowledged_revision<r.revision)
                   AND d.next_attempt_at<=UTC_TIMESTAMP(6)
                   AND (d.lease_until IS NULL OR d.lease_until<UTC_TIMESTAMP(6))
                 ORDER BY d.next_attempt_at,d.subscriber_id
@@ -46,16 +48,19 @@ public class DeliveryRepository {
     }
 
     /**
-     * 投递成功后推进已确认版本，并清除租约及失败记录。
+     * 投递成功后推进已确认 epoch + revision，并清除租约及失败记录。
      */
     public void delivered(Delivery delivery) {
         jdbc.update("""
                 UPDATE config_delivery_state
-                   SET acknowledged_revision=GREATEST(acknowledged_revision,?),
+                   SET acknowledged_revision=CASE WHEN acknowledged_epoch=?
+                               THEN GREATEST(acknowledged_revision,?) ELSE ? END,
+                       acknowledged_epoch=?,
                        lease_owner=NULL,lease_until=NULL,failure_count=0,last_error=NULL,
                        next_attempt_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6)
                  WHERE subscriber_id=? AND lease_owner=?
-                """, delivery.revision(), delivery.subscriberId(), delivery.leaseId());
+                """, delivery.epoch(), delivery.revision(), delivery.revision(),
+                delivery.epoch(), delivery.subscriberId(), delivery.leaseId());
     }
 
     /**

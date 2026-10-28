@@ -10,7 +10,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 
 PROCESSES = []
 LOGS = []
@@ -199,6 +198,15 @@ def main():
     wait_until("second instance update propagated",
                lambda: any(row["id"] == ids[-1] and row["name"] == "updated-by-second-instance"
                            and row["status"] == 0 for row in replica()))
+    # 相同内容（包括 JSON 格式变化）不应产生 revision 或 updated_at 的变化。
+    before_noop = request(8080, "/api/v1/sync/revision")["revision"]
+    unchanged = request(8082, f"/api/v1/admin/nodes/{ids[-1]}", "PUT", {
+        "name": "updated-by-second-instance", "status": 0,
+        "config": '{ "enabled" : false }', "remark": "Updated on node 2"
+    })
+    assert unchanged["name"] == "updated-by-second-instance", unchanged
+    assert request(8080, "/api/v1/sync/revision")["revision"] == before_noop
+    print("PASS semantic no-op update does not increment revision", flush=True)
     before_bad = request(8080, "/api/v1/sync/revision")["revision"]
     request(8080, "/api/v1/admin/nodes", "POST", {
         "parentId": ids[0], "nodeType": "sdk_app",
@@ -227,6 +235,30 @@ def main():
                lambda: any(row["id"] == ids[0] and row["name"] == "changed-while-offline"
                            for row in replica()) and subscriber()["acknowledgedRevision"] >= latest,
                seconds=90)
+
+
+    # 数据集 epoch 单独变更，即使 revision 未变也必须重新通知接入方。
+    container = subprocess.check_output(
+        ["docker", "ps", "--filter", "ancestor=mysql:8.4", "--format", "{{.ID}}"],
+        text=True).strip().splitlines()[0]
+
+    def mysql(sql):
+        return subprocess.check_output(
+            ["docker", "exec", container, "mysql", "-uroot", "-pintegration-test",
+             "-N", "-B", "-e", sql], text=True, stderr=subprocess.DEVNULL).strip()
+
+    old_head = request(8080, "/api/v1/sync/revision")
+    mysql("UPDATE config_center.config_revision SET epoch=UUID() WHERE id=1")
+    changed_head = request(8080, "/api/v1/sync/revision")
+    assert changed_head["epoch"] != old_head["epoch"], changed_head
+    assert changed_head["revision"] == old_head["revision"], changed_head
+    wait_until("epoch-only change triggers Webhook acknowledgement",
+               lambda: mysql("SELECT acknowledged_epoch FROM config_center.config_delivery_state "
+                             "WHERE subscriber_id=(SELECT id FROM config_center.config_subscriber "
+                             "WHERE code='ci-demo')") == changed_head["epoch"], seconds=75)
+    wait_until("client rebuilt snapshot for new epoch",
+               lambda: request(8081, "/demo/revision")["epoch"] == changed_head["epoch"], seconds=75)
+    print("PASS epoch-only change triggers notification and full snapshot", flush=True)
 
     # Deletion must remove the local replica, not just disappear from batch-get.
     request(8082, f"/api/v1/admin/nodes/{ids[-1]}", "DELETE", expected=204)
