@@ -1,4 +1,4 @@
-package com.hctty.platform.config.webhook;
+package com.hitall.platform.config.webhook;
 
 import java.net.URI;
 import java.net.http.HttpClient;

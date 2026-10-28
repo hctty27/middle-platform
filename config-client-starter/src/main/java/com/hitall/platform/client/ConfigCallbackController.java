@@ -1,4 +1,4 @@
-package com.hctty.platform.client;
+package com.hitall.platform.client;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

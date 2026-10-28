@@ -1,3 +1,3 @@
-package com.hctty.platform.config.node;
+package com.hitall.platform.config.node;
 
 public record RevisionInfo(String epoch, long revision) {}

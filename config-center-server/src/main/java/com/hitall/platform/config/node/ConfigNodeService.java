@@ -1,4 +1,4 @@
-package com.hctty.platform.config.node;
+package com.hitall.platform.config.node;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;

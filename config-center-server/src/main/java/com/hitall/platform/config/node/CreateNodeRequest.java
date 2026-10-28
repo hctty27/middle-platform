@@ -1,4 +1,4 @@
-package com.hctty.platform.config.node;
+package com.hitall.platform.config.node;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
