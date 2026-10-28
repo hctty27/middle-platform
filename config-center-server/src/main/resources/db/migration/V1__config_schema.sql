@@ -1,3 +1,5 @@
+-- 权威配置节点表：game → region → server_group → channel → sdk_app。
+-- 同级节点 code 唯一；父节点类型合法性由写服务进一步校验。
 CREATE TABLE config_node (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     parent_id BIGINT NOT NULL,
@@ -16,6 +18,8 @@ CREATE TABLE config_node (
     CONSTRAINT chk_config_node_status CHECK (status IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 全局版本记录：固定只有 id=1 的一行，revision 每次变更递增。
+-- epoch 标识数据世代，用于识别数据库重建或版本体系变化。
 CREATE TABLE config_revision (
     id TINYINT NOT NULL PRIMARY KEY,
     revision BIGINT NOT NULL,
@@ -25,6 +29,7 @@ CREATE TABLE config_revision (
 
 INSERT INTO config_revision (id, revision, epoch) VALUES (1, 0, UUID());
 
+-- 增量事件日志：只记录 revision、node_id 和操作类型，不重复保存完整节点数据。
 CREATE TABLE config_change_log (
     revision BIGINT NOT NULL PRIMARY KEY,
     node_id BIGINT NOT NULL,
@@ -34,6 +39,7 @@ CREATE TABLE config_change_log (
     CONSTRAINT chk_change_operation CHECK (operation IN ('UPSERT', 'DELETE'))
 ) ENGINE=InnoDB;
 
+-- 接入方订阅信息：保存回调地址、共享密钥及启用状态。
 CREATE TABLE config_subscriber (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL UNIQUE,
@@ -44,6 +50,7 @@ CREATE TABLE config_subscriber (
     updated_at DATETIME(6) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 每个接入方独立的投递游标、重试时间和租约状态，用于多实例协调。
 CREATE TABLE config_delivery_state (
     subscriber_id BIGINT NOT NULL PRIMARY KEY,
     acknowledged_revision BIGINT NOT NULL DEFAULT 0,

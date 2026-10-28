@@ -5,6 +5,10 @@ import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 示例应用对外展示本地配置副本及同步进度。
+ * 以下接口读取本地数据库，不会直接调用配置中心。
+ */
 @RestController
 @RequestMapping("/demo")
 public class DemoController {

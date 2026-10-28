@@ -14,6 +14,7 @@ management:
     web:
       exposure:
         include: health,info
+# Webhook 的允许主机、轮询周期和请求超时均由配置中心控制。
 config:
   webhook:
     allowed-hosts: ${WEBHOOK_ALLOWED_HOSTS:localhost,127.0.0.1}
