@@ -4,6 +4,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -45,6 +46,19 @@ public class ConfigNodeService {
             rs.getTimestamp("updated_at").toLocalDateTime()
     );
 
+    private static final RowMapper<NodeSummary> SUMMARY_MAPPER = (rs, row) -> new NodeSummary(
+            rs.getLong("id"),
+            rs.getLong("parent_id"),
+            rs.getString("node_type"),
+            rs.getString("code"),
+            rs.getString("name"),
+            rs.getInt("status"),
+            "server_group".equals(rs.getString("node_type"))
+    );
+
+    private static final String SUMMARY_COLUMNS =
+            "n.id,n.parent_id,n.node_type,n.code,n.name,n.status";
+
     private final JdbcTemplate jdbc;
 
     public ConfigNodeService(JdbcTemplate jdbc) {
@@ -54,6 +68,54 @@ public class ConfigNodeService {
     public List<ConfigNode> list() {
         return jdbc.query("SELECT * FROM config_node ORDER BY id", NODE_MAPPER);
     }
+
+    /**
+     * 管理端导航仅加载前三层的轻量节点，不读取 JSON 配置。
+     */
+    public List<NodeSummary> treeChildren(long parentId) {
+        validateParentId(parentId);
+        return jdbc.query("SELECT " + SUMMARY_COLUMNS +
+                        " FROM config_node n WHERE n.parent_id=? AND n.node_type IN ('game','region','server_group')" +
+                        " ORDER BY n.id", SUMMARY_MAPPER, parentId);
+    }
+
+    /**
+     * 仅查询直属子项，支持关键词过滤及服务端分页。
+     */
+    public NodePage children(long parentId, int page, int size, String keyword) {
+        validateParentId(parentId);
+        if (page < 1 || size < 1 || size > 100) throw badRequest("Invalid pagination");
+        String word = keyword == null ? "" : keyword.trim();
+        if (word.length() > 128) throw badRequest("Keyword too long");
+
+        String condition = " FROM config_node n WHERE n.parent_id=?";
+        List<Object> params = new ArrayList<>();
+        params.add(parentId);
+        if (!word.isEmpty()) {
+            condition += " AND (n.name LIKE ? ESCAPE '!' OR n.code LIKE ? ESCAPE '!')";
+            String pattern = "%" + word.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+            params.add(pattern);
+            params.add(pattern);
+        }
+
+        Long total = jdbc.queryForObject("SELECT COUNT(*)" + condition, Long.class, params.toArray());
+        List<Object> pageParams = new ArrayList<>(params);
+        pageParams.add(size);
+        pageParams.add(((long) page - 1) * size);
+        List<NodeSummary> items = jdbc.query("SELECT " + SUMMARY_COLUMNS + condition +
+                        " ORDER BY n.id LIMIT ? OFFSET ?", SUMMARY_MAPPER, pageParams.toArray());
+        return new NodePage(items, total == null ? 0L : total, page, size);
+    }
+
+    private static void validateParentId(long parentId) {
+        if (parentId < 0) throw badRequest("Invalid parentId");
+    }
+
+    public record NodeSummary(
+            long id, long parentId, String nodeType, String code, String name, int status, boolean leaf
+    ) {}
+
+    public record NodePage(List<NodeSummary> items, long total, int page, int size) {}
 
     public ConfigNode get(long id) {
         return jdbc.query("SELECT * FROM config_node WHERE id=?", NODE_MAPPER, id)

@@ -10,6 +10,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 PROCESSES = []
 LOGS = []
@@ -33,12 +34,10 @@ def request(port, path, method="GET", data=None, expected=200):
     return json.loads(body) if body else None
 
 
-def wait_until(label, predicate, seconds=75, process=None):
+def wait_until(label, predicate, seconds=75):
     end = time.monotonic() + seconds
     last = None
     while time.monotonic() < end:
-        if process is not None and process.poll() is not None:
-            raise AssertionError(f"{label}: process exited with code {process.returncode}")
         try:
             result = predicate()
             if result:
@@ -118,20 +117,12 @@ def synchronized_nodes(count, revision):
 
 def main():
     center1 = start("center-1", "config-center-server", 8080)
-    wait_until("primary config-center ready",
-               lambda: request(8080, "/actuator/health")["status"] == "UP",
-               process=center1)
-
-    # The primary instance has completed schema migration; the second instance
-    # and demo use separate databases and can initialize concurrently.
+    wait_until("primary config-center ready", lambda: request(8080, "/actuator/health")["status"] == "UP")
     center2 = start("center-2", "config-center-server", 8082)
+    wait_until("second config-center ready", lambda: request(8082, "/actuator/health")["status"] == "UP")
+
     demo = start("demo", "config-client-demo", 8081)
-    wait_until("second config-center ready",
-               lambda: request(8082, "/actuator/health")["status"] == "UP",
-               process=center2)
-    wait_until("client demo ready",
-               lambda: request(8081, "/demo/revision") is not None,
-               process=demo)
+    wait_until("client demo ready", lambda: request(8081, "/demo/revision") is not None)
     request(8080, "/api/v1/admin/subscribers", "POST", {
         "code": "ci-demo",
         "callbackUrl": "http://127.0.0.1:8081/internal/config/callback",
@@ -150,6 +141,22 @@ def main():
     history = request(8082, "/api/v1/sync/changes?afterRevision=0&limit=100")
     assert [event["revision"] for event in history] == list(range(1, 6)), history
     print("PASS five-level tree and cluster-wide ordered revisions", flush=True)
+    # Navigation endpoints must return small summaries without any JSON configuration.
+    roots = request(8080, "/api/v1/admin/nodes/tree?parentId=0")
+    assert len(roots) == 1 and roots[0]["id"] == ids[0], roots
+    assert "config" not in roots[0] and roots[0]["leaf"] is False, roots
+    regions = request(8080, f"/api/v1/admin/nodes/tree?parentId={ids[0]}")
+    assert len(regions) == 1 and regions[0]["id"] == ids[1], regions
+    groups = request(8080, f"/api/v1/admin/nodes/tree?parentId={ids[1]}")
+    assert len(groups) == 1 and groups[0]["id"] == ids[2] and groups[0]["leaf"], groups
+    assert request(8080, f"/api/v1/admin/nodes/tree?parentId={ids[2]}") == []
+    page = request(8080, f"/api/v1/admin/nodes/children?parentId={ids[2]}&page=1&size=1&keyword=ci-channel")
+    assert page["total"] == 1 and len(page["items"]) == 1, page
+    assert page["items"][0]["id"] == ids[3] and "config" not in page["items"][0], page
+    assert request(8080, f"/api/v1/admin/nodes/children?parentId={ids[2]}&page=2&size=1")["items"] == []
+    assert json.loads(request(8080, f"/api/v1/admin/nodes/{ids[3]}")["config"]) == {"enabled": True}
+    request(8080, f"/api/v1/admin/nodes/children?parentId={ids[2]}&page=0", expected=400)
+    print("PASS lightweight lazy tree and paginated child management APIs", flush=True)
     wait_until("Webhook pull copied all five nodes", lambda: synchronized_nodes(5, 5))
 
     # Write through a different config-center instance, verify client upsert.
@@ -182,7 +189,7 @@ def main():
     wait_until("offline client catches up to authority",
                lambda: any(row["id"] == ids[0] and row["name"] == "changed-while-offline"
                            for row in replica()) and subscriber()["acknowledgedRevision"] >= latest,
-               seconds=90, process=demo)
+               seconds=90)
 
     # Deletion must remove the local replica, not just disappear from batch-get.
     request(8082, f"/api/v1/admin/nodes/{ids[-1]}", "DELETE", expected=204)

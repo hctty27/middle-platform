@@ -11,3 +11,32 @@
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 18px}.node-form{max-width:960px}.actions{display:flex;justify-content:flex-end}.content-panel{margin:24px;min-height:350px}
 .json-input textarea{font-family:"JetBrains Mono",Consolas,monospace!important;line-height:1.7;background:#f9fafc}
 @media(max-width:1000px){.sidebar{width:170px}.workspace{grid-template-columns:1fr}.tree-panel{min-height:250px}.subline{display:none}}
+
+/* 配置树与右侧工作区独立滚动，避免节点多时撑高整个页面。 */
+.workspace{height:calc(100vh - 80px);min-height:0;overflow:hidden}
+.tree-panel{display:flex;flex-direction:column;min-height:0;min-width:0}
+.tree-panel .panel-title{flex-shrink:0}
+.tree-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;margin-top:16px;scrollbar-width:thin}
+.tree-panel .el-tree{margin-top:0}
+.tree-hint{flex-shrink:0;padding-top:12px;border-top:1px solid #edf0f5;color:#94a0b1;font-size:11px;line-height:1.6}
+.node-row{min-width:0;gap:8px}
+.node-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node-row .el-tag{flex-shrink:0}
+.editor-panel{min-width:0;min-height:0;overflow-y:auto}
+.editor-panel .panel-title{flex-wrap:wrap}
+.panel-actions{display:flex;gap:8px;flex-wrap:wrap}
+.panel-actions .el-button+.el-button{margin-left:0}
+.node-tabs{margin-top:-8px}
+.children-section{display:flex;flex-direction:column;gap:16px;min-height:300px;height:calc(100% - 106px)}
+.children-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.children-toolbar .muted{margin-left:8px}
+.children-search{max-width:300px}
+.children-section .el-table{flex:1;min-height:180px}
+.children-section .el-table__row{cursor:pointer}
+.children-pagination{display:flex;justify-content:flex-end;flex-shrink:0}
+@media(max-width:1000px){
+  .workspace{height:auto;min-height:calc(100vh - 80px);overflow:visible}
+  .tree-panel{height:330px}
+  .editor-panel{min-height:420px;overflow:visible}
+  .children-section{height:500px}
+}
