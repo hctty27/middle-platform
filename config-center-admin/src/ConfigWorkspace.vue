@@ -240,15 +240,15 @@ async function choose(node: NodeSummary, path: NodeSummary[]) {
   return true
 }
 
-async function onTreeClick(node: NodeSummary) {
-  const sequence = ++selectionSequence
-  try {
-    const result = await api.get<NodeMatch>('/admin/nodes/' + node.id + '/path')
-    if (sequence !== selectionSequence) return
-    await choose(result.data.node, result.data.path)
-  } catch {
-    if (sequence === selectionSequence) ElMessage.error('节点路径加载失败')
+function onTreeClick(node: NodeSummary, rawTreeNode: unknown) {
+  type TreePathNode = { data: NodeSummary; parent: TreePathNode | null; level: number }
+  const path: NodeSummary[] = []
+  let current = rawTreeNode as TreePathNode | null
+  while (current && current.level > 0 && path.length < 5) {
+    path.unshift(current.data)
+    current = current.parent
   }
+  void choose(node, path.length ? path : [node])
 }
 
 async function openMatch(match: NodeMatch) {
