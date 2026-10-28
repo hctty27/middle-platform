@@ -157,6 +157,17 @@ def main():
     assert json.loads(request(8080, f"/api/v1/admin/nodes/{ids[3]}")["config"]) == {"enabled": True}
     request(8080, f"/api/v1/admin/nodes/children?parentId={ids[2]}&page=0", expected=400)
     print("PASS lightweight lazy tree and paginated child management APIs", flush=True)
+    # Global search must find unloaded descendants and return their complete ancestor path.
+    matches = request(8080, "/api/v1/admin/nodes/search?keyword=ci-sdk_app")
+    assert len(matches) == 1 and matches[0]["node"]["id"] == ids[-1], matches
+    assert [node["id"] for node in matches[0]["path"]] == ids, matches
+    assert "config" not in matches[0]["node"], matches
+    path = request(8082, f"/api/v1/admin/nodes/{ids[3]}/path")
+    assert [node["id"] for node in path["path"]] == ids[:4], path
+    assert request(8080, "/api/v1/admin/nodes/search?keyword=") == []
+    assert request(8080, "/api/v1/admin/nodes/search?keyword=x&limit=51", expected=400)
+    print("PASS global search, deep navigation paths and input validation", flush=True)
+
     wait_until("Webhook pull copied all five nodes", lambda: synchronized_nodes(5, 5))
 
     # Write through a different config-center instance, verify client upsert.
