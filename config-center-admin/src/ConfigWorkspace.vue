@@ -115,6 +115,10 @@ async function beforeDrawerClose(done: () => void) {
   }
 }
 
+function closeEditor() {
+  void beforeDrawerClose(() => { drawerVisible.value = false })
+}
+
 const loadTree: LoadFunction = async (node, resolve, reject) => {
   const parentId = node.level === 0 ? 0 : (node.data as NodeSummary).id
   try {
@@ -181,8 +185,11 @@ async function searchAll() {
 
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
+  if (!searchWord.value.trim()) {
+    void searchAll()
+    return
+  }
   searchTimer = setTimeout(() => void searchAll(), 250)
-  if (!searchWord.value.trim()) void searchAll()
 }
 
 async function loadChildren() {
@@ -221,9 +228,11 @@ async function choose(node: NodeSummary, path: NodeSummary[]) {
   drawerVisible.value = false
   selected.value = node
   breadcrumbs.value = [...path]
+  if (childTimer) clearTimeout(childTimer)
   childPage.value = 1
   childSearch.value = ''
-  treeRef.value?.setCurrentKey(treeRef.value.getNode(node.id) ? node.id : undefined)
+  const tree = treeRef.value
+  tree?.setCurrentKey(tree.getNode(node.id) ? node.id : undefined)
   void loadChildren()
   return true
 }
@@ -403,7 +412,10 @@ onBeforeUnmount(() => {
     <section class="tree-panel">
       <div class="panel-title">
         <strong>配置目录</strong>
-        <el-button size="small" type="primary" @click="openCreate(null)">+ 游戏</el-button>
+        <div class="panel-actions">
+          <el-button size="small" @click="refresh">刷新</el-button>
+          <el-button size="small" type="primary" @click="openCreate(null)">+ 游戏</el-button>
+        </div>
       </div>
       <el-input v-model="searchWord" clearable placeholder="全局搜索名称或 Code"
                 @input="onSearchInput" @clear="onSearchInput" />
@@ -531,7 +543,7 @@ onBeforeUnmount(() => {
         </el-form>
       </div>
       <template #footer>
-        <el-button :disabled="saving" @click="beforeDrawerClose(() => drawerVisible = false)">取消</el-button>
+        <el-button :disabled="saving" @click="closeEditor">取消</el-button>
         <el-button type="primary" :loading="saving" :disabled="detailLoading" @click="save">保存配置</el-button>
       </template>
     </el-drawer>
