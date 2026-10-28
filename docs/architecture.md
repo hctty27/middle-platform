@@ -2,8 +2,10 @@
 
 - 五级层级固定：game -> region -> server_group -> channel -> sdk_app。
 - 所有业务配置仅存于 `config_node`；其余表是同步/订阅的基础设施表。
-- 游戏 parent_id=0，其他节点 parent_id>0；不使用父节点自引用 FK。写服务核对父子类型。
-- parent_id、node_type、code 创建后不可修改；`config` 是本节点 JSON，不向上继承。
+- `config_node` 仅存储 `game_id`、`region_id`、`server_group_id`、`channel_id` 四个祖先 ID，不存储 `parent_id`；仅保存祖先，不保存自身。
+- 游戏四列都为空；大区只保存游戏 ID；区服组保存游戏和大区 ID；渠道再保存区服组 ID；SDK 应用保存全部四个 ID。
+- API 中的 `parentId` 是按 `nodeType` 推导的兼容属性；写服务通过创建请求的 `parentId` 校验父类型并自动生成祖先路径。节点层级、类型、编码创建后不可修改。
+- 同级 `code` 的唯一性通过按 `nodeType` 和最深非空祖先 ID（根为 0）建立的 MySQL 函数唯一索引保证。`config` 只保存本节点 JSON，不向上继承。
 - 配置中心多个 Spring Boot 实例共享单个 MySQL，应用无独立配置状态。
 - 全局版本行必须在写事务内先锁定，确保提交顺序与 revision 一致；同时提交 config_node 与 change log。
 - Webhook 通知仅包含 epoch 和 revision，订阅者按 revision 获取 ID 列表并查询节点最新状态。
@@ -31,3 +33,10 @@
 若变更日志已被清理而出现游标缺口，客户端应重新初始化，而非跳过版本。
 版本号每次配置写操作递增，普通读取、订阅者编辑不改变版本。
 单 MySQL 是单点故障；必须备份、监控、测试恢复，前端无登录不等于 API 可公开访问。
+
+## V2 数据库升级
+
+- Flyway V1 已被使用，不修改；V2 在配置中心和 Demo 副本分别新增四个祖先列、按原父子关系回填、校验路径完整性并删除持久化 `parent_id`。
+- V2 重建同级唯一索引和四个查询索引，并更新权威端 `epoch`，使新 Starter 对旧数据执行全量快照恢复（revision 不重置）。
+- **这是非向后兼容的数据库升级**：先备份数据库，停旧版读写服务，部署迁移与新版服务及 Starter，最后恢复流量；避免旧版实例继续查询或写入已经删除的列。
+- `parentId` 保留在管理 API 和写入请求中，前端无需直接编辑祖先路径。部署结束应验收同级 `code` 唯一、历史数据回填、搜索路径、Webhook 同步与删除。

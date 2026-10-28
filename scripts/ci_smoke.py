@@ -136,6 +136,20 @@ def main():
         node = create_node(kind, parent, f"ci-{kind}")
         ids.append(node["id"])
         parent = node["id"]
+    # 祖先 ID 只记录上层，不记录自身；API 仍通过计算属性提供 parentId。
+    expected = [
+        (None, None, None, None),
+        (ids[0], None, None, None),
+        (ids[0], ids[1], None, None),
+        (ids[0], ids[1], ids[2], None),
+        (ids[0], ids[1], ids[2], ids[3]),
+    ]
+    for index, node_id in enumerate(ids):
+        node = request(8080, f"/api/v1/config/nodes/{node_id}")
+        assert tuple(node[field] for field in
+                     ("gameId", "regionId", "serverGroupId", "channelId")) == expected[index], node
+        assert node["parentId"] == (ids[index - 1] if index else 0), node
+    print("PASS fixed ancestor paths and computed parent IDs", flush=True)
     head = request(8080, "/api/v1/sync/revision")
     assert head["revision"] == 5, head
     history = request(8082, "/api/v1/sync/changes?afterRevision=0&limit=100")
@@ -169,6 +183,11 @@ def main():
     print("PASS global search, deep navigation paths and input validation", flush=True)
 
     wait_until("Webhook pull copied all five nodes", lambda: synchronized_nodes(5, 5))
+    local = {row["id"]: row for row in replica()}
+    for index, node_id in enumerate(ids):
+        assert tuple(local[node_id][field] for field in
+                     ("game_id", "region_id", "server_group_id", "channel_id")) == expected[index], local
+    print("PASS complete ancestor paths in synchronized local replica", flush=True)
 
     # Write through a different config-center instance, verify client upsert.
     request(8082, f"/api/v1/admin/nodes/{ids[-1]}", "PUT", {
@@ -188,6 +207,13 @@ def main():
     }, 400)
     assert request(8080, "/api/v1/sync/revision")["revision"] == before_bad
     print("PASS invalid parent rejects write without version increment", flush=True)
+    # 同级 code 唯一性必须由数据库约束保证，不可依赖可空列组合 UNIQUE。
+    request(8080, "/api/v1/admin/nodes", "POST", {
+        "parentId": ids[2], "nodeType": "channel", "code": "ci-channel",
+        "name": "duplicated", "status": 1, "config": "{}"
+    }, 409)
+    assert request(8080, "/api/v1/sync/revision")["revision"] == before_bad
+    print("PASS sibling code uniqueness under derived parent scope", flush=True)
 
     # Offline client must be retried and must recover without losing changes.
     stop(demo)

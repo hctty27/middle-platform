@@ -32,10 +32,10 @@ WHERE child.node_type = 'sdk_app';
 ALTER TABLE config_node
     ADD CONSTRAINT chk_config_node_ancestry CHECK (
         (node_type = 'game' AND game_id IS NULL AND region_id IS NULL AND server_group_id IS NULL AND channel_id IS NULL)
-        OR (node_type = 'region' AND game_id > 0 AND region_id IS NULL AND server_group_id IS NULL AND channel_id IS NULL)
-        OR (node_type = 'server_group' AND game_id > 0 AND region_id > 0 AND server_group_id IS NULL AND channel_id IS NULL)
-        OR (node_type = 'channel' AND game_id > 0 AND region_id > 0 AND server_group_id > 0 AND channel_id IS NULL)
-        OR (node_type = 'sdk_app' AND game_id > 0 AND region_id > 0 AND server_group_id > 0 AND channel_id > 0)
+        OR (node_type = 'region' AND COALESCE(game_id, 0) > 0 AND region_id IS NULL AND server_group_id IS NULL AND channel_id IS NULL)
+        OR (node_type = 'server_group' AND COALESCE(game_id, 0) > 0 AND COALESCE(region_id, 0) > 0 AND server_group_id IS NULL AND channel_id IS NULL)
+        OR (node_type = 'channel' AND COALESCE(game_id, 0) > 0 AND COALESCE(region_id, 0) > 0 AND COALESCE(server_group_id, 0) > 0 AND channel_id IS NULL)
+        OR (node_type = 'sdk_app' AND COALESCE(game_id, 0) > 0 AND COALESCE(region_id, 0) > 0 AND COALESCE(server_group_id, 0) > 0 AND COALESCE(channel_id, 0) > 0)
     );
 
 ALTER TABLE config_node

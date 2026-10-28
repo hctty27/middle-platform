@@ -527,7 +527,7 @@ onBeforeUnmount(() => {
         <el-form v-if="!detailLoading" label-position="top" class="node-form">
           <div class="form-grid">
             <el-form-item label="节点类型"><el-input :model-value="labels[form.nodeType]" disabled /></el-form-item>
-            <el-form-item label="父节点 ID"><el-input :model-value="String(form.parentId)" disabled /></el-form-item>
+            <el-form-item label="父节点 ID（根据层级推导）"><el-input :model-value="String(form.parentId)" disabled /></el-form-item>
             <el-form-item label="业务编码"><el-input v-model="form.code" :disabled="!creating" maxlength="128" /></el-form-item>
             <el-form-item label="节点名称"><el-input v-model="form.name" maxlength="128" show-word-limit /></el-form-item>
           </div>

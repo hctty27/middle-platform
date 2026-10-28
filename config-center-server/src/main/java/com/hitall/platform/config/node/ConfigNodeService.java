@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -173,23 +173,27 @@ public class ConfigNodeService {
         lockRevision();
         Ancestry ancestry = ancestryFromParent(input.parentId(), input.nodeType());
         KeyHolder key = new GeneratedKeyHolder();
-        jdbc.update(connection -> {
-            PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO config_node(game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            statement.setObject(1, ancestry.gameId());
-            statement.setObject(2, ancestry.regionId());
-            statement.setObject(3, ancestry.serverGroupId());
-            statement.setObject(4, ancestry.channelId());
-            statement.setString(5, input.nodeType());
-            statement.setString(6, input.code());
-            statement.setString(7, input.name());
-            statement.setInt(8, input.status());
-            statement.setString(9, input.config());
-            statement.setString(10, input.remark());
-            return statement;
-        }, key);
+        try {
+            jdbc.update(connection -> {
+                PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO config_node(game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                        Statement.RETURN_GENERATED_KEYS);
+                statement.setObject(1, ancestry.gameId());
+                statement.setObject(2, ancestry.regionId());
+                statement.setObject(3, ancestry.serverGroupId());
+                statement.setObject(4, ancestry.channelId());
+                statement.setString(5, input.nodeType());
+                statement.setString(6, input.code());
+                statement.setString(7, input.name());
+                statement.setInt(8, input.status());
+                statement.setString(9, input.config());
+                statement.setString(10, input.remark());
+                return statement;
+            }, key);
+            } catch (DuplicateKeyException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate sibling code", exception);
+        }
         long id = key.getKey().longValue();
         recordChange(id, "UPSERT");
         return get(id);
