@@ -66,8 +66,12 @@ def start(name, module, port, extra=None):
     path = f"/tmp/middle-platform-{name}.log"
     log = open(path, "w", encoding="utf-8")
     LOGS.append((name, path, log))
+    java_home = env.get("JAVA_HOME")
+    java_bin = str(pathlib.Path(java_home) / "bin" / "java") if java_home else "java"
+    if java_home and not os.access(java_bin, os.X_OK):
+        raise RuntimeError(f"JAVA_HOME points to a missing Java executable: {java_bin}")
     proc = subprocess.Popen(
-        ["java", "-jar", jar(module)],
+        [java_bin, "-jar", jar(module)],
         env=env, stdout=log, stderr=subprocess.STDOUT
     )
     PROCESSES.append(proc)
