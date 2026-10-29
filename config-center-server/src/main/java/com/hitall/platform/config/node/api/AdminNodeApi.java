@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node.api.v1;
+package com.hitall.platform.config.node.api;
 
 import com.hitall.platform.config.node.dto.CreateNodeRequest;
 import com.hitall.platform.config.node.dto.NodePage;

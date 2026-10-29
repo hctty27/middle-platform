@@ -1,4 +1,4 @@
-package com.hitall.platform.config.subscriber.api.v1;
+package com.hitall.platform.config.subscriber.api;
 
 import com.hitall.platform.config.subscriber.service.SubscriberService;
 

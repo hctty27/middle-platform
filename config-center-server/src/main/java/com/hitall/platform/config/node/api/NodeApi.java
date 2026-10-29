@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node.api.v1;
+package com.hitall.platform.config.node.api;
 
 import com.hitall.platform.config.node.model.ConfigNode;
 import com.hitall.platform.config.node.service.ConfigNodeService;

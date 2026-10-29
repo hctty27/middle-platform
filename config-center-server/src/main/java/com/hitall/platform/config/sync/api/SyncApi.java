@@ -1,4 +1,4 @@
-package com.hitall.platform.config.sync.api.v1;
+package com.hitall.platform.config.sync.api;
 
 import com.hitall.platform.config.node.service.ConfigNodeService;
 import com.hitall.platform.config.sync.dto.ChangeEvent;

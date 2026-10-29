@@ -26,7 +26,7 @@
 - 增量与快照：`GET /api/config/v1/sync/revision`、`GET /api/config/v1/sync/changes?afterRevision=...&limit=...`、`GET /api/config/v1/sync/snapshot`
 - 接入实例内部回调：`POST /internal/config/callback`，属于内部 Webhook，不公开在统一 API 网关
 
-V1 Java API 位于各业务模块的 `api.v1` 包。未来只有 API 契约发生不兼容变化时才增加 `api.v2` 与对应版本 DTO，Service/Repository 默认继续复用，暂不创建无业务含义的空 V2 实现。
+Java 接口类统一放在各业务模块的 `api` 包，不用版本号命名包或类。版本仅体现在 HTTP 路径；未来出现不兼容的 V2 时，先考虑在现有 API 中使用独立的方法/映射与版本 DTO，确有职责分化再增加有业务含义的 API 类，Service/Repository 优先复用。
 
 **兼容期**：服务端继续接受原 `/api/v1/...` 路由，包括原管理子项分页 `/api/v1/admin/nodes/children?parentId=...`。前端与 Starter 默认使用新路径。只有在确认旧客户端全部升级后，才能另行删除别名。
 
@@ -71,7 +71,6 @@ config/
 ├── ConfigCenterApplication.java
 ├── node/
 │   ├── api/
-│   │   └── v1/
 │   ├── service/
 │   ├── repository/
 │   ├── model/
@@ -100,4 +99,6 @@ CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 pack
 
 ### API 包版本策略
 
-配置中心规范 API 类为 `node.api.v1.AdminNodeApi`、`node.api.v1.NodeApi`、`node.api.v1.NodeNavigationApi`、`sync.api.v1.SyncApi`、`subscriber.api.v1.SubscriberApi`。旧路径别名与 V1 共用实现；API 版本号不同于 Flyway 数据库迁移版本号。
+配置中心 API 类为 `node.api.AdminNodeApi`、`node.api.NodeApi`、`node.api.NodeNavigationApi`、`sync.api.SyncApi`、`subscriber.api.SubscriberApi`。旧路径别名与 V1 共用实现；API 版本号不同于 Flyway 数据库迁移版本号。
+
+**补充约定**：Java `api` 包与 `*Api` 类名均不带 `v1`、`v2` 等版本号，只有 URL 体现版本。CI 将检查包路径与命名。

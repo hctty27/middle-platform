@@ -41,11 +41,11 @@ def main():
 
     # HTTP entry-point naming convention: api package and *Api class.
     expected_apis = (
-        "config-center-server/src/main/java/com/hitall/platform/config/node/api/v1/AdminNodeApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/node/api/v1/NodeApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/node/api/v1/NodeNavigationApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/sync/api/v1/SyncApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/subscriber/api/v1/SubscriberApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/node/api/AdminNodeApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/subscriber/api/SubscriberApi.java",
         "config-client-starter/src/main/java/com/hitall/platform/client/callback/api/ConfigCallbackApi.java",
         "config-client-demo/src/main/java/com/hitall/platform/demo/api/DemoApi.java",
     )
@@ -59,10 +59,7 @@ def main():
             if "controller" in source.parts or source.stem.endswith("Controller"):
                 problems.append(f"Legacy controller naming: {source}")
             if "@RestController" in source.read_text(encoding="utf-8"):
-                if not (source.parent.name == "api" or (
-                    source.parent.name.startswith("v") and source.parent.name[1:].isdigit()
-                    and source.parent.parent.name == "api"
-                )) or not source.stem.endswith("Api"):
+                if source.parent.name != "api" or not source.stem.endswith("Api"):
                     problems.append(f"REST endpoint must use api/*Api.java: {source}")
 
     if problems:
