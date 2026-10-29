@@ -58,10 +58,20 @@ class ConfigCenterRemoteClientTimeoutTest {
     }
 
     @Test
-    void failsExplicitlyWhenRevisionResponseIsMissing() {
-        // A null response must never be interpreted as revision zero.
-        ConfigClientProperties settings = new ConfigClientProperties();
-        assertTrue(settings.getConnectTimeoutMs() > 0);
-        assertTrue(settings.getReadTimeoutMs() > 0);
+    void rejectsEmptyRevisionResponse() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/sync/revision", exchange -> {
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ConfigClientProperties settings = new ConfigClientProperties();
+            settings.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
+            ConfigCenterRemoteClient remote = new ConfigCenterRemoteClient(settings);
+            assertThrows(IllegalStateException.class, remote::revision);
+        } finally {
+            server.stop(0);
+        }
     }
 }
