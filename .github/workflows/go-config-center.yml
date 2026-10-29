@@ -48,6 +48,11 @@ jobs:
           echo "497ae4fcdfa64c5b0c311ffe4c2bd991e43991e82e5367792ed78bc2dca27354  /tmp/sqlc.tar.gz" | sha256sum -c -
           tar -xzf /tmp/sqlc.tar.gz -C /tmp sqlc
           /tmp/sqlc generate
+          for file in internal/sqlcgen/*.go; do
+            echo "BEGIN_SQLC_FILE:$file"
+            cat "$file"
+            echo "END_SQLC_FILE:$file"
+          done
       - run: gofmt -w ./cmd/config-center/*.go ./internal/config/*.go
       - run: go test -count=1 -race ./...
       - run: go vet ./...

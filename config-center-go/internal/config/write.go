@@ -186,11 +186,7 @@ func validateCallback(raw, allowed string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u == nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" { return ErrInvalid }
 	host := strings.ToLower(u.Hostname())
-	allowedHost := false
-	for _, h := range strings.Split(allowed, ",") {
-		if strings.EqualFold(strings.TrimSpace(h), host) { allowedHost = true; break }
-	}
-	if !allowedHost { return ErrInvalid }
+	if !webhookHostAllowed(host, allowed) { return ErrInvalid }
 	if u.Scheme != "https" && !(u.Scheme == "http" && (host == "localhost" || net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback())) {
 		return ErrInvalid
 	}

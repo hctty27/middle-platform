@@ -13,7 +13,6 @@ import (
 	"io"
 	"bytes"
 	"log/slog"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -39,7 +38,7 @@ type Dispatcher struct {
 func NewDispatcher(db *sql.DB, allowedHosts string) *Dispatcher {
 	if allowedHosts == "" { allowedHosts = "localhost,127.0.0.1" }
 	transport := &http.Transport{
-		DialContext: (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		DialContext: secureWebhookDial(allowedHosts, nil),
 		MaxIdleConns: 20,
 		MaxIdleConnsPerHost: 4,
 		IdleConnTimeout: 30 * time.Second,
