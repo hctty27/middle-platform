@@ -65,7 +65,7 @@ Java HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api
 
 ## Java 包结构（业务模块 + 职责子包）
 
-`config-center-server` 保留 `com.hitall.platform.config.ConfigCenterApplication` 作为根启动类，按以下业务域组织：
+`config-center` 保留 `com.hitall.platform.config.ConfigCenterApplication` 作为根启动类，按以下业务域组织：
 
 ```text
 config/

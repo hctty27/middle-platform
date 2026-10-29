@@ -15,7 +15,7 @@ docker compose up -d
 export CONFIG_DB_URL='jdbc:mysql://127.0.0.1:3306/config_center?connectionTimeZone=UTC'
 export CONFIG_DB_USER=root
 export CONFIG_DB_PASSWORD=local-dev-only
-gradle :config-center-server:bootRun
+gradle :config-center:bootRun
 ```
 
 ## 启动接入服务

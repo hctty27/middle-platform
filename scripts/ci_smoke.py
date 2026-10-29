@@ -118,9 +118,9 @@ def synchronized_nodes(count, revision):
 
 
 def main():
-    center1 = start("center-1", "config-center-server", 8080)
+    center1 = start("center-1", "config-center", 8080)
     wait_until("primary config-center ready", lambda: request(8080, "/actuator/health")["status"] == "UP")
-    center2 = start("center-2", "config-center-server", 8082)
+    center2 = start("center-2", "config-center", 8082)
     wait_until("second config-center ready", lambda: request(8082, "/actuator/health")["status"] == "UP")
 
     access = start("access", "config-center-access", 8081)

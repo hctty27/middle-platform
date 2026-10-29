@@ -42,7 +42,7 @@ def main():
         return result.stdout.strip()
 
     mysql("CREATE DATABASE config_migration CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
-    jars = [p for p in glob.glob("config-center-server/build/libs/*.jar") if not p.endswith("-plain.jar")]
+    jars = [p for p in glob.glob("config-center/build/libs/*.jar") if not p.endswith("-plain.jar")]
     assert len(jars) == 1, jars
     env = os.environ.copy()
     env["CONFIG_DB_URL"] = "jdbc:mysql://127.0.0.1:3306/config_migration?connectionTimeZone=UTC"
