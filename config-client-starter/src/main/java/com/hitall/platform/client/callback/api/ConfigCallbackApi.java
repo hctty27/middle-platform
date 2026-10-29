@@ -1,4 +1,4 @@
-package com.hitall.platform.client.callback;
+package com.hitall.platform.client.callback.api;
 
 import com.hitall.platform.client.config.ConfigClientProperties;
 import com.hitall.platform.client.sync.ConfigSyncTrigger;
@@ -18,11 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
  * 先校验时间戳与 HMAC 签名，再触发接入方主动同步配置。
  */
 @RestController
-public class ConfigCallbackController {
+public class ConfigCallbackApi {
     private final ConfigSyncTrigger trigger;
     private final ConfigClientProperties properties;
 
-    public ConfigCallbackController(ConfigSyncTrigger trigger,
+    public ConfigCallbackApi(ConfigSyncTrigger trigger,
                                     ConfigClientProperties properties) {
         this.trigger = trigger;
         this.properties = properties;

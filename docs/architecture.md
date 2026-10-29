@@ -67,17 +67,17 @@
 config/
 ├── ConfigCenterApplication.java
 ├── node/
-│   ├── controller/
+│   ├── api/
 │   ├── service/
 │   ├── repository/
 │   ├── model/
 │   └── dto/
 ├── sync/
-│   ├── controller/
+│   ├── api/
 │   ├── repository/
 │   └── dto/
 ├── subscriber/
-│   ├── controller/
+│   ├── api/
 │   ├── service/
 │   ├── repository/
 │   └── dto/
@@ -88,6 +88,8 @@ config/
 
 `config-client-starter` 保留 `com.hitall.platform.client` 根包，按 `config`、`callback`、`sync`、`remote`、`repository` 分组；单元测试按相同包结构放置。Spring Boot 自动装配类移动到 `client.config.ConfigClientAutoConfiguration`，并已同步更新 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`。
 
-`config-client-demo` 的 `DemoController` 位于 `demo.controller`。本次只调整 Java 包名和引用关系，不调整 API、SQL、MySQL 表、Webhook、版本协议或业务行为。此前直接 import 旧包路径的调用方需更新 Java import；仅依赖 Starter 自动装配的配置无需改变。
+`config-client-demo` 的 `DemoApi` 位于 `demo.api`。本次只调整 Java 包名和引用关系，不调整 API、SQL、MySQL 表、Webhook、版本协议或业务行为。此前直接 import 旧包路径的调用方需更新 Java import；仅依赖 Starter 自动装配的配置无需改变。
 
 CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 package 声明不一致，以及重要模块再次退化为扁平包。
+
+**接口层命名约定：** 所有使用 `@RestController` 的 Java 类统一位于所属业务模块的 `api` 包，并以 `Api` 结尾，例如 `node.api.NodeApi`、`sync.api.SyncApi`。Starter 回调入口位于 `client.callback.api.ConfigCallbackApi`，示例入口位于 `demo.api.DemoApi`。类重命名不改变 Spring MVC 的请求映射、返回 JSON 或 HTTP 状态码。

@@ -1,4 +1,4 @@
-package com.hitall.platform.client.callback;
+package com.hitall.platform.client.callback.api;
 
 import com.hitall.platform.client.config.ConfigClientProperties;
 import com.hitall.platform.client.sync.ConfigSyncTrigger;
@@ -17,16 +17,16 @@ import org.springframework.web.server.ResponseStatusException;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class ConfigCallbackControllerTest {
+class ConfigCallbackApiTest {
     @Test
     void validSignatureSchedulesSyncWithoutExecutingItInController() throws Exception {
         ConfigSyncTrigger trigger = mock(ConfigSyncTrigger.class);
         ConfigClientProperties properties = new ConfigClientProperties();
         properties.setWebhookSecret("integration-test-key");
-        ConfigCallbackController controller = new ConfigCallbackController(trigger, properties);
+        ConfigCallbackApi controller = new ConfigCallbackApi(trigger, properties);
 
         String timestamp = Long.toString(Instant.now().getEpochSecond());
-        var notification = new ConfigCallbackController.Notification("epoch-a", 42);
+        var notification = new ConfigCallbackApi.Notification("epoch-a", 42);
         String payload = timestamp + ".epoch-a.42";
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec("integration-test-key".getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
@@ -42,9 +42,9 @@ class ConfigCallbackControllerTest {
         ConfigSyncTrigger trigger = mock(ConfigSyncTrigger.class);
         ConfigClientProperties properties = new ConfigClientProperties();
         properties.setWebhookSecret("integration-test-key");
-        ConfigCallbackController controller = new ConfigCallbackController(trigger, properties);
+        ConfigCallbackApi controller = new ConfigCallbackApi(trigger, properties);
 
-        var notification = new ConfigCallbackController.Notification("epoch-a", 42);
+        var notification = new ConfigCallbackApi.Notification("epoch-a", 42);
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
                 () -> controller.notify(Long.toString(Instant.now().getEpochSecond()),
                         "sha256=wrong", notification));

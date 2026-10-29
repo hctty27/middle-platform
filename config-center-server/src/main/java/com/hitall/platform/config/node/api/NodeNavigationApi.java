@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node.controller;
+package com.hitall.platform.config.node.api;
 
 import com.hitall.platform.config.node.repository.NodeNavigationRepository;
 
@@ -12,10 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 /** 配置节点全局搜索与路径查询接口。 */
 @RestController
 @RequestMapping("/api/v1/admin/nodes")
-public class NodeNavigationController {
+public class NodeNavigationApi {
     private final NodeNavigationRepository repository;
 
-    public NodeNavigationController(NodeNavigationRepository repository) {
+    public NodeNavigationApi(NodeNavigationRepository repository) {
         this.repository = repository;
     }
 

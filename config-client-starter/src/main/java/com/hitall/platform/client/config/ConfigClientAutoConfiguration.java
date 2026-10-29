@@ -1,6 +1,6 @@
 package com.hitall.platform.client.config;
 
-import com.hitall.platform.client.callback.ConfigCallbackController;
+import com.hitall.platform.client.callback.api.ConfigCallbackApi;
 import com.hitall.platform.client.sync.ClientSynchronizer;
 import com.hitall.platform.client.sync.ConfigReconciliationJob;
 import com.hitall.platform.client.sync.ConfigSyncTrigger;
@@ -49,9 +49,9 @@ public class ConfigClientAutoConfiguration {
     }
 
     @Bean
-    ConfigCallbackController configCallbackController(ConfigSyncTrigger trigger,
+    ConfigCallbackApi configCallbackApi(ConfigSyncTrigger trigger,
                                                       ConfigClientProperties properties) {
-        return new ConfigCallbackController(trigger, properties);
+        return new ConfigCallbackApi(trigger, properties);
     }
 
     @Bean

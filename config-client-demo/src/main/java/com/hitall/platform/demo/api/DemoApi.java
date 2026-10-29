@@ -1,4 +1,4 @@
-package com.hitall.platform.demo.controller;
+package com.hitall.platform.demo.api;
 
 import java.util.List;
 import java.util.Map;
@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/demo")
-public class DemoController {
+public class DemoApi {
     private final JdbcTemplate jdbc;
 
-    public DemoController(JdbcTemplate jdbc) {
+    public DemoApi(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
