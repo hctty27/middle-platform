@@ -96,6 +96,7 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v6
+      - run: python3 scripts/check_java_packages.py
       - run: ./gradlew build --no-daemon
   admin:
     needs: changes
