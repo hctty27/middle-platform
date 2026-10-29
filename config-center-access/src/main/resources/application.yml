@@ -1,0 +1,17 @@
+server:
+  port: ${CONFIG_ACCESS_PORT:8081}
+spring:
+  application:
+    name: config-center-access
+  datasource:
+    url: ${ACCESS_DB_URL:jdbc:mysql://localhost:3306/config_access?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC}
+    username: ${ACCESS_DB_USER:root}
+    password: ${ACCESS_DB_PASSWORD:}
+# 通过回调和定期校对维护本地数据库副本。
+config:
+  client:
+    base-url: ${CONFIG_CENTER_URL:http://localhost:8080}
+    webhook-secret: ${CONFIG_WEBHOOK_SECRET:change-me-in-development}
+    connect-timeout-ms: ${CONFIG_CLIENT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${CONFIG_CLIENT_READ_TIMEOUT_MS:15000}
+    reconcile-ms: 300000

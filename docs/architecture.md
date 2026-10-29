@@ -25,10 +25,11 @@
 - 客户端节点查询：`GET /api/config/nodes/{id}`、`POST /api/config/nodes/batch-get`
 - 增量与快照：`GET /api/config/sync/revision`、`GET /api/config/sync/changes?afterRevision=...&limit=...`、`GET /api/config/sync/snapshot`
 - 接入实例内部回调：`POST /internal/config/callback`，属于内部 Webhook，不公开在统一 API 网关
+- 接入工程本地查询：`GET /api/access/nodes`、`GET /api/access/revision`；仅供接入端自身或可信网络调用
 
 Java HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api`。不按版本拆 Java 包或增加 URL 版本段；后续若需要不兼容升级，先评估兼容字段、独立资源或明确迁移窗口，并按实际需求决定是否引入版本协商。
 
-**接口收敛**：配置中心只暴露 `/api/config/**`。旧版版本化接口全部下线，不再保留兼容映射。必须在同一上线窗口升级管理端、Starter、Demo 与所有调用方，并调整网关路由；否则旧调用方将收到 404。
+**接口收敛**：配置中心只暴露 `/api/config/**`。旧版版本化接口全部下线，不再保留兼容映射。必须在同一上线窗口升级管理端、接入服务与所有调用方，并调整网关路由；否则旧调用方将收到 404。
 
 ## 正确性关键
 
@@ -39,9 +40,9 @@ Java HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api
 
 ## V2 数据库升级
 
-- Flyway V1 已被使用，不修改；V2 在配置中心和 Demo 副本分别新增四个祖先列、按原父子关系回填、校验路径完整性并删除持久化 `parent_id`。
-- V2 重建同级唯一索引和四个查询索引，并更新权威端 `epoch`，使新 Starter 对旧数据执行全量快照恢复（revision 不重置）。
-- **这是非向后兼容的数据库升级**：先备份数据库，停旧版读写服务，部署迁移与新版服务及 Starter，最后恢复流量；避免旧版实例继续查询或写入已经删除的列。
+- Flyway V1 已被使用，不修改；V2 在配置中心和 接入服务 副本分别新增四个祖先列、按原父子关系回填、校验路径完整性并删除持久化 `parent_id`。
+- V2 重建同级唯一索引和四个查询索引，并更新权威端 `epoch`，使新 接入服务 对旧数据执行全量快照恢复（revision 不重置）。
+- **这是非向后兼容的数据库升级**：先备份数据库，停旧版读写服务，部署迁移与新版服务及 接入服务，最后恢复流量；避免旧版实例继续查询或写入已经删除的列。
 - `parentId` 保留在管理 API 和写入请求中，前端无需直接编辑祖先路径。部署结束应验收同级 `code` 唯一、历史数据回填、搜索路径、Webhook 同步与删除。
 
 ## 同步可靠性及清理
@@ -89,13 +90,13 @@ config/
     └── repository/
 ```
 
-`config-client-starter` 保留 `com.hitall.platform.client` 根包，按 `config`、`callback`、`sync`、`remote`、`repository` 分组；单元测试按相同包结构放置。Spring Boot 自动装配类移动到 `client.config.ConfigClientAutoConfiguration`，并已同步更新 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`。
+`config-center-access` 是独立 Spring Boot 应用，Java 根包为 `com.hitall.platform.access`。内部按 `api`、`callback`、`config`、`sync`、`remote`、`repository` 组织；`ConfigAccessConfiguration` 改为普通应用配置，不再使用 Spring Boot 接入服务 自动装配元数据。`ConfigCallbackApi` 由组件扫描注册一次，避免重复路由。
 
-`config-client-demo` 的 `DemoApi` 位于 `demo.api`。本次只调整 Java 包名和引用关系，不调整 API、SQL、MySQL 表、Webhook、版本协议或业务行为。此前直接 import 旧包路径的调用方需更新 Java import；仅依赖 Starter 自动装配的配置无需改变。
+原 接入服务 查询接口更名为 `access.api.AccessApi`，提供 `GET /api/access/nodes` 和 `GET /api/access/revision`；内部回调继续使用 `POST /internal/config/callback`。本次不改配置中心远程 API、数据库表、SQL、Webhook 验签和同步协议。接入工程可独立运行，不作为项目依赖或 接入服务 提供给其他工程。
 
 CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 package 声明不一致，以及重要模块再次退化为扁平包。
 
-**接口层命名约定：** 所有使用 `@RestController` 的 Java 类统一位于所属业务模块的 `api` 包，并以 `Api` 结尾，例如 `node.api.NodeApi`、`sync.api.SyncApi`。Starter 回调入口位于 `client.callback.api.ConfigCallbackApi`，示例入口位于 `demo.api.DemoApi`。类重命名不改变 Spring MVC 的请求映射、返回 JSON 或 HTTP 状态码。
+**接口层命名约定：** 所有使用 `@RestController` 的 Java 类统一位于所属业务模块的 `api` 包，并以 `Api` 结尾，例如 `node.api.NodeApi`、`sync.api.SyncApi`。接入工程的回调入口位于 `access.callback.api.ConfigCallbackApi`，本地查询入口位于 `access.api.AccessApi`。旧 `/demo/**` 本地查询路径已替换为 `/api/access/**`，但 Webhook 路径不变。
 
 ### API 命名规则
 
