@@ -2,6 +2,8 @@
 """End-to-end CI smoke test using real MySQL and two Spring Boot instances."""
 
 import glob
+import hashlib
+import hmac
 import json
 import os
 import pathlib
@@ -15,9 +17,10 @@ PROCESSES = []
 LOGS = []
 
 
-def request(port, path, method="GET", data=None, expected=200):
+def request(port, path, method="GET", data=None, expected=200, extra_headers=None):
     payload = None if data is None else json.dumps(data).encode("utf-8")
     headers = {"Content-Type": "application/json"} if payload is not None else {}
+    headers.update(extra_headers or {})
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}", data=payload, headers=headers, method=method
     )
@@ -127,6 +130,21 @@ def main():
         "callbackUrl": "http://127.0.0.1:8081/internal/config/callback",
         "secret": os.environ["CONFIG_WEBHOOK_SECRET"]
     }, 201)
+
+    # Webhook must return 202 after HMAC validation, without waiting for sync.
+    initial = request(8080, "/api/v1/sync/revision")
+    timestamp = str(int(time.time()))
+    message = f'{timestamp}.{initial["epoch"]}.{initial["revision"]}'
+    signature = hmac.new(os.environ["CONFIG_WEBHOOK_SECRET"].encode("utf-8"),
+                         message.encode("utf-8"), hashlib.sha256).hexdigest()
+    notification = {"epoch": initial["epoch"], "revision": initial["revision"]}
+    request(8081, "/internal/config/callback", "POST", notification, 401,
+            extra_headers={"X-Config-Timestamp": timestamp,
+                           "X-Config-Signature": "sha256=invalid"})
+    request(8081, "/internal/config/callback", "POST", notification, 202,
+            extra_headers={"X-Config-Timestamp": timestamp,
+                           "X-Config-Signature": "sha256=" + signature})
+    print("PASS invalid callback rejected and valid callback acknowledged asynchronously", flush=True)
 
     # Five-level hierarchy and versioned change log.
     parent = 0
