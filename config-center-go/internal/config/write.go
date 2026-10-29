@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/hctty27/middle-platform/config-center-go/internal/sqlcgen"
 )
 
 var ErrConflict = errors.New("conflicting configuration")
@@ -72,16 +73,17 @@ func databaseError(err error) error {
 }
 
 func recordChange(ctx context.Context, tx *sql.Tx, nodeID int64, operation string) error {
-	if _, err := tx.ExecContext(ctx, "UPDATE config_revision SET revision=revision+1 WHERE id=1"); err != nil { return err }
-	var current int64
-	if err := tx.QueryRowContext(ctx, "SELECT revision FROM config_revision WHERE id=1").Scan(&current); err != nil { return err }
-	_, err := tx.ExecContext(ctx, "INSERT INTO config_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))", current, nodeID, operation)
+	queries := sqlcgen.New(tx)
+	if err := queries.IncrementRevision(ctx); err != nil { return err }
+	current, err := queries.GetRevision(ctx)
+	if err != nil { return err }
+	_, err = tx.ExecContext(ctx, "INSERT INTO config_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))", current.Revision, nodeID, operation)
 	return err
 }
 
 func lockRevision(ctx context.Context, tx *sql.Tx) error {
-	var revision int64
-	return tx.QueryRowContext(ctx, "SELECT revision FROM config_revision WHERE id=1 FOR UPDATE").Scan(&revision)
+	_, err := sqlcgen.New(tx).LockRevision(ctx)
+	return err
 }
 
 func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, error) {
@@ -186,11 +188,7 @@ func validateCallback(raw, allowed string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u == nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" { return ErrInvalid }
 	host := strings.ToLower(u.Hostname())
-	allowedHost := false
-	for _, h := range strings.Split(allowed, ",") {
-		if strings.EqualFold(strings.TrimSpace(h), host) { allowedHost = true; break }
-	}
-	if !allowedHost { return ErrInvalid }
+	if !webhookHostAllowed(host, allowed) { return ErrInvalid }
 	if u.Scheme != "https" && !(u.Scheme == "http" && (host == "localhost" || net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback())) {
 		return ErrInvalid
 	}

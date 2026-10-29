@@ -48,6 +48,7 @@ jobs:
           echo "497ae4fcdfa64c5b0c311ffe4c2bd991e43991e82e5367792ed78bc2dca27354  /tmp/sqlc.tar.gz" | sha256sum -c -
           tar -xzf /tmp/sqlc.tar.gz -C /tmp sqlc
           /tmp/sqlc generate
+          test -z "$(git status --porcelain -- internal/sqlcgen)"
       - run: gofmt -w ./cmd/config-center/*.go ./internal/config/*.go
       - run: go test -count=1 -race ./...
       - run: go vet ./...

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/hctty27/middle-platform/config-center-go/internal/sqlcgen"
 )
 
 const nodeColumns = "id,node_type,game_id,region_id,server_group_id,code,name,status,config,remark,created_at,updated_at"
@@ -137,26 +139,28 @@ func (s *Store) Revision(ctx context.Context) (Revision, error) {
 	return revision(ctx, s.DB)
 }
 
-func revision(ctx context.Context, db queryer) (Revision, error) {
-	var v Revision
-	err := db.QueryRowContext(ctx, "SELECT epoch,revision FROM config_revision WHERE id=1").Scan(&v.Epoch, &v.Revision)
-	return v, err
+func revision(ctx context.Context, db sqlcgen.DBTX) (Revision, error) {
+	row, err := sqlcgen.New(db).GetRevision(ctx)
+	if err != nil { return Revision{}, err }
+	return Revision{Epoch: row.Epoch, Revision: row.Revision}, nil
 }
 
 func (s *Store) Changes(ctx context.Context, after int64, limit int) ([]ChangeEvent, error) {
 	if after < 0 || limit < 1 || limit > 500 { return nil, ErrInvalid }
-	rows, err := s.DB.QueryContext(ctx, "SELECT revision,node_id,operation,created_at FROM config_change_log WHERE revision>? ORDER BY revision LIMIT ?", after, limit)
+	found, err := sqlcgen.New(s.DB).ListChanges(ctx, sqlcgen.ListChangesParams{
+		Revision: after, Limit: int32(limit),
+	})
 	if err != nil { return nil, err }
-	defer rows.Close()
-	out := make([]ChangeEvent, 0)
-	for rows.Next() {
-		var e ChangeEvent
-		var created time.Time
-		if err := rows.Scan(&e.Revision, &e.NodeID, &e.Operation, &created); err != nil { return nil, err }
-		e.CreatedAt = LocalDateTime(created)
-		out = append(out, e)
+	out := make([]ChangeEvent, 0, len(found))
+	for _, event := range found {
+		out = append(out, ChangeEvent{
+			Revision: event.Revision,
+			NodeID: event.NodeID,
+			Operation: event.Operation,
+			CreatedAt: LocalDateTime(event.CreatedAt),
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
