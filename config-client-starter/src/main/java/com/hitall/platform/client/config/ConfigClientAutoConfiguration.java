@@ -1,4 +1,9 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.config;
+
+import com.hitall.platform.client.callback.ConfigCallbackController;
+import com.hitall.platform.client.sync.ClientSynchronizer;
+import com.hitall.platform.client.sync.ConfigReconciliationJob;
+import com.hitall.platform.client.sync.ConfigSyncTrigger;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

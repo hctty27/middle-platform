@@ -1,4 +1,4 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

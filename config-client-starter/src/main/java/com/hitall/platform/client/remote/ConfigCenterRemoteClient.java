@@ -1,15 +1,18 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.remote;
+
+import com.hitall.platform.client.config.ConfigClientProperties;
+import com.hitall.platform.client.sync.ClientSynchronizer;
 
 import java.time.Duration;
 import java.net.http.HttpClient;
 import java.util.List;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
-import com.hitall.platform.client.ClientSynchronizer.Event;
-import com.hitall.platform.client.ClientSynchronizer.Node;
-import com.hitall.platform.client.ClientSynchronizer.Ids;
-import com.hitall.platform.client.ClientSynchronizer.Revision;
-import com.hitall.platform.client.ClientSynchronizer.Snapshot;
+import com.hitall.platform.client.sync.ClientSynchronizer.Event;
+import com.hitall.platform.client.sync.ClientSynchronizer.Node;
+import com.hitall.platform.client.sync.ClientSynchronizer.Ids;
+import com.hitall.platform.client.sync.ClientSynchronizer.Revision;
+import com.hitall.platform.client.sync.ClientSynchronizer.Snapshot;
 
 /** 封装配置中心的版本、增量、节点批量查询和快照接口。 */
 public class ConfigCenterRemoteClient {
