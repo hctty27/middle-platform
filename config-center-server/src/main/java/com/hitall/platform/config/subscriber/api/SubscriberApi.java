@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 /** 接入方订阅管理接口，业务和持久化委托给服务层。 */
 @RestController
-@RequestMapping({"/api/config/admin/subscribers", "/api/v1/admin/subscribers"})
+@RequestMapping("/api/config/admin/subscribers")
 public class SubscriberApi {
     private final SubscriberService service;
 

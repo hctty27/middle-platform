@@ -28,7 +28,7 @@
 
 Java HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api`。不按版本拆 Java 包或增加 URL 版本段；后续若需要不兼容升级，先评估兼容字段、独立资源或明确迁移窗口，并按实际需求决定是否引入版本协商。
 
-**兼容期**：服务端继续接受原 `/api/v1/...` 路由，包括原管理子项分页 `/api/v1/admin/nodes/children?parentId=...`。前端与 Starter 默认使用新路径。只有在确认旧客户端全部升级后，才能另行删除别名。
+**接口收敛**：配置中心只暴露 `/api/config/**`。旧版版本化接口全部下线，不再保留兼容映射。必须在同一上线窗口升级管理端、Starter、Demo 与所有调用方，并调整网关路由；否则旧调用方将收到 404。
 
 ## 正确性关键
 
@@ -99,6 +99,6 @@ CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 pack
 
 ### API 命名规则
 
-配置中心 API 类为 `node.api.AdminNodeApi`、`node.api.NodeApi`、`node.api.NodeNavigationApi`、`sync.api.SyncApi`、`subscriber.api.SubscriberApi`。旧路径别名与规范路径共用实现；Flyway 数据库迁移版本独立于 HTTP 路由。
+配置中心 API 类为 `node.api.AdminNodeApi`、`node.api.NodeApi`、`node.api.NodeNavigationApi`、`sync.api.SyncApi`、`subscriber.api.SubscriberApi`。不提供旧接口别名；Flyway 数据库迁移版本独立于 HTTP 路由。
 
 **补充约定**：Java 的 `api` 包、`*Api` 类名及正式 HTTP 地址都不包含版本号。CI 将检查包路径及命名。
