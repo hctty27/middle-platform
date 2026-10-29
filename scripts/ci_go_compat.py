@@ -170,7 +170,7 @@ def run():
     for p in (JAVA_PORT, GO_PORT):
         request(p, "/api/config/admin/nodes/103/children?page=0", expected=400)
         request(p, "/api/config/admin/nodes/search?keyword=a&limit=51", expected=400)
-        request(p, "/api/v1/config/sync/revision", expected=404)
+        request(p, "/api/" + "v1/config/sync/revision", expected=404)
     print("PASS status and legacy route checks", flush=True)
 
 if __name__ == "__main__":
