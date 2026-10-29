@@ -82,3 +82,25 @@ location ^~ /api/config/ {
 ## 模块合并说明
 
 `config-client-starter` 与 `config-client-demo` 已整合到 `config-center-access`，仅输出独立可运行 Spring Boot 应用，不再作为 Starter 引入。内部 Webhook `/internal/config/callback`、配置中心 `/api/config/**`、`config.client.*` 参数、Flyway V1/V2 迁移保持不变。已有本地副本数据库无需重新创建，迁移时沿用原 JDBC URL 即可；新建环境默认示例数据库为 `config_access`。旧 `/demo/**` 查询路由不再提供。
+
+## V4 四级配置树上线（非兼容数据库迁移）
+
+原有 `game → region → server_group → channel → sdk_app` 改为 `game → region → server_group → channel_app`。配置中心 Flyway V4 与接入工程 Flyway V3 必须同步升级，旧实例不可在新表结构下继续读写。
+
+1. **停止写入与通知**：停止旧配置中心、管理端及接入实例，确认无活跃旧版应用后再迁移。备份权威 MySQL 和接入副本数据库，并在测试环境演练恢复。
+2. **预检 Code 冲突**：不同旧渠道下的 SDK 应用提升为同一区服组直属节点后，`code` 不能重复。执行下列查询，必须返回空结果：
+
+```sql
+SELECT server_group_id, code, COUNT(*) AS cnt
+FROM config_node
+WHERE node_type='sdk_app'
+GROUP BY server_group_id, code
+HAVING COUNT(*) > 1;
+```
+
+3. **检查渠道配置**：原渠道节点的 `config`、`remark`、`status` 不会自动合并进新渠道应用。V4 自动备份所有旧渠道和 SDK 应用（含 `channel_id` 对应关系）到 `config_node_v4_legacy_archive`；如业务依赖渠道层配置，先人工决定新归属。
+4. **部署配置中心**：首次启动会执行 V4，完成类型重命名、删除旧渠道节点和 `channel_id`、重建约束/索引并更新 `epoch`。必须确认 `flyway_schema_history` 已有 V4 的成功记录。
+5. **部署接入工程与前端**：接入端 V3 清空旧副本并重置游标；新服务启动后自动重建四级快照。升级前端，核对区服组的渠道应用列表、全局搜索路径及增量同步。
+6. **恢复服务**：确认多个配置中心实例和所有接入实例的 `epoch` 相同、应用数量一致后再恢复写入。不要让旧实例混入集群。
+
+**注意**：MySQL DDL 存在隐式提交，迁移失败后数据库可能已部分升级；不要跳过 Flyway 失败记录或盲目重试，应根据备份和实际 DDL 状态修复后重试。代码层不提供旧 `channel` / `sdk_app` 类型兼容。

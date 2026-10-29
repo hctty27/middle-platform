@@ -4,7 +4,7 @@
 
 ## 组成
 
-- `config-center`：多实例无状态服务，共用一个权威 MySQL，管理五级配置树与变更日志。
+- `config-center`：多实例无状态服务，共用一个权威 MySQL，管理四级配置树与变更日志。
 - `config-center-admin`：无需登录的管理页（仅限可信网络部署）。
 - `config-center-access`：独立接入工程，内置 Webhook 验签、增量同步、定期补偿和 MySQL 本地副本，不对外发布 Starter。
 
@@ -22,3 +22,7 @@
 **重要：不实现用户登录和角色权限。所有配置管理接口相当于管理员级权限，必须限制到受信任的内网/网关。Webhook 必须由接入方验证签名，禁止任意内网回调 URL。**
 
 本项目使用 Flyway 管理数据库演进。已执行的 V1/V2 版本迁移不可直接改写；新增数据库结构变更需继续使用更高版本迁移。
+
+## 四级配置树
+
+当前业务层级为 `game → region → server_group → channel_app`（游戏 → 大区 → 区服组 → 渠道应用）。旧 `channel` 层级和 `sdk_app` 类型已经取消；配置中心使用 Flyway V4 升级，接入端本地副本使用 Flyway V3 升级。原有 SDK 应用 ID、Code、JSON 配置不变，旧渠道及其应用关联保存在配置中心的 `config_node_v4_legacy_archive` 归档表中。部署前务必完成备份、重名预检和停写切换，详见 `docs/deployment.md`。

@@ -39,3 +39,5 @@
 6. 任一应执行的任务失败时，CI Gate 必须失败。
 
 修改模块依赖关系或增加目录时，应同时更新 `build.yml` 的筛选规则与此文档。
+
+四级改造回归：`scripts/ci_smoke.py` 覆盖 `channel_app` 创建、路径、唯一性、跨实例同步与本地副本；`scripts/ci_migration_smoke.py` 验证 V1→V2→V3→V4 的旧数据归档、ID 保留及 epoch 切换。

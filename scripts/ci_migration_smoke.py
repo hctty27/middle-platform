@@ -143,13 +143,6 @@ def main():
     print("PASS V4 four-level hierarchy, legacy archive and epoch change", flush=True)
 
 
-if __name__ == "__main__":
-    main()
-
-
-if __name__ == "__main__":
-    main()
-
     # 原数据由 V4 自动归档。SDK 应用保留 id/code/config，直属父节点直接变为区服组。
     previous_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1;")
     boot("legacy-v4-upgrade")
@@ -178,3 +171,7 @@ if __name__ == "__main__":
     assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1;") != previous_epoch
     assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1;") == "7"
     print("PASS V4 four-level hierarchy, legacy archive and epoch change", flush=True)
+
+
+if __name__ == "__main__":
+    main()
