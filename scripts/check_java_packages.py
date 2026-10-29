@@ -41,6 +41,7 @@ def main():
 
     # HTTP entry-point naming convention: api package and *Api class.
     expected_apis = (
+        "config-center-server/src/main/java/com/hitall/platform/config/node/api/AdminNodeApi.java",
         "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeApi.java",
         "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
         "config-center-server/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",

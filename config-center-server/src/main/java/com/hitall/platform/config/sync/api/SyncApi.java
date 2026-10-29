@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
  * 向客户端公开版本游标、增量事件和全量快照。
  */
 @RestController
-@RequestMapping("/api/v1/sync")
+@RequestMapping({"/api/config/sync", "/api/v1/sync"})
 public class SyncApi {
     private final ConfigNodeService service;
 
