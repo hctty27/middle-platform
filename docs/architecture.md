@@ -57,3 +57,37 @@
 - 异步同步失败不会影响已经返回的 202。启动后 3 秒首次执行、默认每 5 分钟执行的定期校对仍然作为**最终一致性补偿机制**；进程重启后也会重新校对。
 - 后台任务依旧依赖客户端本地 MySQL 的 `epoch + revision` 游标以及事务内校验，保证增量和快照恢复时不会被其他实例的旧结果覆盖。
 - 需要强持久通知、严格投递完成确认或更短恢复时间时，应进一步引入持久化任务表/消息队列或加强校对频率和告警，本阶段不引入新基础设施。
+
+
+## Java 包结构（业务模块 + 职责子包）
+
+`config-center-server` 保留 `com.hitall.platform.config.ConfigCenterApplication` 作为根启动类，按以下业务域组织：
+
+```text
+config/
+├── ConfigCenterApplication.java
+├── node/
+│   ├── controller/
+│   ├── service/
+│   ├── repository/
+│   ├── model/
+│   └── dto/
+├── sync/
+│   ├── controller/
+│   ├── repository/
+│   └── dto/
+├── subscriber/
+│   ├── controller/
+│   ├── service/
+│   ├── repository/
+│   └── dto/
+└── webhook/
+    ├── service/
+    └── repository/
+```
+
+`config-client-starter` 保留 `com.hitall.platform.client` 根包，按 `config`、`callback`、`sync`、`remote`、`repository` 分组；单元测试按相同包结构放置。Spring Boot 自动装配类移动到 `client.config.ConfigClientAutoConfiguration`，并已同步更新 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`。
+
+`config-client-demo` 的 `DemoController` 位于 `demo.controller`。本次只调整 Java 包名和引用关系，不调整 API、SQL、MySQL 表、Webhook、版本协议或业务行为。此前直接 import 旧包路径的调用方需更新 Java import；仅依赖 Starter 自动装配的配置无需改变。
+
+CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 package 声明不一致，以及重要模块再次退化为扁平包。
