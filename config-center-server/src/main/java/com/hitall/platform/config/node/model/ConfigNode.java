@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node;
+package com.hitall.platform.config.node.model;
 
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonProperty;

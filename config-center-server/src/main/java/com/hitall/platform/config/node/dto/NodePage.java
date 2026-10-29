@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node;
+package com.hitall.platform.config.node.dto;
 
 import java.util.List;
 
