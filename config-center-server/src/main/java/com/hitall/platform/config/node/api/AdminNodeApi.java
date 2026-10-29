@@ -11,9 +11,9 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-/** 配置管理节点 API；兼容历史 /api/v1/admin/nodes 路由。 */
+/** 配置管理节点 API，仅暴露统一的无版本路由。 */
 @RestController
-@RequestMapping({"/api/config/admin/nodes", "/api/v1/admin/nodes"})
+@RequestMapping("/api/config/admin/nodes")
 public class AdminNodeApi {
     private final ConfigNodeService service;
 

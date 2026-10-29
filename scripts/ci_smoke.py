@@ -172,14 +172,16 @@ def main():
     history = request(8082, "/api/config/sync/changes?afterRevision=0&limit=100")
     assert [event["revision"] for event in history] == list(range(1, 6)), history
 
-    # 规范路径与已发布旧接口应同时可用，避免旧 Starter 断连。
-    assert request(8080, "/api/v1/sync/revision") == head
-    assert request(8080, "/api/v1/admin/nodes") == request(8080, "/api/config/admin/nodes")
-    assert request(8080, f"/api/v1/config/nodes/{ids[0]}") == request(
-        8080, f"/api/config/nodes/{ids[0]}")
-    assert request(8080, f"/api/v1/admin/nodes/children?parentId={ids[2]}&page=1&size=1")[
-        "total"] == request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=1&size=1")["total"]
-    print("PASS canonical unversioned routes and legacy aliases", flush=True)
+    # 旧版版本化路由应彻底失效（404），统一无版本路径仍正常工作。
+    legacy_prefix = "/api/" + "v1"
+    request(8080, legacy_prefix + "/sync/revision", expected=404)
+    request(8082, legacy_prefix + "/sync/changes?afterRevision=0", expected=404)
+    request(8080, legacy_prefix + "/admin/nodes", expected=404)
+    request(8080, legacy_prefix + "/admin/nodes/tree?parentId=0", expected=404)
+    request(8080, legacy_prefix + "/admin/subscribers", expected=404)
+    request(8080, legacy_prefix + f"/config/nodes/{ids[0]}", expected=404)
+    request(8080, legacy_prefix + "/config/nodes/batch-get", "POST", {"ids": ids}, 404)
+    print("PASS unversioned API routes and removal of legacy aliases", flush=True)
 
     print("PASS five-level tree and cluster-wide ordered revisions", flush=True)
     # Navigation endpoints must return small summaries without any JSON configuration.

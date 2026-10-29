@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 /** 客户端节点查询 API；无管理写接口。 */
 @RestController
-@RequestMapping({"/api/config/nodes", "/api/v1/config/nodes"})
+@RequestMapping("/api/config/nodes")
 public class NodeApi {
     private final ConfigNodeService service;
 

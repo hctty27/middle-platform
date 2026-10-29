@@ -47,7 +47,7 @@ npm install
 npm run dev
 ```
 
-仅供可信网络访问。生产部署将 `/api/config/admin/**`（以及兼容期 `/api/v1/admin/**`）限制到受信任的网关来源，不允许匿名公网访问。由于没有登录/权限系统，网关网络 ACL 即为管理接口的唯一访问控制边界。生产的 Webhook 需要 HTTPS、受控 DNS/目标地址、密钥管理与监控。
+仅供可信网络访问。生产部署将 `/api/config/admin/**`限制到受信任的网关来源，不允许匿名公网访问。由于没有登录/权限系统，网关网络 ACL 即为管理接口的唯一访问控制边界。生产的 Webhook 需要 HTTPS、受控 DNS/目标地址、密钥管理与监控。
 
 ## 客户端远程请求超时
 
@@ -77,4 +77,4 @@ location ^~ /api/config/ {
 }
 ```
 
-接入服务的 `CONFIG_CENTER_URL` 只配置服务根 URL，例如 `http://config-center:8080`，Starter 内部自动拼接 `/api/config/...`。旧版客户端在兼容期仍可使用原 `/api/v1/...` 路由；迁移时需要单独保留 `/api/v1/` 到配置中心的转发规则，否则旧客户端可能返回 404。管理接口不含登录模块，必须通过可信网络、网关 ACL 等限制访问。
+接入服务的 `CONFIG_CENTER_URL` 只配置服务根 URL，例如 `http://config-center:8080`，Starter 内部自动拼接 `/api/config/...`。旧版版本化接口已删除：上线前必须升级所有接入工程的 Starter、重新构建 Demo 与管理前端，并同时调整 Nginx 配置；不再配置旧版接口前缀的转发规则。未升级的旧调用方将收到 404。管理接口不含登录模块，必须通过可信网络、网关 ACL 等限制访问。
