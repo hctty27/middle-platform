@@ -1,6 +1,9 @@
 package com.hitall.platform.client;
 
+import java.time.Duration;
+import java.net.http.HttpClient;
 import java.util.List;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import com.hitall.platform.client.ClientSynchronizer.Event;
 import com.hitall.platform.client.ClientSynchronizer.Node;
@@ -13,7 +16,26 @@ public class ConfigCenterRemoteClient {
     private final RestClient client;
 
     public ConfigCenterRemoteClient(ConfigClientProperties properties) {
-        client = RestClient.builder().baseUrl(properties.getBaseUrl()).build();
+        int connectTimeoutMs = validateTimeout("connectTimeoutMs", properties.getConnectTimeoutMs());
+        int readTimeoutMs = validateTimeout("readTimeoutMs", properties.getReadTimeoutMs());
+
+        HttpClient http = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(connectTimeoutMs))
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
+        factory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
+        client = RestClient.builder()
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(factory)
+                .build();
+    }
+
+    private static int validateTimeout(String name, int millis) {
+        if (millis < 1 || millis > 120_000) {
+            throw new IllegalArgumentException(name + " must be between 1 and 120000 ms");
+        }
+        return millis;
     }
 
     public Revision revision() {

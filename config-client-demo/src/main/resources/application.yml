@@ -13,4 +13,6 @@ config:
     enabled: true
     base-url: ${CONFIG_CENTER_URL:http://localhost:8080}
     webhook-secret: ${CONFIG_WEBHOOK_SECRET:change-me-in-development}
+    connect-timeout-ms: ${CONFIG_CLIENT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${CONFIG_CLIENT_READ_TIMEOUT_MS:15000}
     reconcile-ms: 300000

@@ -107,4 +107,19 @@ class ClientSynchronizerTest {
         verify(remote, never()).batchGet(any());
         verify(local).replaceSnapshot(snapshot);
     }
+    @Test
+    void networkFailureDoesNotWriteNodesOrAdvanceCursor() {
+        var current = new ClientSynchronizer.State("epoch-a", 7);
+        when(local.readState()).thenReturn(current);
+        when(remote.revision()).thenThrow(new org.springframework.web.client.ResourceAccessException("timeout"));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.web.client.ResourceAccessException.class, synchronizer::synchronize);
+
+        verify(local, never()).lockedState();
+        verify(local, never()).moveCursor(any(), anyLong());
+        verify(local, never()).delete(anyLong());
+        verify(local, never()).upsert(any());
+    }
+
 }
