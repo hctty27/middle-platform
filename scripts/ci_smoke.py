@@ -92,7 +92,7 @@ def stop(proc):
 
 
 def create_node(node_type, parent, code):
-    return request(8080, "/api/config/v1/admin/nodes", "POST", {
+    return request(8080, "/api/config/admin/nodes", "POST", {
         "parentId": parent,
         "nodeType": node_type,
         "code": code,
@@ -104,7 +104,7 @@ def create_node(node_type, parent, code):
 
 
 def subscriber():
-    rows = request(8080, "/api/config/v1/admin/subscribers")
+    rows = request(8080, "/api/config/admin/subscribers")
     return next(row for row in rows if row["code"] == "ci-demo")
 
 
@@ -125,14 +125,14 @@ def main():
 
     demo = start("demo", "config-client-demo", 8081)
     wait_until("client demo ready", lambda: request(8081, "/demo/revision") is not None)
-    request(8080, "/api/config/v1/admin/subscribers", "POST", {
+    request(8080, "/api/config/admin/subscribers", "POST", {
         "code": "ci-demo",
         "callbackUrl": "http://127.0.0.1:8081/internal/config/callback",
         "secret": os.environ["CONFIG_WEBHOOK_SECRET"]
     }, 201)
 
     # Webhook must return 202 after HMAC validation, without waiting for sync.
-    initial = request(8080, "/api/config/v1/sync/revision")
+    initial = request(8080, "/api/config/sync/revision")
     timestamp = str(int(time.time()))
     message = f'{timestamp}.{initial["epoch"]}.{initial["revision"]}'
     signature = hmac.new(os.environ["CONFIG_WEBHOOK_SECRET"].encode("utf-8"),
@@ -162,51 +162,51 @@ def main():
         (ids[0], ids[1], ids[2], ids[3]),
     ]
     for index, node_id in enumerate(ids):
-        node = request(8080, f"/api/config/v1/nodes/{node_id}")
+        node = request(8080, f"/api/config/nodes/{node_id}")
         assert tuple(node[field] for field in
                      ("gameId", "regionId", "serverGroupId", "channelId")) == expected[index], node
         assert node["parentId"] == (ids[index - 1] if index else 0), node
     print("PASS fixed ancestor paths and computed parent IDs", flush=True)
-    head = request(8080, "/api/config/v1/sync/revision")
+    head = request(8080, "/api/config/sync/revision")
     assert head["revision"] == 5, head
-    history = request(8082, "/api/config/v1/sync/changes?afterRevision=0&limit=100")
+    history = request(8082, "/api/config/sync/changes?afterRevision=0&limit=100")
     assert [event["revision"] for event in history] == list(range(1, 6)), history
 
     # 规范路径与已发布旧接口应同时可用，避免旧 Starter 断连。
     assert request(8080, "/api/v1/sync/revision") == head
-    assert request(8080, "/api/v1/admin/nodes") == request(8080, "/api/config/v1/admin/nodes")
+    assert request(8080, "/api/v1/admin/nodes") == request(8080, "/api/config/admin/nodes")
     assert request(8080, f"/api/v1/config/nodes/{ids[0]}") == request(
-        8080, f"/api/config/v1/nodes/{ids[0]}")
+        8080, f"/api/config/nodes/{ids[0]}")
     assert request(8080, f"/api/v1/admin/nodes/children?parentId={ids[2]}&page=1&size=1")[
-        "total"] == request(8080, f"/api/config/v1/admin/nodes/{ids[2]}/children?page=1&size=1")["total"]
-    print("PASS canonical v1 paths and legacy aliases", flush=True)
+        "total"] == request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=1&size=1")["total"]
+    print("PASS canonical unversioned routes and legacy aliases", flush=True)
 
     print("PASS five-level tree and cluster-wide ordered revisions", flush=True)
     # Navigation endpoints must return small summaries without any JSON configuration.
-    roots = request(8080, "/api/config/v1/admin/nodes/tree?parentId=0")
+    roots = request(8080, "/api/config/admin/nodes/tree?parentId=0")
     assert len(roots) == 1 and roots[0]["id"] == ids[0], roots
     assert "config" not in roots[0] and roots[0]["leaf"] is False, roots
-    regions = request(8080, f"/api/config/v1/admin/nodes/tree?parentId={ids[0]}")
+    regions = request(8080, f"/api/config/admin/nodes/tree?parentId={ids[0]}")
     assert len(regions) == 1 and regions[0]["id"] == ids[1], regions
-    groups = request(8080, f"/api/config/v1/admin/nodes/tree?parentId={ids[1]}")
+    groups = request(8080, f"/api/config/admin/nodes/tree?parentId={ids[1]}")
     assert len(groups) == 1 and groups[0]["id"] == ids[2] and groups[0]["leaf"], groups
-    assert request(8080, f"/api/config/v1/admin/nodes/tree?parentId={ids[2]}") == []
-    page = request(8080, f"/api/config/v1/admin/nodes/{ids[2]}/children?page=1&size=1&keyword=ci-channel")
+    assert request(8080, f"/api/config/admin/nodes/tree?parentId={ids[2]}") == []
+    page = request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=1&size=1&keyword=ci-channel")
     assert page["total"] == 1 and len(page["items"]) == 1, page
     assert page["items"][0]["id"] == ids[3] and "config" not in page["items"][0], page
-    assert request(8080, f"/api/config/v1/admin/nodes/{ids[2]}/children?page=2&size=1")["items"] == []
-    assert json.loads(request(8080, f"/api/config/v1/admin/nodes/{ids[3]}")["config"]) == {"enabled": True}
-    request(8080, f"/api/config/v1/admin/nodes/{ids[2]}/children?page=0", expected=400)
+    assert request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=2&size=1")["items"] == []
+    assert json.loads(request(8080, f"/api/config/admin/nodes/{ids[3]}")["config"]) == {"enabled": True}
+    request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=0", expected=400)
     print("PASS lightweight lazy tree and paginated child management APIs", flush=True)
     # Global search must find unloaded descendants and return their complete ancestor path.
-    matches = request(8080, "/api/config/v1/admin/nodes/search?keyword=ci-sdk_app")
+    matches = request(8080, "/api/config/admin/nodes/search?keyword=ci-sdk_app")
     assert len(matches) == 1 and matches[0]["node"]["id"] == ids[-1], matches
     assert [node["id"] for node in matches[0]["path"]] == ids, matches
     assert "config" not in matches[0]["node"], matches
-    path = request(8082, f"/api/config/v1/admin/nodes/{ids[3]}/path")
+    path = request(8082, f"/api/config/admin/nodes/{ids[3]}/path")
     assert [node["id"] for node in path["path"]] == ids[:4], path
-    assert request(8080, "/api/config/v1/admin/nodes/search?keyword=") == []
-    assert request(8080, "/api/config/v1/admin/nodes/search?keyword=x&limit=51", expected=400)
+    assert request(8080, "/api/config/admin/nodes/search?keyword=") == []
+    assert request(8080, "/api/config/admin/nodes/search?keyword=x&limit=51", expected=400)
     print("PASS global search, deep navigation paths and input validation", flush=True)
 
     wait_until("Webhook pull copied all five nodes", lambda: synchronized_nodes(5, 5))
@@ -217,7 +217,7 @@ def main():
     print("PASS complete ancestor paths in synchronized local replica", flush=True)
 
     # Write through a different config-center instance, verify client upsert.
-    request(8082, f"/api/config/v1/admin/nodes/{ids[-1]}", "PUT", {
+    request(8082, f"/api/config/admin/nodes/{ids[-1]}", "PUT", {
         "name": "updated-by-second-instance",
         "status": 0,
         "config": '{"enabled":false}',
@@ -227,37 +227,37 @@ def main():
                lambda: any(row["id"] == ids[-1] and row["name"] == "updated-by-second-instance"
                            and row["status"] == 0 for row in replica()))
     # 相同内容（包括 JSON 格式变化）不应产生 revision 或 updated_at 的变化。
-    before_noop = request(8080, "/api/config/v1/sync/revision")["revision"]
-    unchanged = request(8082, f"/api/config/v1/admin/nodes/{ids[-1]}", "PUT", {
+    before_noop = request(8080, "/api/config/sync/revision")["revision"]
+    unchanged = request(8082, f"/api/config/admin/nodes/{ids[-1]}", "PUT", {
         "name": "updated-by-second-instance", "status": 0,
         "config": '{ "enabled" : false }', "remark": "Updated on node 2"
     })
     assert unchanged["name"] == "updated-by-second-instance", unchanged
-    assert request(8080, "/api/config/v1/sync/revision")["revision"] == before_noop
+    assert request(8080, "/api/config/sync/revision")["revision"] == before_noop
     print("PASS semantic no-op update does not increment revision", flush=True)
-    before_bad = request(8080, "/api/config/v1/sync/revision")["revision"]
-    request(8080, "/api/config/v1/admin/nodes", "POST", {
+    before_bad = request(8080, "/api/config/sync/revision")["revision"]
+    request(8080, "/api/config/admin/nodes", "POST", {
         "parentId": ids[0], "nodeType": "sdk_app",
         "code": "bad-parent", "name": "invalid",
         "status": 1, "config": "{}"
     }, 400)
-    assert request(8080, "/api/config/v1/sync/revision")["revision"] == before_bad
+    assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
     print("PASS invalid parent rejects write without version increment", flush=True)
     # 同级 code 唯一性必须由数据库约束保证，不可依赖可空列组合 UNIQUE。
-    request(8080, "/api/config/v1/admin/nodes", "POST", {
+    request(8080, "/api/config/admin/nodes", "POST", {
         "parentId": ids[2], "nodeType": "channel", "code": "ci-channel",
         "name": "duplicated", "status": 1, "config": "{}"
     }, 409)
-    assert request(8080, "/api/config/v1/sync/revision")["revision"] == before_bad
+    assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
     print("PASS sibling code uniqueness under derived parent scope", flush=True)
 
     # Offline client must be retried and must recover without losing changes.
     stop(demo)
-    request(8082, f"/api/config/v1/admin/nodes/{ids[0]}", "PUT", {
+    request(8082, f"/api/config/admin/nodes/{ids[0]}", "PUT", {
         "name": "changed-while-offline", "status": 1,
         "config": '{"enabled":true}', "remark": "offline"
     })
-    latest = request(8080, "/api/config/v1/sync/revision")["revision"]
+    latest = request(8080, "/api/config/sync/revision")["revision"]
     demo = start("demo-restarted", "config-client-demo", 8081)
     wait_until("offline client catches up to authority",
                lambda: any(row["id"] == ids[0] and row["name"] == "changed-while-offline"
@@ -275,9 +275,9 @@ def main():
             ["docker", "exec", container, "mysql", "-uroot", "-pintegration-test",
              "-N", "-B", "-e", sql], text=True, stderr=subprocess.DEVNULL).strip()
 
-    old_head = request(8080, "/api/config/v1/sync/revision")
+    old_head = request(8080, "/api/config/sync/revision")
     mysql("UPDATE config_center.config_revision SET epoch=UUID() WHERE id=1")
-    changed_head = request(8080, "/api/config/v1/sync/revision")
+    changed_head = request(8080, "/api/config/sync/revision")
     assert changed_head["epoch"] != old_head["epoch"], changed_head
     assert changed_head["revision"] == old_head["revision"], changed_head
     wait_until("epoch-only change triggers Webhook acknowledgement",
@@ -289,7 +289,7 @@ def main():
     print("PASS epoch-only change triggers notification and full snapshot", flush=True)
 
     # Deletion must remove the local replica, not just disappear from batch-get.
-    request(8082, f"/api/config/v1/admin/nodes/{ids[-1]}", "DELETE", expected=204)
+    request(8082, f"/api/config/admin/nodes/{ids[-1]}", "DELETE", expected=204)
     wait_until("delete propagated to local replica",
                lambda: len(replica()) == 4 and all(row["id"] != ids[-1] for row in replica()))
 

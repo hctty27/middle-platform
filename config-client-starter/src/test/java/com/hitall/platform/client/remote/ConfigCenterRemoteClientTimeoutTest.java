@@ -30,7 +30,7 @@ class ConfigCenterRemoteClientTimeoutTest {
     void timesOutOnSlowRemoteWithoutReturningAnEmptyRevision() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         CountDownLatch requestStarted = new CountDownLatch(1);
-        server.createContext("/api/config/v1/sync/revision", exchange -> {
+        server.createContext("/api/config/sync/revision", exchange -> {
             requestStarted.countDown();
             try {
                 Thread.sleep(750);
@@ -62,7 +62,7 @@ class ConfigCenterRemoteClientTimeoutTest {
     @Test
     void rejectsEmptyRevisionResponse() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/api/config/v1/sync/revision", exchange -> {
+        server.createContext("/api/config/sync/revision", exchange -> {
             exchange.sendResponseHeaders(204, -1);
             exchange.close();
         });

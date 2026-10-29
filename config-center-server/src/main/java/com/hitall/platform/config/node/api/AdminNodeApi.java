@@ -11,9 +11,9 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-/** V1 管理端节点 API；兼容历史 /api/v1/admin/nodes 路由。 */
+/** 配置管理节点 API；兼容历史 /api/v1/admin/nodes 路由。 */
 @RestController
-@RequestMapping({"/api/config/v1/admin/nodes", "/api/v1/admin/nodes"})
+@RequestMapping({"/api/config/admin/nodes", "/api/v1/admin/nodes"})
 public class AdminNodeApi {
     private final ConfigNodeService service;
 
@@ -33,7 +33,7 @@ public class AdminNodeApi {
     }
 
 
-    // v1 规范路径；兼容旧版的 GET /children?parentId=...
+    // 规范子节点分页路径；保留原有 GET /children?parentId=... 兼容
     @GetMapping("/{id}/children")
     public NodePage childrenById(
             @PathVariable("id") long parentId,

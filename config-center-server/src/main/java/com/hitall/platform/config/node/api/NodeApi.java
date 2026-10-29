@@ -5,9 +5,9 @@ import com.hitall.platform.config.node.service.ConfigNodeService;
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
-/** V1 客户端节点查询 API；无管理写接口。 */
+/** 客户端节点查询 API；无管理写接口。 */
 @RestController
-@RequestMapping({"/api/config/v1/nodes", "/api/v1/config/nodes"})
+@RequestMapping({"/api/config/nodes", "/api/v1/config/nodes"})
 public class NodeApi {
     private final ConfigNodeService service;
 

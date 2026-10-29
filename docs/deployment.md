@@ -32,7 +32,7 @@ gradle :config-client-demo:bootRun
 创建订阅者（仅允许 localhost 回调地址，生产需要配置 `config.webhook.allowed-hosts`）：
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/admin/subscribers \
+curl -X POST http://127.0.0.1:8080/api/config/admin/subscribers \
   -H 'Content-Type: application/json' \
   -d '{"code":"demo","callbackUrl":"http://127.0.0.1:8081/internal/config/callback","secret":"dev-signing-secret"}'
 ```
@@ -47,7 +47,7 @@ npm install
 npm run dev
 ```
 
-仅供可信网络访问。生产部署将 `/api/v1/admin/**` 限制到受信任的网关来源，不允许匿名公网访问。由于没有登录/权限系统，网关网络 ACL 即为管理接口的唯一访问控制边界。生产的 Webhook 需要 HTTPS、受控 DNS/目标地址、密钥管理与监控。
+仅供可信网络访问。生产部署将 `/api/config/admin/**`（以及兼容期 `/api/v1/admin/**`）限制到受信任的网关来源，不允许匿名公网访问。由于没有登录/权限系统，网关网络 ACL 即为管理接口的唯一访问控制边界。生产的 Webhook 需要 HTTPS、受控 DNS/目标地址、密钥管理与监控。
 
 ## 客户端远程请求超时
 
@@ -67,9 +67,9 @@ config:
 注意服务端 Webhook 默认请求超时为 5 秒，完整的接入端同步（尤其大数据量首次快照）可能超过该时限，导致重复通知；重复通知须保持幂等，生产环境按实际耗时配置该超时或进一步采用异步触发方案。
 
 
-## 统一接口前缀与 Nginx
+## 统一无版本接口前缀与 Nginx
 
-生产环境建议使用 `/api/config/v1/**` 访问配置中心，Nginx 仅按服务前缀转发，请保留原始请求 URI，不要把版本号拆给不同上游：
+生产环境统一使用 `/api/config/**` 访问配置中心。Nginx 仅按服务前缀转发，`proxy_pass` 不带 URI 后缀，完整保留请求路径：
 
 ```nginx
 location ^~ /api/config/ {
@@ -77,4 +77,4 @@ location ^~ /api/config/ {
 }
 ```
 
-接入服务的 `CONFIG_CENTER_URL` 只配置服务根 URL，例如 `http://config-center:8080`，Starter 内部自动拼接 `/api/config/v1/...`。旧版客户端在过渡期仍可使用原 `/api/v1/...` 路由；迁移时务必保证旧路径仍能转发至配置中心。管理接口不含登录模块，必须通过可信网络、网关 ACL 等限制访问。
+接入服务的 `CONFIG_CENTER_URL` 只配置服务根 URL，例如 `http://config-center:8080`，Starter 内部自动拼接 `/api/config/...`。旧版客户端在兼容期仍可使用原 `/api/v1/...` 路由；迁移时需要单独保留 `/api/v1/` 到配置中心的转发规则，否则旧客户端可能返回 404。管理接口不含登录模块，必须通过可信网络、网关 ACL 等限制访问。

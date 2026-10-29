@@ -13,20 +13,20 @@
 - Webhook 必须通过 HMAC SHA-256 验证；管理接口只在可信网络提供。
 - 不实现账号、登录、角色与权限模块。
 
-## API 契约与版本演进
+## API 契约与路由规范
 
-统一 HTTP 前缀采用 `/api/{service}/v{version}/...`。当前配置中心的规范前缀为 `/api/config/v1`，Nginx 只按 `/api/config/`、`/api/auth/`、`/api/service/` 等服务前缀分流；V1/V2 由 Spring Boot 的 API 包及请求映射处理，不按版本部署独立后端。
+统一 HTTP 前缀为 `/api/{service}/...`，配置中心使用 `/api/config`，SDK 认证服使用 `/api/auth`，SDK 功能服使用 `/api/service`。Nginx 只按服务前缀分流，不按版本号分流；服务端 URL、Java 包名和接口类名均不带版本号。
 
-- 管理端：`GET/POST /api/config/v1/admin/nodes`，`GET/PUT/DELETE /api/config/v1/admin/nodes/{id}`
-- 配置树：`GET /api/config/v1/admin/nodes/tree?parentId=...`
-- 直属子项分页：`GET /api/config/v1/admin/nodes/{id}/children?page=...&size=...&keyword=...`；根级仍通过 `/admin/nodes/children?parentId=0` 查询
-- 全局搜索与路径：`GET /api/config/v1/admin/nodes/search?keyword=...`、`GET /api/config/v1/admin/nodes/{id}/path`
-- 订阅者管理：`GET/POST /api/config/v1/admin/subscribers`
-- 客户端节点查询：`GET /api/config/v1/nodes/{id}`、`POST /api/config/v1/nodes/batch-get`
-- 增量与快照：`GET /api/config/v1/sync/revision`、`GET /api/config/v1/sync/changes?afterRevision=...&limit=...`、`GET /api/config/v1/sync/snapshot`
+- 管理端：`GET/POST /api/config/admin/nodes`，`GET/PUT/DELETE /api/config/admin/nodes/{id}`
+- 配置树：`GET /api/config/admin/nodes/tree?parentId=...`
+- 直属子项分页：`GET /api/config/admin/nodes/{id}/children?page=...&size=...&keyword=...`；根级仍通过 `/admin/nodes/children?parentId=0` 查询
+- 全局搜索与路径：`GET /api/config/admin/nodes/search?keyword=...`、`GET /api/config/admin/nodes/{id}/path`
+- 订阅者管理：`GET/POST /api/config/admin/subscribers`
+- 客户端节点查询：`GET /api/config/nodes/{id}`、`POST /api/config/nodes/batch-get`
+- 增量与快照：`GET /api/config/sync/revision`、`GET /api/config/sync/changes?afterRevision=...&limit=...`、`GET /api/config/sync/snapshot`
 - 接入实例内部回调：`POST /internal/config/callback`，属于内部 Webhook，不公开在统一 API 网关
 
-Java 接口类统一放在各业务模块的 `api` 包，不用版本号命名包或类。版本仅体现在 HTTP 路径；未来出现不兼容的 V2 时，先考虑在现有 API 中使用独立的方法/映射与版本 DTO，确有职责分化再增加有业务含义的 API 类，Service/Repository 优先复用。
+Java HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api`。不按版本拆 Java 包或增加 URL 版本段；后续若需要不兼容升级，先评估兼容字段、独立资源或明确迁移窗口，并按实际需求决定是否引入版本协商。
 
 **兼容期**：服务端继续接受原 `/api/v1/...` 路由，包括原管理子项分页 `/api/v1/admin/nodes/children?parentId=...`。前端与 Starter 默认使用新路径。只有在确认旧客户端全部升级后，才能另行删除别名。
 
@@ -97,8 +97,8 @@ CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 pack
 
 **接口层命名约定：** 所有使用 `@RestController` 的 Java 类统一位于所属业务模块的 `api` 包，并以 `Api` 结尾，例如 `node.api.NodeApi`、`sync.api.SyncApi`。Starter 回调入口位于 `client.callback.api.ConfigCallbackApi`，示例入口位于 `demo.api.DemoApi`。类重命名不改变 Spring MVC 的请求映射、返回 JSON 或 HTTP 状态码。
 
-### API 包版本策略
+### API 命名规则
 
-配置中心 API 类为 `node.api.AdminNodeApi`、`node.api.NodeApi`、`node.api.NodeNavigationApi`、`sync.api.SyncApi`、`subscriber.api.SubscriberApi`。旧路径别名与 V1 共用实现；API 版本号不同于 Flyway 数据库迁移版本号。
+配置中心 API 类为 `node.api.AdminNodeApi`、`node.api.NodeApi`、`node.api.NodeNavigationApi`、`sync.api.SyncApi`、`subscriber.api.SubscriberApi`。旧路径别名与规范路径共用实现；Flyway 数据库迁移版本独立于 HTTP 路由。
 
-**补充约定**：Java `api` 包与 `*Api` 类名均不带 `v1`、`v2` 等版本号，只有 URL 体现版本。CI 将检查包路径与命名。
+**补充约定**：Java 的 `api` 包、`*Api` 类名及正式 HTTP 地址都不包含版本号。CI 将检查包路径及命名。
