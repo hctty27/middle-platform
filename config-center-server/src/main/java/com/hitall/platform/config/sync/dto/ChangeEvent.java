@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node;
+package com.hitall.platform.config.sync.dto;
 
 import java.time.LocalDateTime;
 

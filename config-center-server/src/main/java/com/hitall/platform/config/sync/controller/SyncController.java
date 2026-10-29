@@ -1,4 +1,8 @@
-package com.hitall.platform.config.node;
+package com.hitall.platform.config.sync.controller;
+
+import com.hitall.platform.config.node.service.ConfigNodeService;
+import com.hitall.platform.config.sync.dto.ChangeEvent;
+import com.hitall.platform.config.sync.dto.RevisionInfo;
 
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
