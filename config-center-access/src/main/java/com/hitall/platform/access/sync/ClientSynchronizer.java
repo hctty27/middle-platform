@@ -148,7 +148,7 @@ public class ClientSynchronizer {
     public record Ids(List<Long> ids) {}
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public record Node(long id, String nodeType, Long gameId, Long regionId,
-                       Long serverGroupId, Long channelId, String code, String name,
+                       Long serverGroupId, String code, String name,
                        int status, String config, String remark,
                        LocalDateTime createdAt, LocalDateTime updatedAt) {}
 }

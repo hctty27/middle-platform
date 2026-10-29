@@ -24,19 +24,18 @@ public class ConfigNodeWriteRepository {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(connection -> {
                 PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO config_node(game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                        "INSERT INTO config_node(game_id,region_id,server_group_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
                         Statement.RETURN_GENERATED_KEYS);
                 statement.setObject(1, ancestry.gameId());
                 statement.setObject(2, ancestry.regionId());
                 statement.setObject(3, ancestry.serverGroupId());
-                statement.setObject(4, ancestry.channelId());
-                statement.setString(5, input.nodeType());
-                statement.setString(6, input.code());
-                statement.setString(7, input.name());
-                statement.setInt(8, input.status());
-                statement.setString(9, input.config());
-                statement.setString(10, input.remark());
+                statement.setString(4, input.nodeType());
+                statement.setString(5, input.code());
+                statement.setString(6, input.name());
+                statement.setInt(7, input.status());
+                statement.setString(8, input.config());
+                statement.setString(9, input.remark());
                 return statement;
             }, key);
         return key.getKey().longValue();

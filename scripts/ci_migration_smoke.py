@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a real V1 -> V2 -> V3 upgrade with legacy rows against MySQL 8.4."""
+"""Run a real V1 -> V2 -> V3 -> V4 upgrade with legacy rows against MySQL 8.4."""
 
 import glob
 import json
@@ -89,7 +89,7 @@ def main():
         VALUES
             (77,7,DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 1 DAY),UTC_TIMESTAMP(6));
     """)
-    boot("legacy-v3-upgrade")
+    boot("legacy-v3-upgrade", "--spring.flyway.target=3")
     versions = mysql("SELECT version FROM config_migration.flyway_schema_history "
                      "WHERE success=1 ORDER BY installed_rank;").splitlines()
     assert versions == ["1", "2", "3"], versions
@@ -112,6 +112,37 @@ def main():
     assert mysql("SELECT acknowledged_revision,COALESCE(acknowledged_epoch,'NULL') "
                  "FROM config_migration.config_delivery_state WHERE subscriber_id=77;") == "7\tNULL"
     print("PASS V1 legacy data -> V2 ancestry -> V3 epoch cursor", flush=True)
+
+    # 原数据由 V4 自动归档。SDK 应用保留 id/code/config，直属父节点直接变为区服组。
+    previous_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1;")
+    boot("legacy-v4-upgrade")
+    versions = mysql("SELECT version FROM config_migration.flyway_schema_history "
+                     "WHERE success=1 ORDER BY installed_rank;").splitlines()
+    assert versions == ["1", "2", "3", "4"], versions
+    rows = mysql("""
+        SELECT id,node_type,COALESCE(game_id,0),COALESCE(region_id,0),
+               COALESCE(server_group_id,0)
+        FROM config_migration.config_node ORDER BY id;
+    """).splitlines()
+    assert rows == [
+        "101\tgame\t0\t0\t0",
+        "102\tregion\t101\t0\t0",
+        "103\tserver_group\t101\t102\t0",
+        "105\tchannel_app\t101\t102\t103",
+    ], rows
+    assert mysql("SELECT COUNT(*) FROM information_schema.columns WHERE "
+                 "table_schema='config_migration' AND table_name='config_node' "
+                 "AND column_name='channel_id';") == "0"
+    assert mysql("SELECT id,node_type,COALESCE(channel_id,0) FROM "
+                 "config_migration.config_node_v4_legacy_archive ORDER BY id;").splitlines() == [
+        "104\tchannel\t0",
+        "105\tsdk_app\t104",
+    ]
+    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1;") != previous_epoch
+    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1;") == "7"
+    print("PASS V4 four-level hierarchy, legacy archive and epoch change", flush=True)
+
+
 
 
 if __name__ == "__main__":

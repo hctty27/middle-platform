@@ -32,8 +32,7 @@ public class ConfigNodeService {
     private static final Map<String, String> PARENTS = Map.of(
             "region", "game",
             "server_group", "region",
-            "channel", "server_group",
-            "sdk_app", "channel"
+            "channel_app", "server_group"
     );
 
     private final ConfigNodeQueryRepository queries;
@@ -139,7 +138,7 @@ public class ConfigNodeService {
     private NodeAncestry ancestryFromParent(long parentId, String nodeType) {
         if ("game".equals(nodeType)) {
             if (parentId != 0) throw badRequest("Game parentId must be 0");
-            return new NodeAncestry(null, null, null, null);
+            return new NodeAncestry(null, null, null);
         }
         String expected = PARENTS.get(nodeType);
         if (expected == null || parentId <= 0) throw badRequest("Invalid nodeType/parentId");
@@ -149,10 +148,9 @@ public class ConfigNodeService {
         }
         ConfigNode parent = parents.getFirst();
         return switch (nodeType) {
-            case "region" -> new NodeAncestry(parent.id(), null, null, null);
-            case "server_group" -> new NodeAncestry(parent.gameId(), parent.id(), null, null);
-            case "channel" -> new NodeAncestry(parent.gameId(), parent.regionId(), parent.id(), null);
-            case "sdk_app" -> new NodeAncestry(parent.gameId(), parent.regionId(), parent.serverGroupId(), parent.id());
+            case "region" -> new NodeAncestry(parent.id(), null, null);
+            case "server_group" -> new NodeAncestry(parent.gameId(), parent.id(), null);
+            case "channel_app" -> new NodeAncestry(parent.gameId(), parent.regionId(), parent.id());
             default -> throw badRequest("Invalid node type");
         };
     }

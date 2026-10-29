@@ -7,10 +7,10 @@ import type { LoadFunction } from 'element-plus'
 
 export function useNodeWorkspace(emit: (event: 'changed') => void) {
 const labels: Record<NodeType, string> = {
-  game: '游戏', region: '大区', server_group: '区服组', channel: '渠道', sdk_app: 'SDK 应用'
+  game: '游戏', region: '大区', server_group: '区服组', channel_app: '渠道应用'
 }
 const nextType: Partial<Record<NodeType, NodeType>> = {
-  game: 'region', region: 'server_group', server_group: 'channel', channel: 'sdk_app'
+  game: 'region', region: 'server_group', server_group: 'channel_app'
 }
 const treeProps = { label: 'name', isLeaf: 'leaf' }
 const treeRef = ref<InstanceType<typeof ElTree> | null>(null)
@@ -55,7 +55,7 @@ let detailController: AbortController | undefined
 function toSummary(node: NodeRecord): NodeSummary {
   return { id: node.id, parentId: node.parentId, nodeType: node.nodeType,
     code: node.code, name: node.name, status: node.status,
-    leaf: ['server_group', 'channel', 'sdk_app'].includes(node.nodeType) }
+    leaf: ['server_group', 'channel_app'].includes(node.nodeType) }
 }
 
 function resetForm(parentId: number, nodeType: NodeType) {
@@ -170,7 +170,7 @@ async function loadChildren() {
   const node = selected.value
   const sequence = ++childSequence
   childController?.abort()
-  if (!node || node.nodeType === 'sdk_app') {
+  if (!node || node.nodeType === 'channel_app') {
     children.value = []
     childTotal.value = 0
     childrenLoading.value = false
@@ -211,7 +211,7 @@ function onTreeClick(node: NodeSummary, rawTreeNode: unknown) {
   type TreePathNode = { data: NodeSummary; parent: TreePathNode | null; level: number }
   const path: NodeSummary[] = []
   let current = rawTreeNode as TreePathNode | null
-  while (current && current.level > 0 && path.length < 5) {
+  while (current && current.level > 0 && path.length < 4) {
     path.unshift(current.data)
     current = current.parent
   }

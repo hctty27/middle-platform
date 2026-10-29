@@ -71,7 +71,7 @@ onMounted(() => void refreshRevision())
         <h2>系统说明</h2>
         <p>当前权威数据集：{{ epoch }}</p>
         <p>当前配置版本：{{ revision }}</p>
-        <p>游戏 → 大区 → 区服组 → 渠道 → SDK 应用，配置只在对应节点保存。</p>
+        <p>游戏 → 大区 → 区服组 → 渠道应用，配置只在对应节点保存。</p>
         <el-alert title="管理后台没有登录和账号权限，必须通过内网或受控网关限制访问。"
                   type="warning" show-icon :closable="false" />
       </main>

@@ -1,11 +1,11 @@
 # 配置中心架构决策
 
-- 五级层级固定：game -> region -> server_group -> channel -> sdk_app。
+- 当前四级层级固定：game -> region -> server_group -> channel_app。
 - 所有业务配置仅存于 `config_node`；其余表是同步/订阅的基础设施表。
-- `config_node` 仅存储 `game_id`、`region_id`、`server_group_id`、`channel_id` 四个祖先 ID，不存储 `parent_id`；仅保存祖先，不保存自身。
-- 游戏四列都为空；大区只保存游戏 ID；区服组保存游戏和大区 ID；渠道再保存区服组 ID；SDK 应用保存全部四个 ID。
+- 当前 `config_node` 仅存储 `game_id`、`region_id`、`server_group_id` 三个祖先 ID，不存储 `parent_id`；仅保存祖先，不保存自身。
+- 游戏三个祖先列均为空；大区只保存游戏 ID；区服组保存游戏和大区 ID；渠道应用保存游戏、大区和区服组 ID。
 - API 中的 `parentId` 是按 `nodeType` 推导的兼容属性；写服务通过创建请求的 `parentId` 校验父类型并自动生成祖先路径。节点层级、类型、编码创建后不可修改。
-- 同级 `code` 的唯一性通过按 `nodeType` 和最深非空祖先 ID（根为 0）建立的 MySQL 函数唯一索引保证。`config` 只保存本节点 JSON，不向上继承。
+- 同级 `code` 的唯一性通过按 `nodeType` 和最深非空祖先 ID（根为 0）建立的 MySQL 函数唯一索引保证；`channel_app` 的直属父节点是 `server_group`。`config` 只保存本节点 JSON，不向上继承。
 - 配置中心多个 Spring Boot 实例共享单个 MySQL，应用无独立配置状态。
 - 全局版本行必须在写事务内先锁定，确保提交顺序与 revision 一致；同时提交 config_node 与 change log。
 - Webhook 通知仅包含 epoch 和 revision，订阅者按 revision 获取 ID 列表并查询节点最新状态。
@@ -103,3 +103,13 @@ CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 pack
 配置中心 API 类为 `node.api.AdminNodeApi`、`node.api.NodeApi`、`node.api.NodeNavigationApi`、`sync.api.SyncApi`、`subscriber.api.SubscriberApi`。不提供旧接口别名；Flyway 数据库迁移版本独立于 HTTP 路由。
 
 **补充约定**：Java 的 `api` 包、`*Api` 类名及正式 HTTP 地址都不包含版本号。CI 将检查包路径及命名。
+
+## V4 四级配置树升级
+
+- 当前唯一有效节点类型：`game`、`region`、`server_group`、`channel_app`。禁止再创建 `channel` 和 `sdk_app`。
+- 服务端新增 Flyway `V4__channel_app_hierarchy.sql`，删除 `channel_id`，调整约束和同级唯一索引；保留 SDK 应用原主键、编码和 JSON，并迁至区服组下。
+- V4 在执行不可逆变更前，通过临时唯一键检查同一区服组下的重复应用 Code。若有冲突，迁移会失败，需要先解决并重新部署。
+- V4 将原 `channel` 及 `sdk_app` 记录完整归档到 `config_node_v4_legacy_archive`，保留旧渠道配置、应用到渠道的关系。归档表不参与新系统的配置查询和同步；旧渠道 JSON 不会自动合并到应用 JSON。
+- 迁移完成后配置中心切换 `epoch`，不重置 `revision`。接入工程使用独立 Flyway `V3__channel_app_replica.sql` 清理本地旧副本并重置同步游标，首次访问新服务后按四级快照全量恢复。
+- V1/V2/V3 是历史迁移，不改写其内容；旧 V2 章节中的五级路径仅用于说明历史数据如何升级。生产上线必须先备份、协调停写、同时替换配置中心和接入端二进制，然后恢复 Webhook 投递。
+- 管理界面仍只把前三层作为懒加载目录，`channel_app` 在区服组右侧分页列表中维护。HTTP 路由与 Nginx 分流规则不变。

@@ -45,14 +45,14 @@ public class LocalConfigRepository {
 
     public void upsert(Node node) {
         jdbc.update("""
-                INSERT INTO config_node(id,game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                INSERT INTO config_node(id,game_id,region_id,server_group_id,node_type,code,name,status,config,remark,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                 ON DUPLICATE KEY UPDATE game_id=VALUES(game_id),region_id=VALUES(region_id),
-                    server_group_id=VALUES(server_group_id),channel_id=VALUES(channel_id),
+                    server_group_id=VALUES(server_group_id),
                     node_type=VALUES(node_type),code=VALUES(code),name=VALUES(name),
                     status=VALUES(status),config=VALUES(config),remark=VALUES(remark),
                     created_at=VALUES(created_at),updated_at=VALUES(updated_at)
-                """, node.id(), node.gameId(), node.regionId(), node.serverGroupId(), node.channelId(),
+                """, node.id(), node.gameId(), node.regionId(), node.serverGroupId(),
                 node.nodeType(), node.code(), node.name(), node.status(), node.config(), node.remark(),
                 node.createdAt(), node.updatedAt());
     }
