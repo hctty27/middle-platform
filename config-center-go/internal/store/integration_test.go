@@ -163,12 +163,12 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 
 	// Two Go instances must never claim the same pending subscriber concurrently.
 	first, second := webhook.NewDispatcher(db, "127.0.0.1"), webhook.NewDispatcher(db, "127.0.0.1")
-	type claimResult struct { job *Delivery; err error }
+	type claimResult struct { job *webhook.Delivery; err error }
 	claims := make(chan claimResult, 2)
 	var claimWG sync.WaitGroup
-	for _, d := range []*Dispatcher{first, second} {
+	for _, d := range []*webhook.Dispatcher{first, second} {
 		claimWG.Add(1)
-		go func(d *Dispatcher) {
+		go func(d *webhook.Dispatcher) {
 			defer claimWG.Done()
 			job, err := d.Claim(ctx)
 			claims <- claimResult{job, err}
