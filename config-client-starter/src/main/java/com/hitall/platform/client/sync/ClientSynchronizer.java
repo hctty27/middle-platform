@@ -1,4 +1,8 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.sync;
+
+import com.hitall.platform.client.config.ConfigClientProperties;
+import com.hitall.platform.client.remote.ConfigCenterRemoteClient;
+import com.hitall.platform.client.repository.LocalConfigRepository;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

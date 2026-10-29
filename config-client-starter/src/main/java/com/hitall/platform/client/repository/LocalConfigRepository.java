@@ -1,9 +1,11 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.repository;
+
+import com.hitall.platform.client.sync.ClientSynchronizer;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import com.hitall.platform.client.ClientSynchronizer.Node;
-import com.hitall.platform.client.ClientSynchronizer.Snapshot;
-import com.hitall.platform.client.ClientSynchronizer.State;
+import com.hitall.platform.client.sync.ClientSynchronizer.Node;
+import com.hitall.platform.client.sync.ClientSynchronizer.Snapshot;
+import com.hitall.platform.client.sync.ClientSynchronizer.State;
 
 /** 本地配置节点副本和同步游标的 JDBC 操作。写事务由同步编排层显式控制。 */
 public class LocalConfigRepository {

@@ -1,4 +1,4 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.sync;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

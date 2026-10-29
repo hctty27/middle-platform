@@ -1,4 +1,4 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.sync;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
