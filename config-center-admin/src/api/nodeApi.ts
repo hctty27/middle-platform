@@ -9,7 +9,9 @@ export const nodeApi = {
     api.get<NodeMatch[]>('/admin/nodes/search', { params: { keyword }, signal }),
 
   getChildren: (params: { parentId: number; page: number; size: number; keyword: string }, signal?: AbortSignal) =>
-    api.get<NodePage>('/admin/nodes/children', { params, signal }),
+    api.get<NodePage>('/admin/nodes/' + params.parentId + '/children', {
+      params: { page: params.page, size: params.size, keyword: params.keyword }, signal
+    }),
 
   getNode: (id: number, signal?: AbortSignal) =>
     api.get<NodeRecord>('/admin/nodes/' + id, { signal }),

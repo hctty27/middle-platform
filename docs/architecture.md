@@ -13,19 +13,22 @@
 - Webhook 必须通过 HMAC SHA-256 验证；管理接口只在可信网络提供。
 - 不实现账号、登录、角色与权限模块。
 
-## API 契约
+## API 契约与版本演进
 
-- `GET /api/v1/admin/nodes` 列出全部节点
-- `POST /api/v1/admin/nodes` 新增节点
-- `PUT /api/v1/admin/nodes/{id}` 修改名称、状态、JSON、备注
-- `DELETE /api/v1/admin/nodes/{id}` 无子节点才允许删除
-- `GET /api/v1/config/nodes/{id}` 获取节点
-- `POST /api/v1/config/nodes/batch-get` 获取节点集合
-- `GET /api/v1/sync/revision` 当前数据集标识和版本
-- `GET /api/v1/sync/changes?afterRevision=&limit=` 获取连续变更
-- `GET /api/v1/sync/snapshot` 初始化专用（需事务一致性快照）
-- `POST /api/v1/admin/subscribers` 配置接入方 Webhook
-- `POST /internal/config/callback` 接入方接收通知
+统一 HTTP 前缀采用 `/api/{service}/v{version}/...`。当前配置中心的规范前缀为 `/api/config/v1`，Nginx 只按 `/api/config/`、`/api/auth/`、`/api/service/` 等服务前缀分流；V1/V2 由 Spring Boot 的 API 包及请求映射处理，不按版本部署独立后端。
+
+- 管理端：`GET/POST /api/config/v1/admin/nodes`，`GET/PUT/DELETE /api/config/v1/admin/nodes/{id}`
+- 配置树：`GET /api/config/v1/admin/nodes/tree?parentId=...`
+- 直属子项分页：`GET /api/config/v1/admin/nodes/{id}/children?page=...&size=...&keyword=...`；根级仍通过 `/admin/nodes/children?parentId=0` 查询
+- 全局搜索与路径：`GET /api/config/v1/admin/nodes/search?keyword=...`、`GET /api/config/v1/admin/nodes/{id}/path`
+- 订阅者管理：`GET/POST /api/config/v1/admin/subscribers`
+- 客户端节点查询：`GET /api/config/v1/nodes/{id}`、`POST /api/config/v1/nodes/batch-get`
+- 增量与快照：`GET /api/config/v1/sync/revision`、`GET /api/config/v1/sync/changes?afterRevision=...&limit=...`、`GET /api/config/v1/sync/snapshot`
+- 接入实例内部回调：`POST /internal/config/callback`，属于内部 Webhook，不公开在统一 API 网关
+
+V1 Java API 位于各业务模块的 `api.v1` 包。未来只有 API 契约发生不兼容变化时才增加 `api.v2` 与对应版本 DTO，Service/Repository 默认继续复用，暂不创建无业务含义的空 V2 实现。
+
+**兼容期**：服务端继续接受原 `/api/v1/...` 路由，包括原管理子项分页 `/api/v1/admin/nodes/children?parentId=...`。前端与 Starter 默认使用新路径。只有在确认旧客户端全部升级后，才能另行删除别名。
 
 ## 正确性关键
 
@@ -68,6 +71,7 @@ config/
 ├── ConfigCenterApplication.java
 ├── node/
 │   ├── api/
+│   │   └── v1/
 │   ├── service/
 │   ├── repository/
 │   ├── model/
@@ -93,3 +97,7 @@ config/
 CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 package 声明不一致，以及重要模块再次退化为扁平包。
 
 **接口层命名约定：** 所有使用 `@RestController` 的 Java 类统一位于所属业务模块的 `api` 包，并以 `Api` 结尾，例如 `node.api.NodeApi`、`sync.api.SyncApi`。Starter 回调入口位于 `client.callback.api.ConfigCallbackApi`，示例入口位于 `demo.api.DemoApi`。类重命名不改变 Spring MVC 的请求映射、返回 JSON 或 HTTP 状态码。
+
+### API 包版本策略
+
+配置中心规范 API 类为 `node.api.v1.AdminNodeApi`、`node.api.v1.NodeApi`、`node.api.v1.NodeNavigationApi`、`sync.api.v1.SyncApi`、`subscriber.api.v1.SubscriberApi`。旧路径别名与 V1 共用实现；API 版本号不同于 Flyway 数据库迁移版本号。

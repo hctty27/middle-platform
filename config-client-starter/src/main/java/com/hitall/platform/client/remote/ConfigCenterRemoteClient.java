@@ -42,27 +42,27 @@ public class ConfigCenterRemoteClient {
     }
 
     public Revision revision() {
-        Revision value = client.get().uri("/api/v1/sync/revision").retrieve().body(Revision.class);
+        Revision value = client.get().uri("/api/config/v1/sync/revision").retrieve().body(Revision.class);
         if (value == null) throw new IllegalStateException("Missing remote revision");
         return value;
     }
 
     public Event[] changes(long after, int limit) {
-        Event[] value = client.get().uri(builder -> builder.path("/api/v1/sync/changes")
+        Event[] value = client.get().uri(builder -> builder.path("/api/config/v1/sync/changes")
                 .queryParam("afterRevision", after).queryParam("limit", limit).build())
                 .retrieve().body(Event[].class);
         return value == null ? new Event[0] : value;
     }
 
     public Node[] batchGet(List<Long> ids) {
-        Node[] value = client.post().uri("/api/v1/config/nodes/batch-get")
+        Node[] value = client.post().uri("/api/config/v1/nodes/batch-get")
                 .body(new Ids(ids)).retrieve().body(Node[].class);
         if (value == null) throw new IllegalStateException("Missing nodes");
         return value;
     }
 
     public Snapshot snapshot() {
-        Snapshot value = client.get().uri("/api/v1/sync/snapshot").retrieve().body(Snapshot.class);
+        Snapshot value = client.get().uri("/api/config/v1/sync/snapshot").retrieve().body(Snapshot.class);
         if (value == null) throw new IllegalStateException("Missing snapshot");
         return value;
     }
