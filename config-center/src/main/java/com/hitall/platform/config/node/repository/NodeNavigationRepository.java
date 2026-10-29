@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 搜索与路径定位：直接按四个祖先 ID 关联，避免递归查询父节点。
+ * 搜索与路径定位：直接按三个祖先 ID 关联，避免递归查询父节点。
  */
 @Repository
 public class NodeNavigationRepository {
@@ -23,7 +23,7 @@ public class NodeNavigationRepository {
                    r.id AS r_id, r.node_type AS r_type, r.code AS r_code,
                    r.name AS r_name, r.status AS r_status,
                    sg.id AS sg_id, sg.node_type AS sg_type, sg.code AS sg_code,
-                   sg.name AS sg_name, sg.status AS sg_status,
+                   sg.name AS sg_name, sg.status AS sg_status
             FROM config_node n
             LEFT JOIN config_node g ON g.id = n.game_id
             LEFT JOIN config_node r ON r.id = n.region_id

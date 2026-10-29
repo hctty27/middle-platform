@@ -1,4 +1,4 @@
-export type NodeType = 'game' | 'region' | 'server_group' | 'channel' | 'sdk_app'
+export type NodeType = 'game' | 'region' | 'server_group' | 'channel_app'
 
 export interface NodeSummary {
   id: number

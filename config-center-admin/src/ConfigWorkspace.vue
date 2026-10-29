@@ -20,7 +20,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, expand
       <el-input v-model="searchWord" clearable placeholder="全局搜索名称或 Code"
                 @input="onSearchInput" @clear="onSearchInput" />
       <div v-if="searchWord.trim()" class="tree-scroll search-results" v-loading="searchLoading">
-        <div class="search-count">跨所有游戏、大区、区服组、渠道和 SDK 应用搜索</div>
+        <div class="search-count">跨所有游戏、大区、区服组和渠道应用搜索</div>
         <el-empty v-if="!searchLoading && !searchMatches.length" description="无匹配节点" :image-size="75" />
         <button v-for="match in searchMatches" :key="match.node.id" class="search-result"
                 @click="openMatch(match)">
@@ -45,7 +45,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, expand
           </template>
         </el-tree>
       </div>
-      <div class="tree-hint">目录只展开前三层，渠道和 SDK 应用在右侧列表中逐级查看。</div>
+      <div class="tree-hint">目录只展开前三层，渠道应用在右侧列表中查看。</div>
     </section>
 
     <section class="editor-panel">
@@ -78,16 +78,16 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, expand
         </div>
         <div class="children-toolbar">
           <div>
-            <strong>{{ selected.nodeType === 'sdk_app' ? '节点详情' : nextLabel + '列表' }}</strong>
-            <span v-if="selected.nodeType !== 'sdk_app'" class="muted">共 {{ childTotal }} 条</span>
+            <strong>{{ selected.nodeType === 'channel_app' ? '节点详情' : nextLabel + '列表' }}</strong>
+            <span v-if="selected.nodeType !== 'channel_app'" class="muted">共 {{ childTotal }} 条</span>
           </div>
-          <div class="children-tools" v-if="selected.nodeType !== 'sdk_app'">
+          <div class="children-tools" v-if="selected.nodeType !== 'channel_app'">
             <el-input v-model="childSearch" clearable placeholder="筛选直属子项" @input="onChildSearch" />
             <el-button type="primary" @click="openCreate(selected)">+ 新增{{ nextLabel }}</el-button>
           </div>
         </div>
-        <div v-if="selected.nodeType === 'sdk_app'" class="leaf-tip">
-          SDK 应用是末级节点，可以通过右上角“查看 / 编辑”维护配置。
+        <div v-if="selected.nodeType === 'channel_app'" class="leaf-tip">
+          渠道应用是末级节点，可以通过右上角“查看 / 编辑”维护配置。
         </div>
         <template v-else>
           <div class="children-table">
