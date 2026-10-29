@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -17,8 +18,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @ConditionalOnProperty(prefix = "config.client", name = "enabled", havingValue = "true")
 public class ConfigClientAutoConfiguration {
     @Bean
-    ClientSynchronizer clientSynchronizer(JdbcTemplate jdbc, ConfigClientProperties properties) {
-        return new ClientSynchronizer(jdbc, properties);
+    ClientSynchronizer clientSynchronizer(JdbcTemplate jdbc, ConfigClientProperties properties,
+                                          PlatformTransactionManager transactionManager) {
+        return new ClientSynchronizer(jdbc, properties, transactionManager);
     }
 
     @Bean

@@ -11,4 +11,5 @@ dependencies {
     api("org.springframework.boot:spring-boot-starter-webmvc")
     api("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-autoconfigure")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
