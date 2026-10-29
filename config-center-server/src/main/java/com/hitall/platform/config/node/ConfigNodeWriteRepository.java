@@ -18,7 +18,7 @@ public class ConfigNodeWriteRepository {
 
     public long insert(CreateNodeRequest input, NodeAncestry ancestry) {
         KeyHolder key = new GeneratedKeyHolder();
-            jdbc.update(connection -> {
+        jdbc.update(connection -> {
                 PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO config_node(game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
                         "VALUES (?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
