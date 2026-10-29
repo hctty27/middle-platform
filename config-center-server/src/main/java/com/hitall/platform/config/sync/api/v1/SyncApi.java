@@ -1,4 +1,4 @@
-package com.hitall.platform.config.sync.api;
+package com.hitall.platform.config.sync.api.v1;
 
 import com.hitall.platform.config.node.service.ConfigNodeService;
 import com.hitall.platform.config.sync.dto.ChangeEvent;
@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
  * 向客户端公开版本游标、增量事件和全量快照。
  */
 @RestController
-@RequestMapping("/api/v1/sync")
+@RequestMapping({"/api/config/v1/sync", "/api/v1/sync"})
 public class SyncApi {
     private final ConfigNodeService service;
 
