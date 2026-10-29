@@ -26,7 +26,12 @@ def request(port, path, method="GET", payload=None, expected=200):
         status, body = exc.code, exc.read()
     if status != expected:
         raise AssertionError(f"{port} {method} {path}: HTTP {status}, expected {expected}: {body[:600]!r}")
-    return json.loads(body) if body else None
+    if not body:
+        return None
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return body.decode("utf-8", errors="replace")
 
 def wait_ready(port, path, proc, label):
     deadline = time.monotonic() + 85
