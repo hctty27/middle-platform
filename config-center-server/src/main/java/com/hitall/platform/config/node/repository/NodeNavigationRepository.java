@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node;
+package com.hitall.platform.config.node.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;

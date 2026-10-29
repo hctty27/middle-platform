@@ -1,4 +1,8 @@
-package com.hitall.platform.config.node;
+package com.hitall.platform.config.node.repository;
+
+import com.hitall.platform.config.node.dto.NodePage;
+import com.hitall.platform.config.node.dto.NodeSummary;
+import com.hitall.platform.config.node.model.ConfigNode;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -1,4 +1,6 @@
-package com.hitall.platform.config.node;
+package com.hitall.platform.config.node.controller;
+
+import com.hitall.platform.config.node.repository.NodeNavigationRepository;
 
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
