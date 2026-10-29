@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -134,6 +135,54 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err != nil || len(subscribers) != 1 || subscribers[0].AcknowledgedRevision != 6 {
 		t.Fatalf("acknowledgment: %+v %v", subscribers, err)
 	}
+
+	// Every concurrent writer must receive exactly one monotonically increasing revision.
+	var wg sync.WaitGroup
+	errs := make(chan error, 12)
+	for i := range 12 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := store.Create(ctx, CreateNodeRequest{
+				NodeType: "game", Code: fmt.Sprintf("concurrent-%d", i),
+				Name: fmt.Sprintf("Concurrent %d", i), Status: &enabled, Config: "{}",
+			})
+			errs <- err
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs { if err != nil { t.Fatal(err) } }
+	all, err := store.Changes(ctx, 0, 100)
+	if err != nil || len(all) != 18 { t.Fatalf("concurrent change log count = %d, err = %v", len(all), err) }
+	for i, event := range all {
+		if event.Revision != int64(i+1) { t.Fatalf("revision gap at %d: %d", i, event.Revision) }
+	}
+
+	// Two Go instances must never claim the same pending subscriber concurrently.
+	first, second := NewDispatcher(db, "127.0.0.1"), NewDispatcher(db, "127.0.0.1")
+	type claimResult struct { job *Delivery; err error }
+	claims := make(chan claimResult, 2)
+	var claimWG sync.WaitGroup
+	for _, d := range []*Dispatcher{first, second} {
+		claimWG.Add(1)
+		go func(d *Dispatcher) {
+			defer claimWG.Done()
+			job, err := d.claim(ctx)
+			claims <- claimResult{job, err}
+		}(d)
+	}
+	claimWG.Wait()
+	close(claims)
+	successful := 0
+	for result := range claims {
+		if result.err != nil { t.Fatal(result.err) }
+		if result.job != nil {
+			successful++
+			if err := first.delivered(ctx, *result.job); err != nil { t.Fatal(err) }
+		}
+	}
+	if successful != 1 { t.Fatalf("expected exactly one lease holder, got %d", successful) }
 }
 
 func errorsIs(err, target error) bool {

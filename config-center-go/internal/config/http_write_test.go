@@ -37,7 +37,7 @@ func TestCreateAndDeleteWriteRoutes(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated { t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String()) }
-	var result Node
+	var result struct { ID int64 `json:"id"` }
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil { t.Fatal(err) }
 	if result.ID != 5 || writer.last.Code != "g1" { t.Fatalf("result: %+v, last: %+v", result, writer.last) }
 
