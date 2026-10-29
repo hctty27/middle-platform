@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: "mysql"
+    schema: "internal/sqlc/schema.sql"
+    queries: "internal/sqlc/queries.sql"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "internal/sqlcgen"
+        sql_package: "database/sql"
+        emit_interface: true
+        emit_empty_slices: true

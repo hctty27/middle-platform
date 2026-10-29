@@ -52,3 +52,14 @@ Go 写接口和 Webhook 分发实现位于 `internal/config/write.go` 与 `deliv
 - Java 版本仍保持现有协议，Go 的写入/Webhook **不能与 Java 写实例同时启用投递**；需要完成真实 MySQL 并发和兼容回归后再切换。
 
 默认阶段一的只读启动方法仍可使用。写入功能适合在专用测试库验证，**勿直接对生产库开启**。
+
+## 第三阶段：真实 Flyway 兼容性验证与性能基线
+
+CI `compatibility` 作业启动 MySQL 8.4，使用现有 Java Spring Boot + Flyway 执行真实 V1→V4 迁移，然后对同一个迁移后的数据库同时启动 Java 8080 和 Go 8081。
+
+- `scripts/ci_go_compat.py` 对照读取接口、历史节点、搜索、快照和增量日志；交替用 Java / Go 写入后验证双端响应、幂等更新、删除与 revision。
+- `scripts/ci_go_benchmark.py` 在同一 Runner 上分别测试 Java 和 Go 的典型只读接口，输出 QPS、P50、P95 和 P99，并上传 CI 构建产物。仅作趋势参考，不作为吞吐优势证明，也不设任意性能门槛。
+- `sqlc.yaml` + `internal/sqlc/queries.sql` 开始以 sqlc v1.31.1 为新查询维护生成源。运行 `sqlc generate` 可生成 `internal/sqlcgen/`；CI 校验生成和编译。现有 Store SQL 尚未切换到生成层，生成层当前是过渡步骤。
+- `internal/sqlc/schema.sql` 只是 sqlc 分析专用的 V4 字段快照，不能用于部署或替代 Flyway 迁移。
+
+下一步需要在稳定生成的基础上逐个替换手写查询，并进一步验证 Webhook 目标地址 DNS 重绑定防护、生产时区和多实例压测。
