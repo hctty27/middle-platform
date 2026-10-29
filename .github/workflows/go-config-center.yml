@@ -13,9 +13,24 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: integration-test-only
+          MYSQL_DATABASE: config_center_go_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pintegration-test-only"
+          --health-interval=5s
+          --health-timeout=4s
+          --health-retries=20
     defaults:
       run:
         working-directory: config-center-go
+    env:
+      TEST_CONFIG_DB_DSN: "root:integration-test-only@tcp(127.0.0.1:3306)/config_center_go_test?parseTime=true&loc=UTC"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
@@ -24,6 +39,6 @@ jobs:
           cache-dependency-path: config-center-go/go.mod
       - run: go mod tidy
       - run: gofmt -w ./cmd/config-center/*.go ./internal/config/*.go
-      - run: go test ./...
+      - run: go test -count=1 -race ./...
       - run: go vet ./...
       - run: go build ./cmd/config-center

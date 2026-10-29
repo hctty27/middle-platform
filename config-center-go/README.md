@@ -38,3 +38,17 @@ go run ./cmd/config-center
 4. 生成并使用 sqlc 类型安全查询，跑压测和 P95/P99 比对，再考虑逐步迁移真实流量。
 
 **警告**：不要把本阶段的 Go 服务部署为 Java 配置中心的直接替代品。管理端写接口尚未实现，且未进行与现有 Java 实现的 MySQL 集成对照测试。保持 Nginx 正式路由不变。
+
+
+## 第二阶段：写入与集群 Webhook（默认关闭）
+
+Go 写接口和 Webhook 分发实现位于 `internal/config/write.go` 与 `delivery.go`。
+
+- `CONFIG_GO_ENABLE_WRITES=false`：默认关闭管理写接口；启用后开放节点创建、更新、删除及新增订阅者。
+- `CONFIG_GO_ENABLE_WEBHOOK=false`：默认关闭投递执行器；启用需同时启用写接口。
+- `WEBHOOK_ALLOWED_HOSTS=localhost,127.0.0.1`：配置订阅者回调的允许主机；生产配置明确的 HTTPS 主机。
+- 全局版本行先 `SELECT ... FOR UPDATE`，节点写入、revision 自增、change_log 插入同一事务；相同 JSON 内容更新不产生新版本。
+- Webhook 使用 MySQL `FOR UPDATE OF d SKIP LOCKED` 抢占投递行、30 秒租约、HMAC SHA-256、失败指数退避。每轮至多 16 个任务，最多 4 个并发请求。
+- Java 版本仍保持现有协议，Go 的写入/Webhook **不能与 Java 写实例同时启用投递**；需要完成真实 MySQL 并发和兼容回归后再切换。
+
+默认阶段一的只读启动方法仍可使用。写入功能适合在专用测试库验证，**勿直接对生产库开启**。

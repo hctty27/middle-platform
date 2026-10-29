@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -29,10 +30,24 @@ type Reader interface {
 	Subscribers(context.Context) ([]Subscriber, error)
 }
 
-type api struct{ reader Reader }
+type Writer interface {
+	Create(context.Context, CreateNodeRequest) (Node, error)
+	Update(context.Context, int64, UpdateNodeRequest) (Node, error)
+	Delete(context.Context, int64) error
+	CreateSubscriber(context.Context, CreateSubscriberRequest) error
+}
 
-func Router(reader Reader) http.Handler {
-	h := &api{reader: reader}
+type api struct {
+	reader Reader
+	writer Writer
+}
+
+func Router(reader Reader) http.Handler { return router(reader, nil) }
+
+func RouterWithWrites(reader Reader, writer Writer) http.Handler { return router(reader, writer) }
+
+func router(reader Reader, writer Writer) http.Handler {
+	h := &api{reader: reader, writer: writer}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Logger)
 	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, map[string]string{"status": "UP"}) })
@@ -58,6 +73,12 @@ func Router(reader Reader) http.Handler {
 	r.Get("/api/config/sync/revision", h.revision)
 	r.Get("/api/config/sync/changes", h.changes)
 	r.Get("/api/config/sync/snapshot", h.snapshot)
+	if writer != nil {
+		r.Post("/api/config/admin/nodes", h.create)
+		r.Put("/api/config/admin/nodes/{id}", h.update)
+		r.Delete("/api/config/admin/nodes/{id}", h.delete)
+		r.Post("/api/config/admin/subscribers", h.createSubscriber)
+	}
 	return r
 }
 
@@ -80,6 +101,8 @@ func respond(w http.ResponseWriter, value any, err error) {
 		writeError(w, http.StatusBadRequest, "invalid request")
 	case errors.Is(err, sql.ErrNoRows):
 		writeError(w, http.StatusNotFound, "node not found")
+	case errors.Is(err, ErrConflict):
+		writeError(w, http.StatusConflict, "conflicting configuration")
 	default:
 		slog.Error("configuration query failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
@@ -194,3 +217,43 @@ func (h *api) subscribers(w http.ResponseWriter, r *http.Request) {
 	respond(w, out, err)
 }
 
+
+func decodeBody(w http.ResponseWriter, r *http.Request, target any) error {
+	defer r.Body.Close()
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err := decoder.Decode(target); err != nil { return ErrInvalid }
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) { return ErrInvalid }
+	return nil
+}
+
+func (h *api) create(w http.ResponseWriter, r *http.Request) {
+	var input CreateNodeRequest
+	if err := decodeBody(w, r, &input); err != nil { respond(w, nil, err); return }
+	node, err := h.writer.Create(r.Context(), input)
+	if err != nil { respond(w, nil, err); return }
+	writeJSON(w, http.StatusCreated, node)
+}
+
+func (h *api) update(w http.ResponseWriter, r *http.Request) {
+	id, err := id(r)
+	if err != nil { respond(w, nil, err); return }
+	var input UpdateNodeRequest
+	if err := decodeBody(w, r, &input); err != nil { respond(w, nil, err); return }
+	node, err := h.writer.Update(r.Context(), id, input)
+	respond(w, node, err)
+}
+
+func (h *api) delete(w http.ResponseWriter, r *http.Request) {
+	id, err := id(r)
+	if err != nil { respond(w, nil, err); return }
+	if err := h.writer.Delete(r.Context(), id); err != nil { respond(w, nil, err); return }
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *api) createSubscriber(w http.ResponseWriter, r *http.Request) {
+	var input CreateSubscriberRequest
+	if err := decodeBody(w, r, &input); err != nil { respond(w, nil, err); return }
+	if err := h.writer.CreateSubscriber(r.Context(), input); err != nil { respond(w, nil, err); return }
+	w.WriteHeader(http.StatusCreated)
+}

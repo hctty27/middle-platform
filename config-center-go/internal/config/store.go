@@ -16,7 +16,10 @@ type queryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-type Store struct{ DB *sql.DB }
+type Store struct {
+	DB *sql.DB
+	AllowedHosts string
+}
 
 func (s *Store) Ready(ctx context.Context) error { return s.DB.PingContext(ctx) }
 

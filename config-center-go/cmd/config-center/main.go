@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -61,9 +62,19 @@ func run() error {
 	if address == "" {
 		address = ":8081"
 	}
+	store := &config.Store{DB: db, AllowedHosts: os.Getenv("WEBHOOK_ALLOWED_HOSTS")}
+	writesEnabled := strings.EqualFold(os.Getenv("CONFIG_GO_ENABLE_WRITES"), "true")
+	webhookEnabled := strings.EqualFold(os.Getenv("CONFIG_GO_ENABLE_WEBHOOK"), "true")
+	if webhookEnabled && !writesEnabled {
+		return errors.New("webhook requires CONFIG_GO_ENABLE_WRITES=true")
+	}
+	var writer config.Writer
+	if writesEnabled { writer = store }
+	var handler http.Handler = config.Router(store)
+	if writer != nil { handler = config.RouterWithWrites(store, writer) }
 	server := &http.Server{
 		Addr:              address,
-		Handler:           config.Router(&config.Store{DB: db}),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -71,9 +82,13 @@ func run() error {
 	}
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if webhookEnabled {
+		dispatcher := config.NewDispatcher(db, store.AllowedHosts)
+		go dispatcher.Run(stopCtx)
+	}
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("read-only Go config center started", "address", address, "revision", revision)
+		slog.Info("Go config center started", "address", address, "revision", revision, "writes_enabled", writesEnabled, "webhook_enabled", webhookEnabled)
 		errCh <- server.ListenAndServe()
 	}()
 	select {
