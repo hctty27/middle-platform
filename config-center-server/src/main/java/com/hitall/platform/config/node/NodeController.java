@@ -25,13 +25,13 @@ public class NodeController {
     }
 
     @GetMapping("/admin/nodes/tree")
-    public List<ConfigNodeService.NodeSummary> treeChildren(
+    public List<NodeSummary> treeChildren(
             @RequestParam(defaultValue = "0") long parentId) {
         return service.treeChildren(parentId);
     }
 
     @GetMapping("/admin/nodes/children")
-    public ConfigNodeService.NodePage children(
+    public NodePage children(
             @RequestParam long parentId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
