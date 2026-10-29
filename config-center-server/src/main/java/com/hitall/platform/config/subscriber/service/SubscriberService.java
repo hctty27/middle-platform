@@ -1,4 +1,4 @@
-package com.hitall.platform.config.webhook;
+package com.hitall.platform.config.subscriber.service;
 
 import java.net.URI;
 import java.util.Arrays;

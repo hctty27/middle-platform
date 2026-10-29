@@ -1,4 +1,4 @@
-package com.hitall.platform.config.webhook;
+package com.hitall.platform.config.webhook.repository;
 
 import java.util.List;
 import java.util.Optional;

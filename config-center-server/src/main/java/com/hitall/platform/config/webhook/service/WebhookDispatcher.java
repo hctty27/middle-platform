@@ -1,4 +1,6 @@
-package com.hitall.platform.config.webhook;
+package com.hitall.platform.config.webhook.service;
+
+import com.hitall.platform.config.webhook.repository.DeliveryRepository;
 
 import java.net.URI;
 import java.net.http.HttpClient;

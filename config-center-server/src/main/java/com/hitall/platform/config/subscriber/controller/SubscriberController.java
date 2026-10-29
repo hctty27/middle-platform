@@ -1,4 +1,6 @@
-package com.hitall.platform.config.webhook;
+package com.hitall.platform.config.subscriber.controller;
+
+import com.hitall.platform.config.subscriber.service.SubscriberService;
 
 import java.util.List;
 import jakarta.validation.Valid;
