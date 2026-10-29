@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { NodeForm } from '../types'
+import type { NodeForm, NodeType } from '../types'
 
 defineProps<{
   visible: boolean
@@ -8,6 +8,7 @@ defineProps<{
   saving: boolean
   creating: boolean
   form: NodeForm
+  labels: Record<NodeType, string>
   beforeClose: (done: () => void) => void
 }>()
 

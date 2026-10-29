@@ -120,7 +120,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, expand
 
     <NodeEditor v-model:visible="drawerVisible" :title="editorTitle"
                 :detail-loading="detailLoading" :saving="saving" :creating="creating"
-                :form="form" :before-close="beforeDrawerClose"
+                :form="form" :labels="labels" :before-close="beforeDrawerClose"
                 @cancel="closeEditor" @save="save" />
   </main>
 </template>
