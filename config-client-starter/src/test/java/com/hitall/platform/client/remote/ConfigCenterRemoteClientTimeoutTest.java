@@ -1,4 +1,6 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.remote;
+
+import com.hitall.platform.client.config.ConfigClientProperties;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

@@ -1,4 +1,7 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.sync;
+
+import com.hitall.platform.client.remote.ConfigCenterRemoteClient;
+import com.hitall.platform.client.repository.LocalConfigRepository;
 
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;

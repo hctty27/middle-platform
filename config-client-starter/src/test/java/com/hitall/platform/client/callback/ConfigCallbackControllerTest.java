@@ -1,4 +1,7 @@
-package com.hitall.platform.client;
+package com.hitall.platform.client.callback;
+
+import com.hitall.platform.client.config.ConfigClientProperties;
+import com.hitall.platform.client.sync.ConfigSyncTrigger;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
