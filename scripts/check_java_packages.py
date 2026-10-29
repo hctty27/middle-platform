@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 
-MODULES = ("config-center-server", "config-client-starter", "config-client-demo")
+MODULES = ("config-center-server", "config-center-access")
 SOURCE_DIRS = ("src/main/java", "src/test/java")
 PATTERN = re.compile(r"^package\s+([\w.]+)\s*;", re.MULTILINE)
 
@@ -28,17 +28,23 @@ def main():
                     problems.append(f"{file}: package {actual}, expected {expected}")
 
     server = Path("config-center-server/src/main/java/com/hitall/platform/config")
-    starter = Path("config-client-starter/src/main/java/com/hitall/platform/client")
+    access = Path("config-center-access/src/main/java/com/hitall/platform/access")
     for area in ("node", "sync", "subscriber", "webhook"):
         if not (server / area).is_dir():
             problems.append(f"Missing business module: {area}")
     for area in ("config", "callback", "sync", "remote", "repository"):
-        if not (starter / area).is_dir():
-            problems.append(f"Missing starter module: {area}")
-    for root in (starter, server / "node", server / "webhook"):
+        if not (access / area).is_dir():
+            problems.append(f"Missing access module: {area}")
+    for root in (server / "node", server / "webhook"):
         if list(root.glob("*.java")):
             problems.append(f"Unexpected flat Java files in {root}")
 
+
+    for legacy in ("config-client-starter", "config-client-demo"):
+        if Path(legacy).exists():
+            problems.append(f"Removed module still exists: {legacy}")
+    if not (access / "ConfigCenterAccessApplication.java").is_file():
+        problems.append("Missing ConfigCenterAccessApplication")
 
     # HTTP entry-point naming convention: api package and *Api class.
     expected_apis = (
@@ -47,8 +53,8 @@ def main():
         "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
         "config-center-server/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",
         "config-center-server/src/main/java/com/hitall/platform/config/subscriber/api/SubscriberApi.java",
-        "config-client-starter/src/main/java/com/hitall/platform/client/callback/api/ConfigCallbackApi.java",
-        "config-client-demo/src/main/java/com/hitall/platform/demo/api/DemoApi.java",
+        "config-center-access/src/main/java/com/hitall/platform/access/callback/api/ConfigCallbackApi.java",
+        "config-center-access/src/main/java/com/hitall/platform/access/api/AccessApi.java",
     )
     for path in expected_apis:
         if not Path(path).is_file():
@@ -79,10 +85,10 @@ def main():
     frontend_http = Path("config-center-admin/src/api/http.ts").read_text(encoding="utf-8")
     if "baseURL: '/api/config'" not in frontend_http:
         problems.append("Vue management HTTP client must use /api/config")
-    remote_http = Path("config-client-starter/src/main/java/com/hitall/platform/client/remote/ConfigCenterRemoteClient.java").read_text(encoding="utf-8")
+    remote_http = Path("config-center-access/src/main/java/com/hitall/platform/access/remote/ConfigCenterRemoteClient.java").read_text(encoding="utf-8")
     for suffix in ("/sync/revision", "/sync/changes", "/sync/snapshot", "/nodes/batch-get"):
         if '"/api/config' + suffix + '"' not in remote_http:
-            problems.append(f"Starter remote client must use /api/config{suffix}")
+            problems.append(f"Access remote client must use /api/config{suffix}")
 
     if problems:
         print("\n".join(problems), file=sys.stderr)

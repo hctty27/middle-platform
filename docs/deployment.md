@@ -18,15 +18,15 @@ export CONFIG_DB_PASSWORD=local-dev-only
 gradle :config-center-server:bootRun
 ```
 
-## 启动示例
+## 启动接入服务
 
 ```bash
-export DEMO_DB_URL='jdbc:mysql://127.0.0.1:3306/config_demo?connectionTimeZone=UTC'
-export DEMO_DB_USER=root
-export DEMO_DB_PASSWORD=local-dev-only
+export ACCESS_DB_URL='jdbc:mysql://127.0.0.1:3306/config_access?connectionTimeZone=UTC'
+export ACCESS_DB_USER=root
+export ACCESS_DB_PASSWORD=local-dev-only
 export CONFIG_CENTER_URL=http://127.0.0.1:8080
 export CONFIG_WEBHOOK_SECRET='dev-signing-secret'
-gradle :config-client-demo:bootRun
+gradle :config-center-access:bootRun
 ```
 
 创建订阅者（仅允许 localhost 回调地址，生产需要配置 `config.webhook.allowed-hosts`）：
@@ -34,10 +34,10 @@ gradle :config-client-demo:bootRun
 ```bash
 curl -X POST http://127.0.0.1:8080/api/config/admin/subscribers \
   -H 'Content-Type: application/json' \
-  -d '{"code":"demo","callbackUrl":"http://127.0.0.1:8081/internal/config/callback","secret":"dev-signing-secret"}'
+  -d '{"code":"access","callbackUrl":"http://127.0.0.1:8081/internal/config/callback","secret":"dev-signing-secret"}'
 ```
 
-查看接入副本：`http://127.0.0.1:8081/demo/nodes`。
+查看接入副本：`http://127.0.0.1:8081/api/access/nodes`；查看当前游标：`http://127.0.0.1:8081/api/access/revision`。
 
 ## 管理界面
 
@@ -51,7 +51,7 @@ npm run dev
 
 ## 客户端远程请求超时
 
-Starter 默认连接超时为 **2000ms**、单次请求读取超时为 **15000ms**，可按内网状况覆盖：
+接入服务 默认连接超时为 **2000ms**、单次请求读取超时为 **15000ms**，可按内网状况覆盖：
 
 ```yaml
 config:
@@ -60,7 +60,7 @@ config:
     read-timeout-ms: 15000
 ```
 
-或者使用 Demo 对应的环境变量 `CONFIG_CLIENT_CONNECT_TIMEOUT_MS`、`CONFIG_CLIENT_READ_TIMEOUT_MS`。
+或者使用 接入工程 对应的环境变量 `CONFIG_CLIENT_CONNECT_TIMEOUT_MS`、`CONFIG_CLIENT_READ_TIMEOUT_MS`。
 两个值必须在 1–120000ms 范围内，设置为 0 不允许（避免无期限等待或立即超时）。
 配置中心不可达或请求超时后，同步任务会失败且不会推进本地 revision；
 定时校对将再次尝试，Webhook 投递也会按现有策略重试。
@@ -77,4 +77,8 @@ location ^~ /api/config/ {
 }
 ```
 
-接入服务的 `CONFIG_CENTER_URL` 只配置服务根 URL，例如 `http://config-center:8080`，Starter 内部自动拼接 `/api/config/...`。旧版版本化接口已删除：上线前必须升级所有接入工程的 Starter、重新构建 Demo 与管理前端，并同时调整 Nginx 配置；不再配置旧版接口前缀的转发规则。未升级的旧调用方将收到 404。管理接口不含登录模块，必须通过可信网络、网关 ACL 等限制访问。
+接入服务的 `CONFIG_CENTER_URL` 只配置服务根 URL，例如 `http://config-center:8080`，接入服务 内部自动拼接 `/api/config/...`。旧版版本化接口已删除：上线前必须升级所有接入工程的 接入服务、重新构建 接入工程 与管理前端，并同时调整 Nginx 配置；不再配置旧版接口前缀的转发规则。未升级的旧调用方将收到 404。管理接口不含登录模块，必须通过可信网络、网关 ACL 等限制访问。
+
+## 模块合并说明
+
+`config-client-starter` 与 `config-client-demo` 已整合到 `config-center-access`，仅输出独立可运行 Spring Boot 应用，不再作为 Starter 引入。内部 Webhook `/internal/config/callback`、配置中心 `/api/config/**`、`config.client.*` 参数、Flyway V1/V2 迁移保持不变。已有本地副本数据库无需重新创建，迁移时沿用原 JDBC URL 即可；新建环境默认示例数据库为 `config_access`。旧 `/demo/**` 查询路由不再提供。

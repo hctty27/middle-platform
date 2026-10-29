@@ -64,7 +64,7 @@ def jar(module):
 def start(name, module, port, extra=None):
     env = os.environ.copy()
     env.update(extra or {})
-    env["CONFIG_CENTER_PORT" if "center" in name else "CONFIG_CLIENT_PORT"] = str(port)
+    env["CONFIG_CENTER_PORT" if "center" in name else "CONFIG_ACCESS_PORT"] = str(port)
     path = f"/tmp/middle-platform-{name}.log"
     log = open(path, "w", encoding="utf-8")
     LOGS.append((name, path, log))
@@ -105,11 +105,11 @@ def create_node(node_type, parent, code):
 
 def subscriber():
     rows = request(8080, "/api/config/admin/subscribers")
-    return next(row for row in rows if row["code"] == "ci-demo")
+    return next(row for row in rows if row["code"] == "ci-access")
 
 
 def replica():
-    return request(8081, "/demo/nodes")
+    return request(8081, "/api/access/nodes")
 
 
 def synchronized_nodes(count, revision):
@@ -123,10 +123,10 @@ def main():
     center2 = start("center-2", "config-center-server", 8082)
     wait_until("second config-center ready", lambda: request(8082, "/actuator/health")["status"] == "UP")
 
-    demo = start("demo", "config-client-demo", 8081)
-    wait_until("client demo ready", lambda: request(8081, "/demo/revision") is not None)
+    access = start("access", "config-center-access", 8081)
+    wait_until("client access ready", lambda: request(8081, "/api/access/revision") is not None)
     request(8080, "/api/config/admin/subscribers", "POST", {
-        "code": "ci-demo",
+        "code": "ci-access",
         "callbackUrl": "http://127.0.0.1:8081/internal/config/callback",
         "secret": os.environ["CONFIG_WEBHOOK_SECRET"]
     }, 201)
@@ -254,13 +254,13 @@ def main():
     print("PASS sibling code uniqueness under derived parent scope", flush=True)
 
     # Offline client must be retried and must recover without losing changes.
-    stop(demo)
+    stop(access)
     request(8082, f"/api/config/admin/nodes/{ids[0]}", "PUT", {
         "name": "changed-while-offline", "status": 1,
         "config": '{"enabled":true}', "remark": "offline"
     })
     latest = request(8080, "/api/config/sync/revision")["revision"]
-    demo = start("demo-restarted", "config-client-demo", 8081)
+    access = start("access-restarted", "config-center-access", 8081)
     wait_until("offline client catches up to authority",
                lambda: any(row["id"] == ids[0] and row["name"] == "changed-while-offline"
                            for row in replica()) and subscriber()["acknowledgedRevision"] >= latest,
@@ -285,9 +285,9 @@ def main():
     wait_until("epoch-only change triggers Webhook acknowledgement",
                lambda: mysql("SELECT acknowledged_epoch FROM config_center.config_delivery_state "
                              "WHERE subscriber_id=(SELECT id FROM config_center.config_subscriber "
-                             "WHERE code='ci-demo')") == changed_head["epoch"], seconds=75)
+                             "WHERE code='ci-access')") == changed_head["epoch"], seconds=75)
     wait_until("client rebuilt snapshot for new epoch",
-               lambda: request(8081, "/demo/revision")["epoch"] == changed_head["epoch"], seconds=75)
+               lambda: request(8081, "/api/access/revision")["epoch"] == changed_head["epoch"], seconds=75)
     print("PASS epoch-only change triggers notification and full snapshot", flush=True)
 
     # Deletion must remove the local replica, not just disappear from batch-get.
