@@ -78,7 +78,9 @@ config/
 │   └── dto/
 ├── subscriber/
 │   ├── controller/
-│   └── service/
+│   ├── service/
+│   ├── repository/
+│   └── dto/
 └── webhook/
     ├── service/
     └── repository/

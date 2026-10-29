@@ -3,6 +3,8 @@ package com.hitall.platform.config.subscriber.controller;
 import com.hitall.platform.config.subscriber.service.SubscriberService;
 
 import java.util.List;
+import com.hitall.platform.config.subscriber.dto.CreateSubscriber;
+import com.hitall.platform.config.subscriber.dto.SubscriberView;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -18,13 +20,13 @@ public class SubscriberController {
     }
 
     @GetMapping
-    public List<SubscriberService.SubscriberView> list() {
+    public List<SubscriberView> list() {
         return service.list();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public void create(@Valid @RequestBody SubscriberService.CreateSubscriber request) {
+    public void create(@Valid @RequestBody CreateSubscriber request) {
         service.create(request);
     }
 }
