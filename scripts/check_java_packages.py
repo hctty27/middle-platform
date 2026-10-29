@@ -38,6 +38,29 @@ def main():
         if list(root.glob("*.java")):
             problems.append(f"Unexpected flat Java files in {root}")
 
+
+    # HTTP entry-point naming convention: api package and *Api class.
+    expected_apis = (
+        "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",
+        "config-center-server/src/main/java/com/hitall/platform/config/subscriber/api/SubscriberApi.java",
+        "config-client-starter/src/main/java/com/hitall/platform/client/callback/api/ConfigCallbackApi.java",
+        "config-client-demo/src/main/java/com/hitall/platform/demo/api/DemoApi.java",
+    )
+    for path in expected_apis:
+        if not Path(path).is_file():
+            problems.append(f"Missing API class: {path}")
+
+    for module in MODULES:
+        root = Path(module, "src/main/java")
+        for source in root.rglob("*.java"):
+            if "controller" in source.parts or source.stem.endswith("Controller"):
+                problems.append(f"Legacy controller naming: {source}")
+            if "@RestController" in source.read_text(encoding="utf-8"):
+                if source.parent.name != "api" or not source.stem.endswith("Api"):
+                    problems.append(f"REST endpoint must use api/*Api.java: {source}")
+
     if problems:
         print("\n".join(problems), file=sys.stderr)
         return 1

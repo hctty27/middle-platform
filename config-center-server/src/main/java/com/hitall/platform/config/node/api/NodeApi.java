@@ -1,4 +1,4 @@
-package com.hitall.platform.config.node.controller;
+package com.hitall.platform.config.node.api;
 
 import com.hitall.platform.config.node.dto.CreateNodeRequest;
 import com.hitall.platform.config.node.dto.NodePage;
@@ -19,10 +19,10 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/v1")
-public class NodeController {
+public class NodeApi {
     private final ConfigNodeService service;
 
-    public NodeController(ConfigNodeService service) {
+    public NodeApi(ConfigNodeService service) {
         this.service = service;
     }
 

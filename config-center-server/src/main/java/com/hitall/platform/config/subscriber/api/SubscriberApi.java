@@ -1,4 +1,4 @@
-package com.hitall.platform.config.subscriber.controller;
+package com.hitall.platform.config.subscriber.api;
 
 import com.hitall.platform.config.subscriber.service.SubscriberService;
 
@@ -12,10 +12,10 @@ import org.springframework.web.bind.annotation.*;
 /** 接入方订阅管理接口，业务和持久化委托给服务层。 */
 @RestController
 @RequestMapping("/api/v1/admin/subscribers")
-public class SubscriberController {
+public class SubscriberApi {
     private final SubscriberService service;
 
-    public SubscriberController(SubscriberService service) {
+    public SubscriberApi(SubscriberService service) {
         this.service = service;
     }
 

@@ -1,4 +1,4 @@
-package com.hitall.platform.config.sync.controller;
+package com.hitall.platform.config.sync.api;
 
 import com.hitall.platform.config.node.service.ConfigNodeService;
 import com.hitall.platform.config.sync.dto.ChangeEvent;
@@ -12,10 +12,10 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/v1/sync")
-public class SyncController {
+public class SyncApi {
     private final ConfigNodeService service;
 
-    public SyncController(ConfigNodeService service) {
+    public SyncApi(ConfigNodeService service) {
         this.service = service;
     }
 
