@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end CI smoke test using real MySQL and two Spring Boot instances."""
+"""End-to-end CI smoke test using real MySQL, two config centers and Go access."""
 
 import glob
 import hashlib
@@ -64,7 +64,10 @@ def jar(module):
 def start(name, module, port, extra=None):
     env = os.environ.copy()
     env.update(extra or {})
-    env["CONFIG_CENTER_PORT" if "center" in name else "CONFIG_ACCESS_PORT"] = str(port)
+    if name.startswith("access"):
+        env["CONFIG_ACCESS_ADDR"] = f":{port}"
+    else:
+        env["CONFIG_CENTER_PORT"] = str(port)
     path = f"/tmp/middle-platform-{name}.log"
     log = open(path, "w", encoding="utf-8")
     LOGS.append((name, path, log))
@@ -72,10 +75,8 @@ def start(name, module, port, extra=None):
     java_bin = str(pathlib.Path(java_home) / "bin" / "java") if java_home else "java"
     if java_home and not os.access(java_bin, os.X_OK):
         raise RuntimeError(f"JAVA_HOME points to a missing Java executable: {java_bin}")
-    proc = subprocess.Popen(
-        [java_bin, "-jar", jar(module)],
-        env=env, stdout=log, stderr=subprocess.STDOUT
-    )
+    command = ["/tmp/config-center-access-ci"] if name.startswith("access") else [java_bin, "-jar", jar(module)]
+    proc = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
     PROCESSES.append(proc)
     print(f"Starting {name} (pid={proc.pid})", flush=True)
     return proc

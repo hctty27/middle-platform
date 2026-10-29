@@ -6,7 +6,7 @@
 - 游戏三个祖先列均为空；大区只保存游戏 ID；区服组保存游戏和大区 ID；渠道应用保存游戏、大区和区服组 ID。
 - API 中的 `parentId` 是按 `nodeType` 推导的兼容属性；写服务通过创建请求的 `parentId` 校验父类型并自动生成祖先路径。节点层级、类型、编码创建后不可修改。
 - 同级 `code` 的唯一性通过按 `nodeType` 和最深非空祖先 ID（根为 0）建立的 MySQL 函数唯一索引保证；`channel_app` 的直属父节点是 `server_group`。`config` 只保存本节点 JSON，不向上继承。
-- 配置中心多个 Spring Boot 实例共享单个 MySQL，应用无独立配置状态。
+- 配置中心多个无状态实例（Java 或 Go）共享单个 MySQL，应用无独立配置状态。
 - 全局版本行必须在写事务内先锁定，确保提交顺序与 revision 一致；同时提交 config_node 与 change log。
 - Webhook 通知仅包含 epoch 和 revision，订阅者按 revision 获取 ID 列表并查询节点最新状态。
 - 重试允许重复通知，客户端需要实现幂等且严格连续推进本地游标。
@@ -27,7 +27,7 @@
 - 接入实例内部回调：`POST /internal/config/callback`，属于内部 Webhook，不公开在统一 API 网关
 - 接入工程本地查询：`GET /api/access/nodes`、`GET /api/access/revision`；仅供接入端自身或可信网络调用
 
-Java HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api`。不按版本拆 Java 包或增加 URL 版本段；后续若需要不兼容升级，先评估兼容字段、独立资源或明确迁移窗口，并按实际需求决定是否引入版本协商。
+现存 Java 配置中心的 HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api`。Go 接入工程统一使用 `internal/api`。不按版本拆 Java 包或增加 URL 版本段；后续若需要不兼容升级，先评估兼容字段、独立资源或明确迁移窗口，并按实际需求决定是否引入版本协商。
 
 **接口收敛**：配置中心只暴露 `/api/config/**`。旧版版本化接口全部下线，不再保留兼容映射。必须在同一上线窗口升级管理端、接入服务与所有调用方，并调整网关路由；否则旧调用方将收到 404。
 
@@ -63,7 +63,7 @@ Java HTTP 入口统一放在各业务模块的 `api` 包，类名统一为 `*Api
 - 需要强持久通知、严格投递完成确认或更短恢复时间时，应进一步引入持久化任务表/消息队列或加强校对频率和告警，本阶段不引入新基础设施。
 
 
-## Java 包结构（业务模块 + 职责子包）
+## Java 配置中心包结构（接入工程已改为 Go）
 
 `config-center` 保留 `com.hitall.platform.config.ConfigCenterApplication` 作为根启动类，按以下业务域组织：
 
@@ -90,13 +90,11 @@ config/
     └── repository/
 ```
 
-`config-center-access` 是独立 Spring Boot 应用，Java 根包为 `com.hitall.platform.access`。内部按 `api`、`callback`、`config`、`sync`、`remote`、`repository` 组织；`ConfigAccessConfiguration` 改为普通应用配置，不再使用 Spring Boot 接入服务 自动装配元数据。`ConfigCallbackApi` 由组件扫描注册一次，避免重复路由。
-
-原 接入服务 查询接口更名为 `access.api.AccessApi`，提供 `GET /api/access/nodes` 和 `GET /api/access/revision`；内部回调继续使用 `POST /internal/config/callback`。本次不改配置中心远程 API、数据库表、SQL、Webhook 验签和同步协议。接入工程可独立运行，不作为项目依赖或 接入服务 提供给其他工程。
+`config-center-access` 现为独立 Go 应用，入口 `cmd/config-center-access`，内部按 `api`、`settings`、`syncer`、`remote`、`store` 分层。Webhook 回调签名协议和本地查询路径不变；新库由 Go 自动建四级表，旧库必须先完成历史 Flyway V3。接入端不是其他项目的 Starter 依赖。
 
 CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 package 声明不一致，以及重要模块再次退化为扁平包。
 
-**接口层命名约定：** 所有使用 `@RestController` 的 Java 类统一位于所属业务模块的 `api` 包，并以 `Api` 结尾，例如 `node.api.NodeApi`、`sync.api.SyncApi`。接入工程的回调入口位于 `access.callback.api.ConfigCallbackApi`，本地查询入口位于 `access.api.AccessApi`。旧 `/demo/**` 本地查询路径已替换为 `/api/access/**`，但 Webhook 路径不变。
+**接口层命名约定：** 所有使用 `@RestController` 的 Java 类统一位于所属业务模块的 `api` 包，并以 `Api` 结尾，例如 `node.api.NodeApi`、`sync.api.SyncApi`。Go 接入工程的回调与本地查询都位于 `internal/api`。旧 `/demo/**` 本地查询路径已替换为 `/api/access/**`，但 Webhook 路径不变。
 
 ### API 命名规则
 
@@ -110,6 +108,6 @@ CI 会运行 `scripts/check_java_packages.py`，阻止 Java 文件路径和 pack
 - 服务端新增 Flyway `V4__channel_app_hierarchy.sql`，删除 `channel_id`，调整约束和同级唯一索引；保留 SDK 应用原主键、编码和 JSON，并迁至区服组下。
 - V4 在执行不可逆变更前，通过临时唯一键检查同一区服组下的重复应用 Code。若有冲突，迁移会失败，需要先解决并重新部署。
 - V4 将原 `channel` 及 `sdk_app` 记录完整归档到 `config_node_v4_legacy_archive`，保留旧渠道配置、应用到渠道的关系。归档表不参与新系统的配置查询和同步；旧渠道 JSON 不会自动合并到应用 JSON。
-- 迁移完成后配置中心切换 `epoch`，不重置 `revision`。接入工程使用独立 Flyway `V3__channel_app_replica.sql` 清理本地旧副本并重置同步游标，首次访问新服务后按四级快照全量恢复。
+- 迁移完成后配置中心切换 `epoch`，不重置 `revision`。历史 Java 接入工程使用独立 Flyway `V3__channel_app_replica.sql` 清理本地旧副本并重置同步游标，切换 Go 前需先执行，首次访问新服务后按四级快照全量恢复。
 - V1/V2/V3 是历史迁移，不改写其内容；旧 V2 章节中的五级路径仅用于说明历史数据如何升级。生产上线必须先备份、协调停写、同时替换配置中心和接入端二进制，然后恢复 Webhook 投递。
 - 管理界面仍只把前三层作为懒加载目录，`channel_app` 在区服组右侧分页列表中维护。HTTP 路由与 Nginx 分流规则不变。
