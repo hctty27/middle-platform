@@ -4,7 +4,7 @@ import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
 
 const emit = defineEmits<{ changed: [] }>()
-const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, expandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
+const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
 </script>
 
 <template>
@@ -33,7 +33,8 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, expand
       </div>
       <div v-show="!searchWord.trim()" ref="treeScrollRef" class="tree-scroll">
         <el-tree :key="treeVersion" ref="treeRef" node-key="id" lazy :load="loadTree"
-                 :props="treeProps" :default-expanded-keys="expandedKeys"
+                 :props="treeProps" :default-expanded-keys="restoredExpandedKeys"
+                 :auto-expand-parent="false"
                  :current-node-key="selected?.id" highlight-current
                  :expand-on-click-node="false" @node-click="onTreeClick"
                  @node-expand="onExpand" @node-collapse="onCollapse">

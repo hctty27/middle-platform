@@ -17,6 +17,8 @@ const treeRef = ref<InstanceType<typeof ElTree> | null>(null)
 const treeScrollRef = ref<HTMLElement | null>(null)
 const treeVersion = ref(0)
 const expandedKeys = ref<number[]>([])
+// 仅在重建树时恢复展开状态，避免默认展开属性响应点击事件。
+const restoredExpandedKeys = ref<number[]>([])
 const searchWord = ref('')
 const searchMatches = ref<NodeMatch[]>([])
 const searchLoading = ref(false)
@@ -107,11 +109,20 @@ function onExpand(node: NodeSummary) {
   if (!expandedKeys.value.includes(node.id)) expandedKeys.value = [...expandedKeys.value, node.id]
 }
 function onCollapse(node: NodeSummary) {
-  expandedKeys.value = expandedKeys.value.filter(id => id !== node.id)
+  const collapsedKeys = new Set<number>([node.id])
+  const descendants = [...(treeRef.value?.getNode(node.id)?.childNodes ?? [])]
+  while (descendants.length) {
+    const child = descendants.pop()!
+    collapsedKeys.add((child.data as NodeSummary).id)
+    descendants.push(...child.childNodes)
+    child.collapse()
+  }
+  expandedKeys.value = expandedKeys.value.filter(id => !collapsedKeys.has(id))
 }
 
 async function reloadTree() {
   const scrollTop = treeScrollRef.value?.scrollTop ?? 0
+  restoredExpandedKeys.value = [...expandedKeys.value]
   treeVersion.value++
   await nextTick()
   if (treeScrollRef.value) treeScrollRef.value.scrollTop = scrollTop
@@ -376,6 +387,6 @@ onBeforeUnmount(() => {
   detailController?.abort()
 })
   return {
-    labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, expandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh
+    labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh
   }
 }
