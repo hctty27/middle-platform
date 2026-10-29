@@ -11,6 +11,8 @@ public class ConfigClientProperties {
     private boolean enabled;
     private String baseUrl = "http://localhost:8080";
     private String webhookSecret = "";
+    private int connectTimeoutMs = 2000;
+    private int readTimeoutMs = 15000;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -18,4 +20,8 @@ public class ConfigClientProperties {
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
     public String getWebhookSecret() { return webhookSecret; }
     public void setWebhookSecret(String webhookSecret) { this.webhookSecret = webhookSecret; }
+    public int getConnectTimeoutMs() { return connectTimeoutMs; }
+    public void setConnectTimeoutMs(int connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
+    public int getReadTimeoutMs() { return readTimeoutMs; }
+    public void setReadTimeoutMs(int readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
 }
