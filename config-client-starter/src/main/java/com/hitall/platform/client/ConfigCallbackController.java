@@ -16,22 +16,23 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 public class ConfigCallbackController {
-    private final ClientSynchronizer synchronizer;
+    private final ConfigSyncTrigger trigger;
     private final ConfigClientProperties properties;
 
-    public ConfigCallbackController(ClientSynchronizer synchronizer,
+    public ConfigCallbackController(ConfigSyncTrigger trigger,
                                     ConfigClientProperties properties) {
-        this.synchronizer = synchronizer;
+        this.trigger = trigger;
         this.properties = properties;
     }
 
     // 通知只作为同步触发信号，不直接信任请求体中的配置数据。
     @PostMapping("/internal/config/callback")
+    @ResponseStatus(HttpStatus.ACCEPTED)
     public void notify(@RequestHeader("X-Config-Timestamp") String timestamp,
                        @RequestHeader("X-Config-Signature") String signature,
                        @RequestBody Notification notification) {
         verify(timestamp, signature, notification);
-        synchronizer.synchronize();
+        trigger.requestSync();
     }
 
     // 拒绝时间偏差超过 5 分钟的请求，并使用常量时间比较验证签名。

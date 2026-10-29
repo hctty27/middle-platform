@@ -5,6 +5,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
@@ -23,14 +25,32 @@ public class ConfigClientAutoConfiguration {
         return new ClientSynchronizer(jdbc, properties, transactionManager);
     }
 
-    @Bean
-    ConfigCallbackController configCallbackController(ClientSynchronizer synchronizer,
-                                                      ConfigClientProperties properties) {
-        return new ConfigCallbackController(synchronizer, properties);
+    @Bean("configSyncExecutor")
+    ThreadPoolTaskExecutor configSyncExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("config-sync-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        return executor;
     }
 
     @Bean
-    ConfigReconciliationJob configReconciliationJob(ClientSynchronizer synchronizer) {
-        return new ConfigReconciliationJob(synchronizer);
+    ConfigSyncTrigger configSyncTrigger(ClientSynchronizer synchronizer,
+                                        @Qualifier("configSyncExecutor") ThreadPoolTaskExecutor executor) {
+        return new ConfigSyncTrigger(synchronizer, executor);
+    }
+
+    @Bean
+    ConfigCallbackController configCallbackController(ConfigSyncTrigger trigger,
+                                                      ConfigClientProperties properties) {
+        return new ConfigCallbackController(trigger, properties);
+    }
+
+    @Bean
+    ConfigReconciliationJob configReconciliationJob(ConfigSyncTrigger trigger) {
+        return new ConfigReconciliationJob(trigger);
     }
 }

@@ -10,19 +10,19 @@ import org.springframework.scheduling.annotation.Scheduled;
  */
 public class ConfigReconciliationJob {
     private static final Logger LOGGER = LoggerFactory.getLogger(ConfigReconciliationJob.class);
-    private final ClientSynchronizer synchronizer;
+    private final ConfigSyncTrigger trigger;
 
-    public ConfigReconciliationJob(ClientSynchronizer synchronizer) {
-        this.synchronizer = synchronizer;
+    public ConfigReconciliationJob(ConfigSyncTrigger trigger) {
+        this.trigger = trigger;
     }
 
     // 默认每 5 分钟执行一次；启动后延迟 3 秒首次执行。
     @Scheduled(fixedDelayString = "${config.client.reconcile-ms:300000}", initialDelay = 3000)
     public void reconcile() {
         try {
-            synchronizer.synchronize();
+            trigger.requestSync();
         } catch (RuntimeException ex) {
-            LOGGER.warn("Config reconciliation failed: {}", ex.getMessage());
+            LOGGER.warn("Scheduling config reconciliation failed: {}", ex.getMessage());
         }
     }
 }
