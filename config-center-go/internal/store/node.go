@@ -1,4 +1,4 @@
-package config
+package store
 
 import (
 	"context"
@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/hctty27/middle-platform/config-center-go/internal/sqlcgen"
 )
 
 const nodeColumns = "id,node_type,game_id,region_id,server_group_id,code,name,status,config,remark,created_at,updated_at"
@@ -18,13 +16,16 @@ type queryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+// Store 管理节点数据访问、数据库连接及回调白名单。
 type Store struct {
 	DB *sql.DB
 	AllowedHosts string
 }
 
+// Ready 测试数据库连接状态以提供就绪探针。
 func (s *Store) Ready(ctx context.Context) error { return s.DB.PingContext(ctx) }
 
+// scanNode 将数据库字段扫描成统一节点对象。
 func scanNode(scanner interface{ Scan(...any) error }) (Node, error) {
 	var n Node
 	var game, region, group sql.NullInt64
@@ -43,6 +44,7 @@ func scanNode(scanner interface{ Scan(...any) error }) (Node, error) {
 	return n, nil
 }
 
+// nodes 执行节点查询并正确关闭 SQL 结果集。
 func nodes(ctx context.Context, db queryer, statement string, args ...any) ([]Node, error) {
 	rows, err := db.QueryContext(ctx, statement, args...)
 	if err != nil { return nil, err }
@@ -56,6 +58,7 @@ func nodes(ctx context.Context, db queryer, statement string, args ...any) ([]No
 	return result, rows.Err()
 }
 
+// Nodes 获取所有配置节点。
 func (s *Store) Nodes(ctx context.Context) ([]Node, error) {
 	return nodes(ctx, s.DB, "SELECT "+nodeColumns+" FROM config_node ORDER BY id")
 }
@@ -65,6 +68,7 @@ func (s *Store) Node(ctx context.Context, id int64) (Node, error) {
 	return scanNode(s.DB.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
 }
 
+// Batch 限制批量数量并读取指定节点集合。
 func (s *Store) Batch(ctx context.Context, ids []int64) ([]Node, error) {
 	if len(ids) > 500 { return nil, ErrInvalid }
 	if len(ids) == 0 { return []Node{}, nil }
@@ -77,6 +81,7 @@ func (s *Store) Batch(ctx context.Context, ids []int64) ([]Node, error) {
 	return nodes(ctx, s.DB, "SELECT "+nodeColumns+" FROM config_node WHERE id IN ("+placeholders+") ORDER BY id", args...)
 }
 
+// scope 根据父节点类型构造子项的 SQL 过滤条件。
 func (s *Store) scope(ctx context.Context, parentID int64) (string, []any, error) {
 	if parentID < 0 { return "", nil, ErrInvalid }
 	if parentID == 0 { return "n.node_type='game'", nil, nil }
@@ -98,6 +103,7 @@ func (s *Store) scope(ctx context.Context, parentID int64) (string, []any, error
 	}
 }
 
+// Tree 返回当前配置层级需要的节点摘要。
 func (s *Store) Tree(ctx context.Context, parentID int64) ([]NodeSummary, error) {
 	condition, args, err := s.scope(ctx, parentID)
 	if err != nil { return nil, err }
@@ -108,6 +114,7 @@ func (s *Store) Tree(ctx context.Context, parentID int64) ([]NodeSummary, error)
 	return out, nil
 }
 
+// Children 分页查询直接子项并支持搜索过滤。
 func (s *Store) Children(ctx context.Context, parentID int64, page, size int, keyword string) (NodePage, error) {
 	if page < 1 || size < 1 || size > 100 || len([]rune(strings.TrimSpace(keyword))) > 128 {
 		return NodePage{}, ErrInvalid
@@ -135,61 +142,7 @@ func escaped(s string) string {
 	return strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(s)
 }
 
-func (s *Store) Revision(ctx context.Context) (Revision, error) {
-	return revision(ctx, s.DB)
-}
-
-func revision(ctx context.Context, db sqlcgen.DBTX) (Revision, error) {
-	row, err := sqlcgen.New(db).GetRevision(ctx)
-	if err != nil { return Revision{}, err }
-	return Revision{Epoch: row.Epoch, Revision: row.Revision}, nil
-}
-
-func (s *Store) Changes(ctx context.Context, after int64, limit int) ([]ChangeEvent, error) {
-	if after < 0 || limit < 1 || limit > 500 { return nil, ErrInvalid }
-	found, err := sqlcgen.New(s.DB).ListChanges(ctx, sqlcgen.ListChangesParams{
-		Revision: after, Limit: int32(limit),
-	})
-	if err != nil { return nil, err }
-	out := make([]ChangeEvent, 0, len(found))
-	for _, event := range found {
-		out = append(out, ChangeEvent{
-			Revision: event.Revision,
-			NodeID: event.NodeID,
-			Operation: event.Operation,
-			CreatedAt: LocalDateTime(event.CreatedAt),
-		})
-	}
-	return out, nil
-}
-
-func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
-	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
-	if err != nil { return Snapshot{}, err }
-	defer tx.Rollback()
-	v, err := revision(ctx, tx)
-	if err != nil { return Snapshot{}, err }
-	found, err := nodes(ctx, tx, "SELECT "+nodeColumns+" FROM config_node ORDER BY id")
-	if err != nil { return Snapshot{}, err }
-	if err := tx.Commit(); err != nil { return Snapshot{}, err }
-	return Snapshot{Epoch: v.Epoch, Revision: v.Revision, Nodes: found}, nil
-}
-
-func (s *Store) Subscribers(ctx context.Context) ([]Subscriber, error) {
-	rows, err := s.DB.QueryContext(ctx, "SELECT s.id,s.code,s.callback_url,s.enabled,d.acknowledged_revision,d.failure_count,d.last_error FROM config_subscriber s JOIN config_delivery_state d ON d.subscriber_id=s.id ORDER BY s.id")
-	if err != nil { return nil, err }
-	defer rows.Close()
-	out := make([]Subscriber, 0)
-	for rows.Next() {
-		var sub Subscriber
-		var last sql.NullString
-		if err := rows.Scan(&sub.ID, &sub.Code, &sub.CallbackURL, &sub.Enabled, &sub.AcknowledgedRevision, &sub.Failures, &last); err != nil { return nil, err }
-		if last.Valid { sub.LastError = &last.String }
-		out = append(out, sub)
-	}
-	return out, rows.Err()
-}
-
+// Path 构造指定节点从游戏节点开始的祖先路径。
 func (s *Store) Path(ctx context.Context, id int64) (NodeMatch, error) {
 	n, err := s.Node(ctx, id)
 	if err != nil { return NodeMatch{}, err }
@@ -204,6 +157,7 @@ func (s *Store) Path(ctx context.Context, id int64) (NodeMatch, error) {
 	return match(n, index)
 }
 
+// match 合并节点及祖先形成完整路径。
 func match(n Node, index map[int64]Node) (NodeMatch, error) {
 	path := make([]NodeSummary, 0, 4)
 	for _, id := range []int64{value(n.GameID), value(n.RegionID), value(n.ServerGroupID), n.ID} {
@@ -215,6 +169,7 @@ func match(n Node, index map[int64]Node) (NodeMatch, error) {
 	return NodeMatch{Node: summary(n), Path: path}, nil
 }
 
+// Search 查找匹配节点并批量补齐祖先信息。
 func (s *Store) Search(ctx context.Context, keyword string, limit int) ([]NodeMatch, error) {
 	word := strings.TrimSpace(keyword)
 	if word == "" { return []NodeMatch{}, nil }
