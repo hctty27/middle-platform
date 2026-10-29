@@ -1,17 +1,10 @@
 package com.hitall.platform.config.node;
 
-import java.sql.PreparedStatement;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,14 +24,14 @@ public class ConfigNodeService {
             "sdk_app", "channel"
     );
 
-    private final JdbcTemplate jdbc;
     private final ConfigNodeQueryRepository queries;
+    private final ConfigNodeWriteRepository writes;
     private final RevisionRepository revisions;
 
-    public ConfigNodeService(JdbcTemplate jdbc, ConfigNodeQueryRepository queries,
+    public ConfigNodeService(ConfigNodeQueryRepository queries, ConfigNodeWriteRepository writes,
                              RevisionRepository revisions) {
-        this.jdbc = jdbc;
         this.queries = queries;
+        this.writes = writes;
         this.revisions = revisions;
     }
 
@@ -72,30 +65,13 @@ public class ConfigNodeService {
             throw badRequest("Invalid code");
         }
         revisions.lockRevision();
-        Ancestry ancestry = ancestryFromParent(input.parentId(), input.nodeType());
-        KeyHolder key = new GeneratedKeyHolder();
+        NodeAncestry ancestry = ancestryFromParent(input.parentId(), input.nodeType());
+        long id;
         try {
-            jdbc.update(connection -> {
-                PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO config_node(game_id,region_id,server_group_id,channel_id,node_type,code,name,status,config,remark,created_at,updated_at) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                        Statement.RETURN_GENERATED_KEYS);
-                statement.setObject(1, ancestry.gameId());
-                statement.setObject(2, ancestry.regionId());
-                statement.setObject(3, ancestry.serverGroupId());
-                statement.setObject(4, ancestry.channelId());
-                statement.setString(5, input.nodeType());
-                statement.setString(6, input.code());
-                statement.setString(7, input.name());
-                statement.setInt(8, input.status());
-                statement.setString(9, input.config());
-                statement.setString(10, input.remark());
-                return statement;
-            }, key);
+            id = writes.insert(input, ancestry);
         } catch (DuplicateKeyException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate sibling code", exception);
         }
-        long id = key.getKey().longValue();
         revisions.recordChange(id, "UPSERT");
         return get(id);
     }
@@ -108,15 +84,9 @@ public class ConfigNodeService {
         validateFields(input.name(), input.status(), input.config(), input.remark());
         revisions.lockRevision();
         ConfigNode current = get(id);
-        Boolean unchanged = jdbc.queryForObject("""
-                SELECT (name <=> ?) AND (status <=> ?) AND (remark <=> ?)
-                       AND (config = CAST(? AS JSON))
-                  FROM config_node WHERE id=?
-                """, Boolean.class, input.name(), input.status(), input.remark(), input.config(), id);
-        if (Boolean.TRUE.equals(unchanged)) return current;
+        if (writes.unchanged(id, input)) return current;
 
-        jdbc.update("UPDATE config_node SET name=?,status=?,config=?,remark=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?",
-                input.name(), input.status(), input.config(), input.remark(), id);
+        writes.update(id, input);
         revisions.recordChange(id, "UPSERT");
         return get(id);
     }
@@ -131,7 +101,7 @@ public class ConfigNodeService {
         if (queries.hasChildren(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Delete children first");
         }
-        jdbc.update("DELETE FROM config_node WHERE id=?", id);
+        writes.delete(id);
         revisions.recordChange(id, "DELETE");
     }
 
@@ -153,13 +123,11 @@ public class ConfigNodeService {
         return revisions.changes(after, limit);
     }
 
-    private record Ancestry(Long gameId, Long regionId, Long serverGroupId, Long channelId) {}
-
     // 父节点只作为创建接口参数；数据库保存的是由服务端推导的完整祖先路径。
-    private Ancestry ancestryFromParent(long parentId, String nodeType) {
+    private NodeAncestry ancestryFromParent(long parentId, String nodeType) {
         if ("game".equals(nodeType)) {
             if (parentId != 0) throw badRequest("Game parentId must be 0");
-            return new Ancestry(null, null, null, null);
+            return new NodeAncestry(null, null, null, null);
         }
         String expected = PARENTS.get(nodeType);
         if (expected == null || parentId <= 0) throw badRequest("Invalid nodeType/parentId");
@@ -169,10 +137,10 @@ public class ConfigNodeService {
         }
         ConfigNode parent = parents.getFirst();
         return switch (nodeType) {
-            case "region" -> new Ancestry(parent.id(), null, null, null);
-            case "server_group" -> new Ancestry(parent.gameId(), parent.id(), null, null);
-            case "channel" -> new Ancestry(parent.gameId(), parent.regionId(), parent.id(), null);
-            case "sdk_app" -> new Ancestry(parent.gameId(), parent.regionId(), parent.serverGroupId(), parent.id());
+            case "region" -> new NodeAncestry(parent.id(), null, null, null);
+            case "server_group" -> new NodeAncestry(parent.gameId(), parent.id(), null, null);
+            case "channel" -> new NodeAncestry(parent.gameId(), parent.regionId(), parent.id(), null);
+            case "sdk_app" -> new NodeAncestry(parent.gameId(), parent.regionId(), parent.serverGroupId(), parent.id());
             default -> throw badRequest("Invalid node type");
         };
     }
@@ -182,8 +150,7 @@ public class ConfigNodeService {
         if (status == null || (status != 0 && status != 1)) throw badRequest("Status must be 0 or 1");
         if (remark != null && remark.length() > 500) throw badRequest("Remark too long");
         if (json == null || json.isBlank()) throw badRequest("Config must be JSON");
-        Integer isValid = jdbc.queryForObject("SELECT JSON_VALID(?)", Integer.class, json);
-        if (isValid == null || isValid != 1) throw badRequest("Invalid JSON");
+        if (!writes.validJson(json)) throw badRequest("Invalid JSON");
     }
 
     private static ResponseStatusException badRequest(String message) {
