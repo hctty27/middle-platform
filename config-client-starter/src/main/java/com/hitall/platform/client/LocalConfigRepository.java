@@ -5,7 +5,7 @@ import com.hitall.platform.client.ClientSynchronizer.Node;
 import com.hitall.platform.client.ClientSynchronizer.Snapshot;
 import com.hitall.platform.client.ClientSynchronizer.State;
 
-/** 本地配置节点副本和同步游标的 JDBC 操作。事务由 ClientSynchronizer 控制。 */
+/** 本地配置节点副本和同步游标的 JDBC 操作。写事务由同步编排层显式控制。 */
 public class LocalConfigRepository {
     private final JdbcTemplate jdbc;
 
@@ -13,6 +13,13 @@ public class LocalConfigRepository {
         this.jdbc = jdbc;
     }
 
+    /** 不加行锁读取已提交的同步游标，网络请求前调用。 */
+    public State readState() {
+        return jdbc.queryForObject("SELECT epoch,revision FROM config_sync_state WHERE id=1",
+                (rs, row) -> new State(rs.getString(1), rs.getLong(2)));
+    }
+
+    /** 仅在短写事务内调用，配合游标一致性检查。 */
     public State lockedState() {
         return jdbc.queryForObject("SELECT epoch,revision FROM config_sync_state WHERE id=1 FOR UPDATE",
                 (rs, row) -> new State(rs.getString(1), rs.getLong(2)));

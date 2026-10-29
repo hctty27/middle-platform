@@ -2,83 +2,139 @@ package com.hitall.platform.client;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 将配置中心数据同步到接入服务的本地 MySQL 副本。
- * 优先增量同步；数据世代变化、事件断档时使用全量快照恢复。
+ * 拉取配置中心数据并更新本地副本。
+ * 网络请求不持有数据库事务；每批节点和同步游标在短事务中原子写入。
  */
 public class ClientSynchronizer {
+    private static final int PAGE_SIZE = 200;
+    private static final int MAX_RETRIES = 8;
+
     private final LocalConfigRepository local;
     private final ConfigCenterRemoteClient remote;
+    private final TransactionTemplate transactions;
 
-    public ClientSynchronizer(JdbcTemplate jdbc, ConfigClientProperties properties) {
-        this(new LocalConfigRepository(jdbc), new ConfigCenterRemoteClient(properties));
+    public ClientSynchronizer(JdbcTemplate jdbc, ConfigClientProperties properties,
+                              PlatformTransactionManager transactionManager) {
+        this(new LocalConfigRepository(jdbc), new ConfigCenterRemoteClient(properties), transactionManager);
     }
 
-    public ClientSynchronizer(LocalConfigRepository local, ConfigCenterRemoteClient remote) {
+    public ClientSynchronizer(LocalConfigRepository local, ConfigCenterRemoteClient remote,
+                              PlatformTransactionManager transactionManager) {
         this.local = local;
         this.remote = remote;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
     /**
-     * 同步远端最新配置及本地版本游标。
-     * 本地更新置于事务中；同一实例内同步调用串行执行。
+     * 同一 JVM 内序列化同步任务；多个 JVM 通过同步游标行锁和版本比较协调。
+     * 远程读取发生在事务外，防止网络延迟拉长 MySQL 行锁持有时间。
      */
-    @Transactional
     public synchronized void synchronize() {
-        State state = local.lockedState();
-        Revision head = remote.revision();
-
-        // 首次接入、epoch 改变或本地版本超前时，旧游标不可复用，必须全量重建。
-        if (state.epoch() == null || !state.epoch().equals(head.epoch()) ||
-                state.revision() > head.revision()) {
-            state = resetFromSnapshot();
-        }
-
-        // 正常情况按 revision 顺序分页读取事件，每次最多处理 200 条。
-        long cursor = state.revision();
+        int retries = 0;
         while (true) {
-            Event[] events = remote.changes(cursor, 200);
-            if (events == null || events.length == 0) break;
-            Set<Long> ids = new LinkedHashSet<>();
-            for (Event event : events) {
-                // 发现版本不连续，说明增量事件无法安全衔接，直接退回快照恢复。
-                if (event.revision() != ++cursor) {
-                    resetFromSnapshot();
-                    return;
+            State state = local.readState();
+            Revision head = remote.revision();
+
+            // 首次接入、epoch 改变或游标超前时，只能重新加载一致性快照。
+            if (requiresSnapshot(state, head)) {
+                if (restoreSnapshot(state)) {
+                    retries = 0;
+                } else {
+                    retries = retry(retries);
                 }
-                ids.add(event.nodeId());
+                continue;
             }
-            // 事件只提供节点 ID；批量获取当前节点，缺失的 ID 按删除处理。
+
+            if (state.revision() == head.revision()) return;
+
+            Event[] events = remote.changes(state.revision(), PAGE_SIZE);
+            if (events == null || events.length == 0 || !contiguous(state.revision(), events)) {
+                if (restoreSnapshot(state)) {
+                    retries = 0;
+                } else {
+                    retries = retry(retries);
+                }
+                continue;
+            }
+
+            Set<Long> ids = new LinkedHashSet<>();
+            for (Event event : events) ids.add(event.nodeId());
+
             Node[] nodes = remote.batchGet(new ArrayList<>(ids));
-            Map<Long, Node> current = java.util.Arrays.stream(nodes)
+            Map<Long, Node> latest = Arrays.stream(nodes)
                     .collect(Collectors.toMap(Node::id, node -> node));
-            for (Long id : ids) {
-                Node node = current.get(id);
-                if (node == null) local.delete(id);
-                else local.upsert(node);
+
+            // 避免数据集世代在批量拉取期间切换，导致两个 epoch 的数据混用。
+            if (!Objects.equals(head.epoch(), remote.revision().epoch())) {
+                retries = retry(retries);
+                continue;
             }
-            // 节点更新和游标推进在同一事务中提交，防止只更新一半状态。
-            local.moveCursor(state.epoch(), cursor);
-            if (events.length < 200) break;
-        }
-        // 若追赶结束仍未达到开始时看到的远端版本，重新读取快照兜底。
-        if (cursor < head.revision()) {
-            resetFromSnapshot();
+
+            long targetRevision = events[events.length - 1].revision();
+            boolean applied = Boolean.TRUE.equals(transactions.execute(status -> {
+                State current = local.lockedState();
+                if (!current.equals(state)) return false;
+                for (Long id : ids) {
+                    Node node = latest.get(id);
+                    if (node == null) local.delete(id);
+                    else local.upsert(node);
+                }
+                local.moveCursor(state.epoch(), targetRevision);
+                return true;
+            }));
+
+            if (applied) {
+                retries = 0;
+            } else {
+                retries = retry(retries);
+            }
         }
     }
 
-    // 快照拉取与本地副本替换分离，事务语义保持不变。
-    private State resetFromSnapshot() {
-        return local.replaceSnapshot(remote.snapshot());
+    private boolean restoreSnapshot(State expected) {
+        // 快照通过配置中心的一致性读取接口取得，下载时不持有本地事务。
+        Snapshot snapshot = remote.snapshot();
+        if (snapshot == null || snapshot.epoch() == null || snapshot.nodes() == null) {
+            throw new IllegalStateException("Invalid remote snapshot");
+        }
+        return Boolean.TRUE.equals(transactions.execute(status -> {
+            if (!local.lockedState().equals(expected)) return false;
+            local.replaceSnapshot(snapshot);
+            return true;
+        }));
+    }
+
+    private static boolean requiresSnapshot(State state, Revision head) {
+        return state.epoch() == null || !state.epoch().equals(head.epoch())
+                || state.revision() > head.revision();
+    }
+
+    private static boolean contiguous(long after, Event[] events) {
+        long expected = after;
+        for (Event event : events) {
+            if (event == null || event.revision() != ++expected) return false;
+        }
+        return true;
+    }
+
+    private static int retry(int previous) {
+        if (previous >= MAX_RETRIES) {
+            throw new IllegalStateException("Config sync exceeded concurrent update retry limit");
+        }
+        return previous + 1;
     }
 
     public record State(String epoch, long revision) {}
