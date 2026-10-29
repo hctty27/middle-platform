@@ -1,4 +1,4 @@
-package config
+package store
 
 import (
 	"context"
@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/hctty27/middle-platform/config-center-go/internal/webhook"
+	"github.com/hctty27/middle-platform/config-center-go/internal/service"
 )
 
 func TestWriteValidation(t *testing.T) {
@@ -27,7 +29,7 @@ func TestWriteValidation(t *testing.T) {
 		{NodeType: "game", Code: "a", Name: "A", Status: &status, Config: "not-json"},
 		{NodeType: "game", Code: "", Name: "A", Status: &status, Config: "{}"},
 	} {
-		if validateCreate(n) == nil { t.Fatalf("should reject %+v", n) }
+		if service.ValidateCreate(n) == nil { t.Fatalf("should reject %+v", n) }
 	}
 	for _, raw := range []string{
 		"http://example.com/callback",
@@ -35,7 +37,7 @@ func TestWriteValidation(t *testing.T) {
 		"http://user:pass@localhost/callback",
 		"file:///etc/passwd",
 	} {
-		if validateCallback(raw, "localhost") == nil { t.Fatalf("should reject callback %q", raw) }
+		if webhook.ValidateCallback(raw, "localhost") == nil { t.Fatalf("should reject callback %q", raw) }
 	}
 }
 
@@ -59,8 +61,8 @@ func TestWebhookSignature(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	defer server.Close()
-	d := NewDispatcher(nil, "127.0.0.1")
-	err := d.send(context.Background(), Delivery{
+	d := webhook.NewDispatcher(nil, "127.0.0.1")
+	err := d.Send(context.Background(), webhook.Delivery{
 		URL: server.URL + "/internal/config/callback", Secret: secret, Epoch: "test-epoch", Revision: 17,
 	})
 	if err != nil { t.Fatal(err) }
@@ -122,14 +124,14 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusAccepted) }))
 	defer server.Close()
 	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL+"/internal/config/callback", Secret: "test-secret"}); err != nil { t.Fatal(err) }
-	dispatcher := NewDispatcher(db, "127.0.0.1")
-	job, err := dispatcher.claim(ctx)
+	dispatcher := webhook.NewDispatcher(db, "127.0.0.1")
+	job, err := dispatcher.Claim(ctx)
 	if err != nil || job == nil { t.Fatalf("claim: %+v %v", job, err) }
-	duplicate, err := dispatcher.claim(ctx)
+	duplicate, err := dispatcher.Claim(ctx)
 	if err != nil || duplicate != nil { t.Fatalf("double claim: %+v %v", duplicate, err) }
-	if err := dispatcher.send(ctx, *job); err != nil { t.Fatal(err) }
-	if err := dispatcher.delivered(ctx, *job); err != nil { t.Fatal(err) }
-	duplicate, err = dispatcher.claim(ctx)
+	if err := dispatcher.Send(ctx, *job); err != nil { t.Fatal(err) }
+	if err := dispatcher.Delivered(ctx, *job); err != nil { t.Fatal(err) }
+	duplicate, err = dispatcher.Claim(ctx)
 	if err != nil || duplicate != nil { t.Fatalf("acknowledged claim: %+v %v", duplicate, err) }
 	subscribers, err = store.Subscribers(ctx)
 	if err != nil || len(subscribers) != 1 || subscribers[0].AcknowledgedRevision != 6 {
@@ -160,15 +162,15 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	}
 
 	// Two Go instances must never claim the same pending subscriber concurrently.
-	first, second := NewDispatcher(db, "127.0.0.1"), NewDispatcher(db, "127.0.0.1")
-	type claimResult struct { job *Delivery; err error }
+	first, second := webhook.NewDispatcher(db, "127.0.0.1"), webhook.NewDispatcher(db, "127.0.0.1")
+	type claimResult struct { job *webhook.Delivery; err error }
 	claims := make(chan claimResult, 2)
 	var claimWG sync.WaitGroup
-	for _, d := range []*Dispatcher{first, second} {
+	for _, d := range []*webhook.Dispatcher{first, second} {
 		claimWG.Add(1)
-		go func(d *Dispatcher) {
+		go func(d *webhook.Dispatcher) {
 			defer claimWG.Done()
-			job, err := d.claim(ctx)
+			job, err := d.Claim(ctx)
 			claims <- claimResult{job, err}
 		}(d)
 	}
@@ -179,7 +181,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		if result.err != nil { t.Fatal(result.err) }
 		if result.job != nil {
 			successful++
-			if err := first.delivered(ctx, *result.job); err != nil { t.Fatal(err) }
+			if err := first.Delivered(ctx, *result.job); err != nil { t.Fatal(err) }
 		}
 	}
 	if successful != 1 { t.Fatalf("expected exactly one lease holder, got %d", successful) }

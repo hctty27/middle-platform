@@ -1,6 +1,7 @@
-package config
+package webhook
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -11,13 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"bytes"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 )
 
+// Delivery 描述一次待发送的签名回调及其数据库租约。
 type Delivery struct {
 	SubscriberID int64
 	URL          string
@@ -27,6 +28,7 @@ type Delivery struct {
 	LeaseID      string
 }
 
+// Dispatcher 控制回调任务领取、并发发送与重试。
 type Dispatcher struct {
 	DB           *sql.DB
 	Client       *http.Client
@@ -35,6 +37,7 @@ type Dispatcher struct {
 	Concurrency  int
 }
 
+// NewDispatcher 创建禁用重定向并检查目标地址的回调客户端。
 func NewDispatcher(db *sql.DB, allowedHosts string) *Dispatcher {
 	if allowedHosts == "" { allowedHosts = "localhost,127.0.0.1" }
 	transport := &http.Transport{
@@ -56,6 +59,7 @@ func NewDispatcher(db *sql.DB, allowedHosts string) *Dispatcher {
 	}
 }
 
+// claim 通过数据库行锁与租约协调集群任务领取。
 func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	tx, err := d.DB.BeginTx(ctx, nil)
 	if err != nil { return nil, err }
@@ -87,8 +91,9 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	return delivery, nil
 }
 
+// send 计算 HMAC 签名并发出回调通知。
 func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
-	if err := validateCallback(job.URL, d.AllowedHosts); err != nil {
+	if err := ValidateCallback(job.URL, d.AllowedHosts); err != nil {
 		return fmt.Errorf("unsafe webhook destination: %w", err)
 	}
 	timestamp := time.Now().Unix()
@@ -115,6 +120,7 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	return nil
 }
 
+// delivered 在租约有效时更新已确认的同步版本。
 func (d *Dispatcher) delivered(ctx context.Context, job Delivery) error {
 	_, err := d.DB.ExecContext(ctx, `UPDATE config_delivery_state
 		SET acknowledged_revision=CASE WHEN acknowledged_epoch=?
@@ -127,6 +133,7 @@ func (d *Dispatcher) delivered(ctx context.Context, job Delivery) error {
 	return err
 }
 
+// failed 记录失败信息并按指数退避安排重试。
 func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) error {
 	message := []rune(reason.Error())
 	if len(message) > 500 { message = message[:500] }
@@ -140,6 +147,7 @@ func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) err
 	return err
 }
 
+// dispatch 控制单轮任务数量及并发上限。
 func (d *Dispatcher) dispatch(ctx context.Context) error {
 	batchSize := d.BatchSize
 	if batchSize <= 0 || batchSize > 64 { batchSize = 16 }
@@ -163,7 +171,7 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 			defer wg.Done()
 			defer func() { <-limit }()
 			err := d.send(ctx, job)
-			// Use an independent bounded context to record outcomes during graceful shutdown.
+			// 优雅停机时使用独立的有界上下文，确保仍能持久化投递结果。
 			outcomeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err == nil {
@@ -180,6 +188,7 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 	return ctx.Err()
 }
 
+// Run 定时领取并发送回调，响应优雅停机。
 func (d *Dispatcher) Run(ctx context.Context) {
 	if d.Client == nil { d.Client = NewDispatcher(d.DB, d.AllowedHosts).Client }
 	ticker := time.NewTicker(3 * time.Second)
@@ -195,3 +204,10 @@ func (d *Dispatcher) Run(ctx context.Context) {
 		}
 	}
 }
+
+ // Send 对指定任务发送签名回调，集成测试通过此入口验证协议。
+func (d *Dispatcher) Send(ctx context.Context, job Delivery) error { return d.send(ctx, job) }
+// Claim 领取一个任务，集成测试通过此入口验证数据库租约。
+func (d *Dispatcher) Claim(ctx context.Context) (*Delivery, error) { return d.claim(ctx) }
+// Delivered 提交已确认版本，集成测试通过此入口验证确认逻辑。
+func (d *Dispatcher) Delivered(ctx context.Context, job Delivery) error { return d.delivered(ctx, job) }

@@ -1,4 +1,4 @@
-package config
+package webhook
 
 import (
 	"context"

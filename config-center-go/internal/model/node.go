@@ -1,4 +1,5 @@
-package config
+// Package model 定义节点、订阅者以及配置同步数据模型。
+package model
 
 import (
 	"encoding/json"
@@ -6,14 +7,20 @@ import (
 	"time"
 )
 
+// ErrInvalid 标识无效的请求参数。
 var ErrInvalid = errors.New("invalid request")
+// ErrConflict 标识重复配置或违反数据库约束。
+var ErrConflict = errors.New("conflicting configuration")
 
+// LocalDateTime 实现与已有服务一致的时间序列化格式。
 type LocalDateTime time.Time
 
+// MarshalJSON 输出不带时区后缀的日期时间。
 func (t LocalDateTime) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Time(t).Format("2006-01-02T15:04:05.999999"))
 }
 
+// Node 定义完整配置节点及层级字段。
 type Node struct {
 	ID            int64         `json:"id"`
 	NodeType      string        `json:"nodeType"`
@@ -30,6 +37,7 @@ type Node struct {
 	ParentID      int64         `json:"parentId"`
 }
 
+// Parent 根据节点类型返回直接父节点 ID，游戏节点返回 0。
 func (n Node) Parent() int64 {
 	switch n.NodeType {
 	case "region":
@@ -50,6 +58,7 @@ func value(id *int64) int64 {
 	return *id
 }
 
+// NodeSummary 定义轻量配置树节点。
 type NodeSummary struct {
 	ID       int64  `json:"id"`
 	ParentID int64  `json:"parentId"`
@@ -60,10 +69,12 @@ type NodeSummary struct {
 	Leaf     bool   `json:"leaf"`
 }
 
-func summary(n Node) NodeSummary {
+// Summary 将节点转换为树列表摘要。
+func Summary(n Node) NodeSummary {
 	return NodeSummary{n.ID, n.Parent(), n.NodeType, n.Code, n.Name, n.Status, n.NodeType == "server_group" || n.NodeType == "channel_app"}
 }
 
+// NodePage 定义分页节点结果。
 type NodePage struct {
 	Items []NodeSummary `json:"items"`
 	Total int64         `json:"total"`
@@ -71,16 +82,19 @@ type NodePage struct {
 	Size  int           `json:"size"`
 }
 
+// NodeMatch 包含匹配节点与祖先路径。
 type NodeMatch struct {
 	Node NodeSummary   `json:"node"`
 	Path []NodeSummary `json:"path"`
 }
 
+// Revision 定义同步实例标识及版本号。
 type Revision struct {
 	Epoch    string `json:"epoch"`
 	Revision int64  `json:"revision"`
 }
 
+// ChangeEvent 定义节点增量变更记录。
 type ChangeEvent struct {
 	Revision  int64         `json:"revision"`
 	NodeID    int64         `json:"nodeId"`
@@ -88,12 +102,14 @@ type ChangeEvent struct {
 	CreatedAt LocalDateTime `json:"createdAt"`
 }
 
+// Snapshot 定义同一数据库版本下的完整节点快照。
 type Snapshot struct {
 	Epoch    string `json:"epoch"`
 	Revision int64  `json:"revision"`
 	Nodes    []Node `json:"nodes"`
 }
 
+// Subscriber 定义回调订阅者及投递状态。
 type Subscriber struct {
 	ID                   int64   `json:"id"`
 	Code                 string  `json:"code"`
