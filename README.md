@@ -4,7 +4,7 @@
 
 ## 组成
 
-- `config-center-server`：多实例无状态服务，共用一个权威 MySQL，管理五级配置树与变更日志。
+- `config-center`：多实例无状态服务，共用一个权威 MySQL，管理五级配置树与变更日志。
 - `config-center-admin`：无需登录的管理页（仅限可信网络部署）。
 - `config-center-access`：独立接入工程，内置 Webhook 验签、增量同步、定期补偿和 MySQL 本地副本，不对外发布 Starter。
 
@@ -15,7 +15,7 @@
 ## 本地启动
 
 1. JDK 25，MySQL 8.0+。
-2. 通过 Gradle Wrapper 启动：Linux/macOS 执行 `./gradlew :config-center-server:bootRun`，Windows 执行 `gradlew.bat :config-center-server:bootRun`。首次运行会自动下载 Gradle 9.8.2。配置 `CONFIG_DB_URL`、`CONFIG_DB_USER` 和 `CONFIG_DB_PASSWORD`。
+2. 通过 Gradle Wrapper 启动：Linux/macOS 执行 `./gradlew :config-center:bootRun`，Windows 执行 `gradlew.bat :config-center:bootRun`。首次运行会自动下载 Gradle 9.8.2。配置 `CONFIG_DB_URL`、`CONFIG_DB_USER` 和 `CONFIG_DB_PASSWORD`。
 3. 管理页：`cd config-center-admin && npm ci && npm run dev`。
 4. 接入工程使用独立数据库，通过 `CONFIG_CENTER_URL` 访问配置中心；使用 `ACCESS_DB_URL`、`ACCESS_DB_USER` 和 `ACCESS_DB_PASSWORD` 配置副本数据库，执行 `./gradlew :config-center-access:bootRun` 启动。
 

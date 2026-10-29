@@ -7,7 +7,7 @@
 | 变更范围 | Java | Vue | E2E |
 | --- | --- | --- | --- |
 | `config-center-admin/**` | 跳过 | 运行 | 跳过 |
-| `config-center-server/**`、`config-center-access/**` | 运行 | 跳过 | 运行 |
+| `config-center/**`、`config-center-access/**` | 运行 | 跳过 | 运行 |
 | Gradle 构建文件和 Wrapper | 运行 | 跳过 | 运行 |
 | `scripts/**`、`deploy/**` | 跳过 | 跳过 | 运行 |
 | `.github/**`、`.gitignore` 或未识别路径 | 运行 | 运行 | 运行 |

@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 
-MODULES = ("config-center-server", "config-center-access")
+MODULES = ("config-center", "config-center-access")
 SOURCE_DIRS = ("src/main/java", "src/test/java")
 PATTERN = re.compile(r"^package\s+([\w.]+)\s*;", re.MULTILINE)
 
@@ -27,7 +27,7 @@ def main():
                 if actual != expected:
                     problems.append(f"{file}: package {actual}, expected {expected}")
 
-    server = Path("config-center-server/src/main/java/com/hitall/platform/config")
+    server = Path("config-center/src/main/java/com/hitall/platform/config")
     access = Path("config-center-access/src/main/java/com/hitall/platform/access")
     for area in ("node", "sync", "subscriber", "webhook"):
         if not (server / area).is_dir():
@@ -43,16 +43,18 @@ def main():
     for legacy in ("config-client-starter", "config-client-demo"):
         if Path(legacy).exists():
             problems.append(f"Removed module still exists: {legacy}")
+    if Path("config-center-server").exists():
+        problems.append("Legacy config-center-server module still exists")
     if not (access / "ConfigCenterAccessApplication.java").is_file():
         problems.append("Missing ConfigCenterAccessApplication")
 
     # HTTP entry-point naming convention: api package and *Api class.
     expected_apis = (
-        "config-center-server/src/main/java/com/hitall/platform/config/node/api/AdminNodeApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",
-        "config-center-server/src/main/java/com/hitall/platform/config/subscriber/api/SubscriberApi.java",
+        "config-center/src/main/java/com/hitall/platform/config/node/api/AdminNodeApi.java",
+        "config-center/src/main/java/com/hitall/platform/config/node/api/NodeApi.java",
+        "config-center/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
+        "config-center/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",
+        "config-center/src/main/java/com/hitall/platform/config/subscriber/api/SubscriberApi.java",
         "config-center-access/src/main/java/com/hitall/platform/access/callback/api/ConfigCallbackApi.java",
         "config-center-access/src/main/java/com/hitall/platform/access/api/AccessApi.java",
     )
