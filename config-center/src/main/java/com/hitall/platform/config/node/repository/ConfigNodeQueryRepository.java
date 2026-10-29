@@ -22,7 +22,6 @@ public class ConfigNodeQueryRepository {
             rs.getObject("game_id", Long.class),
             rs.getObject("region_id", Long.class),
             rs.getObject("server_group_id", Long.class),
-            rs.getObject("channel_id", Long.class),
             rs.getString("code"),
             rs.getString("name"),
             rs.getInt("status"),
@@ -38,15 +37,14 @@ public class ConfigNodeQueryRepository {
                 rs.getLong("id"),
                 ConfigNode.parentId(type, rs.getObject("game_id", Long.class),
                         rs.getObject("region_id", Long.class),
-                        rs.getObject("server_group_id", Long.class),
-                        rs.getObject("channel_id", Long.class)),
+                        rs.getObject("server_group_id", Long.class)),
                 type, rs.getString("code"), rs.getString("name"),
-                rs.getInt("status"), "server_group".equals(type)
+                rs.getInt("status"), ("server_group".equals(type) || "channel_app".equals(type))
         );
     };
 
     private static final String SUMMARY_COLUMNS =
-            "n.id,n.node_type,n.game_id,n.region_id,n.server_group_id,n.channel_id,n.code,n.name,n.status";
+            "n.id,n.node_type,n.game_id,n.region_id,n.server_group_id,n.code,n.name,n.status";
 
 
     private final JdbcTemplate jdbc;
@@ -71,9 +69,8 @@ public class ConfigNodeQueryRepository {
         return switch (types.getFirst()) {
             case "game" -> new ChildScope("n.node_type='region' AND n.game_id=?", List.of(parentId));
             case "region" -> new ChildScope("n.node_type='server_group' AND n.region_id=?", List.of(parentId));
-            case "server_group" -> new ChildScope("n.node_type='channel' AND n.server_group_id=?", List.of(parentId));
-            case "channel" -> new ChildScope("n.node_type='sdk_app' AND n.channel_id=?", List.of(parentId));
-            case "sdk_app" -> new ChildScope("1=0", List.of());
+            case "server_group" -> new ChildScope("n.node_type='channel_app' AND n.server_group_id=?", List.of(parentId));
+            case "channel_app" -> new ChildScope("1=0", List.of());
             default -> throw badRequest("Invalid parent node type");
         };
     }
