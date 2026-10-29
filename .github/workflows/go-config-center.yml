@@ -88,6 +88,8 @@ jobs:
         run: |
           ./gradlew :config-center:bootJar --no-daemon
           cd config-center-go
+          go mod tidy
+          echo '===BEGIN-GO-SUM===' && cat go.sum && echo '===END-GO-SUM==='
           go build -o /tmp/config-center-go-ci ./cmd/config-center
       - name: Run existing real Flyway V1-V4 migration
         run: python3 scripts/ci_migration_smoke.py
