@@ -65,7 +65,7 @@ def main():
 
     # Prevent deprecated versioned HTTP endpoints from returning in application code,
     # frontend, Starter, CI tests, or operational documentation.
-    legacy_urls = re.compile(r"/api/(?:v[0-9]+|config/v[0-9]+)(?:/|\\b)")
+    legacy_urls = re.compile(r"/api/(?:v[0-9]+|config/v[0-9]+)(?=/|[^a-zA-Z0-9_]|$)")
     tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
     scan_extensions = {".java", ".py", ".ts", ".vue", ".md", ".yml", ".yaml", ".conf", ".json"}
     for name in tracked:
