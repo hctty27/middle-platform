@@ -1,0 +1,13 @@
+# SDK 核心服务公共模板；复制为 config-dev.yaml 后填写数据库连接信息。
+# 本服务只读取 config-center 权威库，不建立本地副本，也不执行数据库迁移。
+server:
+  # SDK_CORE_ADDR；生产建议通过 Nginx 代理 /api/core/
+  address: ":8082"
+
+database:
+  # SDK_CORE_DB_DSN；与 config-center 指向同一个 config_center 数据库，使用只读账号。
+  # 示例：sdk_reader:password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC
+  dsn: ""
+  maxOpenConns: 20
+  maxIdleConns: 10
+  connMaxLifetime: "30m"
