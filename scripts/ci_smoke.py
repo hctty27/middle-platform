@@ -151,12 +151,14 @@ def main():
         parent = node["id"]
     app = request(8080, "/api/config/admin/channel-apps", "POST", {
         "gameId": ids[0], "code": "ci-huawei", "name": "Huawei",
-        "status": 1, "config": '{"appId":"10001"}', "remark": "shared"
+        "status": 1, "config": '{"appId":"10001"}', "remark": "shared",
+        "testServerGroupId": ids[2], "prodServerGroupId": None, "reviewServerGroupId": None
     }, 201)
-    binding = request(8082, f'/api/config/admin/channel-apps/{app["id"]}/bindings', "POST", {
-        "serverGroupId": ids[2], "status": 1, "config": '{"authUrl":"auth-review"}'
-    }, 201)
-    assert json.loads(binding["effectiveConfig"]) == {"appId": "10001", "authUrl": "auth-review"}
+    assert app["testServerGroupId"] == ids[2]
+    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "PUT", {
+        "name": "Huawei", "status": 1, "config": '{"appId":"10001"}',
+        "prodServerGroupId": ids[2], "testServerGroupId": ids[2]
+    }, expected=400)
     assert len(request(8080, f'/api/config/admin/channel-apps?gameId={ids[0]}')) == 1
 
     expected = [
@@ -178,13 +180,13 @@ def main():
     assert set(snapshot) == {"epoch", "revision", "nodes"}, snapshot
     assert len(snapshot["nodes"]) == 3 and snapshot["revision"] == 3
     updated_app = request(8080, f'/api/config/admin/channel-apps/{app["id"]}', "PUT", {
-        "name": "Huawei Updated", "status": 1, "config": '{"appId":"10001","enabled":true}', "remark": "shared"
+        "name": "Huawei Updated", "status": 1, "config": '{"appId":"10001","enabled":true}', "remark": "shared",
+        "testServerGroupId": ids[2]
     })
     assert updated_app["name"] == "Huawei Updated"
-    updated_binding = request(8082, f'/api/config/admin/channel-app-bindings/{binding["id"]}', "PUT", {
-        "status": 1, "config": '{"authUrl":"auth-production"}'
-    })
-    assert json.loads(updated_binding["effectiveConfig"])["authUrl"] == "auth-production"
+    assert updated_app["testServerGroupId"] == ids[2]
+    assert json.loads(updated_app["config"]) == {"appId": "10001", "enabled": True}
+    assert len(request(8082, f'/api/config/admin/server-groups/{ids[2]}/channel-apps')) == 1
     assert request(8080, "/api/config/sync/revision") == head
     print("PASS channel CRUD does not affect node sync", flush=True)
     # 旧版版本化路由应彻底失效（404），统一无版本路径仍正常工作。
@@ -271,7 +273,7 @@ def main():
         }, 400)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
     print("PASS legacy node types rejected", flush=True)
-    # 同一游戏下渠道应用编码唯一。
+    # 渠道应用编码全局唯一，同游戏重复同样会被拒绝。
     request(8080, "/api/config/admin/channel-apps", "POST", {
         "gameId": ids[0], "code": "ci-huawei", "name": "Duplicated",
         "status": 1, "config": "{}"
@@ -318,12 +320,27 @@ def main():
 
     # 删除时必须先解除绑定，避免区服组和应用出现孤儿引用。
     request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=409)
-    request(8082, f'/api/config/admin/channel-app-bindings/{binding["id"]}', "DELETE", expected=204)
+    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "PUT", {
+        "name": "Huawei Updated", "status": 1,
+        "config": '{"appId":"10001","enabled":true}'
+    })
     request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=204)
     assert request(8080, "/api/config/sync/revision") == changed_head
     request(8082, f"/api/config/admin/nodes/{ids[-1]}", "DELETE", expected=204)
     wait_until("delete propagated to local replica",
                lambda: len(replica()) == 2 and all(row["id"] != ids[-1] for row in replica()))
+
+    # 两个不同游戏不能共用同一渠道 Code，确保 sdk-core 可只用 appId 唯一定位。
+    second_game = create_node("game", 0, "ci-global-game")
+    request(8080, "/api/config/admin/channel-apps", "POST", {
+        "gameId": ids[0], "code": "ci-globally-unique", "name": "First",
+        "status": 1, "config": "{}"
+    }, 201)
+    request(8082, "/api/config/admin/channel-apps", "POST", {
+        "gameId": second_game["id"], "code": "ci-globally-unique", "name": "Duplicate",
+        "status": 1, "config": "{}"
+    }, 409)
+    print("PASS global channel code uniqueness across different games", flush=True)
 
     print("ALL END-TO-END SMOKE TESTS PASSED", flush=True)
 

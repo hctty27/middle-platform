@@ -1,61 +1,57 @@
 package model
 
-// ChannelApp 是游戏级渠道应用，独立于大区和区服组。
+// ChannelApp 统一配置三个环境，每个环境最多绑定一个区服组。
 type ChannelApp struct {
-	ID int64 `json:"id"`
-	GameID int64 `json:"gameId"`
-	Code string `json:"code"`
-	Name string `json:"name"`
-	Status int `json:"status"`
-	Config string `json:"config"`
-	Remark *string `json:"remark"`
-	CreatedAt LocalDateTime `json:"createdAt"`
-	UpdatedAt LocalDateTime `json:"updatedAt"`
+    ID int64 `json:"id"`
+    GameID int64 `json:"gameId"`
+    Code string `json:"code"`
+    Name string `json:"name"`
+    Status int `json:"status"`
+    Config string `json:"config"`
+    Remark *string `json:"remark"`
+    ProdServerGroupID *int64 `json:"prodServerGroupId"`
+    TestServerGroupID *int64 `json:"testServerGroupId"`
+    ReviewServerGroupID *int64 `json:"reviewServerGroupId"`
+    CreatedAt LocalDateTime `json:"createdAt"`
+    UpdatedAt LocalDateTime `json:"updatedAt"`
 }
 
-// ChannelAppBinding 是应用与区服组的关联。覆盖 JSON 只存差异字段。
-type ChannelAppBinding struct {
-	ID int64 `json:"id"`
-	ChannelAppID int64 `json:"channelAppId"`
-	ServerGroupID int64 `json:"serverGroupId"`
-	Status int `json:"status"`
-	Config string `json:"config"`
-	EffectiveConfig string `json:"effectiveConfig"`
-	ServerGroupName string `json:"serverGroupName,omitempty"`
-	RegionName string `json:"regionName,omitempty"`
-	RegionEnvType *string `json:"regionEnvType,omitempty"`
-	CreatedAt LocalDateTime `json:"createdAt"`
-	UpdatedAt LocalDateTime `json:"updatedAt"`
+// ServerGroupOption 为管理端环境下拉框提供路径信息。
+type ServerGroupOption struct {
+    ID int64 `json:"id"`
+    Name string `json:"name"`
+    Code string `json:"code"`
+    RegionName string `json:"regionName"`
 }
 
-
-// ServerGroupBinding 在区服组详情中直接展示已绑定应用及覆盖配置。
+// ServerGroupBinding 由应用的三个区服组 ID 推导，不再维护独立的状态和覆盖配置。
 type ServerGroupBinding struct {
-	ChannelAppBinding
-	ChannelAppName string `json:"channelAppName"`
-	ChannelAppCode string `json:"channelAppCode"`
+    ChannelAppID int64 `json:"channelAppId"`
+    ChannelAppName string `json:"channelAppName"`
+    ChannelAppCode string `json:"channelAppCode"`
+    ServerGroupID int64 `json:"serverGroupId"`
+    Status int `json:"status"`
+    Config string `json:"config"`
 }
 
 type CreateChannelAppRequest struct {
-	GameID int64 `json:"gameId"`
-	Code string `json:"code"`
-	Name string `json:"name"`
-	Status *int `json:"status"`
-	Config string `json:"config"`
-	Remark *string `json:"remark"`
+    GameID int64 `json:"gameId"`
+    Code string `json:"code"`
+    Name string `json:"name"`
+    Status *int `json:"status"`
+    Config string `json:"config"`
+    Remark *string `json:"remark"`
+    ProdServerGroupID *int64 `json:"prodServerGroupId"`
+    TestServerGroupID *int64 `json:"testServerGroupId"`
+    ReviewServerGroupID *int64 `json:"reviewServerGroupId"`
 }
+
 type UpdateChannelAppRequest struct {
-	Name string `json:"name"`
-	Status *int `json:"status"`
-	Config string `json:"config"`
-	Remark *string `json:"remark"`
-}
-type CreateChannelAppBindingRequest struct {
-	ServerGroupID int64 `json:"serverGroupId"`
-	Status *int `json:"status"`
-	Config string `json:"config"`
-}
-type UpdateChannelAppBindingRequest struct {
-	Status *int `json:"status"`
-	Config string `json:"config"`
+    Name string `json:"name"`
+    Status *int `json:"status"`
+    Config string `json:"config"`
+    Remark *string `json:"remark"`
+    ProdServerGroupID *int64 `json:"prodServerGroupId"`
+    TestServerGroupID *int64 `json:"testServerGroupId"`
+    ReviewServerGroupID *int64 `json:"reviewServerGroupId"`
 }

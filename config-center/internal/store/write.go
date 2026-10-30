@@ -14,8 +14,8 @@ import (
 func databaseError(err error) error {
 	var mysqlErr *mysql.MySQLError
 	if errors.As(err, &mysqlErr) {
-		if mysqlErr.Number == 1062 { return fmt.Errorf("%w: duplicate sibling code", ErrConflict) }
-		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 { return fmt.Errorf("%w: database constraint", ErrConflict) }
+		if mysqlErr.Number == 1062 { return fmt.Errorf("%w: duplicate unique code", ErrConflict) }
+		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 { return fmt.Errorf("%w: database constraint", ErrConflict) }
 	}
 	return err
 }
@@ -140,10 +140,10 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 		if count>0 { return ErrConflict }
 	}
 	if current.NodeType == "server_group" {
-		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app_binding WHERE server_group_id=?",id).Scan(&count); err != nil { return err }
-		if count>0 { return ErrConflict }
-	}
-	if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil { return databaseError(err) }
+		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE prod_server_group_id=? OR test_server_group_id=? OR review_server_group_id=?",id,id,id).Scan(&count); err != nil { return err }
+        if count>0 { return ErrConflict }
+    }
+    if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil { return databaseError(err) }
 	if err := recordChange(ctx, tx, id, "DELETE"); err != nil { return err }
 	return tx.Commit()
 }

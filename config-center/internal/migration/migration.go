@@ -19,7 +19,7 @@ import (
 var scripts embed.FS
 
 // Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
-const Latest = 10
+const Latest = 11
 
 var files = [...]string{
  "",
@@ -33,6 +33,7 @@ var files = [...]string{
  "sql/V8__node_only_sync.sql",
  "sql/V9__rename_sync_tables.sql",
  "sql/V10__rename_region_env_prod.sql",
+ "sql/V11__channel_app_env_groups.sql",
 }
 
 // Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
@@ -184,6 +185,9 @@ func migrate(ctx context.Context, conn *sql.Conn, opts Options) error {
  if version > opts.Target { return fmt.Errorf("schema version %d exceeds requested target %d", version, opts.Target) }
  if version == opts.Target { return validate(ctx, conn, version) }
  for next := version+1; next <= opts.Target; next++ {
+  if next == 11 {
+            if err := preflightV11(ctx,conn);err!=nil { return fmt.Errorf("V11 preflight failed (schema unchanged): %w",err) }
+        }
   body, err := scripts.ReadFile(files[next])
   if err != nil { return err }
   // MySQL DDL 会隐式提交，失败时保留 dirty 标志，阻止再次自动执行半成品脚本。
@@ -221,8 +225,22 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
   "SELECT acknowledged_epoch FROM " + deliveryTable + " LIMIT 0",
   "SELECT revision,node_id,operation FROM " + changeLogTable + " LIMIT 0",
   "SELECT id,game_id,code,config FROM config_channel_app LIMIT 0",
-  "SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0",
  }
+ if version >= 11 {
+        statements = append(statements,"SELECT prod_server_group_id,test_server_group_id,review_server_group_id FROM config_channel_app LIMIT 0")
+        present,err:=exists(ctx,conn,"config_channel_app_binding")
+        if err!=nil { return err }
+        if present { return errors.New("V11 validation failed: legacy binding table still exists") }
+        var indexCount int
+        err=conn.QueryRowContext(ctx,`SELECT COUNT(*) FROM information_schema.statistics
+            WHERE table_schema=DATABASE() AND table_name='config_channel_app'
+            AND index_name='uq_channel_app_code' AND column_name='code'
+            AND seq_in_index=1 AND non_unique=0`).Scan(&indexCount)
+        if err!=nil { return fmt.Errorf("V11 global channel code index validation: %w",err) }
+        if indexCount!=1 { return errors.New("V11 validation failed: unique code index missing") }
+    } else {
+        statements = append(statements,"SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0")
+    }
  // 历史归档在 V6-V8 必须存在；V9 后仅用于审计，不再作为服务启动条件。
  if version < 9 {
   statements = append(statements, "SELECT id FROM config_node_v6_channel_app_archive LIMIT 0")
@@ -273,4 +291,36 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
  }
  }
  return nil
+}
+
+// preflightV11 在任何 DDL 发生前校验旧绑定能否无损收敛为三个环境和一个公共 JSON。
+// 发现跨游戏重复 code、重复环境、跨游戏引用、独立启停或不同最终配置时拒绝升级，不进入 dirty 状态。
+func preflightV11(ctx context.Context,conn *sql.Conn) error {
+    checks:=[]struct{name,query string}{
+        {"duplicate global channel code",`SELECT MIN(id) FROM config_channel_app GROUP BY code HAVING COUNT(*)>1 LIMIT 1`},
+        {"invalid binding",`SELECT b.id FROM config_channel_app_binding b
+            JOIN config_channel_app a ON a.id=b.channel_app_id
+            LEFT JOIN config_node sg ON sg.id=b.server_group_id AND sg.node_type='server_group'
+            LEFT JOIN config_node r ON r.id=sg.region_id AND r.node_type='region'
+            WHERE sg.id IS NULL OR r.id IS NULL OR sg.game_id<>a.game_id OR r.game_id<>a.game_id
+               OR r.env_type NOT IN ('prod','test','review') OR r.env_type IS NULL
+               OR b.status<>a.status OR JSON_TYPE(b.config)<>'OBJECT' OR JSON_TYPE(a.config)<>'OBJECT' LIMIT 1`},
+        {"duplicate environment",`SELECT b.channel_app_id FROM config_channel_app_binding b
+            JOIN config_node sg ON sg.id=b.server_group_id
+            JOIN config_node r ON r.id=sg.region_id
+            GROUP BY b.channel_app_id,r.env_type HAVING COUNT(*)>1 LIMIT 1`},
+        {"different effective config",`SELECT b1.channel_app_id FROM config_channel_app_binding b1
+            JOIN config_channel_app a ON a.id=b1.channel_app_id
+            JOIN config_channel_app_binding b2 ON b2.channel_app_id=b1.channel_app_id AND b2.id>b1.id
+            WHERE JSON_MERGE_PATCH(a.config,b1.config)<>JSON_MERGE_PATCH(a.config,b2.config)
+            LIMIT 1`},
+    }
+    for _,check:=range checks {
+        var id int64
+        err:=conn.QueryRowContext(ctx,check.query).Scan(&id)
+        if err==sql.ErrNoRows { continue }
+        if err!=nil { return err }
+        return fmt.Errorf("%s at id=%d; reconcile old bindings before migration",check.name,id)
+    }
+    return nil
 }

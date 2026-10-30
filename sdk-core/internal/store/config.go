@@ -27,11 +27,14 @@ LIMIT 2`
 
 const boundGroupQuery = `
 SELECT r.id, r.code, sg.code
-FROM config_channel_app_binding b
-JOIN config_node sg ON sg.id = b.server_group_id
+FROM config_channel_app a
+JOIN config_node sg ON sg.id = CASE ?
+    WHEN 'prod' THEN a.prod_server_group_id
+    WHEN 'test' THEN a.test_server_group_id
+    WHEN 'review' THEN a.review_server_group_id
+    ELSE NULL END
 JOIN config_node r ON r.id = sg.region_id
-WHERE b.channel_app_id = ?
-  AND b.status = 1
+WHERE a.id = ?
   AND sg.node_type = 'server_group'
   AND sg.status = 1
   AND sg.game_id = ?
@@ -39,7 +42,7 @@ WHERE b.channel_app_id = ?
   AND r.status = 1
   AND r.game_id = ?
   AND r.env_type = ?
-ORDER BY r.id, sg.id`
+LIMIT 1`
 
 // Lookup 在同一只读一致性事务中查询应用与指定环境下的实际绑定。
 // 未绑定的区服组及其空大区不会进入结果。
@@ -81,7 +84,7 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
 		return model.ChannelApp{}, nil, model.ErrInvalidConfig
 	}
 
-	bindings, err := tx.QueryContext(ctx, boundGroupQuery, app.ID, app.GameID, app.GameID, env)
+	bindings, err := tx.QueryContext(ctx, boundGroupQuery, env, app.ID, app.GameID, app.GameID, env)
 	if err != nil {
 		return model.ChannelApp{}, nil, fmt.Errorf("query bound server groups: %w", err)
 	}
@@ -108,10 +111,9 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
 // VerifySchema 在启动时验证查询依赖的业务表和字段存在。
 func (s *Store) VerifySchema(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT a.code, a.config, b.channel_app_id, sg.region_id, r.env_type
+SELECT a.code, a.config, a.prod_server_group_id, a.test_server_group_id, a.review_server_group_id, sg.region_id, r.env_type
 FROM config_channel_app a
-LEFT JOIN config_channel_app_binding b ON b.channel_app_id = a.id
-LEFT JOIN config_node sg ON sg.id = b.server_group_id
+LEFT JOIN config_node sg ON sg.id = a.prod_server_group_id
 LEFT JOIN config_node r ON r.id = sg.region_id
 WHERE 1 = 0`)
 	if err != nil {

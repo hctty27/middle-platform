@@ -92,7 +92,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		if _, err := db.ExecContext(ctx, statement); err != nil { t.Fatalf("%s: %v", statement, err) }
 	}
 	defer func() {
-		for _, name := range []string{"config_channel_app_binding","config_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
+		for _, name := range []string{"config_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
 			if _, err := db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+name); err != nil { t.Log(err) }
 		}
 	}()
@@ -111,10 +111,10 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
     if !errorsIs(err, ErrConflict) { t.Fatalf("changing categorized region type should conflict: %v", err) }
     group, err := store.Create(ctx, CreateNodeRequest{ParentID: region.ID, NodeType: "server_group", Code: "s1", Name: "Group", Status: &enabled, Config: "{}"})
 	if err != nil { t.Fatal(err) }
-	app, err := store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "a1", Name: "App", Status: &enabled, Config: `{"x":1}`})
-	if err != nil { t.Fatal(err) }
-	binding, err := store.CreateChannelAppBinding(ctx,app.ID,model.CreateChannelAppBindingRequest{ServerGroupID: group.ID,Status:&enabled,Config:`{"x":2}`})
-	if err != nil || binding.EffectiveConfig != `{"x":2}` { t.Fatalf("binding: %+v %v",binding,err) }
+	app, err := store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "a1", Name: "App", Status: &enabled, Config: `{"x":1}`,TestServerGroupID:&group.ID})
+    if err != nil { t.Fatal(err) }
+    if app.TestServerGroupID==nil || *app.TestServerGroupID!=group.ID { t.Fatalf("binding not saved: %+v",app) }
+    if _,err=store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:app.Name,Status:&enabled,Config:app.Config,ProdServerGroupID:&group.ID,TestServerGroupID:&group.ID}); !errorsIs(err,ErrInvalid) { t.Fatalf("cross-environment binding accepted: %v",err) }
 	// 渠道绑定存在时快照仍仅包含节点，不能暴露渠道应用配置。
 	boundSnapshot, err := store.Snapshot(ctx)
 	if err != nil || len(boundSnapshot.Nodes) != 3 || boundSnapshot.Revision != 3 { t.Fatalf("snapshot: %+v %v",boundSnapshot,err) }
@@ -131,15 +131,15 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	same, err := store.Revision(ctx)
 	if err != nil || same.Revision != initial.Revision { t.Fatalf("node no-op changed revision: %+v %v",same,err) }
-	_, err = store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:"Updated App",Status:&enabled,Config:`{"x":3}`})
+	_, err = store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:"Updated App",Status:&enabled,Config:`{"x":3}`,TestServerGroupID:&group.ID})
 	if err != nil { t.Fatal(err) }
 	channelRevision, err := store.Revision(ctx)
 	if err != nil || channelRevision != initial { t.Fatalf("channel write changed cursor: %+v vs %+v (%v)",channelRevision,initial,err) }
 	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected child conflict: %v",err) }
 	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected bound group conflict: %v",err) }
 	if err := store.DeleteChannelApp(ctx,app.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected bound app conflict: %v",err) }
-	if err := store.DeleteChannelAppBinding(ctx,binding.ID); err != nil { t.Fatalf("delete binding: %v",err) }
-	if err := store.DeleteChannelApp(ctx,app.ID); err != nil { t.Fatalf("delete app: %v",err) }
+	if _,err:=store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:"Updated App",Status:&enabled,Config:`{"x":3}`});err!=nil { t.Fatalf("clear environment binding: %v",err) }
+    if err := store.DeleteChannelApp(ctx,app.ID); err != nil { t.Fatalf("delete app: %v",err) }
 	finalRevision, err := store.Revision(ctx)
 	if err != nil || finalRevision != initial { t.Fatalf("channel delete changed cursor: %+v vs %+v (%v)",finalRevision,initial,err) }
 	changeList, err := store.Changes(ctx, 0, 100)
@@ -214,6 +214,13 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		}
 	}
 	if successful != 1 { t.Fatalf("expected exactly one lease holder, got %d", successful) }
+    // 渠道 Code 在不同游戏之间也不得重复，由数据库唯一索引兜底。
+    otherGame,err:=store.Create(ctx,CreateNodeRequest{NodeType:"game",Code:"g2",Name:"Other Game",Status:&enabled,Config:"{}"})
+    if err!=nil { t.Fatal(err) }
+    if _,err=store.CreateChannelApp(ctx,model.CreateChannelAppRequest{GameID:game.ID,Code:"cross-game-unique",Name:"App",Status:&enabled,Config:"{}"});err!=nil { t.Fatal(err) }
+    if _,err=store.CreateChannelApp(ctx,model.CreateChannelAppRequest{GameID:otherGame.ID,Code:"cross-game-unique",Name:"Duplicate",Status:&enabled,Config:"{}"});!errorsIs(err,ErrConflict) {
+        t.Fatalf("expected global channel code conflict, got %v",err)
+    }
 }
 
 func errorsIs(err, target error) bool {
@@ -257,15 +264,9 @@ var integrationSchema = []string{
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,game_id BIGINT NOT NULL,
 		code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,name VARCHAR(128) NOT NULL,
 		status TINYINT NOT NULL,config JSON NOT NULL,remark VARCHAR(500) NULL,
-		created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
-		UNIQUE KEY uq_channel_app_game_code(game_id,code)
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
-	`CREATE TABLE config_channel_app_binding (
-		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,channel_app_id BIGINT NOT NULL,
-		server_group_id BIGINT NOT NULL,status TINYINT NOT NULL,config JSON NOT NULL,
-		created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
-		UNIQUE KEY uq_channel_app_group(channel_app_id,server_group_id),
-		FOREIGN KEY (channel_app_id) REFERENCES config_channel_app(id) ON DELETE RESTRICT
+        prod_server_group_id BIGINT NULL,test_server_group_id BIGINT NULL,review_server_group_id BIGINT NULL,
+        created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
+        UNIQUE KEY uq_channel_app_code(code)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
 	`CREATE TABLE config_node_change_log(
 		revision BIGINT NOT NULL PRIMARY KEY,node_id BIGINT NOT NULL,operation VARCHAR(10) NOT NULL,

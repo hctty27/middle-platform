@@ -104,7 +104,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 
 ## V5 副本结构（适配权威库 V7）
 
-`config_node` 仅保留 `game_id` 与 `region_id` 两个祖先列，`config_channel_app_binding.server_group_id` 继续保留。
+`config_node` 仅保留 `game_id` 与 `region_id` 两个祖先列。权威库 V11 已将环境关联收敛到 `config_channel_app`；接入副本本身不保存渠道绑定。
 已有副本库先停接入服务、备份并手工执行 `db/migration/V5__trim_node_group_id_replica.sql`，再启动新版。
 若旧库未升级，启动时会报错提示必须执行 V5，防止新旧 SQL 混用。
 

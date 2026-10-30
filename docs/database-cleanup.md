@@ -1,12 +1,11 @@
-# 配置中心数据库整理（V9）
+# 配置中心数据库整理（V11，保留 V9 历史说明）
 
-## 正式表（8 张）
+## 正式表（7 张）
 
 | 分类 | 表名 | 用途 |
 |---|---|---|
 | 业务 | `config_node` | 游戏、大区、区服组 |
-| 业务 | `config_channel_app` | 游戏级渠道应用 |
-| 业务 | `config_channel_app_binding` | 区服组绑定及覆盖配置 |
+| 业务 | `config_channel_app` | 游戏级渠道应用及三环境绑定 ID、共享 JSON |
 | 同步 | `config_revision` | epoch 和 revision |
 | 同步 | `config_node_change_log` | 三级节点增量日志 |
 | Webhook | `config_subscriber` | 接入方及回调配置 |
@@ -28,13 +27,13 @@ WHERE table_schema = DATABASE()
 ORDER BY table_name;
 ```
 
-正常应为 `version=9` 且 `dirty=0`。两张新表存在且旧名称不再存在。
+新部署正常应为 `version=11` 且 `dirty=0`；V9 的两个同步表更名须保留，V11 的旧绑定表须不存在。
 旧表名只留在 V1–V8 的不可变历史迁移文件、升级兼容校验和历史回归测试中。
 
 ## V4/V6 归档清理（必须人工执行）
 
 `config_node_v4_legacy_archive` 和 `config_node_v6_channel_app_archive` 是不可从现有业务表完整重建的历史数据。
-V9 不自动删除这些表；如需让数据库界面只保留 8 张表，请先完整备份、验证可恢复，再手动清理。
+V9 不自动删除这些表；如需让数据库界面只保留正式业务表，请先完整备份、验证可恢复，再手动清理。
 
 1. 核对实际连接的是权威配置中心库，不是 `config_access` 接入副本库；确认 V9 迁移完成。
 2. 记录归档表行数，并将存在的归档表分别导出到库外持久存储。以下示例适用于 PowerShell 或 CMD，使用 MySQL 客户端的 `--result-file` 避免重定向编码问题。
@@ -55,3 +54,13 @@ DROP TABLE config_node_v6_channel_app_archive;
 
 没有对应归档表时不需要创建空表。不得修改 `config_schema_migrations.version` 或 `dirty` 来绕过校验。
 如果 V9 的 DDL 部分成功后中断，必须先人工核对真实表结构与迁移状态，**不要直接重复执行 RENAME TABLE 或重置 dirty**。
+
+## V11 后的业务表核对
+
+```sql
+SELECT version, dirty FROM config_schema_migrations WHERE id=1;
+SHOW COLUMNS FROM config_channel_app LIKE '%server_group_id';
+SHOW TABLES LIKE 'config_channel_app_binding';
+```
+
+预期迁移版本为 `11`、`dirty=0`，三个区服组字段存在，旧绑定表查询无结果。历史迁移及审计说明不可作为现行绑定接口使用说明。
