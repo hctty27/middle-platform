@@ -30,9 +30,11 @@ CREATE TABLE config_channel_app_binding (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 历史数据保留原始 id 和配置，方便迁移后人工核对。
-CREATE TABLE config_node_v6_channel_app_archive AS
+-- 分离 DDL 和 DML，兼容 enforce_gtid_consistency=ON 的 MySQL。
+-- LIKE 会复制字段、主键、索引与 CHECK 约束；归档表不复制数据时应显式 INSERT。
+CREATE TABLE config_node_v6_channel_app_archive LIKE config_node;
+INSERT INTO config_node_v6_channel_app_archive
     SELECT * FROM config_node WHERE node_type='channel_app';
-ALTER TABLE config_node_v6_channel_app_archive ADD PRIMARY KEY (id);
 
 -- 每个游戏下相同 code 收敛为一个应用，不跨游戏合并。
 INSERT INTO config_channel_app (id,game_id,code,name,status,config,remark,created_at,updated_at)
