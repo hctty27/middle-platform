@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // 配置工作区负责展示懒加载目录树、直属子项列表和节点编辑抽屉。
 // 数据加载、并发控制及表单状态集中交由 useNodeWorkspace 管理。
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
+import { nodeApi } from './api/nodeApi'
 import { focusNodeId, focusNodeRequest } from './app/gameContext'
-import type { NodeType, RegionEnvType } from './features/nodes/types'
+import type { NodeType, NodeRecord, RegionEnvType } from './features/nodes/types'
 import { regionEnvLabels } from './features/nodes/types'
 
 function envLabel(env: RegionEnvType | null | undefined) {
@@ -20,6 +21,28 @@ import GroupBindings from './features/nodes/components/GroupBindings.vue'
 const props = defineProps<{ gameId: number | null }>()
 const emit = defineEmits<{ changed: [] }>()
 const { selectById, labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
+
+const activeTab = ref<'list' | 'config' | 'info'>('list')
+const nodeDetail = ref<NodeRecord | null>(null)
+const nodeDetailLoading = ref(false)
+let nodeDetailSequence = 0
+
+function pretty(value: string) {
+  try { return JSON.stringify(JSON.parse(value), null, 2) } catch { return value }
+}
+watch(() => selected.value?.id, async id => {
+  const sequence = ++nodeDetailSequence
+  nodeDetail.value = null
+  activeTab.value = 'list'
+  if (!id) return
+  nodeDetailLoading.value = true
+  try {
+    const result = await nodeApi.getNode(id)
+    if (sequence === nodeDetailSequence) nodeDetail.value = result.data
+  } finally {
+    if (sequence === nodeDetailSequence) nodeDetailLoading.value = false
+  }
+}, { immediate: true })
 
 // 游戏切换与概览页跳转均直接定位目标节点。
 let focusSequence = 0
@@ -107,6 +130,12 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
             <el-button type="danger" plain @click="removeNode(selected)">删除</el-button>
           </div>
         </div>
+        <el-tabs v-model="activeTab" class="node-detail-tabs">
+          <el-tab-pane :label="selected.nodeType === 'game' ? '大区列表' : selected.nodeType === 'region' ? '区服组列表' : '渠道绑定'" name="list" />
+          <el-tab-pane label="JSON 配置" name="config" />
+          <el-tab-pane label="基本信息" name="info" />
+        </el-tabs>
+        <div v-if="activeTab === 'list'" class="node-child-pane">
         <div class="children-toolbar">
           <div>
             <strong>{{ selected.nodeType === 'server_group' ? '渠道绑定' : nextLabel + '列表' }}</strong>
@@ -154,6 +183,25 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
                          :current-page="childPage" :page-size="childSize" :total="childTotal"
                          layout="total, prev, pager, next" @current-change="onPageChange" />
         </template>
+
+        </div>
+        <div v-else-if="activeTab === 'config'" class="node-detail-content" v-loading="nodeDetailLoading">
+          <div class="section-heading"><div><h3>当前节点 JSON 配置</h3>
+            <p class="muted">此处显示节点自身配置，不包含渠道应用覆盖配置。</p></div>
+            <el-button @click="openEditor(selected)">编辑配置</el-button></div>
+          <pre class="config-preview">{{ nodeDetail ? pretty(nodeDetail.config) : '{}' }}</pre>
+        </div>
+        <div v-else class="node-detail-content" v-loading="nodeDetailLoading">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="节点名称">{{ selected.name }}</el-descriptions-item>
+            <el-descriptions-item label="业务编码">{{ selected.code }}</el-descriptions-item>
+            <el-descriptions-item label="节点类型">{{ labels[selected.nodeType] }}</el-descriptions-item>
+            <el-descriptions-item label="节点 ID">{{ selected.id }}</el-descriptions-item>
+            <el-descriptions-item label="大区环境" v-if="selected.nodeType === 'region'">{{ envLabel(selected.envType) }}</el-descriptions-item>
+            <el-descriptions-item label="状态">{{ selected.status ? '已启用' : '已停用' }}</el-descriptions-item>
+            <el-descriptions-item label="备注">{{ nodeDetail?.remark || '—' }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
       </template>
     </section>
 
