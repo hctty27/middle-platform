@@ -1,0 +1,18 @@
+[Unit]
+Description=Middle Platform config-center
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=middle-platform
+Group=middle-platform
+WorkingDirectory=/opt/middle-platform/config-center
+ExecStart=/opt/middle-platform/config-center/config-center -config /etc/middle-platform/config-center.yaml
+Restart=on-failure
+RestartSec=3s
+KillSignal=SIGTERM
+TimeoutStopSec=40s
+
+[Install]
+WantedBy=multi-user.target
