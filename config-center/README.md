@@ -136,3 +136,29 @@ go run ./cmd/migrate -config configs/config-dev.yaml -repair-v6-gtid
 归档表不存在、两张新增表均没有数据的情况，清理这两张空表与 dirty 标志，随后继续执行 V6。
 任一条件不满足则停止，不清理数据，需要人工核查。该参数只用于此次确定的 1786 中断场景；
 它不是通用的数据库修复工具，正常迁移不应使用。生产环境同理，但必须先完成备份并按生产配置执行。
+
+## 已完成 V6，但旧 V4 归档缺失（1146）
+
+如果 V6 完成执行后最终检查报错 `Table ... config_node_v4_legacy_archive doesn't exist`，
+这说明旧历史归档表可能在历史 Flyway 基线或既有库中未创建，**不能据此认定 V6 失败**。
+V4 归档仅供旧渠道数据审计，运行中的权威应用、绑定与同步并不读取该表。
+校验程序现在将其视为可选项目：不存在时记录警告，仍严格校验 V6 归档表及所有业务必需表。
+
+首先查询：
+
+```sql
+SELECT version,dirty FROM config_schema_migrations WHERE id=1;
+SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE()
+AND table_name IN ('config_node_v4_legacy_archive','config_node_v6_channel_app_archive',
+                   'config_channel_app','config_channel_app_binding');
+```
+
+若是 `version=6,dirty=0`，更新代码后直接重新运行常规迁移命令以校验结构：
+
+```powershell
+go run ./cmd/migrate -config configs/config-dev.yaml
+```
+
+**不要重复使用 `-repair-v6-gtid`**，它只处理 `version=5,dirty=1` 且 V6 尚未执行的安全中断场景；
+也不要为通过校验而创建空的 V4 归档表，否则会误导历史数据审计。
+V4 历史归档缺失不会被自动恢复，若业务仍需旧渠道原始数据，请从备份或原始库恢复。
