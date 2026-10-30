@@ -206,7 +206,6 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
  for _, statement := range []string{
   "SELECT game_id,region_id,server_group_id,env_type FROM config_node LIMIT 0",
   "SELECT acknowledged_epoch FROM config_delivery_state LIMIT 0",
-  "SELECT id FROM config_node_v4_legacy_archive LIMIT 0",
   "SELECT id,game_id,code,config FROM config_channel_app LIMIT 0",
   "SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0",
   "SELECT id FROM config_node_v6_channel_app_archive LIMIT 0",
@@ -214,6 +213,14 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
   rows, err := conn.QueryContext(ctx, statement)
   if err != nil { return fmt.Errorf("schema V6 validation failed: %w", err) }
   if err := rows.Close(); err != nil { return err }
+ }
+ // V4 归档表仅用于历史审计，非当前权威配置所需。
+ // 旧 Flyway 基线或人工历史升级可能没有此表，不能因此否定已经完成的 V6。
+ // 缺失时明确告警，但绝不自动创建空归档表伪造历史；V6 的权威表仍严格校验。
+ hasV4Archive, err := exists(ctx, conn, "config_node_v4_legacy_archive")
+ if err != nil { return fmt.Errorf("inspect optional V4 archive: %w", err) }
+ if !hasV4Archive {
+  slog.Warn("optional V4 legacy archive is missing; historical channel records cannot be verified")
  }
  return nil
 }
