@@ -25,6 +25,14 @@ type ChannelAppBinding struct {
 	UpdatedAt LocalDateTime `json:"updatedAt"`
 }
 
+
+// ServerGroupBinding 在区服组详情中直接展示已绑定应用及覆盖配置。
+type ServerGroupBinding struct {
+	ChannelAppBinding
+	ChannelAppName string `json:"channelAppName"`
+	ChannelAppCode string `json:"channelAppCode"`
+}
+
 type CreateChannelAppRequest struct {
 	GameID int64 `json:"gameId"`
 	Code string `json:"code"`
