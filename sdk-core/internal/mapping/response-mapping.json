@@ -1,0 +1,7 @@
+{
+  "GET /api/core/{env}/{appid}": {
+    "snKey": "channel_app.code",
+    "zoneKey": "server_group.code",
+    "tsKey": "channel_app.config.tsKey"
+  }
+}

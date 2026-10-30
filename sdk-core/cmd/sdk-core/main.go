@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/hctty27/middle-platform/sdk-core/internal/api"
+	"github.com/hctty27/middle-platform/sdk-core/internal/mapping"
 	"github.com/hctty27/middle-platform/sdk-core/internal/service"
 	"github.com/hctty27/middle-platform/sdk-core/internal/settings"
 	"github.com/hctty27/middle-platform/sdk-core/internal/store"
@@ -65,9 +66,13 @@ func run(configPath string) error {
 		return err
 	}
 
+	resolver, err := mapping.LoadDefault()
+	if err != nil { return fmt.Errorf("load response mapping: %w", err) }
+	if err := resolver.Require(mapping.RouteCoreConfig); err != nil { return err }
+
 	server := &http.Server{
 		Addr:              cfg.Server.Address,
-		Handler:           api.Router(service.NewConfigService(repository), db),
+		Handler:           api.Router(service.NewConfigService(repository, resolver), db),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      15 * time.Second,
