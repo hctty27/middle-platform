@@ -23,3 +23,6 @@ export async function loadGames() {
 export function currentGameName() {
   return games.value.find(game => game.id === currentGameId.value)?.name ?? '请选择游戏'
 }
+
+// 概览页或搜索结果可以指定配置工作区打开的节点。
+export const focusNodeId = ref<number | null>(null)
