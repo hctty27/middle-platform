@@ -45,7 +45,7 @@ def main():
         SET GLOBAL gtid_mode=OFF_PERMISSIVE;
         SET GLOBAL gtid_mode=ON_PERMISSIVE;
         SET GLOBAL gtid_mode=ON;""")
-    assert mysql("SELECT @@GLOBAL.gtid_mode,@@GLOBAL.enforce_gtid_consistency") == "ON\\tON"
+    assert mysql("SELECT @@GLOBAL.gtid_mode,@@GLOBAL.enforce_gtid_consistency") == "ON\tON"
     migrate(1)
     assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "1"
     mysql("""
@@ -144,7 +144,7 @@ def main():
     mysql("DELETE FROM config_migration.config_channel_app WHERE id=9001")
     # 仅清理上述两张空表及 dirty 标记，然后自动继续应用修复后的 V6。
     migrate(6, repair=True)
-    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "6\\t0"
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "6\t0"
     assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "6"
     assert_rows("SELECT id,game_id,code,config FROM config_migration.config_channel_app", [
         '105\t101\tlegacy-sdk\t{}'
