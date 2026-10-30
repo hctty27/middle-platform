@@ -60,6 +60,7 @@ func id(r *http.Request) (int64, error) {
 }
 
 // decodeBody 限制请求体大小并拒绝多段 JSON。
+// decodeBody 对请求体设置大小与 JSON 结构边界，阻止多份 JSON 拼接请求。
 func decodeBody(w http.ResponseWriter, r *http.Request, target any) error {
 	defer r.Body.Close()
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))

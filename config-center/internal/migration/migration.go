@@ -17,6 +17,7 @@ import (
 //go:embed sql/*.sql
 var scripts embed.FS
 
+// Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
 const Latest = 5
 
 var files = [...]string{
@@ -70,12 +71,14 @@ func Run(ctx context.Context, dsn string, opts Options) error {
  return migrate(ctx, conn, opts)
 }
 
+// exists 检查指定表是否存在，用于判定全新安装、Go 历史或旧版 Flyway 历史。
 func exists(ctx context.Context, conn *sql.Conn, table string) (bool, error) {
  var count int
  err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&count)
  return count != 0, err
 }
 
+// migrate 按历史版本递进升级；无法确认的旧库拒绝自动改写。
 func migrate(ctx context.Context, conn *sql.Conn, opts Options) error {
  hasState, err := exists(ctx, conn, "config_schema_migrations")
  if err != nil { return err }
@@ -130,6 +133,7 @@ func migrate(ctx context.Context, conn *sql.Conn, opts Options) error {
  return validate(ctx, conn, opts.Target)
 }
 
+// validate 用真实表结构检查替代仅相信迁移历史记录，防止部分 DDL 遗漏。
 func validate(ctx context.Context, conn *sql.Conn, version int) error {
  if version < Latest { return nil } // 仅迁移测试用的阶段性旧版本
  var rev int64
