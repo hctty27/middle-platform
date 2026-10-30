@@ -64,9 +64,9 @@ curl -X POST http://127.0.0.1:8080/api/config/admin/subscribers \
 
 ## 数据库升级边界
 
-新建库会自动创建最新四级 `config_node` 和 `config_sync_state` 表；已有 V3 数据库可以原样接入，不重置游标。
+新建库会自动创建包含大区环境类型的最新四级 `config_node` 和 `config_sync_state` 表；已有 V3 数据库须先手动执行 `db/migration/V4__region_env_type_replica.sql`，不会重置已有游标。
 
-若副本库尚停留在历史 V1/V2 五级结构，**必须先备份并手工执行缺失的 V2/V3 SQL 迁移**，再启动 Go 接入服务。原始 SQL 保留在 `db/migration`，不会由接入进程自动执行；已经升级的 V3 库不需要重建。Go 服务不会自动删除旧表或历史数据。
+若副本库尚停留在历史 V1/V2 五级结构，**必须先备份并手工执行缺失的 V2/V3 SQL 迁移**，再启动 Go 接入服务。原始 SQL 保留在 `db/migration`，不会由接入进程自动执行；已升级的 V3 库只需要再执行 V4 环境类型扩展，不需要重建。Go 服务不会自动删除旧表或历史数据。
 
 ## 验证
 
@@ -75,3 +75,9 @@ go test -race ./...
 go vet ./...
 go build ./cmd/config-center-access
 ```
+
+## 大区环境同步
+
+`GET /api/access/nodes` 返回 `env_type`（`test` / `review` / `production`）字段。
+历史未分类大区返回 `null`；归类后通过权威端版本事件同步更新。
+已使用 V3 接入副本数据库的部署，请在升级配置中心 V5 前备份并执行 V4 SQL。

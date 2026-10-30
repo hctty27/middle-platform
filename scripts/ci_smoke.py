@@ -90,6 +90,7 @@ def create_node(node_type, parent, code):
     return request(8080, "/api/config/admin/nodes", "POST", {
         "parentId": parent,
         "nodeType": node_type,
+        "envType": "test" if node_type == "region" else None,
         "code": code,
         "name": f"{node_type}-{code}",
         "status": 1,
@@ -184,6 +185,11 @@ def main():
     assert "config" not in roots[0] and roots[0]["leaf"] is False, roots
     regions = request(8080, f"/api/config/admin/nodes/tree?parentId={ids[0]}")
     assert len(regions) == 1 and regions[0]["id"] == ids[1], regions
+    assert regions[0]["envType"] == "test", regions
+    filtered = request(8080, f"/api/config/admin/nodes/{ids[0]}/children?envType=test")
+    assert filtered["total"] == 1 and filtered["items"][0]["envType"] == "test", filtered
+    filtered = request(8080, f"/api/config/admin/nodes/{ids[0]}/children?envType=production")
+    assert filtered["total"] == 0, filtered
     groups = request(8080, f"/api/config/admin/nodes/tree?parentId={ids[1]}")
     assert len(groups) == 1 and groups[0]["id"] == ids[2] and groups[0]["leaf"], groups
     assert request(8080, f"/api/config/admin/nodes/tree?parentId={ids[2]}") == []
@@ -210,7 +216,8 @@ def main():
     for index, node_id in enumerate(ids):
         assert tuple(local[node_id][field] for field in
                      ("game_id", "region_id", "server_group_id")) == expected[index], local
-    print("PASS complete ancestor paths in synchronized local replica", flush=True)
+    assert local[ids[1]]["env_type"] == "test", local
+    print("PASS complete ancestor paths and region environment in synchronized local replica", flush=True)
 
     # Write through a different config-center instance, verify client upsert.
     request(8082, f"/api/config/admin/nodes/{ids[-1]}", "PUT", {
