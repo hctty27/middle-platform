@@ -24,6 +24,7 @@ func (t LocalDateTime) MarshalJSON() ([]byte, error) {
 type Node struct {
 	ID            int64         `json:"id"`
 	NodeType      string        `json:"nodeType"`
+	EnvType       *string       `json:"envType"`
 	GameID        *int64        `json:"gameId"`
 	RegionID      *int64        `json:"regionId"`
 	ServerGroupID *int64        `json:"serverGroupId"`
@@ -63,6 +64,7 @@ type NodeSummary struct {
 	ID       int64  `json:"id"`
 	ParentID int64  `json:"parentId"`
 	NodeType string `json:"nodeType"`
+	EnvType  *string `json:"envType"`
 	Code     string `json:"code"`
 	Name     string `json:"name"`
 	Status   int    `json:"status"`
@@ -71,7 +73,7 @@ type NodeSummary struct {
 
 // Summary 将节点转换为树列表摘要。
 func Summary(n Node) NodeSummary {
-	return NodeSummary{n.ID, n.Parent(), n.NodeType, n.Code, n.Name, n.Status, n.NodeType == "server_group" || n.NodeType == "channel_app"}
+	return NodeSummary{ID: n.ID, ParentID: n.Parent(), NodeType: n.NodeType, EnvType: n.EnvType, Code: n.Code, Name: n.Name, Status: n.Status, Leaf: n.NodeType == "server_group" || n.NodeType == "channel_app"}
 }
 
 // NodePage 定义分页节点结果。
