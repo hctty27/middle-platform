@@ -1,6 +1,6 @@
 # Go 接入工程
 
-`config-center-access` 是独立 Go 接入示例，不作为 SDK/Starter 给其他项目依赖。与 `config-center-go` 的 `/api/config/**` 完全兼容。
+`config-center-access` 是独立 Go 接入示例，不作为 SDK/Starter 给其他项目依赖。与 `config-center` 的 `/api/config/**` 完全兼容。
 
 ## 主要功能
 
@@ -29,7 +29,7 @@ go mod download
 go run ./cmd/config-center-access
 ```
 
-> 如果 Go 配置中心使用默认 `:8081`，需将其中一个进程改为不同端口，例如配置中心 `CONFIG_GO_ADDR=:8080`。
+> 如果配置中心使用默认 `:8081`，需将其中一个进程改为不同端口，例如配置中心 `CONFIG_GO_ADDR=:8080`。
 
 ## Linux/macOS 启动
 
@@ -64,9 +64,9 @@ curl -X POST http://127.0.0.1:8080/api/config/admin/subscribers \
 
 ## 数据库升级边界
 
-新建库会自动创建最新四级 `config_node` 和 `config_sync_state` 表；已有 Flyway V3 数据库可以原样接入，不重置游标。
+新建库会自动创建最新四级 `config_node` 和 `config_sync_state` 表；已有 V3 数据库可以原样接入，不重置游标。
 
-若副本库尚停留在历史 V1/V2 五级结构，**必须先用旧版 Flyway 升级至 V3 并备份**，再切换 Go 接入服务。历史 SQL 存放在 `db/migration`，保留用于核查升级，不会被 Go 服务自动执行；不要直接改写已有 Flyway 版本。Go 服务不会自动删除旧表或历史数据。
+若副本库尚停留在历史 V1/V2 五级结构，**必须先备份并手工执行缺失的 V2/V3 SQL 迁移**，再启动 Go 接入服务。原始 SQL 保留在 `db/migration`，不会由接入进程自动执行；已经升级的 V3 库不需要重建。Go 服务不会自动删除旧表或历史数据。
 
 ## 验证
 

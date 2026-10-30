@@ -1,74 +1,41 @@
 #!/usr/bin/env python3
-"""Run a real V1 -> V2 -> V3 -> V4 upgrade with legacy rows against MySQL 8.4."""
+"""Go SQL 迁移真实 MySQL V1→V4 与旧四级配置结构回归。"""
 
-import glob
-import json
 import os
-import pathlib
 import subprocess
-import time
-import urllib.request
+
+CONTAINER = subprocess.check_output(
+    ["docker", "ps", "--filter", "ancestor=mysql:8.4", "--format", "{{.ID}}"],
+    text=True,
+).strip().splitlines()[0]
 
 
-PORT = 8093
+def mysql(statement):
+    proc = subprocess.run(
+        ["docker", "exec", "-i", CONTAINER, "mysql", "-uroot", "-pintegration-test", "-N", "-B"],
+        input=statement, capture_output=True, text=True, check=True,
+    )
+    return proc.stdout.strip()
 
 
-def wait_ready(process, log_path, seconds=75):
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            raise AssertionError("Migration server exited:\n" + pathlib.Path(log_path).read_text()[-7000:])
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/actuator/health", timeout=2) as response:
-                if json.load(response)["status"] == "UP":
-                    return
-        except Exception:
-            pass
-        time.sleep(0.5)
-    raise AssertionError("Migration server did not become healthy:\n" + pathlib.Path(log_path).read_text()[-7000:])
+def migrate(version):
+    env = os.environ.copy()
+    env["CONFIG_DB_DSN"] = (
+        "root:integration-test@tcp(127.0.0.1:3306)/config_migration?parseTime=true&loc=UTC"
+    )
+    subprocess.run(["/tmp/config-center-migrate-ci", "-target", str(version)],
+                   check=True, env=env)
+
+
+def assert_rows(sql, expected):
+    actual = mysql(sql).splitlines()
+    assert actual == expected, (actual, expected)
 
 
 def main():
-    containers = subprocess.check_output(
-        ["docker", "ps", "--filter", "ancestor=mysql:8.4", "--format", "{{.ID}}"],
-        text=True).strip().splitlines()
-    assert containers, "MySQL CI container is not running"
-    container = containers[0]
-
-    def mysql(sql):
-        result = subprocess.run(
-            ["docker", "exec", "-i", container, "mysql", "-uroot", "-pintegration-test",
-             "-N", "-B"], input=sql, text=True, capture_output=True, check=True)
-        return result.stdout.strip()
-
-    mysql("CREATE DATABASE config_migration CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
-    jars = [p for p in glob.glob("config-center/build/libs/*.jar") if not p.endswith("-plain.jar")]
-    assert len(jars) == 1, jars
-    env = os.environ.copy()
-    env["CONFIG_DB_URL"] = "jdbc:mysql://127.0.0.1:3306/config_migration?connectionTimeZone=UTC"
-    env["CONFIG_CENTER_PORT"] = str(PORT)
-    java_bin = str(pathlib.Path(env["JAVA_HOME"]) / "bin" / "java") if env.get("JAVA_HOME") else "java"
-
-    def boot(label, *args):
-        log_path = f"/tmp/middle-platform-{label}.log"
-        with open(log_path, "w", encoding="utf-8") as log:
-            process = subprocess.Popen([java_bin, "-jar", jars[0], *args], env=env,
-                                       stdout=log, stderr=subprocess.STDOUT)
-            try:
-                wait_ready(process, log_path)
-            finally:
-                process.terminate()
-                try:
-                    process.wait(timeout=12)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=5)
-        return log_path
-
-    boot("legacy-v1-bootstrap", "--spring.flyway.target=1")
-    assert mysql("SELECT version FROM config_migration.flyway_schema_history "
-                 "WHERE success=1 ORDER BY installed_rank;").splitlines() == ["1"]
-
+    mysql("CREATE DATABASE config_migration CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci")
+    migrate(1)
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "1"
     mysql("""
         INSERT INTO config_migration.config_node
             (id,parent_id,node_type,code,name,status,config,remark,created_at,updated_at)
@@ -89,60 +56,56 @@ def main():
         VALUES
             (77,7,DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 1 DAY),UTC_TIMESTAMP(6));
     """)
-    boot("legacy-v3-upgrade", "--spring.flyway.target=3")
-    versions = mysql("SELECT version FROM config_migration.flyway_schema_history "
-                     "WHERE success=1 ORDER BY installed_rank;").splitlines()
-    assert versions == ["1", "2", "3"], versions
-    rows = mysql("""
+    migrate(2)
+    assert_rows("""
         SELECT id,COALESCE(game_id,0),COALESCE(region_id,0),
                COALESCE(server_group_id,0),COALESCE(channel_id,0)
         FROM config_migration.config_node ORDER BY id;
-    """).splitlines()
-    expected = [
+    """, [
         "101\t0\t0\t0\t0",
         "102\t101\t0\t0\t0",
         "103\t101\t102\t0\t0",
         "104\t101\t102\t103\t0",
         "105\t101\t102\t103\t104",
-    ]
-    assert rows == expected, (rows, expected)
-    assert mysql("SELECT COUNT(*) FROM information_schema.columns WHERE "
-                 "table_schema='config_migration' AND table_name='config_node' "
-                 "AND column_name='parent_id';") == "0"
+    ])
+    migrate(3)
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "3"
     assert mysql("SELECT acknowledged_revision,COALESCE(acknowledged_epoch,'NULL') "
-                 "FROM config_migration.config_delivery_state WHERE subscriber_id=77;") == "7\tNULL"
-    print("PASS V1 legacy data -> V2 ancestry -> V3 epoch cursor", flush=True)
-
-    # 原数据由 V4 自动归档。SDK 应用保留 id/code/config，直属父节点直接变为区服组。
-    previous_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1;")
-    boot("legacy-v4-upgrade")
-    versions = mysql("SELECT version FROM config_migration.flyway_schema_history "
-                     "WHERE success=1 ORDER BY installed_rank;").splitlines()
-    assert versions == ["1", "2", "3", "4"], versions
-    rows = mysql("""
+                 "FROM config_migration.config_delivery_state WHERE subscriber_id=77") == "7\tNULL"
+    old_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1")
+    migrate(4)
+    assert_rows("""
         SELECT id,node_type,COALESCE(game_id,0),COALESCE(region_id,0),
                COALESCE(server_group_id,0)
         FROM config_migration.config_node ORDER BY id;
-    """).splitlines()
-    assert rows == [
+    """, [
         "101\tgame\t0\t0\t0",
         "102\tregion\t101\t0\t0",
         "103\tserver_group\t101\t102\t0",
         "105\tchannel_app\t101\t102\t103",
-    ], rows
-    assert mysql("SELECT COUNT(*) FROM information_schema.columns WHERE "
-                 "table_schema='config_migration' AND table_name='config_node' "
-                 "AND column_name='channel_id';") == "0"
-    assert mysql("SELECT id,node_type,COALESCE(channel_id,0) FROM "
-                 "config_migration.config_node_v4_legacy_archive ORDER BY id;").splitlines() == [
+    ])
+    assert_rows("SELECT id,node_type,COALESCE(channel_id,0) FROM "
+                "config_migration.config_node_v4_legacy_archive ORDER BY id", [
         "104\tchannel\t0",
         "105\tsdk_app\t104",
-    ]
-    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1;") != previous_epoch
-    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1;") == "7"
-    print("PASS V4 four-level hierarchy, legacy archive and epoch change", flush=True)
-
-
+    ])
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "4"
+    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") != old_epoch
+    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
+    migrate(4)  # 幂等性校验
+    # 验证已有历史 V4 记录的数据库能直接接入 Go，不重新执行破坏性 SQL。
+    mysql("""
+        DROP TABLE config_migration.config_schema_migrations;
+        CREATE TABLE config_migration.flyway_schema_history (
+            installed_rank INT PRIMARY KEY, version VARCHAR(50), success TINYINT NOT NULL
+        );
+        INSERT INTO config_migration.flyway_schema_history(installed_rank,version,success)
+        VALUES(1,'4',1);
+    """)
+    migrate(4)
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "4"
+    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
+    print("PASS Go SQL migrations V1-V4, legacy V4 baseline and idempotence", flush=True)
 
 
 if __name__ == "__main__":
