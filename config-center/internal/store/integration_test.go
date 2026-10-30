@@ -106,7 +106,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
     if region.EnvType == nil || *region.EnvType != "test" { t.Fatalf("region env not persisted: %+v", region) }
     filtered, err := store.Children(ctx, game.ID, 1, 20, "", "test")
     if err != nil || len(filtered.Items) != 1 || filtered.Items[0].EnvType == nil { t.Fatalf("region env filter: %+v, %v", filtered, err) }
-    rejected := "production"
+    rejected := "prod"
     _, err = store.Update(ctx, region.ID, UpdateNodeRequest{EnvType: &rejected, Name: region.Name, Status: &enabled, Config: "{}"})
     if !errorsIs(err, ErrConflict) { t.Fatalf("changing categorized region type should conflict: %v", err) }
     group, err := store.Create(ctx, CreateNodeRequest{ParentID: region.ID, NodeType: "server_group", Code: "s1", Name: "Group", Status: &enabled, Config: "{}"})
@@ -242,7 +242,7 @@ var integrationSchema = []string{
 		CONSTRAINT chk_config_node_type CHECK(node_type IN ('game','region','server_group')),
 		CONSTRAINT chk_config_node_status CHECK(status IN(0,1)),
         CONSTRAINT chk_config_node_env_type CHECK(
-            (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','production')))
+            (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','prod')))
             OR (node_type<>'region' AND env_type IS NULL)
         ),
 		CONSTRAINT chk_config_node_ancestry CHECK(

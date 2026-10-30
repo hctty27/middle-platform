@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Go SQL 迁移真实 MySQL V1→V9 与旧版配置结构回归。"""
+"""Go SQL 迁移真实 MySQL V1→V10 与旧版配置结构回归。"""
 
 import os
 import subprocess
@@ -219,7 +219,25 @@ def main():
     migrate(9)
     assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == before_v9_epoch
 
-    print("PASS GTID-safe V1-V9 migration, V9 table renames and archive-safe validation", flush=True)
+    # V10 将旧 production 大区迁移为 prod，保持 revision 并切换 epoch。
+    mysql("UPDATE config_migration.config_node SET env_type='production' WHERE id=102")
+    before_v10_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1")
+    before_v10_revision = mysql("SELECT revision FROM config_migration.config_revision WHERE id=1")
+    migrate(10)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["10", "0"]
+    assert mysql("SELECT env_type FROM config_migration.config_node WHERE id=102") == "prod"
+    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == before_v10_revision
+    after_v10_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1")
+    assert after_v10_epoch != before_v10_epoch
+    try:
+        mysql("UPDATE config_migration.config_node SET env_type='production' WHERE id=102")
+        raise AssertionError("legacy production value was accepted after V10")
+    except subprocess.CalledProcessError:
+        pass
+    migrate(10)
+    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == after_v10_epoch
+
+    print("PASS GTID-safe V1-V10 migration, production-to-prod conversion and archive-safe validation", flush=True)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ func ValidateEnvType(nodeType string, envType *string) error {
     if envType == nil { return ErrInvalid }
     // 环境用途使用稳定的英文协议值，展示文本由管理端映射为中文。
     switch *envType {
-    case "test", "review", "production": return nil
+    case "test", "review", "prod": return nil
     default: return ErrInvalid
     }
 }

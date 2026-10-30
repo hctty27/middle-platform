@@ -13,6 +13,10 @@ func TestValidateNodeEnvironment(t *testing.T) {
     node := remote.Node{ID: 1, NodeType: "region", EnvType: &env, Code: "r", Name: "Region",
         Config: "{}", CreatedAt: now, UpdatedAt: now}
     if err := validateNode(node); err != nil { t.Fatal(err) }
+    env = "prod"
+    if err := validateNode(node); err != nil { t.Fatal(err) }
+    env = "production"
+    if err := validateNode(node); err == nil { t.Fatal("accepted deprecated production environment") }
     env = "bad"
     if err := validateNode(node); err == nil { t.Fatal("accepted bad environment") }
     env = "review"

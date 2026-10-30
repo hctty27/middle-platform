@@ -24,7 +24,7 @@ func (t LocalDateTime) MarshalJSON() ([]byte, error) {
 type Node struct {
 	ID            int64         `json:"id"`
 	NodeType      string        `json:"nodeType"`
-	// EnvType 仅大区节点使用：test 测试、review 提审、production 正式。
+	// EnvType 仅大区节点使用：test 测试、review 提审、prod 正式。
 	EnvType       *string       `json:"envType"`
 	GameID        *int64        `json:"gameId"`
 	RegionID      *int64        `json:"regionId"`

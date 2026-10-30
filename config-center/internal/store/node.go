@@ -124,7 +124,7 @@ func (s *Store) Children(ctx context.Context, parentID int64, page, size int, ke
     if err != nil { return NodePage{}, err }
     if envType != "" {
         switch envType {
-        case "test", "review", "production":
+        case "test", "review", "prod":
         default: return NodePage{}, ErrInvalid
         }
         if parentID == 0 { return NodePage{}, ErrInvalid }

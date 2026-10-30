@@ -19,7 +19,7 @@ import (
 var scripts embed.FS
 
 // Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
-const Latest = 9
+const Latest = 10
 
 var files = [...]string{
  "",
@@ -32,6 +32,7 @@ var files = [...]string{
  "sql/V7__trim_node_group_id.sql",
  "sql/V8__node_only_sync.sql",
  "sql/V9__rename_sync_tables.sql",
+ "sql/V10__rename_region_env_prod.sql",
 }
 
 // Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
@@ -245,6 +246,21 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
    return fmt.Errorf("inspect V7 config_node columns: %w", err)
   }
   if obsoleteColumns != 0 { return errors.New("schema V7 validation failed: config_node.server_group_id still exists") }
+ }
+ // V10 必须完成历史值转换，且数据库约束只允许 prod。
+ if version >= 10 {
+  var obsolete int
+  if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_node WHERE env_type='production'").Scan(&obsolete); err != nil {
+   return fmt.Errorf("inspect V10 region env values: %w", err)
+  }
+  if obsolete != 0 { return fmt.Errorf("schema V10 validation failed: %d legacy production regions remain", obsolete) }
+  var clause string
+  if err := conn.QueryRowContext(ctx, "SELECT check_clause FROM information_schema.check_constraints WHERE constraint_schema=DATABASE() AND constraint_name='chk_config_node_env_type'").Scan(&clause); err != nil {
+   return fmt.Errorf("inspect V10 region env constraint: %w", err)
+  }
+  if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
+   return errors.New("schema V10 validation failed: region environment constraint is outdated")
+  }
  }
  // V4 归档表仅用于历史审计，非当前权威配置所需。
  // 旧 Flyway 基线或人工历史升级可能没有此表，不能因此否定已经完成的 V6。

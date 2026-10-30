@@ -9,7 +9,7 @@ function envLabel(env: RegionEnvType | null | undefined) {
 }
 // 环境类型仅影响展示标签，不参与数据过滤或后端写入校验。
 function envTagType(env: RegionEnvType | null | undefined): 'success' | 'warning' | 'primary' | 'info' {
-  return env === 'production' ? 'success' : env === 'test' ? 'warning' : env === 'review' ? 'primary' : 'info'
+  return env === 'prod' ? 'success' : env === 'test' ? 'warning' : env === 'review' ? 'primary' : 'info'
 }
 import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'

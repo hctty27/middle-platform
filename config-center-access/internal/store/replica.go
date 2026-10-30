@@ -54,7 +54,7 @@ func (s *Replica) EnsureSchema(ctx context.Context) error {
 		KEY idx_replica_game_type (game_id,node_type),
 		KEY idx_replica_region_type (region_id,node_type),
 		CONSTRAINT chk_replica_node_env_type CHECK (
-            (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','production')))
+            (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','prod')))
             OR (node_type<>'region' AND env_type IS NULL)
         ),
         CONSTRAINT chk_replica_node_ancestry CHECK (
@@ -87,6 +87,16 @@ func (s *Replica) EnsureSchema(ctx context.Context) error {
 	}
 	if obsoleteColumns != 0 {
 		return fmt.Errorf("obsolete replica schema: apply db/migration/V5__trim_node_group_id_replica.sql before startup")
+	}
+	// 旧副本的 CHECK 约束包含 production，新协议同步前必须先迁移。
+	var legacyEnvConstraint int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.check_constraints
+        WHERE constraint_schema=DATABASE() AND constraint_name='chk_replica_node_env_type'
+          AND check_clause LIKE '%production%'`).Scan(&legacyEnvConstraint); err != nil {
+		return fmt.Errorf("inspect replica region environment: %w", err)
+	}
+	if legacyEnvConstraint != 0 {
+		return fmt.Errorf("obsolete replica environment schema: apply db/migration/V6__rename_region_env_prod_replica.sql before startup")
 	}
 	if _, err := s.DB.ExecContext(ctx, `INSERT IGNORE INTO config_sync_state(id,epoch,revision,updated_at)
 		VALUES(1,NULL,0,UTC_TIMESTAMP(6))`); err != nil {
@@ -185,7 +195,7 @@ func validateNode(n remote.Node) error {
 	if n.NodeType == "region" {
         if n.EnvType != nil {
             switch *n.EnvType {
-            case "test", "review", "production":
+            case "test", "review", "prod":
             default: return fmt.Errorf("invalid region environment %q", *n.EnvType)
             }
         }

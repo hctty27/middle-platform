@@ -1,9 +1,9 @@
 /** NodeType 表示固定的配置层级：游戏、大区、区服组、渠道应用。 */
 export type NodeType = 'game' | 'region' | 'server_group' | 'channel_app'
 /** RegionEnvType 表示大区的运行用途，不是独立的配置节点层级。 */
-export type RegionEnvType = 'test' | 'review' | 'production'
+export type RegionEnvType = 'test' | 'review' | 'prod'
 export const regionEnvLabels: Record<RegionEnvType, string> = {
-  test: '测试服', review: '提审服', production: '正式服'
+  test: '测试服', review: '提审服', prod: '正式服'
 }
 
 /** NodeSummary 是目录树与列表使用的轻量节点，不包含完整 JSON 配置。 */

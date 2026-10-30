@@ -69,7 +69,7 @@ CI 会用 MySQL 8.4 检验全新建库、V1→V5 迁移、历史配置保留、�
 
 ## 大区环境类型
 
-只给大区（`nodeType=region`）增加 `envType`：`test`（测试服）、`review`（提审服）、`production`（正式服）。
+只给大区（`nodeType=region`）增加 `envType`：`test`（测试服）、`review`（提审服）、`prod`（正式服）。
 新建大区必须选择类型，其他层级不能设置；已归类大区不能直接切换环境类型。
 已有大区迁移时保持 `NULL`（未分类），需要逐个核对用途并在管理端首次归类。
 迁移 V5 更新 `epoch`，通知接入端重新获取带环境类型的完整快照，保留现有 revision。
@@ -208,3 +208,19 @@ SHOW TABLES LIKE 'config_subscriber_delivery_state';
 ```
 
 如需从当前业务库移除 `config_node_v6_channel_app_archive`，应先使用 `mysqldump` 单独备份并检查备份完整性，在 V9 成功且业务数据核对无误后才手工执行 `DROP TABLE`。旧版配置中心不得再连接升级后的数据库。具体操作参见 `docs/database-cleanup.md`。
+
+## V10：正式服环境值统一为 prod
+
+- 大区环境类型统一为 `test` / `review` / `prod`，管理端、查询接口和同步协议返回新值；`production` 不再是合法输入。
+- 保留 V1–V9 历史迁移 SQL；新 V10 将已有 `config_node.env_type='production'` 转为 `prod`、收紧 CHECK 约束，并切换一次同步 `epoch`（不改变 `revision`）。
+- **升级顺序：** 停止配置中心和接入端 → 备份权威库和所有接入副本库 → 在已存在的接入库中手动执行 `config-center-access/db/migration/V6__rename_region_env_prod_replica.sql` → 部署新版二进制 → 对配置中心执行 `go run ./cmd/migrate -config configs/config-dev.yaml` → 重启各服务。
+- 调用方将原 `envType=production` 改为 `envType=prod`。这次仅修改环境枚举，未新增 `/api/config/{env}/{appId}` 路由。
+
+迁移后检查：
+
+```sql
+SELECT version,dirty FROM config_schema_migrations WHERE id=1;
+SELECT env_type,COUNT(*) FROM config_node WHERE node_type='region' GROUP BY env_type;
+```
+
+MySQL DDL 不能整体事务回滚；V10 中断时不得直接清除 dirty 状态，应检查实际表结构并通过备份人工恢复。
