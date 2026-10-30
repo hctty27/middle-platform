@@ -28,38 +28,26 @@ func scanApp(row interface{ Scan(...any) error }) (model.ChannelApp, error) {
 	return a, err
 }
 
-// MergeChannelConfig 使用 JSON Merge Patch：覆盖层同名键优先，null 删除公共键。
-func MergeChannelConfig(common, override string) (string,error) {
-	var base, patch map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(common), &base); err != nil || base == nil { return "", model.ErrInvalid }
-	if err := json.Unmarshal([]byte(override), &patch); err != nil || patch == nil { return "", model.ErrInvalid }
-	if err := mergePatch(base,patch); err != nil { return "",err }
-	out,err := json.Marshal(base)
-	return string(out),err
-}
-
-// mergePatch 递归实现对象级 JSON Merge Patch，不将 64 位整数转为 float64。
-func mergePatch(base, patch map[string]json.RawMessage) error {
-	for key,value := range patch {
-		if strings.TrimSpace(string(value)) == "null" { delete(base,key); continue }
-		var nested map[string]json.RawMessage
-		if json.Unmarshal(value,&nested)==nil && nested!=nil {
-			var previous map[string]json.RawMessage
-			if old,found:=base[key]; found { _=json.Unmarshal(old,&previous) }
-			if previous==nil { previous=make(map[string]json.RawMessage) }
-			if err:=mergePatch(previous,nested); err!=nil { return err }
-			result,err:=json.Marshal(previous); if err!=nil { return err }
-			base[key]=result
-		} else {
-			base[key]=value
-		}
-	}
-	return nil
-}
-
 func validObject(config string) bool {
 	var obj map[string]json.RawMessage
 	return json.Unmarshal([]byte(config),&obj)==nil && obj!=nil
+}
+
+// apps 按所属游戏查询应用；管理员列表不查询已删除的绑定表。
+func apps(ctx context.Context, db queryer, gameID int64) ([]model.ChannelApp,error) {
+    statement := "SELECT "+appColumns+" FROM config_channel_app"
+    var args []any
+    if gameID>0 { statement+=" WHERE game_id=?"; args=append(args,gameID) }
+    rows,err:=db.QueryContext(ctx,statement+" ORDER BY id",args...)
+    if err!=nil { return nil,err }
+    defer rows.Close()
+    out:=make([]model.ChannelApp,0)
+    for rows.Next() {
+        app,err:=scanApp(rows)
+        if err!=nil { return nil,err }
+        out=append(out,app)
+    }
+    return out,rows.Err()
 }
 
 func (s *Store) ChannelApps(ctx context.Context, gameID int64) ([]model.ChannelApp,error) {

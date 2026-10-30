@@ -237,6 +237,12 @@ def main():
     migrate(10)
     assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == after_v10_epoch
 
+    # 旧绑定独立状态不能无声丢失；预检失败不会标记 dirty。
+    mysql("UPDATE config_migration.config_channel_app_binding SET status=0 WHERE channel_app_id=105")
+    migrate(11, expected_success=False)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["10", "0"]
+    mysql("UPDATE config_migration.config_channel_app_binding SET status=1 WHERE channel_app_id=105")
+
     # V11 安全收敛：唯一旧环境绑定的有效 JSON 迁入应用公共配置。
     migrate(11)
     assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["11", "0"]

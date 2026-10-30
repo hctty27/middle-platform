@@ -190,7 +190,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
         </div>
         <el-form-item label="状态"><el-switch v-model="form.status" :active-value="1" :inactive-value="0" /></el-form-item>
         <el-form-item v-for="env in environments" :key="env.key" :label="env.label + '区服组（可选）'">
-          <el-select v-model="form[env.field]" filterable remote clearable :remote-method="(keyword: string) => loadOptions(env.key, keyword)"
+          <el-select v-model="form[env.field]" filterable remote clearable :value-on-clear="null" :remote-method="(keyword: string) => loadOptions(env.key, keyword)"
                      :loading="groupLoading[env.key]" placeholder="搜索当前游戏对应环境的区服组" style="width:100%">
             <el-option v-for="group in [...selectedOption(env.key, form[env.field]), ...groupOptions[env.key]]"
                        :key="group.id" :value="group.id" :label="groupLabel(group)" />

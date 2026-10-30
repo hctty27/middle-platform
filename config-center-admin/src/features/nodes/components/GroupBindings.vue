@@ -12,7 +12,6 @@ interface GroupApp {
   config: string
 }
 const props = defineProps<{ gameId: number; groupId: number }>()
-const emit = defineEmits<{ changed: [] }>()
 const apps = ref<GroupApp[]>([])
 const loading = ref(false)
 let sequence = 0
