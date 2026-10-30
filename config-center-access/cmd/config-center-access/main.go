@@ -20,6 +20,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+// main 统一记录启动和运行失败，具体依赖编排交由 run 完成。
 func main() {
 	if err := run(); err != nil {
 		slog.Error("config access stopped", "error", err)
@@ -27,6 +28,7 @@ func main() {
 	}
 }
 
+// run 初始化独立的 MySQL 副本、定时同步和本地 HTTP 接口，并处理优雅退出。
 func run() error {
 	cfg, err := settings.Load()
 	if err != nil {

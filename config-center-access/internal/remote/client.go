@@ -14,6 +14,7 @@ import (
 	"time"
 )
 
+// 限制权威端响应体，避免错误网关或异常配置耗尽接入进程内存。
 const maxResponseBytes = 64 << 20
 
 // Node 保留远程节点的 JSON 字段及日期格式。
@@ -59,6 +60,7 @@ type Client struct {
 	http *http.Client
 }
 
+// New 创建配置中心 HTTP 客户端，使用独立的连接超时和请求总超时。
 func New(base string, connectTimeout, requestTimeout time.Duration) *Client {
 	return &Client{
 		base: base,
@@ -80,6 +82,7 @@ func (c *Client) get(ctx context.Context, path string, target any) error {
 	return c.call(ctx, http.MethodGet, path, nil, target)
 }
 
+// call 统一处理 HTTP 状态、响应大小和严格 JSON 解码，阻止不完整结果进入同步流程。
 func (c *Client) call(ctx context.Context, method, path string, body []byte, target any) error {
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, bytes.NewReader(body))
 	if err != nil {

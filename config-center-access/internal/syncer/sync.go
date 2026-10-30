@@ -25,12 +25,14 @@ type Synchronizer struct {
 	remote Client
 }
 
+// New 组合本地事务副本与远程同步客户端，不在构造时发起网络请求。
 func New(local *store.Replica, remote Client) *Synchronizer {
 	return &Synchronizer{local: local, remote: remote}
 }
 
 // Sync 读取网络数据时不持有数据库行锁，提交时再检查原游标。
 func (s *Synchronizer) Sync(ctx context.Context) error {
+	// 多实例游标 CAS 冲突后重新读取权威版本，限制重试次数避免无限循环。
 	for retries := 0; retries < 8; retries++ {
 		state, err := s.local.ReadState(ctx)
 		if err != nil { return err }
@@ -109,6 +111,7 @@ func (s *Synchronizer) snapshot(ctx context.Context, expected store.State) (bool
 	}, data.Nodes, nil, true)
 }
 
+// contiguous 验证事件版本连续，缺失事件时必须重新拉取完整快照。
 func contiguous(after int64, events []remote.Event) bool {
 	if len(events) == 0 || len(events) > 200 { return false }
 	for _, event := range events {
@@ -125,6 +128,7 @@ type Trigger struct {
 	pending chan struct{}
 }
 
+// NewTrigger 用容量有限的通知通道合并高频回调请求。
 func NewTrigger(s *Synchronizer, period time.Duration) *Trigger {
 	return &Trigger{sync: s, period: period, pending: make(chan struct{}, 1)}
 }

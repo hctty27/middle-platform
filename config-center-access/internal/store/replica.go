@@ -34,6 +34,7 @@ type NodeView struct {
 // Replica 使用独立数据库，不直接修改权威配置中心。
 type Replica struct{ DB *sql.DB }
 
+// New 绑定本地副本数据库，不与配置中心的权威库共享写连接。
 func New(db *sql.DB) *Replica { return &Replica{DB: db} }
 
 // EnsureSchema 对全新数据库建最新四级副本表；保留已有表及 Flyway 历史。
@@ -96,6 +97,7 @@ func (s *Replica) ReadState(ctx context.Context) (State, error) {
 		"SELECT epoch,revision FROM config_sync_state WHERE id=1"))
 }
 
+// scanner 抽象 SQL 行扫描接口，供普通查询和事务内查询复用。
 type scanner interface{ Scan(...any) error }
 
 func readState(_ context.Context, row scanner) (State, error) {
@@ -127,6 +129,7 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 	if err != nil {
 		return false, err
 	}
+	// CAS 检查游标是否仍为下载数据前的版本，避免多实例同步相互覆盖。
 	if current != expected {
 		return false, nil
 	}
@@ -170,6 +173,7 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 	return true, nil
 }
 
+// validateNode 在持久化前校验远端节点的必填项、环境枚举和日期字段。
 func validateNode(n remote.Node) error {
 	if n.ID <= 0 || n.Code == "" || n.Name == "" || !json.Valid([]byte(n.Config)) {
 		return fmt.Errorf("invalid node id=%d or JSON config", n.ID)
