@@ -26,6 +26,7 @@ type ChannelApp struct {
 // BoundGroup 为目标环境实际绑定且启用的唯一区服组。
 type BoundGroup struct {
     RegionCode string
+    RegionConfig json.RawMessage
     ServerGroupCode string
     Config json.RawMessage
 }

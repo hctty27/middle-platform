@@ -165,3 +165,33 @@ func TestDecodeObject(t *testing.T) {
     }
     if _,err:=DecodeObject([]byte(`{"x":null}`));err!=nil { t.Fatal(err) }
 }
+
+func TestRegionConfigMapping(t *testing.T) {
+    resolver, err := Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "regionKey": "region.config.regionKey",
+            "loginUrl": "region.config.login.url",
+            "missing": "region.config.login.optional"
+        }
+    }`))
+    if err != nil { t.Fatal(err) }
+
+    regionConfig, err := DecodeObject([]byte(`{
+        "regionKey": "test-zone",
+        "login": {"url": "https://example.com/login"}
+    }`))
+    if err != nil { t.Fatal(err) }
+
+    got, err := resolver.Resolve(RouteCoreConfig, map[string]any{
+        "region": map[string]any{"config": regionConfig},
+    })
+    if err != nil { t.Fatal(err) }
+
+    want := map[string]any{
+        "regionKey": "test-zone",
+        "loginUrl": "https://example.com/login",
+    }
+    if !reflect.DeepEqual(got, want) {
+        t.Fatalf("got %+v, want %+v", got, want)
+    }
+}

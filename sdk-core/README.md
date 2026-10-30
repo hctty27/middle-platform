@@ -11,7 +11,7 @@ GET /api/core/{env}/{appid}
 - `env` 只接受 `prod`、`test`、`review`，用于选择对应区服组，不用于决定映射规则。
 - `appid` 为全局唯一的 `config_channel_app.code`。
 - 应用、游戏、大区和区服组均须启用；环境没有有效绑定时返回 HTTP 404。
-- 直接读取配置中心权威 MySQL，同一只读 Repeatable Read 事务获取业务上下文。
+- 直接读取配置中心权威 MySQL，单条 JOIN 查询获取渠道、游戏、大区和区服组所需字段，无需拆分查询和额外的显式事务。
 - 统一响应外壳为 `code`、`message`、`data`；`data` 字段由接口级映射决定。
 
 ### 全局响应映射
@@ -50,9 +50,12 @@ GET /api/core/{env}/{appid}
 | `channel_app.config.xxx` | 共享应用 JSON，可多层访问 |
 | `game.code` | 游戏 Code |
 | `region.code` | 当前环境大区 Code |
+| `region.config.xxx` | 当前环境大区 JSON 配置，可多层访问 |
 | `server_group.code` | 当前环境区服组 Code |
 | `server_group.config.xxx` | 区服组 JSON，可多层访问 |
 | `env` | 请求参数（环境名） |
+
+例如在映射中添加 `"regionKey": "region.config.regionKey"` 或 `"loginUrl": "region.config.login.url"`，只需要重新编译部署 `sdk-core`，不再修改查询 SQL 或 Go 映射解析器。
 
 映射字段保留 JSON 原始值类型；数字解析使用 `json.Number` 避免精度丢失。当前仅支持字段提取，不支持表达式、SQL 或默认值。
 
@@ -99,6 +102,7 @@ Invoke-RestMethod http://127.0.0.1:8082/api/core/prod/app1001
 - Nginx 通过 `/api/core/` 转发到多个 `sdk-core` 实例。
 - 映射随程序发布；修改后对多实例执行滚动更新，避免同一接口出现长时间不同 JSON 版本。
 - 修改当前响应结构属于客户端接口契约变化，需协调现有 SDK 客户端。
+- 单条 SELECT 在数据库内一次性读取同一快照，但不承诺性能倍增；建议结合实际访问量和执行计划评估索引与数据库连接池。
 - 默认使用 `Cache-Control: no-store`，避免配置在共享代理中意外缓存。
 
 ## 验证

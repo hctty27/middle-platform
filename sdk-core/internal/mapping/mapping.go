@@ -90,7 +90,7 @@ func parsePath(source string) ([]string,error) {
          "game.code","region.code","server_group.code":
         return segments,nil
     }
-    if len(segments)>=3 && (segments[0]=="channel_app" || segments[0]=="server_group") &&
+    if len(segments)>=3 && (segments[0]=="channel_app" || segments[0]=="server_group" || segments[0]=="region") &&
         segments[1]=="config" {
         return segments,nil
     }

@@ -40,7 +40,7 @@ func TestGetUsesGlobalMappingRegardlessOfEnvironment(t *testing.T) {
                 Config:json.RawMessage(`{"tsKey":"ts-123","enabled":true}`),
             },
             group:&model.BoundGroup{
-                RegionCode:"r1",ServerGroupCode:"s-"+env,Config:json.RawMessage("{}"),
+                RegionCode:"r1",RegionConfig:json.RawMessage("{}"),ServerGroupCode:"s-"+env,Config:json.RawMessage("{}"),
             },
         }
         result,err:=serviceWithReader(t,f).Get(context.Background(),env,"huawei_10001")
@@ -61,7 +61,7 @@ func TestGetRejectsInvalidOrMissingConfig(t *testing.T) {
     for _,appConfig:=range []string{"null", "[]", "invalid"} {
         f:=&fakeReader{
             app:model.ChannelApp{Code:"a1",Config:json.RawMessage(appConfig)},
-            group:&model.BoundGroup{ServerGroupCode:"g1",Config:json.RawMessage("{}")},
+            group:&model.BoundGroup{ServerGroupCode:"g1",RegionConfig:json.RawMessage("{}"),Config:json.RawMessage("{}")},
         }
         _,err:=serviceWithReader(t,f).Get(context.Background(),"prod","a1")
         if !errors.Is(err,model.ErrInvalidConfig) { t.Fatalf("config %q: %v",appConfig,err) }
@@ -77,6 +77,7 @@ func TestGetOmitsUnsetOptionalMappingFields(t *testing.T) {
             app: model.ChannelApp{Code: "app1001", Config: json.RawMessage(config)},
             group: &model.BoundGroup{
                 ServerGroupCode: "group1001",
+                RegionConfig: json.RawMessage("{}"),
                 Config: json.RawMessage("{}"),
             },
         }
@@ -105,4 +106,36 @@ func TestGetPropagatesLookupError(t *testing.T) {
     f:=&fakeReader{err:model.ErrAmbiguous}
     _,err:=serviceWithReader(t,f).Get(context.Background(),"prod","app")
     if !errors.Is(err,model.ErrAmbiguous) { t.Fatal(err) }
+}
+
+func TestGetRegionConfigMappingWithoutCodeChanges(t *testing.T) {
+    resolver, err := mapping.Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "snKey": "channel_app.code",
+            "regionKey": "region.config.regionKey",
+            "loginUrl": "region.config.login.url",
+            "unconfigured": "region.config.login.optional"
+        }
+    }`))
+    if err != nil { t.Fatal(err) }
+
+    f := &fakeReader{
+        app: model.ChannelApp{Code: "app1001", Config: json.RawMessage("{}")},
+        group: &model.BoundGroup{
+            RegionCode: "region1001",
+            RegionConfig: json.RawMessage(`{"regionKey":"r1001","login":{"url":"https://example.com"}}`),
+            ServerGroupCode: "server1001",
+            Config: json.RawMessage("{}"),
+        },
+    }
+    got, err := NewConfigService(f, resolver).Get(context.Background(), "prod", "app1001")
+    if err != nil { t.Fatal(err) }
+    want := map[string]any{
+        "snKey": "app1001",
+        "regionKey": "r1001",
+        "loginUrl": "https://example.com",
+    }
+    if !reflect.DeepEqual(got, want) {
+        t.Fatalf("got %+v, want %+v", got, want)
+    }
 }
