@@ -212,3 +212,29 @@ func (s *Store) DeleteChannelAppBinding(ctx context.Context,id int64) error {
 	if _,err=tx.ExecContext(ctx,"DELETE FROM config_channel_app_binding WHERE id=?",id); err!=nil { return databaseError(err) }
 	return tx.Commit()
 }
+
+
+// ServerGroupBindings 使用单次 JOIN 查询，避免管理端按应用逐个请求。
+func (s *Store) ServerGroupBindings(ctx context.Context, groupID int64) ([]model.ServerGroupBinding, error) {
+	if groupID <= 0 { return nil, ErrInvalid }
+	rows, err := s.DB.QueryContext(ctx, `SELECT b.id,b.channel_app_id,b.server_group_id,b.status,b.config,b.created_at,b.updated_at,
+		a.name,a.code,a.config
+		FROM config_channel_app_binding b
+		JOIN config_channel_app a ON a.id=b.channel_app_id
+		WHERE b.server_group_id=? ORDER BY a.name,b.id`, groupID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	out := make([]model.ServerGroupBinding, 0)
+	for rows.Next() {
+		var item model.ServerGroupBinding
+		var created, updated time.Time
+		var base string
+		if err := rows.Scan(&item.ID,&item.ChannelAppID,&item.ServerGroupID,&item.Status,&item.Config,
+			&created,&updated,&item.ChannelAppName,&item.ChannelAppCode,&base); err != nil { return nil, err }
+		item.CreatedAt, item.UpdatedAt = model.LocalDateTime(created), model.LocalDateTime(updated)
+		item.EffectiveConfig, err = MergeChannelConfig(base, item.Config)
+		if err != nil { return nil, err }
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
