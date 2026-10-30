@@ -20,6 +20,7 @@ const maxResponseBytes = 64 << 20
 type Node struct {
 	ID            int64   `json:"id"`
 	NodeType      string  `json:"nodeType"`
+	EnvType       *string `json:"envType"`
 	GameID        *int64  `json:"gameId"`
 	RegionID      *int64  `json:"regionId"`
 	ServerGroupID *int64  `json:"serverGroupId"`
