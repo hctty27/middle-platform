@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import type { NodeType } from './features/nodes/types'
+import type { NodeType, RegionEnvType } from './features/nodes/types'
+import { regionEnvLabels } from './features/nodes/types'
+
+function envLabel(env: RegionEnvType | null | undefined) {
+  return env ? regionEnvLabels[env] : '未分类'
+}
+function envTagType(env: RegionEnvType | null | undefined): 'success' | 'warning' | 'primary' | 'info' {
+  return env === 'production' ? 'success' : env === 'test' ? 'warning' : env === 'review' ? 'primary' : 'info'
+}
 import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
 
 const emit = defineEmits<{ changed: [] }>()
-const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
+const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
 </script>
 
 <template>
@@ -26,6 +34,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
                 @click="openMatch(match)">
           <span class="search-result-title">{{ match.node.name }}
             <el-tag size="small" type="info">{{ labels[match.node.nodeType] }}</el-tag>
+            <el-tag v-if="match.node.nodeType === 'region'" size="small" :type="envTagType(match.node.envType)">{{ envLabel(match.node.envType) }}</el-tag>
           </span>
           <small>{{ match.path.map(item => item.name).join(' / ') }}</small>
           <small>Code: {{ match.node.code }}</small>
@@ -42,6 +51,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
             <span class="node-row">
               <span class="node-name" :title="data.name">{{ data.name }}</span>
               <el-tag size="small" effect="plain" type="info">{{ labels[data.nodeType as NodeType] }}</el-tag>
+              <el-tag v-if="data.nodeType === 'region'" size="small" :type="envTagType(data.envType)">{{ envLabel(data.envType) }}</el-tag>
             </span>
           </template>
         </el-tree>
@@ -69,6 +79,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
               <el-tag :type="selected.status === 1 ? 'success' : 'info'" effect="plain">
                 {{ selected.status === 1 ? '已启用' : '已停用' }}
               </el-tag>
+              <el-tag v-if="selected.nodeType === 'region'" :type="envTagType(selected.envType)">{{ envLabel(selected.envType) }}</el-tag>
             </div>
             <div class="node-meta">{{ labels[selected.nodeType] }} · ID {{ selected.id }} · Code {{ selected.code }}</div>
           </div>
@@ -83,6 +94,10 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
             <span v-if="selected.nodeType !== 'channel_app'" class="muted">共 {{ childTotal }} 条</span>
           </div>
           <div class="children-tools" v-if="selected.nodeType !== 'channel_app'">
+            <el-select v-if="selected.nodeType === 'game'" v-model="regionFilter" placeholder="全部大区类型"
+                       clearable @change="onRegionFilterChange" style="width: 140px">
+              <el-option v-for="(label, key) in regionEnvLabels" :key="key" :label="label" :value="key" />
+            </el-select>
             <el-input v-model="childSearch" clearable placeholder="筛选直属子项" @input="onChildSearch" />
             <el-button type="primary" @click="openCreate(selected)">+ 新增{{ nextLabel }}</el-button>
           </div>
@@ -96,6 +111,11 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
                       empty-text="暂无子项" @row-click="openChild">
               <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
               <el-table-column prop="code" label="Code" min-width="145" show-overflow-tooltip />
+              <el-table-column v-if="selected.nodeType === 'game'" label="大区类型" width="110">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="envTagType(row.envType)">{{ envLabel(row.envType) }}</el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="状态" width="92">
                 <template #default="{ row }">
                   <el-tag :type="row.status === 1 ? 'success' : 'info'" effect="plain" size="small">

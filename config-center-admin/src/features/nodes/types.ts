@@ -1,9 +1,14 @@
 export type NodeType = 'game' | 'region' | 'server_group' | 'channel_app'
+export type RegionEnvType = 'test' | 'review' | 'production'
+export const regionEnvLabels: Record<RegionEnvType, string> = {
+  test: '测试服', review: '提审服', production: '正式服'
+}
 
 export interface NodeSummary {
   id: number
   parentId: number
   nodeType: NodeType
+  envType: RegionEnvType | null
   code: string
   name: string
   status: number
@@ -28,6 +33,7 @@ export interface NodeMatch {
 export interface NodeForm {
   parentId: number
   nodeType: NodeType
+  envType: RegionEnvType | null
   code: string
   name: string
   status: number
