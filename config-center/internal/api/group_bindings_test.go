@@ -26,9 +26,9 @@ func TestServerGroupBindingsRoute(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	Router(groupBindingsReader{}).ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK { t.Fatalf("unexpected status: %d", recorder.Code) }
-	var result []model.ServerGroupBinding
+	var result []map[string]any
 	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil { t.Fatal(err) }
-	if len(result) != 1 || result[0].ChannelAppName != "微信应用" || result[0].EffectiveConfig != `{"login":true}` {
+	if len(result) != 1 || result[0]["channelAppName"] != "微信应用" || result[0]["effectiveConfig"] != `{"login":true}` {
 		t.Fatalf("unexpected response: %+v", result)
 	}
 }
