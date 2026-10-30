@@ -1,3 +1,4 @@
+// 配置中心服务入口：进程生命周期交由 app 负责。
 package main
 
 import (

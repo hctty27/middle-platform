@@ -75,6 +75,7 @@ func LoadFile(path string) (Config,error) {
   }
   *item.target=parsed
  }
+ // 环境变量可以覆盖 YAML 的数据库和连接参数。
  overrideString("CONFIG_ACCESS_ADDR",&cfg.Address)
  overrideString("ACCESS_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_CENTER_URL",&cfg.CenterURL)

@@ -12,8 +12,10 @@ import (
  "github.com/hctty27/middle-platform/config-center/internal/settings"
 )
 
+// main 解析目标版本和安全升级开关。
 func main() {
  target := flag.Int("target", migration.Latest, "schema version to migrate to (1..5)")
+ // 旧版结构升级必须显式开启。
  allowLegacy := flag.Bool("allow-legacy-upgrade", false, "permit upgrading pre-V4 legacy databases")
  configPath := flag.String("config", "", "YAML configuration file")
  flag.Parse()

@@ -45,6 +45,7 @@ func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, erro
 	// 在节点变更前锁定全局版本行，保证多实例写入的版本顺序。
 	if err := lockRevision(ctx, tx); err != nil { return Node{}, err }
 
+	// 祖先 ID 在创建时从父节点推导，避免调用方伪造跨游戏、跨大区的层级关系。
 	var gameID, regionID, groupID *int64
 	if input.NodeType != "game" {
 		parent, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", input.ParentID))
@@ -89,6 +90,7 @@ func (s *Store) Update(ctx context.Context, id int64, input UpdateNodeRequest) (
     if current.NodeType == "region" && current.EnvType != nil && *current.EnvType != *input.EnvType {
         return Node{}, ErrConflict
     }
+    // 只有数据确实变化时才递增全局 revision，避免无意义的回调广播。
     var unchanged sql.NullBool
 	if err := tx.QueryRowContext(ctx, `SELECT (name <=> ?) AND (status <=> ?) AND (remark <=> ?)
 		AND (config = CAST(? AS JSON)) AND (env_type <=> ?) FROM config_node WHERE id=?`,
@@ -116,6 +118,7 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 	if err := lockRevision(ctx, tx); err != nil { return err }
 	current, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
 	if err != nil { return err }
+	// 按直接祖先字段判断是否存在子节点，拒绝产生孤儿配置。
 	var childCondition string
 	switch current.NodeType {
 	case "game":

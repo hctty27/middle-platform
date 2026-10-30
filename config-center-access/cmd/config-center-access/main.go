@@ -21,6 +21,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+// main 统一处理启动与运行失败。
 func main() {
     configPath := flag.String("config", "", "YAML configuration file")
     flag.Parse()
@@ -30,6 +31,7 @@ func main() {
 	}
 }
 
+// run 初始化本地副本和同步服务，并支持优雅退出。
 func run(configPath string) error {
     cfg, err := settings.LoadFile(configPath)
 	if err != nil {

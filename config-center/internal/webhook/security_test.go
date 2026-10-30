@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// TestWebhookTargetPolicy 验证禁止访问内网、环回和其他特殊目标地址的策略。
 func TestWebhookTargetPolicy(t *testing.T) {
 	for _, input := range []struct{
 		host, ip string
@@ -35,6 +36,7 @@ func TestWebhookTargetPolicy(t *testing.T) {
 	}
 }
 
+// TestWebhookDialBlocksDNSRebinding 验证实际建连目标与安全检查结果一致，阻断 DNS 重绑定。
 func TestWebhookDialBlocksDNSRebinding(t *testing.T) {
 	resolver := func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("10.0.0.1")}}, nil

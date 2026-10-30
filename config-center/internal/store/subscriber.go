@@ -30,6 +30,7 @@ func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequ
 		webhook.ValidateCallback(input.CallbackURL, s.webhookAllowedHosts()) != nil {
 		return ErrInvalid
 	}
+	// 订阅者及投递游标必须同时写入，防止回调任务出现无状态的订阅者。
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil { return err }
 	defer tx.Rollback()
@@ -44,6 +45,7 @@ func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequ
 	return tx.Commit()
 }
 
+// webhookAllowedHosts 返回注册回调时采用的目标主机白名单。
 func (s *Store) webhookAllowedHosts() string {
 	if s.AllowedHosts != "" { return s.AllowedHosts }
 	return "localhost,127.0.0.1"

@@ -77,6 +77,7 @@ func (h *api) batch(w http.ResponseWriter, r *http.Request) {
 	var req struct { IDs []int64 `json:"ids"` }
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err := dec.Decode(&req); err != nil { respond(w, nil, ErrInvalid); return }
+	// 限制批量 ID 数量，避免单次配置同步请求造成过大的数据库负载。
 	if len(req.IDs) > 500 { respond(w, nil, ErrInvalid); return }
 	out, err := h.reader.Batch(r.Context(), req.IDs)
 	respond(w, out, err)

@@ -39,6 +39,7 @@ func (s *Store) Changes(ctx context.Context, after int64, limit int) ([]ChangeEv
 
 // Snapshot 在可重复读事务内读取一致性配置快照。
 func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
+	// 快照中的 epoch、revision 和节点列表必须来自同一事务视图。
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil { return Snapshot{}, err }
 	defer tx.Rollback()

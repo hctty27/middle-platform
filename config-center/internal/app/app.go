@@ -64,6 +64,7 @@ func Run(configPath string) error {
 	repository := &store.Store{DB: db, AllowedHosts: cfg.AllowedHosts}
 	writesEnabled := cfg.WritesEnabled
 	webhookEnabled := cfg.WebhookEnabled
+	// 管理写入能力由开关控制，读 API 不受影响。
 	var writer api.Writer
 	if writesEnabled { writer = repository }
 	var handler http.Handler = api.Router(repository)

@@ -16,6 +16,7 @@ import (
 type fakeTrigger struct { count atomic.Int64 }
 func (f *fakeTrigger) Request() { f.count.Add(1) }
 
+// TestCallbackSignatureAndAcceptance 验证合法签名回调触发同步任务且错误签名被拒绝。
 func TestCallbackSignatureAndAcceptance(t *testing.T) {
 	trigger := &fakeTrigger{}
 	handler := Router(nil, trigger, "test-secret")
@@ -45,6 +46,7 @@ func TestCallbackSignatureAndAcceptance(t *testing.T) {
 	if got := trigger.count.Load(); got != 1 { t.Fatalf("accepted triggers=%d",got) }
 }
 
+// TestCallbackRejectsMalformedJSON 确保无效 JSON 无法触发接入侧同步。
 func TestCallbackRejectsMalformedJSON(t *testing.T) {
 	trigger := &fakeTrigger{}
 	w := httptest.NewRecorder()

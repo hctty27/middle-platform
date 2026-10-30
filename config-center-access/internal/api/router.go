@@ -72,6 +72,7 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 	return mux
 }
 
+// verify 校验签名和五分钟时间窗口，拒绝篡改或重放的同步通知。
 func verify(timestamp, signature, epoch string, revision int64, secret string) bool {
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || secret == "" || epoch == "" || revision < 0 { return false }
@@ -85,6 +86,7 @@ func verify(timestamp, signature, epoch string, revision int64, secret string) b
 	return hmac.Equal(digest, mac.Sum(nil))
 }
 
+// writeJSON 统一接入侧的 JSON 返回格式。
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

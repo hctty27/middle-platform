@@ -1,7 +1,9 @@
 import { api } from './http'
 import type { NodeForm, NodeMatch, NodePage, NodeRecord, NodeSummary } from '../features/nodes/types'
 
+/** nodeApi 封装节点树、搜索、分页和增删改接口；可取消的查询透传 AbortSignal。 */
 export const nodeApi = {
+  // 懒加载只查询直属子节点，避免一次取回所有渠道应用。
   getTreeChildren: (parentId: number) =>
     api.get<NodeSummary[]>('/admin/nodes/tree', { params: { parentId } }),
 
@@ -19,6 +21,7 @@ export const nodeApi = {
   createNode: (form: NodeForm) =>
     api.post<NodeRecord>('/admin/nodes', form),
 
+  // 更新操作只提交可修改字段，不改变节点所属层级和编码。
   updateNode: (id: number, changes: Pick<NodeForm, 'name' | 'status' | 'config' | 'remark' | 'envType'>) =>
     api.put<NodeRecord>('/admin/nodes/' + id, changes),
 

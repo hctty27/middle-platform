@@ -54,6 +54,7 @@ func LoadFile(path string) (Settings,error) {
  if data.Admin.WritesEnabled!=nil {cfg.WritesEnabled=*data.Admin.WritesEnabled}
  if data.Webhook.Enabled!=nil {cfg.WebhookEnabled=*data.Webhook.Enabled}
  if data.Migration.AllowLegacyUpgrade!=nil {cfg.AllowLegacyUpgrade=*data.Migration.AllowLegacyUpgrade}
+ // 环境变量优先级最高，管理写入和回调均由显式开关控制。
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_GO_ADDR",&cfg.Address)
  overrideString("WEBHOOK_ALLOWED_HOSTS",&cfg.AllowedHosts)
