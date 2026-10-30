@@ -262,3 +262,15 @@ button { font: inherit; }
  .v2-shell .metric-grid, .v2-shell .quick-links { grid-template-columns: 1fr; }
  .v2-shell .page-heading { align-items: flex-start; flex-direction: column; }
 }
+
+/* 三级目录工作区标签和 JSON 编辑体验。 */
+.v2-shell .node-detail-tabs { flex-shrink: 0; margin-top: 16px; }
+.v2-shell .node-child-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.v2-shell .node-child-pane .children-toolbar { padding-top: 8px; }
+.v2-shell .node-detail-content { flex: 1; min-height: 230px; overflow: auto; padding-top: 12px; }
+.v2-shell .json-editor { width: 100%; }
+.v2-shell .json-editor-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #e6ecf5; background: #f8fafe; border-bottom: 0; border-radius: 8px 8px 0 0; }
+.v2-shell .json-editor .el-textarea__inner { border-radius: 0 0 8px 8px; }
+.v2-shell .json-valid { color: #15956e; font-size: 12px; }
+.v2-shell .json-invalid, .v2-shell .json-error { color: #d5565c; font-size: 12px; }
+.v2-shell .json-error { margin: 8px 0; word-break: break-word; }
