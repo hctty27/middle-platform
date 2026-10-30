@@ -29,7 +29,7 @@ func ValidateCreate(n model.CreateNodeRequest) error {
 	switch n.NodeType {
 	case "game":
 		if n.ParentID != 0 { return ErrInvalid }
-	case "region", "server_group", "channel_app":
+	case "region", "server_group":
 		if n.ParentID <= 0 { return ErrInvalid }
 	default:
 		return ErrInvalid
