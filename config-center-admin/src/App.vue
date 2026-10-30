@@ -21,7 +21,7 @@ async function refreshRevision() {
   } catch { ElMessage.error('读取配置版本失败') }
 }
 
-function navigate(tab: 'nodes' | 'subscribers' | 'about') {
+function navigate(tab: 'nodes' | 'channel_apps' | 'subscribers' | 'about') {
   navigation.value = tab
 }
 
