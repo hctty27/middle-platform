@@ -19,8 +19,9 @@ import (
 	"github.com/hctty27/middle-platform/config-center/internal/webhook"
 )
 
-func Run() error {
-	cfg, err := settings.Load()
+// Run 支持 YAML 文件和旧版环境变量模式。
+func Run(configPath string) error {
+    cfg, err := settings.LoadFile(configPath)
 	if err != nil { return err }
 	dsn := cfg.DSN
 	parsed, err := mysql.ParseDSN(dsn)
