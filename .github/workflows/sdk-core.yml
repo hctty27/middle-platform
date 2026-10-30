@@ -1,0 +1,31 @@
+name: sdk-core
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdk-core/**'
+      - '.github/workflows/sdk-core.yml'
+  pull_request:
+    paths:
+      - 'sdk-core/**'
+      - '.github/workflows/sdk-core.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: sdk-core/go.mod
+          cache-dependency-path: sdk-core/go.sum
+      - name: Test and race check
+        working-directory: sdk-core
+        run: go test -race ./...
+      - name: Vet and build
+        working-directory: sdk-core
+        run: |
+          go vet ./...
+          go build ./cmd/sdk-core
