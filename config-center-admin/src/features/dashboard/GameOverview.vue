@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { nodeApi } from '../../api/nodeApi'
-import { focusNodeId } from '../../app/gameContext'
+import { focusNodeId, focusNodeRequest } from '../../app/gameContext'
 import { regionEnvLabels } from '../nodes/types'
 import type { NodeSummary, RegionEnvType } from '../nodes/types'
 
@@ -15,6 +15,7 @@ const filter = ref<RegionEnvType | ''>('')
 const visible = computed(() => filter.value ? regions.value.filter(x => x.envType === filter.value) : regions.value)
 function enterRegion(id: number) {
   focusNodeId.value = id
+  focusNodeRequest.value++
   emit('navigate', 'nodes')
 }
 let requestId = 0
@@ -43,7 +44,7 @@ watch(() => props.gameId, () => void load(), { immediate: true })
     <div class="page-heading">
       <div><div class="eyebrow">WORKSPACE OVERVIEW</div><h1>游戏配置概览</h1>
         <p class="muted">从当前游戏进入大区、区服组和渠道应用管理，减少重复切换。</p></div>
-      <el-button type="primary" @click="focusNodeId = null; emit('navigate', 'nodes')">进入配置管理</el-button>
+      <el-button type="primary" @click="focusNodeId = null; focusNodeRequest++; emit('navigate', 'nodes')">进入配置管理</el-button>
     </div>
     <div class="metric-grid">
       <div class="metric-card"><span>大区总数</span><strong>{{ total }}</strong><small>当前游戏</small></div>
@@ -69,7 +70,7 @@ watch(() => props.gameId, () => void load(), { immediate: true })
       </div>
     </section>
     <div class="quick-links">
-      <button @click="emit('navigate', 'nodes')"><strong>配置管理</strong><span>游戏 / 大区 / 区服组 →</span></button>
+      <button @click="focusNodeId = null; focusNodeRequest++; emit('navigate', 'nodes')"><strong>配置管理</strong><span>游戏 / 大区 / 区服组 →</span></button>
       <button @click="emit('navigate', 'channel_apps')"><strong>渠道应用</strong><span>公共配置 / 区服组绑定 →</span></button>
     </div>
   </main>
