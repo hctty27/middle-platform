@@ -10,6 +10,7 @@ import (
 )
 
 type fakeWriter struct {
+	Writer
 	last CreateNodeRequest
 }
 
