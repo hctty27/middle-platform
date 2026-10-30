@@ -7,3 +7,8 @@
 **/dist/
 .env
 *.log
+
+# 本地/生产实际 YAML 配置可能包含数据库密码和回调密钥
+**/configs/config-dev.yaml
+**/configs/config-prod.yaml
+**/configs/*.local.yaml

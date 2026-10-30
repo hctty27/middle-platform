@@ -1,0 +1,9 @@
+server:
+  address: ":8080"
+admin:
+  writesEnabled: false
+webhook:
+  enabled: false
+  allowedHosts: [localhost, 127.0.0.1]
+migration:
+  allowLegacyUpgrade: false

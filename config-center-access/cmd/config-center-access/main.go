@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+    "flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -20,17 +21,19 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-// main 统一记录启动和运行失败，具体依赖编排交由 run 完成。
+// main 统一处理启动与运行失败。
 func main() {
-	if err := run(); err != nil {
+    configPath := flag.String("config", "", "YAML configuration file")
+    flag.Parse()
+    if err := run(*configPath); err != nil {
 		slog.Error("config access stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-// run 初始化独立的 MySQL 副本、定时同步和本地 HTTP 接口，并处理优雅退出。
-func run() error {
-	cfg, err := settings.Load()
+// run 初始化本地副本和同步服务，并支持优雅退出。
+func run(configPath string) error {
+    cfg, err := settings.LoadFile(configPath)
 	if err != nil {
 		return err
 	}

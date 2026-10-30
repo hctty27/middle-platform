@@ -81,3 +81,14 @@ go build ./cmd/config-center-access
 `GET /api/access/nodes` 返回 `env_type`（`test` / `review` / `production`）字段。
 历史未分类大区返回 `null`；归类后通过权威端版本事件同步更新。
 已使用 V3 接入副本数据库的部署，请在升级配置中心 V5 前备份并执行 V4 SQL。
+
+## YAML 本地启动
+
+复制 `configs/config-dev.example.yaml` 为 `configs/config-dev.yaml`，修改数据库和回调密钥，然后执行：
+
+```powershell
+go run ./cmd/config-center-access -config configs/config-dev.yaml
+```
+
+通用配置在 `configs/config.yaml`，开发/生产配置与通用配置合并；环境变量优先级最高。省略 `-config` 时保留旧的环境变量启动方式。
+生产模板：`configs/config-prod.example.yaml`；建议通过 `ACCESS_DB_DSN` 和 `CONFIG_WEBHOOK_SECRET` 注入生产密钥。实际的 `config-dev.yaml`、`config-prod.yaml` 已加入 `.gitignore`。
