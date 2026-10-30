@@ -21,6 +21,9 @@ type ChannelAppBinding struct {
 	Status int `json:"status"`
 	Config string `json:"config"`
 	EffectiveConfig string `json:"effectiveConfig"`
+	ServerGroupName string `json:"serverGroupName,omitempty"`
+	RegionName string `json:"regionName,omitempty"`
+	RegionEnvType *string `json:"regionEnvType,omitempty"`
 	CreatedAt LocalDateTime `json:"createdAt"`
 	UpdatedAt LocalDateTime `json:"updatedAt"`
 }
