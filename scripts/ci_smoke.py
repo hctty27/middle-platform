@@ -218,7 +218,8 @@ def main():
     local = {row["id"]: row for row in replica()}
     for index, node_id in enumerate(ids):
         assert tuple(local[node_id][field] for field in
-                     ("game_id", "region_id", "server_group_id")) == expected[index], local
+                     ("game_id", "region_id")) == expected[index], local
+        assert "server_group_id" not in local[node_id], local
     assert local[ids[1]]["env_type"] == "test", local
     print("PASS complete ancestor paths and region environment in synchronized local replica", flush=True)
 
