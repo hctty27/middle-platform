@@ -207,8 +207,8 @@ def main():
     assert len(matches) == 1 and matches[0]["node"]["id"] == ids[-1], matches
     assert [node["id"] for node in matches[0]["path"]] == ids, matches
     assert "config" not in matches[0]["node"], matches
-    path = request(8082, f"/api/config/admin/nodes/{ids[3]}/path")
-    assert [node["id"] for node in path["path"]] == ids[:4], path
+    path = request(8082, f"/api/config/admin/nodes/{ids[2]}/path")
+    assert [node["id"] for node in path["path"]] == ids, path
     assert request(8080, "/api/config/admin/nodes/search?keyword=") == []
     assert request(8080, "/api/config/admin/nodes/search?keyword=x&limit=51", expected=400)
     print("PASS global search, deep navigation paths and input validation", flush=True)
