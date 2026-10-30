@@ -15,108 +15,87 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  changes:
-    name: Detect changed paths
+  go:
+    name: Go config center
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      java: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.java == 'true' || steps.filter.outputs.shared == 'true' || steps.filter.outputs.unknown == 'true' }}
-      admin: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.admin == 'true' || steps.filter.outputs.shared == 'true' || steps.filter.outputs.unknown == 'true' }}
-      integration: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.integration == 'true' || steps.filter.outputs.shared == 'true' || steps.filter.outputs.unknown == 'true' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: config-center
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: integration-test-only
+          MYSQL_DATABASE: config_center_go_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pintegration-test-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=25
+    env:
+      TEST_CONFIG_DB_DSN: root:integration-test-only@tcp(127.0.0.1:3306)/config_center_go_test?parseTime=true&loc=UTC
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
         with:
-          fetch-depth: 0
-      - name: Identify affected modules
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          base: ${{ github.ref }}
-          predicate-quantifier: some-with-excludes
-          filters: |
-            java:
-              - 'config-center-java/**'
-              - 'build.gradle.kts'
-              - 'settings.gradle.kts'
-              - 'gradle.properties'
-              - 'gradle/**'
-              - 'gradlew'
-              - 'gradlew.bat'
-            admin:
-              - 'config-center-admin/**'
-            integration:
-              - 'config-center-java/**'
-              - 'config-center-access/**'
-              - 'build.gradle.kts'
-              - 'settings.gradle.kts'
-              - 'gradle.properties'
-              - 'gradle/**'
-              - 'gradlew'
-              - 'gradlew.bat'
-              - 'scripts/**'
-              - 'deploy/**'
-            shared:
-              - '.github/**'
-              - '.gitignore'
-            unknown:
-              - '**'
-              - '!config-center-admin/**'
-              - '!config-center-java/**'
-              - '!config-center/**'
-              - '!config-center-access/**'
-              - '!build.gradle.kts'
-              - '!settings.gradle.kts'
-              - '!gradle.properties'
-              - '!gradle/**'
-              - '!gradlew'
-              - '!gradlew.bat'
-              - '!scripts/**'
-              - '!deploy/**'
-              - '!.github/**'
-              - '!.gitignore'
-              - '!README.md'
-              - '!docs/**'
+          go-version: "1.27.3"
+          cache-dependency-path: config-center/go.mod
+      - name: Check module files
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: Validate sqlc generated code
+        run: |
+          curl -fsSL --retry 3 -o /tmp/sqlc.tar.gz https://github.com/sqlc-dev/sqlc/releases/download/v1.31.1/sqlc_1.31.1_linux_amd64.tar.gz
+          echo "497ae4fcdfa64c5b0c311ffe4c2bd991e43991e82e5367792ed78bc2dca27354  /tmp/sqlc.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/sqlc.tar.gz -C /tmp sqlc
+          /tmp/sqlc generate
+          test -z "$(git status --porcelain -- internal/sqlcgen)"
+      - run: go test -race -count=1 ./...
+      - run: go vet ./...
+      - run: go build ./cmd/config-center ./cmd/migrate
 
-  java:
-    needs: changes
-    if: ${{ needs.changes.outputs.java == 'true' }}
+  access:
+    name: Go access
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: config-center-access
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
         with:
-          distribution: temurin
-          java-version: '25'
-      - uses: gradle/actions/setup-gradle@v6
-      - run: python3 scripts/check_java_packages.py
-      - run: ./gradlew build --no-daemon
+          go-version: "1.27.3"
+          cache-dependency-path: config-center-access/go.mod
+      - run: go test -race -count=1 ./...
+      - run: go vet ./...
+      - run: go build ./cmd/config-center-access
+
   admin:
-    needs: changes
-    if: ${{ needs.changes.outputs.admin == 'true' }}
+    name: Vue admin
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: config-center-admin
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: config-center-admin/package-lock.json
       - run: npm ci --no-audit --no-fund
-        working-directory: config-center-admin
       - run: npm run build
-        working-directory: config-center-admin
+
   integration:
-    needs: changes
-    if: ${{ needs.changes.outputs.integration == 'true' }}
-    name: MySQL + multi-instance + Webhook E2E
+    name: Go MySQL migration + two instances + Webhook E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     services:
       mysql:
         image: mysql:8.4
@@ -126,90 +105,44 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -pintegration-test"
+          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pintegration-test"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=25
     env:
-      CONFIG_DB_URL: jdbc:mysql://127.0.0.1:3306/config_center?connectionTimeZone=UTC
-      CONFIG_DB_USER: root
-      CONFIG_DB_PASSWORD: integration-test
       ACCESS_DB_DSN: root:integration-test@tcp(127.0.0.1:3306)/config_access?parseTime=true&loc=UTC
       CONFIG_CENTER_URL: http://127.0.0.1:8080
       CONFIG_WEBHOOK_SECRET: ci-signed-webhook-secret
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '25'
-      - uses: gradle/actions/setup-gradle@v6
-      - name: Prepare isolated access database
-        run: |
-          docker exec "$(docker ps --filter 'ancestor=mysql:8.4' --format '{{.ID}}' | head -n 1)" mysql -uroot -pintegration-test -e "CREATE DATABASE config_access CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
-          cache-dependency-path: config-center-access/go.mod
-      - name: Package executable services
+          cache-dependency-path: config-center/go.mod
+      - name: Prepare access database
         run: |
-          ./gradlew :config-center-java:bootJar --no-daemon
-          cd config-center-access
-          go build -o /tmp/config-center-access-ci ./cmd/config-center-access
-      - name: Test V1 legacy schema and ancestor migration
+          docker exec "$(docker ps --filter 'ancestor=mysql:8.4' --format '{{.ID}}' | head -n 1)" mysql -uroot -pintegration-test -e "CREATE DATABASE config_access CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+      - name: Build Go services and migration CLI
+        run: |
+          (cd config-center && go build -o /tmp/config-center-ci ./cmd/config-center)
+          (cd config-center && go build -o /tmp/config-center-migrate-ci ./cmd/migrate)
+          (cd config-center-access && go build -o /tmp/config-center-access-ci ./cmd/config-center-access)
+      - name: Test real V1-V4 schema upgrades
         run: python3 scripts/ci_migration_smoke.py
-      - name: Test two config-center instances, MySQL, callback and recovery
+      - name: Test Go cluster and signed callbacks
         run: python3 scripts/ci_smoke.py
 
   ci-gate:
     name: CI Gate
-    needs: [changes, java, admin, integration]
+    needs: [go, access, admin, integration]
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - name: Verify required jobs succeeded
+      - name: Require all checks
         env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          JAVA_EXPECTED: ${{ needs.changes.outputs.java }}
-          JAVA_RESULT: ${{ needs.java.result }}
-          ADMIN_EXPECTED: ${{ needs.changes.outputs.admin }}
-          ADMIN_RESULT: ${{ needs.admin.result }}
-          INTEGRATION_EXPECTED: ${{ needs.changes.outputs.integration }}
-          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          RESULTS: ${{ join(needs.*.result, ',') }}
         run: |
-          set -euo pipefail
-
-          if [[ "$CHANGES_RESULT" != "success" ]]; then
-            echo "::error::Change detection failed: $CHANGES_RESULT"
+          if [[ "$RESULTS" != "success,success,success,success" ]]; then
+            echo "::error::One or more checks failed or were skipped: $RESULTS"
             exit 1
           fi
-
-          check_job() {
-            local label="$1" expected="$2" result="$3"
-            case "$expected" in
-              true)
-                if [[ "$result" != "success" ]]; then
-                  echo "::error::$label must pass, but was $result"
-                  return 1
-                fi
-                ;;
-              false)
-                if [[ "$result" != "skipped" ]]; then
-                  echo "::error::$label should be skipped, but was $result"
-                  return 1
-                fi
-                ;;
-              *)
-                echo "::error::$label has an invalid change-detection result: $expected"
-                return 1
-                ;;
-            esac
-            echo "$label: $result (required=$expected)"
-          }
-
-          status=0
-          check_job "Java" "$JAVA_EXPECTED" "$JAVA_RESULT" || status=1
-          check_job "Vue" "$ADMIN_EXPECTED" "$ADMIN_RESULT" || status=1
-          check_job "MySQL/Webhook E2E" "$INTEGRATION_EXPECTED" "$INTEGRATION_RESULT" || status=1
-          exit "$status"

@@ -14,6 +14,7 @@ type Settings struct {
     AllowedHosts string
     WritesEnabled bool
     WebhookEnabled bool
+    AllowLegacyUpgrade bool
 }
 // Load 读取和校验环境变量，保持原有变量及默认端口兼容。
 func Load() (Settings, error) {
@@ -23,6 +24,7 @@ func Load() (Settings, error) {
         AllowedHosts: os.Getenv("WEBHOOK_ALLOWED_HOSTS"),
         WritesEnabled: strings.EqualFold(os.Getenv("CONFIG_GO_ENABLE_WRITES"), "true"),
         WebhookEnabled: strings.EqualFold(os.Getenv("CONFIG_GO_ENABLE_WEBHOOK"), "true"),
+        AllowLegacyUpgrade: strings.EqualFold(os.Getenv("CONFIG_ALLOW_LEGACY_UPGRADE"), "true"),
     }
     if cfg.DSN == "" { return Settings{}, errors.New("CONFIG_DB_DSN is required") }
     if cfg.Address == "" { cfg.Address = ":8081" }

@@ -13,6 +13,7 @@ import (
 	"time"
 	"github.com/go-sql-driver/mysql"
 	"github.com/hctty27/middle-platform/config-center/internal/api"
+	"github.com/hctty27/middle-platform/config-center/internal/migration"
 	"github.com/hctty27/middle-platform/config-center/internal/settings"
 	"github.com/hctty27/middle-platform/config-center/internal/store"
 	"github.com/hctty27/middle-platform/config-center/internal/webhook"
@@ -31,6 +32,13 @@ func Run() error {
 	parsed.Timeout = 5 * time.Second
 	parsed.ReadTimeout = 10 * time.Second
 	parsed.WriteTimeout = 10 * time.Second
+
+	// 启动前使用 MySQL 命名锁执行 Go 迁移，避免集群实例并行修改表结构。
+	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer migrationCancel()
+	if err := migration.Run(migrationCtx, parsed.FormatDSN(), migration.Options{
+		AllowLegacyUpgrade: cfg.AllowLegacyUpgrade,
+	}); err != nil { return err }
 
 	db, err := sql.Open("mysql", parsed.FormatDSN())
 	if err != nil {

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""End-to-end CI smoke test using real MySQL, two config centers and Go access."""
+"""Go 配置中心双实例、Webhook 与 Go 接入端 MySQL 端到端回归。"""
 
-import glob
 import hashlib
 import hmac
 import json
@@ -51,31 +50,21 @@ def wait_until(label, predicate, seconds=75):
     raise AssertionError(f"Timed out: {label}. Last failure: {last}")
 
 
-def jar(module):
-    matches = [
-        item for item in glob.glob(f"{module}/build/libs/*.jar")
-        if not item.endswith("-plain.jar")
-    ]
-    if len(matches) != 1:
-        raise AssertionError(f"Expected one executable jar for {module}: {matches}")
-    return matches[0]
-
-
 def start(name, module, port, extra=None):
     env = os.environ.copy()
     env.update(extra or {})
     if name.startswith("access"):
         env["CONFIG_ACCESS_ADDR"] = f":{port}"
     else:
-        env["CONFIG_CENTER_PORT"] = str(port)
+        env["CONFIG_GO_ADDR"] = f":{port}"
+        env["CONFIG_DB_DSN"] = "root:integration-test@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC"
+        env["CONFIG_GO_ENABLE_WRITES"] = "true"
+        env["CONFIG_GO_ENABLE_WEBHOOK"] = "true"
+        env["WEBHOOK_ALLOWED_HOSTS"] = "localhost,127.0.0.1"
     path = f"/tmp/middle-platform-{name}.log"
     log = open(path, "w", encoding="utf-8")
     LOGS.append((name, path, log))
-    java_home = env.get("JAVA_HOME")
-    java_bin = str(pathlib.Path(java_home) / "bin" / "java") if java_home else "java"
-    if java_home and not os.access(java_bin, os.X_OK):
-        raise RuntimeError(f"JAVA_HOME points to a missing Java executable: {java_bin}")
-    command = ["/tmp/config-center-access-ci"] if name.startswith("access") else [java_bin, "-jar", jar(module)]
+    command = ["/tmp/config-center-access-ci"] if name.startswith("access") else ["/tmp/config-center-ci"]
     proc = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
     PROCESSES.append(proc)
     print(f"Starting {name} (pid={proc.pid})", flush=True)
@@ -120,9 +109,9 @@ def synchronized_nodes(count, revision):
 
 def main():
     center1 = start("center-1", "config-center-java", 8080)
-    wait_until("primary config-center ready", lambda: request(8080, "/actuator/health")["status"] == "UP")
+    wait_until("primary config-center ready", lambda: request(8080, "/health/ready")["status"] == "UP")
     center2 = start("center-2", "config-center-java", 8082)
-    wait_until("second config-center ready", lambda: request(8082, "/actuator/health")["status"] == "UP")
+    wait_until("second config-center ready", lambda: request(8082, "/health/ready")["status"] == "UP")
 
     access = start("access", "config-center-access", 8081)
     wait_until("client access ready", lambda: request(8081, "/api/access/revision") is not None)

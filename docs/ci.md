@@ -1,43 +1,27 @@
-# 按变更范围执行 CI
+# CI：纯 Go + MySQL + Vue
 
-`.github/workflows/build.yml` 始终在 main push、目标为 main 的 PR 和手动运行时触发。
-`changes` 使用 `dorny/paths-filter` 对比变更文件，决定是否执行 Java、Vue 和 MySQL/Webhook E2E。
-未识别的新路径会保守执行全部三项检查，避免漏测。
+所有 PR 和 main push 由 `.github/workflows/build.yml` 执行：
 
-| 变更范围 | Java | Vue | E2E |
-| --- | --- | --- | --- |
-| `config-center-admin/**` | 跳过 | 运行 | 跳过 |
-| `config-center/**`、`config-center-access/**` | 运行 | 跳过 | 运行 |
-| Gradle 构建文件和 Wrapper | 运行 | 跳过 | 运行 |
-| `scripts/**`、`deploy/**` | 跳过 | 跳过 | 运行 |
-| `.github/**`、`.gitignore` 或未识别路径 | 运行 | 运行 | 运行 |
-| 仅 `README.md`、`docs/**` | 跳过 | 跳过 | 跳过 |
-| 手动运行 `workflow_dispatch` | 运行 | 运行 | 运行 |
+| Job | 校验 |
+| --- | --- |
+| `Go config center` | Go 单测、race、vet、build、sqlc 生成结果、MySQL 数据访问 |
+| `Go access` | 接入端 Go 单测、race、vet、build |
+| `Vue admin` | npm ci 与 Vue 构建 |
+| `Go MySQL migration + two instances + Webhook E2E` | Go V1–V4 实际迁移、双实例、节点变更、Webhook 验签、同步补偿 |
+| `CI Gate` | 要求上述四项全部成功 |
 
-混合修改取并集，例如同时修改前后端时，三个构建都会执行。
+数据库回归通过 `scripts/ci_migration_smoke.py` 和 `scripts/ci_smoke.py` 运行，不需要 JDK、Gradle 或其它服务端语言。
 
-## CI Gate
+生产分支保护建议只配置 `CI Gate` 为必需检查。迁移 SQL 更新必须验证空库初始化、旧节点归档、epoch 切换和重复迁移的幂等性。
 
-`CI Gate` 使用 `always()` 运行，严格校验：
+本地验证：
 
-- 变更检测自身必须成功。
-- 需要执行的 Job 必须返回 `success`。
-- 不需要执行的 Job 必须返回 `skipped`。
-- 任何检测异常、非预期跳过或执行失败都导致 Gate 失败。
-
-如需在 GitHub 分支保护 / Ruleset 中设置必需检查，请设置 **`CI Gate`**，
-不要把会按变更范围跳过的 `java`、`admin`、`MySQL + multi-instance + Webhook E2E`
-作为必需检查，否则可能产生不必要的合并限制。
-
-## 验收建议
-
-1. 仅修改前端：应只运行 Vue 与 CI Gate。
-2. 仅修改后端或 SQL：应运行 Java、E2E 与 CI Gate。
-3. 仅修改文档：应只有变更检测与 CI Gate。
-4. 修改 `.github/**`、混合改动或未知路径：应执行完整回归。
-5. 手动触发 Build：应执行全部任务。
-6. 任一应执行的任务失败时，CI Gate 必须失败。
-
-修改模块依赖关系或增加目录时，应同时更新 `build.yml` 的筛选规则与此文档。
-
-四级改造回归：`scripts/ci_smoke.py` 覆盖 `channel_app` 创建、路径、唯一性、跨实例同步与本地副本；`scripts/ci_migration_smoke.py` 验证 V1→V2→V3→V4 的旧数据归档、ID 保留及 epoch 切换。
+```bash
+cd config-center
+go test -race ./...
+go vet ./...
+go build ./cmd/config-center ./cmd/migrate
+cd ../config-center-access
+go test -race ./...
+go vet ./...
+```
