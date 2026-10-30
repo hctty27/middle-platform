@@ -73,3 +73,14 @@ CI 会用 MySQL 8.4 检验全新建库、V1→V5 迁移、历史配置保留、�
 新建大区必须选择类型，其他层级不能设置；已归类大区不能直接切换环境类型。
 已有大区迁移时保持 `NULL`（未分类），需要逐个核对用途并在管理端首次归类。
 迁移 V5 更新 `epoch`，通知接入端重新获取带环境类型的完整快照，保留现有 revision。
+
+## YAML 本地启动
+
+从 `configs/config-dev.example.yaml` 复制为 `configs/config-dev.yaml`，修改本机数据库密码，然后执行：
+
+```powershell
+go run ./cmd/config-center -config configs/config-dev.yaml
+```
+
+数据库迁移可执行 `go run ./cmd/migrate -config configs/config-dev.yaml`。
+配置优先级：程序默认值 → 同目录 `config.yaml` → 指定 YAML → 环境变量。不加 `-config` 时继续使用旧的环境变量方式。生产模板为 `configs/config-prod.example.yaml`；生产数据库凭证推荐通过 `CONFIG_DB_DSN` 注入，不提交实际配置文件。
