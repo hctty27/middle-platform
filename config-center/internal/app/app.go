@@ -19,6 +19,7 @@ import (
 	"github.com/hctty27/middle-platform/config-center/internal/webhook"
 )
 
+// Run 完成参数解析、数据库检查、HTTP 路由和回调调度器启动，并在终止信号后优雅退出。
 func Run() error {
 	cfg, err := settings.Load()
 	if err != nil { return err }
@@ -63,6 +64,7 @@ func Run() error {
 	repository := &store.Store{DB: db, AllowedHosts: cfg.AllowedHosts}
 	writesEnabled := cfg.WritesEnabled
 	webhookEnabled := cfg.WebhookEnabled
+	// 管理接口的写权限由运行参数控制，读接口始终使用相同的数据仓库。
 	var writer api.Writer
 	if writesEnabled { writer = repository }
 	var handler http.Handler = api.Router(repository)
