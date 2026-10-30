@@ -26,3 +26,6 @@ export function currentGameName() {
 
 // 概览页或搜索结果可以指定配置工作区打开的节点。
 export const focusNodeId = ref<number | null>(null)
+
+// 递增请求号保证连续点击同一个大区也能重新定位。
+export const focusNodeRequest = ref(0)
