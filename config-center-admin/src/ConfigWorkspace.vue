@@ -2,9 +2,11 @@
 // 配置工作区负责展示懒加载目录树、直属子项列表和节点编辑抽屉。
 // 数据加载、并发控制及表单状态集中交由 useNodeWorkspace 管理。
 import { ref, watch } from 'vue'
+import type { LoadFunction } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { nodeApi } from './api/nodeApi'
-import { focusNodeId, focusNodeRequest } from './app/gameContext'
-import type { NodeType, NodeRecord, RegionEnvType } from './features/nodes/types'
+import { currentGameId, focusNodeId, focusNodeRequest } from './app/gameContext'
+import type { NodeType, NodeMatch, NodeRecord, RegionEnvType } from './features/nodes/types'
 import { regionEnvLabels } from './features/nodes/types'
 
 function envLabel(env: RegionEnvType | null | undefined) {
@@ -45,6 +47,25 @@ watch(() => selected.value?.id, async id => {
 }, { immediate: true })
 
 // 游戏切换与概览页跳转均直接定位目标节点。
+// 当前工作台仅显示选中游戏的三级目录，跨游戏搜索仍可定位。
+const loadTreeScoped: LoadFunction = (node, resolve, reject) => {
+  if (node.level > 0) return loadTree(node, resolve, reject)
+  if (!props.gameId) { resolve([]); return }
+  void nodeApi.getTreeChildren(0).then(response => resolve(response.data.filter(game => game.id === props.gameId)))
+    .catch(() => { ElMessage.error('加载游戏目录失败'); reject() })
+}
+function openSearchMatch(match: NodeMatch) {
+  const gameId = match.path[0]?.id
+  if (gameId && gameId !== props.gameId) {
+    currentGameId.value = gameId
+    focusNodeId.value = match.node.id
+    focusNodeRequest.value++
+    searchWord.value = ''
+    onSearchInput()
+    return
+  }
+  void openMatch(match)
+}
 let focusSequence = 0
 watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
   const nodeId = focusNodeId.value
@@ -72,7 +93,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
         <div class="search-count">跨所有游戏、大区、区服组和渠道应用搜索</div>
         <el-empty v-if="!searchLoading && !searchMatches.length" description="无匹配节点" :image-size="75" />
         <button v-for="match in searchMatches" :key="match.node.id" class="search-result"
-                @click="openMatch(match)">
+                @click="openSearchMatch(match)">
           <span class="search-result-title">{{ match.node.name }}
             <el-tag size="small" type="info">{{ labels[match.node.nodeType] }}</el-tag>
             <el-tag v-if="match.node.nodeType === 'region'" size="small" :type="envTagType(match.node.envType)">{{ envLabel(match.node.envType) }}</el-tag>
@@ -82,7 +103,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
         </button>
       </div>
       <div v-show="!searchWord.trim()" ref="treeScrollRef" class="tree-scroll">
-        <el-tree :key="treeVersion" ref="treeRef" node-key="id" lazy :load="loadTree"
+        <el-tree :key="treeVersion + '-' + gameId" ref="treeRef" node-key="id" lazy :load="loadTreeScoped"
                  :props="treeProps" :default-expanded-keys="restoredExpandedKeys"
                  :auto-expand-parent="false"
                  :current-node-key="selected?.id" highlight-current
