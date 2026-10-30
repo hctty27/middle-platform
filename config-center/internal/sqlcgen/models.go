@@ -10,25 +10,6 @@ import (
 	"time"
 )
 
-type ConfigChangeLog struct {
-	Revision  int64
-	NodeID    int64
-	Operation string
-	CreatedAt time.Time
-}
-
-type ConfigDeliveryState struct {
-	SubscriberID         int64
-	AcknowledgedRevision int64
-	AcknowledgedEpoch    sql.NullString
-	LeaseOwner           sql.NullString
-	LeaseUntil           sql.NullTime
-	NextAttemptAt        time.Time
-	FailureCount         int32
-	LastError            sql.NullString
-	UpdatedAt            time.Time
-}
-
 type ConfigNode struct {
 	ID        int64
 	GameID    sql.NullInt64
@@ -42,6 +23,13 @@ type ConfigNode struct {
 	Remark    sql.NullString
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type ConfigNodeChangeLog struct {
+	Revision  int64
+	NodeID    int64
+	Operation string
+	CreatedAt time.Time
 }
 
 type ConfigRevision struct {
@@ -58,4 +46,16 @@ type ConfigSubscriber struct {
 	Enabled       int8
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+type ConfigSubscriberDeliveryState struct {
+	SubscriberID         int64
+	AcknowledgedRevision int64
+	AcknowledgedEpoch    sql.NullString
+	LeaseOwner           sql.NullString
+	LeaseUntil           sql.NullTime
+	NextAttemptAt        time.Time
+	FailureCount         int32
+	LastError            sql.NullString
+	UpdatedAt            time.Time
 }

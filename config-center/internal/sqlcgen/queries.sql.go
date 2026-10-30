@@ -89,15 +89,15 @@ type ListChangesParams struct {
 	Limit    int32
 }
 
-func (q *Queries) ListChanges(ctx context.Context, arg ListChangesParams) ([]ConfigChangeLog, error) {
+func (q *Queries) ListChanges(ctx context.Context, arg ListChangesParams) ([]ConfigNodeChangeLog, error) {
 	rows, err := q.db.QueryContext(ctx, listChanges, arg.Revision, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ConfigChangeLog{}
+	items := []ConfigNodeChangeLog{}
 	for rows.Next() {
-		var i ConfigChangeLog
+		var i ConfigNodeChangeLog
 		if err := rows.Scan(
 			&i.Revision,
 			&i.NodeID,

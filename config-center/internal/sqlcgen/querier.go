@@ -12,7 +12,7 @@ type Querier interface {
 	GetNode(ctx context.Context, id int64) (GetNodeRow, error)
 	GetRevision(ctx context.Context) (GetRevisionRow, error)
 	IncrementRevision(ctx context.Context) error
-	ListChanges(ctx context.Context, arg ListChangesParams) ([]ConfigChangeLog, error)
+	ListChanges(ctx context.Context, arg ListChangesParams) ([]ConfigNodeChangeLog, error)
 	ListNodes(ctx context.Context) ([]ListNodesRow, error)
 	LockRevision(ctx context.Context) (int64, error)
 }
