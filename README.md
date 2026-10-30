@@ -71,3 +71,5 @@ npm run dev
 **安全注意：** 管理接口没有账号权限系统，必须部署在可信内网或受保护网关。数据库迁移包含非事务性 MySQL DDL；升级旧库时必须先备份，失败后按照日志检查并恢复，不可盲目重试。
 
 更多信息：[部署说明](docs/deployment.md) · [系统架构](docs/architecture.md) · [CI 回归](docs/ci.md)。
+
+三个 Go 服务的结构化日志、Request ID 和部署说明参见 [统一日志规范](docs/logging.md)。

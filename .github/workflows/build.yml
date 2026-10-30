@@ -54,6 +54,8 @@ jobs:
           tar -xzf /tmp/sqlc.tar.gz -C /tmp sqlc
           /tmp/sqlc generate
           git diff --exit-code -- internal/sqlcgen
+      - name: Verify shared logging module
+        run: (cd ../shared/logging && go test -race -count=1 ./... && go vet ./...)
       - run: go test -race -count=1 ./...
       - run: go vet ./...
       - run: go build ./cmd/config-center ./cmd/migrate

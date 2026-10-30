@@ -19,6 +19,7 @@ import (
 	"github.com/hctty27/middle-platform/config-center-access/internal/store"
 	"github.com/hctty27/middle-platform/config-center-access/internal/syncer"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/hctty27/middle-platform/shared/logging"
 )
 
 // main 统一处理启动与运行失败。
@@ -37,6 +38,7 @@ func run(configPath string) error {
 	if err != nil {
 		return err
 	}
+	if err := logging.Init("config-center-access", cfg.Log); err != nil { return err }
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -65,7 +67,7 @@ func run(configPath string) error {
 
 	server := &http.Server{
 		Addr: cfg.Address,
-		Handler: api.Router(replica, trigger, cfg.WebhookSecret),
+		Handler: logging.HTTP(cfg.Log, api.Router(replica, trigger, cfg.WebhookSecret)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {

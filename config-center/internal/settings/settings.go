@@ -11,6 +11,7 @@ import (
  "strings"
 
  "gopkg.in/yaml.v3"
+ "github.com/hctty27/middle-platform/shared/logging"
 )
 
 // Settings 保存配置中心运行参数。
@@ -21,6 +22,7 @@ type Settings struct {
  WritesEnabled bool
  WebhookEnabled bool
  AllowLegacyUpgrade bool
+ Log logging.Config
 }
 
 type configFile struct {
@@ -32,6 +34,7 @@ type configFile struct {
   AllowedHosts []string `yaml:"allowedHosts"`
  } `yaml:"webhook"`
  Migration struct { AllowLegacyUpgrade *bool `yaml:"allowLegacyUpgrade"` } `yaml:"migration"`
+ Log logging.Config `yaml:"log"`
 }
 
 // Load 兼容旧版环境变量启动方式。
@@ -39,7 +42,7 @@ func Load() (Settings,error) { return LoadFile("") }
 
 // LoadFile 依次加载共享 YAML、指定环境 YAML，再应用环境变量覆盖。
 func LoadFile(path string) (Settings,error) {
- var data configFile
+ data:=configFile{Log:logging.Default()}
  if path!="" {
   base:=filepath.Join(filepath.Dir(path),"config.yaml")
   if filepath.Clean(path)!=filepath.Clean(base) {
@@ -49,7 +52,7 @@ func LoadFile(path string) (Settings,error) {
   }
   if err:=readYAML(path,&data);err!=nil { return Settings{},err }
  }
- cfg:=Settings{Address:":8081",DSN:data.Database.DSN,AllowedHosts:strings.Join(data.Webhook.AllowedHosts,",")}
+ cfg:=Settings{Address:":8081",DSN:data.Database.DSN,AllowedHosts:strings.Join(data.Webhook.AllowedHosts,","),Log:data.Log}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
  if data.Admin.WritesEnabled!=nil {cfg.WritesEnabled=*data.Admin.WritesEnabled}
  if data.Webhook.Enabled!=nil {cfg.WebhookEnabled=*data.Webhook.Enabled}
@@ -65,6 +68,7 @@ func LoadFile(path string) (Settings,error) {
  } {
   if err:=overrideBool(b.name,b.target);err!=nil{return Settings{},err}
  }
+ if err:=cfg.Log.ApplyEnv();err!=nil{return Settings{},err}
  if strings.TrimSpace(cfg.DSN)=="" {return Settings{},errors.New("database.dsn or CONFIG_DB_DSN is required")}
  if cfg.WebhookEnabled && !cfg.WritesEnabled {return Settings{},errors.New("webhook requires admin.writesEnabled=true")}
  return cfg,nil

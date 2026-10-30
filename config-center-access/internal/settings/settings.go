@@ -12,6 +12,7 @@ import (
  "time"
 
  "gopkg.in/yaml.v3"
+ "github.com/hctty27/middle-platform/shared/logging"
 )
 
 // Config 保存接入服务运行参数。
@@ -23,6 +24,7 @@ type Config struct {
  ConnectTimeout time.Duration
  RequestTimeout time.Duration
  ReconcileInterval time.Duration
+ Log logging.Config
 }
 
 type configFile struct {
@@ -35,6 +37,7 @@ type configFile struct {
   RequestTimeout string `yaml:"requestTimeout"`
   ReconcileInterval string `yaml:"reconcileInterval"`
  } `yaml:"sync"`
+ Log logging.Config `yaml:"log"`
 }
 
 // Load 保留纯环境变量启动方式。
@@ -42,7 +45,7 @@ func Load() (Config,error) { return LoadFile("") }
 
 // LoadFile 依次加载共享 YAML、环境 YAML，再用环境变量覆盖。
 func LoadFile(path string) (Config,error) {
- var data configFile
+ data:=configFile{Log:logging.Default()}
  if path!="" {
   base:=filepath.Join(filepath.Dir(path),"config.yaml")
   if filepath.Clean(path)!=filepath.Clean(base) {
@@ -60,6 +63,7 @@ func LoadFile(path string) (Config,error) {
   ConnectTimeout:2*time.Second,
   RequestTimeout:15*time.Second,
   ReconcileInterval:5*time.Minute,
+  Log:data.Log,
  }
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
  if data.ConfigCenter.URL!="" {cfg.CenterURL=data.ConfigCenter.URL}
@@ -95,6 +99,7 @@ func LoadFile(path string) (Config,error) {
   if err!=nil || duration<time.Second {return Config{},fmt.Errorf("CONFIG_RECONCILE_INTERVAL must be a duration >= 1s")}
   cfg.ReconcileInterval=duration
  }
+ if err:=cfg.Log.ApplyEnv();err!=nil{return Config{},err}
  cfg.CenterURL=strings.TrimRight(cfg.CenterURL,"/")
  if strings.TrimSpace(cfg.DSN)=="" {return Config{},fmt.Errorf("database.dsn or ACCESS_DB_DSN is required")}
  if strings.TrimSpace(cfg.WebhookSecret)=="" || cfg.WebhookSecret=="change-me-in-development" {
