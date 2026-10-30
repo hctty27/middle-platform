@@ -5,8 +5,9 @@ import SubscriberPage from './features/subscribers/SubscriberPage.vue'
 import { getRevision } from './api/syncApi'
 import { ElMessage } from 'element-plus'
 import ConfigWorkspace from './ConfigWorkspace.vue'
+import ChannelAppPage from './features/nodes/ChannelAppPage.vue'
 
-const navigation = ref<'nodes' | 'subscribers' | 'about'>('nodes')
+const navigation = ref<'nodes' | 'channel_apps' | 'subscribers' | 'about'>('nodes')
 const sidebarCollapsed = ref(false)
 const revision = ref(0)
 const epoch = ref('')
@@ -40,6 +41,9 @@ onMounted(() => void refreshRevision())
       <button :title="'配置管理'" :class="{ active: navigation === 'nodes' }" @click="navigate('nodes')">
         <span class="nav-symbol">▦</span><span v-if="!sidebarCollapsed">配置管理</span>
       </button>
+      <button title="渠道应用" :class="{ active: navigation === 'channel_apps' }" @click="navigate('channel_apps')">
+        <span class="nav-symbol">▣</span><span v-if="!sidebarCollapsed">渠道应用</span>
+      </button>
       <button title="接入与同步" :class="{ active: navigation === 'subscribers' }" @click="navigate('subscribers')">
         <span class="nav-symbol">↗</span><span v-if="!sidebarCollapsed">接入与同步</span>
       </button>
@@ -57,7 +61,7 @@ onMounted(() => void refreshRevision())
     <div class="main">
       <header class="topbar">
         <div class="topbar-heading">
-          <strong>{{ navigation === 'nodes' ? '配置管理' : navigation === 'subscribers' ? '接入与同步' : '系统说明' }}</strong>
+          <strong>{{ navigation === 'nodes' ? '配置管理' : navigation === 'channel_apps' ? '渠道应用' : navigation === 'subscribers' ? '接入与同步' : '系统说明' }}</strong>
           <span class="subline">研发中台 / 配置中心</span>
         </div>
         <div class="top-right">
@@ -68,12 +72,13 @@ onMounted(() => void refreshRevision())
       <div v-show="navigation === 'nodes'" class="workspace-shell">
         <ConfigWorkspace @changed="refreshRevision" />
       </div>
+      <ChannelAppPage v-if="navigation === 'channel_apps'" @changed="refreshRevision" />
       <SubscriberPage v-if="navigation === 'subscribers'" />
       <main v-else-if="navigation === 'about'" class="content-panel">
         <h2>系统说明</h2>
         <p>当前权威数据集：{{ epoch }}</p>
         <p>当前配置版本：{{ revision }}</p>
-        <p>游戏 → 大区 → 区服组 → 渠道应用，配置只在对应节点保存。</p>
+        <p>配置树：游戏 → 大区 → 区服组；渠道应用归属游戏，通过绑定关联区服组，公共配置支持环境覆盖。</p>
         <el-alert title="管理后台没有登录和账号权限，必须通过内网或受控网关限制访问。"
                   type="warning" show-icon :closable="false" />
       </main>
