@@ -14,10 +14,13 @@ func (h *api) channelApps(w http.ResponseWriter,r *http.Request) {
 	respond(w,out,err)
 }
 
-func (h *api) channelAppBindings(w http.ResponseWriter,r *http.Request) {
-	appID,err:=id(r); if err!=nil || appID<=0 { respond(w,nil,ErrInvalid); return }
-	out,err:=h.reader.ChannelAppBindings(r.Context(),appID)
-	respond(w,out,err)
+// serverGroupOptions 返回指定游戏和环境中可选择的区服组。
+func (h *api) serverGroupOptions(w http.ResponseWriter,r *http.Request) {
+    gameID,err:=param(r,"gameId",-1)
+    env:=r.URL.Query().Get("envType")
+    if err!=nil || gameID<=0 { respond(w,nil,ErrInvalid);return }
+    out,err:=h.reader.ServerGroupOptions(r.Context(),gameID,env,r.URL.Query().Get("keyword"))
+    respond(w,out,err)
 }
 
 func (h *api) createChannelApp(w http.ResponseWriter,r *http.Request) {
@@ -41,30 +44,6 @@ func (h *api) deleteChannelApp(w http.ResponseWriter,r *http.Request) {
 	if err=h.writer.DeleteChannelApp(r.Context(),appID); err!=nil { respond(w,nil,err); return }
 	w.WriteHeader(http.StatusNoContent)
 }
-
-func (h *api) createChannelAppBinding(w http.ResponseWriter,r *http.Request) {
-	appID,err:=id(r); if err!=nil || appID<=0 { respond(w,nil,ErrInvalid); return }
-	var input model.CreateChannelAppBindingRequest
-	if err=decodeBody(w,r,&input); err!=nil { respond(w,nil,err); return }
-	out,err:=h.writer.CreateChannelAppBinding(r.Context(),appID,input)
-	if err!=nil { respond(w,nil,err); return }
-	writeJSON(w,http.StatusCreated,out)
-}
-
-func (h *api) updateChannelAppBinding(w http.ResponseWriter,r *http.Request) {
-	bindingID,err:=id(r); if err!=nil || bindingID<=0 { respond(w,nil,ErrInvalid); return }
-	var input model.UpdateChannelAppBindingRequest
-	if err=decodeBody(w,r,&input); err!=nil { respond(w,nil,err); return }
-	out,err:=h.writer.UpdateChannelAppBinding(r.Context(),bindingID,input)
-	respond(w,out,err)
-}
-
-func (h *api) deleteChannelAppBinding(w http.ResponseWriter,r *http.Request) {
-	bindingID,err:=id(r); if err!=nil || bindingID<=0 { respond(w,nil,ErrInvalid); return }
-	if err=h.writer.DeleteChannelAppBinding(r.Context(),bindingID); err!=nil { respond(w,nil,err); return }
-	w.WriteHeader(http.StatusNoContent)
-}
-
 
 // serverGroupBindings 查询当前区服组已绑定的渠道应用，供工作台直接管理。
 func (h *api) serverGroupBindings(w http.ResponseWriter, r *http.Request) {

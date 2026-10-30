@@ -40,7 +40,7 @@ type Reader interface {
 	Snapshot(context.Context) (Snapshot, error)
 	Subscribers(context.Context) ([]Subscriber, error)
 	ChannelApps(context.Context,int64) ([]model.ChannelApp,error)
-	ChannelAppBindings(context.Context,int64) ([]model.ChannelAppBinding,error)
+	ServerGroupOptions(context.Context,int64,string,string) ([]model.ServerGroupOption,error)
 	ServerGroupBindings(context.Context,int64) ([]model.ServerGroupBinding,error)
 }
 
@@ -53,9 +53,6 @@ type Writer interface {
 	CreateChannelApp(context.Context,model.CreateChannelAppRequest) (model.ChannelApp,error)
 	UpdateChannelApp(context.Context,int64,model.UpdateChannelAppRequest) (model.ChannelApp,error)
 	DeleteChannelApp(context.Context,int64) error
-	CreateChannelAppBinding(context.Context,int64,model.CreateChannelAppBindingRequest) (model.ChannelAppBinding,error)
-	UpdateChannelAppBinding(context.Context,int64,model.UpdateChannelAppBindingRequest) (model.ChannelAppBinding,error)
-	DeleteChannelAppBinding(context.Context,int64) error
 }
 
 // api 保存 HTTP 路由处理所需的读写依赖。
@@ -95,8 +92,8 @@ func router(reader Reader, writer Writer) http.Handler {
 	r.Get("/api/config/admin/nodes/{id}", h.node)
 	r.Get("/api/config/admin/subscribers", h.subscribers)
 	r.Get("/api/config/admin/channel-apps",h.channelApps)
-	r.Get("/api/config/admin/channel-apps/{id}/bindings",h.channelAppBindings)
-	r.Get("/api/config/admin/server-groups/{id}/channel-app-bindings",h.serverGroupBindings)
+	r.Get("/api/config/admin/channel-apps/server-groups",h.serverGroupOptions)
+    r.Get("/api/config/admin/server-groups/{id}/channel-apps",h.serverGroupBindings)
 	r.Get("/api/config/nodes/{id}", h.node)
 	r.Post("/api/config/nodes/batch-get", h.batch)
 	r.Get("/api/config/sync/revision", h.revision)
@@ -111,9 +108,6 @@ func router(reader Reader, writer Writer) http.Handler {
 		r.Post("/api/config/admin/channel-apps",h.createChannelApp)
 		r.Put("/api/config/admin/channel-apps/{id}",h.updateChannelApp)
 		r.Delete("/api/config/admin/channel-apps/{id}",h.deleteChannelApp)
-		r.Post("/api/config/admin/channel-apps/{id}/bindings",h.createChannelAppBinding)
-		r.Put("/api/config/admin/channel-app-bindings/{id}",h.updateChannelAppBinding)
-		r.Delete("/api/config/admin/channel-app-bindings/{id}",h.deleteChannelAppBinding)
 	}
 	return r
 }
