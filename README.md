@@ -71,3 +71,7 @@ npm run dev
 **安全注意：** 管理接口没有账号权限系统，必须部署在可信内网或受保护网关。数据库迁移包含非事务性 MySQL DDL；升级旧库时必须先备份，失败后按照日志检查并恢复，不可盲目重试。
 
 更多信息：[部署说明](docs/deployment.md) · [系统架构](docs/architecture.md) · [CI 回归](docs/ci.md)。
+
+## 优雅停服与服务管理
+
+三个 Go 服务统一响应 Ctrl+C 和 SIGTERM，接到停机信号后会切换就绪状态，等待已有 HTTP 请求完成，并等待配置同步 / Webhook 后台任务退出。Linux 生产环境推荐使用 systemd 管理服务，集群采用先摘流量再滚动更新的流程。详见 [优雅停机与启停管理](docs/graceful-shutdown.md)。
