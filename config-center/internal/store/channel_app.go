@@ -110,9 +110,35 @@ func (s *Store) ChannelAppBindings(ctx context.Context, appID int64) ([]model.Ch
 	if err != nil { return nil,err }
 	found,err := bindings(ctx,s.DB,appID)
 	if err != nil { return nil,err }
+	// 批量补齐可读的区服组路径，前端不再对每条绑定单独查询节点。
+	metaRows, err := s.DB.QueryContext(ctx, `SELECT b.server_group_id,g.name,r.name,r.env_type
+		FROM config_channel_app_binding b
+		JOIN config_node g ON g.id=b.server_group_id
+		JOIN config_node r ON r.id=g.region_id
+		WHERE b.channel_app_id=?`, appID)
+	if err != nil { return nil,err }
+	type groupMeta struct { group,region string; env *string }
+	meta := make(map[int64]groupMeta)
+	for metaRows.Next() {
+		var groupID int64
+		var groupName, regionName string
+		var env sql.NullString
+		if err = metaRows.Scan(&groupID,&groupName,&regionName,&env); err != nil { break }
+		var envType *string
+		if env.Valid { e := env.String; envType = &e }
+		meta[groupID] = groupMeta{groupName,regionName,envType}
+	}
+	if err == nil { err = metaRows.Err() }
+	metaRows.Close()
+	if err != nil { return nil,err }
 	for i := range found {
 		found[i].EffectiveConfig,err = MergeChannelConfig(a.Config,found[i].Config)
 		if err != nil { return nil,err }
+		if m,ok:=meta[found[i].ServerGroupID]; ok {
+			found[i].ServerGroupName=m.group
+			found[i].RegionName=m.region
+			found[i].RegionEnvType=m.env
+		}
 	}
 	return found,nil
 }
