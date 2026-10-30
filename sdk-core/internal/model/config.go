@@ -20,6 +20,7 @@ type ChannelApp struct {
     Code string
     Name string
     GameCode string
+    GameConfig json.RawMessage
     Config json.RawMessage
 }
 

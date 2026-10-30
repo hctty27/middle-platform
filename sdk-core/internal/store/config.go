@@ -29,6 +29,7 @@ SELECT
     a.name,
     a.config,
     g.code,
+    g.config,
     r.code,
     r.config,
     sg.code,
@@ -61,7 +62,7 @@ LIMIT 1`
 // Lookup 使用单条 SELECT 获取一致的应用、大区、区服组数据，避免二次查询和显式事务开销。
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp, *model.BoundGroup, error) {
     var app model.ChannelApp
-    var appJSON, regionJSON, groupJSON []byte
+    var appJSON, gameJSON, regionJSON, groupJSON []byte
     group := &model.BoundGroup{}
 
     err := s.db.QueryRowContext(ctx, configQuery, env, env, appID).Scan(
@@ -71,6 +72,7 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
         &app.Name,
         &appJSON,
         &app.GameCode,
+        &gameJSON,
         &group.RegionCode,
         &regionJSON,
         &group.ServerGroupCode,
@@ -84,6 +86,7 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
     }
 
     app.Config = append(json.RawMessage(nil), appJSON...)
+    app.GameConfig = append(json.RawMessage(nil), gameJSON...)
     group.RegionConfig = append(json.RawMessage(nil), regionJSON...)
     group.Config = append(json.RawMessage(nil), groupJSON...)
     return app, group, nil

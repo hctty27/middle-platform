@@ -51,7 +51,7 @@ func TestLookupMySQL(t *testing.T) {
             review_server_group_id BIGINT NULL
         ) ENGINE=InnoDB`,
         `INSERT INTO config_node (id,node_type,code,status,config,game_id,region_id,env_type) VALUES
-            (1,'game','game1001',1,'{}',NULL,NULL,NULL),
+            (1,'game','game1001',1,'{"gameKey":"main","login":{"sdk":{"enabled":true}}}',NULL,NULL,NULL),
             (2,'region','region-prod',1,'{"regionKey":"prod","login":{"url":"https://prod.example.com"}}',1,NULL,'prod'),
             (3,'region','region-test',1,'{"regionKey":"test"}',1,NULL,'test'),
             (4,'region','region-review',1,'{"regionKey":"review"}',1,NULL,'review'),
@@ -89,6 +89,9 @@ func TestLookupMySQL(t *testing.T) {
             if !jsonHasRegionKey(group.RegionConfig,tc.regionKey) {
                 t.Fatalf("region config mismatch: %s",group.RegionConfig)
             }
+            var gameConfig map[string]any
+            if err := json.Unmarshal(app.GameConfig,&gameConfig);err!=nil { t.Fatal(err) }
+            if gameConfig["gameKey"]!="main" { t.Fatalf("unexpected game JSON: %s",app.GameConfig) }
             if len(group.Config)==0 { t.Fatal("missing server group JSON") }
         })
     }

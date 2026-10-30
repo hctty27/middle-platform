@@ -60,7 +60,6 @@ func TestRejectsInvalidMapping(t *testing.T) {
     cases:=[]string{
         "{}", "[]", `{"GET /a":{}}`,
         `{"GET /a":{"a":"sql.select"}}`,
-        `{"GET /a":{"a":"channel_app.config"}}`,
         `{"GET /a":{"a":"channel_app.config..key"}}`,
         `{"GET /a":{"a":"channel_app.password"}}`,
         `{"GET /a":{"a":""}}`,
@@ -193,5 +192,45 @@ func TestRegionConfigMapping(t *testing.T) {
     }
     if !reflect.DeepEqual(got, want) {
         t.Fatalf("got %+v, want %+v", got, want)
+    }
+}
+
+func TestGameConfigNestedAndFullObjectMapping(t *testing.T) {
+    resolver, err := Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "gameCode": "game.code",
+            "gameName": "game.config.name",
+            "nestedValue": "game.config.settings.login.url",
+            "wholeGame": "game.config",
+            "wholeRegion": "region.config",
+            "wholeServerGroup": "server_group.config",
+            "wholeChannelApp": "channel_app.config",
+            "missing": "game.config.settings.optional"
+        }
+    }`))
+    if err != nil { t.Fatal(err) }
+
+    game, err := DecodeObject([]byte(`{
+        "name": "demo",
+        "settings": {"login": {"url": "https://game.example.com"}},
+        "maxCount": 9007199254740993
+    }`))
+    if err != nil { t.Fatal(err) }
+
+    got, err := resolver.Resolve(RouteCoreConfig, map[string]any{
+        "game": map[string]any{"code": "game001", "config": game},
+        "region": map[string]any{"config": map[string]any{"enabled": true}},
+        "server_group": map[string]any{"config": map[string]any{"zone": "zone1"}},
+        "channel_app": map[string]any{"config": map[string]any{}},
+    })
+    if err != nil { t.Fatal(err) }
+    if got["gameName"]!="demo" || got["nestedValue"]!="https://game.example.com" ||
+        got["gameCode"]!="game001" || !reflect.DeepEqual(got["wholeGame"],game) {
+        t.Fatalf("unexpected mapped values: %+v",got)
+    }
+    if _,ok:=got["missing"];ok { t.Fatal("missing game config field should be omitted") }
+    if _,ok:=got["wholeChannelApp"].(map[string]any); !ok { t.Fatal("whole config must be JSON object") }
+    if got["wholeGame"].(map[string]any)["maxCount"]!=json.Number("9007199254740993") {
+        t.Fatal("JSON numeric precision lost")
     }
 }

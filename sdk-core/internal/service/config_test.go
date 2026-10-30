@@ -37,7 +37,7 @@ func TestGetUsesGlobalMappingRegardlessOfEnvironment(t *testing.T) {
         f:=&fakeReader{
             app:model.ChannelApp{
                 Code:"huawei_10001",Name:"Huawei",GameCode:"game_1",
-                Config:json.RawMessage(`{"tsKey":"ts-123","enabled":true}`),
+                GameConfig: json.RawMessage("{}"), Config:json.RawMessage(`{"tsKey":"ts-123","enabled":true}`),
             },
             group:&model.BoundGroup{
                 RegionCode:"r1",RegionConfig:json.RawMessage("{}"),ServerGroupCode:"s-"+env,Config:json.RawMessage("{}"),
@@ -60,7 +60,7 @@ func TestGetRejectsUnboundEnvironment(t *testing.T) {
 func TestGetRejectsInvalidOrMissingConfig(t *testing.T) {
     for _,appConfig:=range []string{"null", "[]", "invalid"} {
         f:=&fakeReader{
-            app:model.ChannelApp{Code:"a1",Config:json.RawMessage(appConfig)},
+            app:model.ChannelApp{Code:"a1",GameConfig:json.RawMessage("{}"),Config:json.RawMessage(appConfig)},
             group:&model.BoundGroup{ServerGroupCode:"g1",RegionConfig:json.RawMessage("{}"),Config:json.RawMessage("{}")},
         }
         _,err:=serviceWithReader(t,f).Get(context.Background(),"prod","a1")
@@ -74,7 +74,7 @@ func TestGetOmitsUnsetOptionalMappingFields(t *testing.T) {
         `{"tsKey":null}`,
     } {
         f := &fakeReader{
-            app: model.ChannelApp{Code: "app1001", Config: json.RawMessage(config)},
+            app: model.ChannelApp{Code: "app1001", GameConfig: json.RawMessage("{}"), Config: json.RawMessage(config)},
             group: &model.BoundGroup{
                 ServerGroupCode: "group1001",
                 RegionConfig: json.RawMessage("{}"),
@@ -120,7 +120,7 @@ func TestGetRegionConfigMappingWithoutCodeChanges(t *testing.T) {
     if err != nil { t.Fatal(err) }
 
     f := &fakeReader{
-        app: model.ChannelApp{Code: "app1001", Config: json.RawMessage("{}")},
+        app: model.ChannelApp{Code: "app1001", GameConfig: json.RawMessage("{}"), Config: json.RawMessage("{}")},
         group: &model.BoundGroup{
             RegionCode: "region1001",
             RegionConfig: json.RawMessage(`{"regionKey":"r1001","login":{"url":"https://example.com"}}`),
@@ -138,4 +138,53 @@ func TestGetRegionConfigMappingWithoutCodeChanges(t *testing.T) {
     if !reflect.DeepEqual(got, want) {
         t.Fatalf("got %+v, want %+v", got, want)
     }
+}
+
+func TestGetGameConfigNestedMapping(t *testing.T) {
+    resolver, err := mapping.Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "gameConfig": "game.config",
+            "gameTitle": "game.config.title",
+            "regionConfig": "region.config",
+            "missing": "game.config.doesNotExist"
+        }
+    }`))
+    if err != nil { t.Fatal(err) }
+
+    f := &fakeReader{
+        app: model.ChannelApp{
+            Code: "app1001",
+            GameCode: "game1001",
+            GameConfig: json.RawMessage(`{"title":"Game","online":true}`),
+            Config: json.RawMessage("{}"),
+        },
+        group: &model.BoundGroup{
+            RegionConfig: json.RawMessage(`{"regionId":"r1"}`),
+            Config: json.RawMessage("{}"),
+        },
+    }
+    got, err := NewConfigService(f,resolver).Get(context.Background(),"prod","app1001")
+    if err != nil { t.Fatal(err) }
+    want := map[string]any{
+        "gameConfig": map[string]any{"title":"Game","online":true},
+        "gameTitle": "Game",
+        "regionConfig": map[string]any{"regionId":"r1"},
+    }
+    if !reflect.DeepEqual(got,want) { t.Fatalf("got %+v; want %+v",got,want) }
+}
+
+func TestGetRejectsMalformedGameConfig(t *testing.T) {
+    f := &fakeReader{
+        app: model.ChannelApp{
+            Code: "app1001",
+            GameConfig: json.RawMessage("invalid"),
+            Config: json.RawMessage("{}"),
+        },
+        group: &model.BoundGroup{
+            RegionConfig: json.RawMessage("{}"),
+            Config: json.RawMessage("{}"),
+        },
+    }
+    _,err := serviceWithReader(t,f).Get(context.Background(),"prod","app1001")
+    if !errors.Is(err,model.ErrInvalidConfig) { t.Fatalf("expected invalid game JSON: %v",err) }
 }
