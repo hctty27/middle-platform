@@ -243,11 +243,14 @@ def main():
     assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["10", "0"]
     mysql("UPDATE config_migration.config_channel_app_binding SET status=1 WHERE channel_app_id=105")
 
+    # 校验唯一环境下的历史覆盖字段能上升为公共配置。
+    mysql("""UPDATE config_migration.config_channel_app_binding
+        SET config='{"sdkKey":"live"}' WHERE channel_app_id=105""")
     # V11 安全收敛：唯一旧环境绑定的有效 JSON 迁入应用公共配置。
     migrate(11)
     assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["11", "0"]
     assert mysql("SELECT prod_server_group_id FROM config_migration.config_channel_app WHERE id=105") == "103"
-    assert mysql("SELECT JSON_EXTRACT(config, '$') FROM config_migration.config_channel_app WHERE id=105") != "{}"
+    assert mysql("SELECT JSON_UNQUOTE(JSON_EXTRACT(config, '$.sdkKey')) FROM config_migration.config_channel_app WHERE id=105") == "live"
     assert mysql("""SELECT COUNT(*) FROM information_schema.tables
         WHERE table_schema='config_migration' AND table_name='config_channel_app_binding'""") == "0"
     migrate(11)
