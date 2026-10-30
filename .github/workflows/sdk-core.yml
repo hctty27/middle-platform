@@ -15,6 +15,21 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: sdk-core-test
+          MYSQL_DATABASE: sdk_core_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -psdk-core-test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=25
+    env:
+      TEST_SDK_CORE_DB_DSN: root:sdk-core-test@tcp(127.0.0.1:3306)/sdk_core_test?parseTime=true&loc=UTC
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
