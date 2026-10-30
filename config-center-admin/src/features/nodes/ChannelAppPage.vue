@@ -42,7 +42,7 @@ const filteredApps = computed(() => apps.value.filter(app =>
   (app.name + app.code).toLowerCase().includes(appSearch.value.trim().toLowerCase())))
 const filteredBindings = computed(() => bindings.value.filter(item =>
   (!envFilter.value || item.regionEnvType === envFilter.value) &&
-  (item.regionName + item.serverGroupName + item.serverGroupId).toLowerCase().includes(bindingSearch.value.trim().toLowerCase())))
+  ((item.regionName ?? '') + (item.serverGroupName ?? '') + item.serverGroupId).toLowerCase().includes(bindingSearch.value.trim().toLowerCase())))
 let appSequence = 0
 let bindingSequence = 0
 let groupSequence = 0
