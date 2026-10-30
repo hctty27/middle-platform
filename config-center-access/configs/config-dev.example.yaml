@@ -1,0 +1,4 @@
+database:
+  dsn: 'root:local-dev-only@tcp(127.0.0.1:3306)/config_access?parseTime=true&loc=UTC'
+webhook:
+  secret: 'local-dev-example-only-change-me'
