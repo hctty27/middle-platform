@@ -21,6 +21,7 @@ import (
 	"github.com/hctty27/middle-platform/config-center/internal/service"
 )
 
+// TestWriteValidation 验证创建与更新请求的基础业务约束。
 func TestWriteValidation(t *testing.T) {
 	status := 1
 	for _, n := range []CreateNodeRequest{
@@ -41,6 +42,7 @@ func TestWriteValidation(t *testing.T) {
 	}
 }
 
+// TestWebhookSignature 验证回调消息签名遵循约定的 HMAC 协议。
 func TestWebhookSignature(t *testing.T) {
 	const secret = "integration-secret"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +70,7 @@ func TestWebhookSignature(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 }
 
+// TestDatabaseWriteAndWebhookIntegration 覆盖节点写入、版本递增及回调投递的数据库集成流程。
 func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	raw := os.Getenv("TEST_CONFIG_DB_DSN")
 	if raw == "" { t.Skip("TEST_CONFIG_DB_DSN not set") }

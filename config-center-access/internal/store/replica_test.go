@@ -6,6 +6,7 @@ import (
     "github.com/hctty27/middle-platform/config-center-access/internal/remote"
 )
 
+// TestValidateNodeEnvironment 验证副本节点只允许大区设置合法的环境类型。
 func TestValidateNodeEnvironment(t *testing.T) {
     now := time.Now().UTC().Format("2006-01-02T15:04:05.999999")
     env := "review"

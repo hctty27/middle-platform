@@ -24,6 +24,7 @@ func (t LocalDateTime) MarshalJSON() ([]byte, error) {
 type Node struct {
 	ID            int64         `json:"id"`
 	NodeType      string        `json:"nodeType"`
+	// EnvType 仅大区节点使用：test 测试、review 提审、production 正式。
 	EnvType       *string       `json:"envType"`
 	GameID        *int64        `json:"gameId"`
 	RegionID      *int64        `json:"regionId"`
@@ -35,6 +36,7 @@ type Node struct {
 	Remark        *string       `json:"remark"`
 	CreatedAt     LocalDateTime `json:"createdAt"`
 	UpdatedAt     LocalDateTime `json:"updatedAt"`
+	// ParentID 是基于祖先 ID 推导出的接口字段，不单独作为数据库关系列维护。
 	ParentID      int64         `json:"parentId"`
 }
 
@@ -52,6 +54,7 @@ func (n Node) Parent() int64 {
 	}
 }
 
+// value 将可空祖先 ID 转换为接口所需的整数，空值表示根层级。
 func value(id *int64) int64 {
 	if id == nil {
 		return 0
@@ -68,6 +71,7 @@ type NodeSummary struct {
 	Code     string `json:"code"`
 	Name     string `json:"name"`
 	Status   int    `json:"status"`
+	// Leaf 服务于管理端懒加载目录，不代表配置数据库中一定不存在更低层级。
 	Leaf     bool   `json:"leaf"`
 }
 

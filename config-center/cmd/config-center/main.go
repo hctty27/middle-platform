@@ -1,3 +1,4 @@
+// 配置中心服务进程入口：不承载业务逻辑，初始化和生命周期统一由 app.Run 负责。
 package main
 
 import (

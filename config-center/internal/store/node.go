@@ -9,8 +9,10 @@ import (
 	"time"
 )
 
+// 节点查询统一列顺序，必须与 scanNode 的扫描字段严格保持一致。
 const nodeColumns = "id,node_type,game_id,region_id,server_group_id,env_type,code,name,status,config,remark,created_at,updated_at"
 
+// queryer 让普通连接与事务共用同一套节点读取实现。
 type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	QueryRowContext(context.Context, string, ...any) *sql.Row
@@ -64,6 +66,7 @@ func (s *Store) Nodes(ctx context.Context) ([]Node, error) {
 	return nodes(ctx, s.DB, "SELECT "+nodeColumns+" FROM config_node ORDER BY id")
 }
 
+// Node 根据主键查询完整节点；不存在时由上层统一转换为 HTTP 错误。
 func (s *Store) Node(ctx context.Context, id int64) (Node, error) {
 	if id <= 0 { return Node{}, ErrInvalid }
 	return scanNode(s.DB.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
@@ -148,6 +151,7 @@ func (s *Store) Children(ctx context.Context, parentID int64, page, size int, ke
 	return NodePage{Items: out, Total: total, Page: page, Size: size}, nil
 }
 
+// escaped 转义 LIKE 模糊匹配中的特殊字符，防止用户输入被解释为通配符。
 func escaped(s string) string {
 	return strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(s)
 }

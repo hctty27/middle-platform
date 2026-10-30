@@ -76,6 +76,7 @@ func router(reader Reader, writer Writer) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "UP"})
 	})
+	// 管理查询和接入同步共享同一服务前缀，由 Nginx 在更外层区分业务模块。
 	r.Get("/api/config/admin/nodes", h.list)
 	r.Get("/api/config/admin/nodes/tree", h.tree)
 	r.Get("/api/config/admin/nodes/children", h.children)
@@ -89,6 +90,7 @@ func router(reader Reader, writer Writer) http.Handler {
 	r.Get("/api/config/sync/revision", h.revision)
 	r.Get("/api/config/sync/changes", h.changes)
 	r.Get("/api/config/sync/snapshot", h.snapshot)
+	// 仅当运行实例显式提供写依赖时注册管理写接口。
 	if writer != nil {
 		r.Post("/api/config/admin/nodes", h.create)
 		r.Put("/api/config/admin/nodes/{id}", h.update)

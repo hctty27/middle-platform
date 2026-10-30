@@ -7,6 +7,7 @@ import (
 	"github.com/hctty27/middle-platform/config-center/internal/model"
 )
 
+// 复用领域层错误标识，使 HTTP 层能统一映射非法参数响应。
 var ErrInvalid = model.ErrInvalid
 
 // ValidateNode 验证节点名称、状态、JSON 配置及备注长度。
@@ -44,6 +45,7 @@ func ValidateEnvType(nodeType string, envType *string) error {
         return nil
     }
     if envType == nil { return ErrInvalid }
+    // 环境用途使用稳定的英文协议值，展示文本由管理端映射为中文。
     switch *envType {
     case "test", "review", "production": return nil
     default: return ErrInvalid

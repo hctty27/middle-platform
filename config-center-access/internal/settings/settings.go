@@ -57,6 +57,7 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+// value 读取可选环境变量，未配置时保留开发默认值。
 func value(name, fallback string) string {
 	if v := os.Getenv(name); v != "" {
 		return v
@@ -64,6 +65,7 @@ func value(name, fallback string) string {
 	return fallback
 }
 
+// millis 将毫秒参数转换为 duration，并拒绝不合理的超时值。
 func millis(name string, fallback int) (time.Duration, error) {
 	raw := value(name, strconv.Itoa(fallback))
 	ms, err := strconv.Atoi(raw)

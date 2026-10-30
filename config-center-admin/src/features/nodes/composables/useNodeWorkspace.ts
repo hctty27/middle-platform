@@ -5,6 +5,10 @@ import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch, RegionEnvT
 import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
 import type { LoadFunction } from 'element-plus'
 
+/**
+ * useNodeWorkspace 集中管理配置树、搜索、分页、节点编辑及刷新动作。
+ * 通过请求取消和递增序号避免快速切换节点时旧响应覆盖新状态。
+ */
 export function useNodeWorkspace(emit: (event: 'changed') => void) {
 const labels: Record<NodeType, string> = {
   game: '游戏', region: '大区', server_group: '区服组', channel_app: '渠道应用'
@@ -49,6 +53,7 @@ const editorTitle = computed(() => creating.value ? '新增' + labels[form.nodeT
 let originalForm = ''
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let childTimer: ReturnType<typeof setTimeout> | undefined
+// 异步请求序号与 AbortController 配合，确保最后一次用户操作拥有更新权。
 let searchSequence = 0
 let detailSequence = 0
 let childSequence = 0
@@ -98,6 +103,7 @@ function closeEditor() {
   void beforeDrawerClose(() => { drawerVisible.value = false })
 }
 
+// Element Plus 懒加载仅查询当前目录的直接子节点，避免全量构建大树。
 const loadTree: LoadFunction = async (node, resolve, reject) => {
   const parentId = node.level === 0 ? 0 : (node.data as NodeSummary).id
   try {
@@ -112,6 +118,7 @@ const loadTree: LoadFunction = async (node, resolve, reject) => {
 function onExpand(node: NodeSummary) {
   if (!expandedKeys.value.includes(node.id)) expandedKeys.value = [...expandedKeys.value, node.id]
 }
+// 收起父节点时同步移除已展开的后代标记，避免下次刷新错误恢复展开状态。
 function onCollapse(node: NodeSummary) {
   const collapsedKeys = new Set<number>([node.id])
   const descendants = [...(treeRef.value?.getNode(node.id)?.childNodes ?? [])]
@@ -124,6 +131,7 @@ function onCollapse(node: NodeSummary) {
   expandedKeys.value = expandedKeys.value.filter(id => !collapsedKeys.has(id))
 }
 
+// 重建树后恢复展开路径和滚动位置，避免用户刷新后丢失浏览上下文。
 async function reloadTree() {
   const scrollTop = treeScrollRef.value?.scrollTop ?? 0
   restoredExpandedKeys.value = [...expandedKeys.value]
@@ -147,6 +155,7 @@ async function refreshTreeParent(parentId: number) {
   }
 }
 
+// 全局检索与目录懒加载相互独立，并忽略过期搜索结果。
 async function searchAll() {
   const keyword = searchWord.value.trim()
   const sequence = ++searchSequence
@@ -181,6 +190,7 @@ function onSearchInput() {
   searchTimer = setTimeout(() => void searchAll(), 250)
 }
 
+// 直属子项独立分页；用户切换节点时取消上一节点的请求。
 async function loadChildren() {
   const node = selected.value
   const sequence = ++childSequence
@@ -266,6 +276,7 @@ function onPageChange(page: number) {
   void loadChildren()
 }
 
+// 详情加载按序号校验，防止快速点击不同节点后编辑抽屉显示错误数据。
 async function openEditor(node: NodeSummary) {
   if (!(await confirmDiscard())) return
   ++detailSequence
@@ -302,6 +313,7 @@ async function openCreate(parent: NodeSummary | null) {
   drawerVisible.value = true
 }
 
+// 保存后局部刷新受影响的父目录和子项列表，不强制重新请求整棵树。
 async function save() {
   if (saving.value) return
   if (form.nodeType === 'region' && !form.envType) {

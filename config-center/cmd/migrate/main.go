@@ -11,8 +11,10 @@ import (
  "github.com/hctty27/middle-platform/config-center/internal/migration"
 )
 
+// main 解析迁移目标版本和旧库升级开关，独立运行 Go 数据库迁移。
 func main() {
  target := flag.Int("target", migration.Latest, "schema version to migrate to (1..4)")
+ // 旧版结构迁移可能改变数据布局，必须显式开启，不能默认用于生产库。
  allowLegacy := flag.Bool("allow-legacy-upgrade", false, "permit upgrading pre-V4 legacy databases")
  flag.Parse()
  dsn := os.Getenv("CONFIG_DB_DSN")

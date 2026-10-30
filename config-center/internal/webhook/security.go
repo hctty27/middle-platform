@@ -14,6 +14,7 @@ import (
 
 var ErrInvalid = model.ErrInvalid
 
+// webhookLookup 可注入域名解析器，用于测试真实连接目标的安全校验。
 type webhookLookup func(context.Context, string) ([]net.IPAddr, error)
 
 // forbiddenWebhookRanges 保存回调目标禁止使用的特殊网络地址段。
@@ -42,7 +43,7 @@ func permittedWebhookIP(host string, address netip.Addr) bool {
 		if block.Contains(address) { return false }
 	}
 
-	// Local development and explicit private IP callbacks remain supported.
+	// 显式配置的本地回调地址仍可使用环回 IP，但必须经过主机白名单检查。
 	if strings.EqualFold(host, "localhost") { return address.IsLoopback() }
 	if literal, err := netip.ParseAddr(host); err == nil {
 		return literal.Unmap() == address
@@ -59,7 +60,7 @@ func webhookHostAllowed(host, allowed string) bool {
 	return false
 }
 
-// The checked address is also the address dialed; there is no second DNS lookup.
+// 校验与实际建连使用同一解析结果，避免第二次 DNS 解析引入重绑定攻击。
 // secureWebhookDial 校验解析 IP 并直接连接该 IP，避免 DNS 重绑定。
 func secureWebhookDial(allowedHosts string, lookup webhookLookup) func(context.Context, string, string) (net.Conn, error) {
 	if lookup == nil { lookup = net.DefaultResolver.LookupIPAddr }

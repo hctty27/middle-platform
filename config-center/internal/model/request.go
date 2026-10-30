@@ -4,6 +4,7 @@ package model
 type CreateNodeRequest struct {
 	ParentID int64   `json:"parentId"`
 	NodeType string  `json:"nodeType"`
+	// 只有创建大区时允许设置环境类型，其他层级必须为空。
 	EnvType  *string `json:"envType"`
 	Code     string  `json:"code"`
 	Name     string  `json:"name"`
@@ -14,6 +15,7 @@ type CreateNodeRequest struct {
 
 // UpdateNodeRequest 定义修改节点允许更新的字段。
 type UpdateNodeRequest struct {
+	// 环境分类由服务端执行节点类型与修改约束校验。
 	EnvType *string `json:"envType"`
 	Name   string  `json:"name"`
 	Status *int    `json:"status"`
@@ -25,5 +27,6 @@ type UpdateNodeRequest struct {
 type CreateSubscriberRequest struct {
 	Code        string `json:"code"`
 	CallbackURL string `json:"callbackUrl"`
+	// 回调密钥只用于服务端签名，不应通过查询接口返回。
 	Secret      string `json:"secret"`
 }
