@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const nodeColumns = "id,node_type,game_id,region_id,server_group_id,code,name,status,config,remark,created_at,updated_at"
+const nodeColumns = "id,node_type,game_id,region_id,server_group_id,env_type,code,name,status,config,remark,created_at,updated_at"
 
 type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -29,15 +29,16 @@ func (s *Store) Ready(ctx context.Context) error { return s.DB.PingContext(ctx) 
 func scanNode(scanner interface{ Scan(...any) error }) (Node, error) {
 	var n Node
 	var game, region, group sql.NullInt64
-	var remark sql.NullString
+	var remark, envType sql.NullString
 	var created, updated time.Time
-	err := scanner.Scan(&n.ID, &n.NodeType, &game, &region, &group, &n.Code, &n.Name, &n.Status, &n.Config, &remark, &created, &updated)
+	err := scanner.Scan(&n.ID, &n.NodeType, &game, &region, &group, &envType, &n.Code, &n.Name, &n.Status, &n.Config, &remark, &created, &updated)
 	if err != nil {
 		return Node{}, err
 	}
 	if game.Valid { n.GameID = &game.Int64 }
 	if region.Valid { n.RegionID = &region.Int64 }
 	if group.Valid { n.ServerGroupID = &group.Int64 }
+	if envType.Valid { n.EnvType = &envType.String }
 	if remark.Valid { n.Remark = &remark.String }
 	n.CreatedAt, n.UpdatedAt = LocalDateTime(created), LocalDateTime(updated)
 	n.ParentID = n.Parent()
@@ -115,12 +116,21 @@ func (s *Store) Tree(ctx context.Context, parentID int64) ([]NodeSummary, error)
 }
 
 // Children 分页查询直接子项并支持搜索过滤。
-func (s *Store) Children(ctx context.Context, parentID int64, page, size int, keyword string) (NodePage, error) {
+func (s *Store) Children(ctx context.Context, parentID int64, page, size int, keyword, envType string) (NodePage, error) {
 	if page < 1 || size < 1 || size > 100 || len([]rune(strings.TrimSpace(keyword))) > 128 {
 		return NodePage{}, ErrInvalid
 	}
 	condition, args, err := s.scope(ctx, parentID)
-	if err != nil { return NodePage{}, err }
+    if err != nil { return NodePage{}, err }
+    if envType != "" {
+        switch envType {
+        case "test", "review", "production":
+        default: return NodePage{}, ErrInvalid
+        }
+        if parentID == 0 { return NodePage{}, ErrInvalid }
+        condition += " AND n.node_type='region' AND n.env_type=?"
+        args = append(args, envType)
+    }
 	if word := strings.TrimSpace(keyword); word != "" {
 		condition += " AND (n.name LIKE ? ESCAPE '!' OR n.code LIKE ? ESCAPE '!')"
 		pattern := "%" + escaped(word) + "%"

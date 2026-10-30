@@ -49,7 +49,7 @@ func (h *api) page(w http.ResponseWriter, r *http.Request, parent int64) {
 	size, err := param(r, "size", 20)
 	if err != nil { respond(w, nil, err); return }
 	if p < 1 || p > 1_000_000_000 || size < 1 || size > 100 { respond(w, nil, ErrInvalid); return }
-	out, err := h.reader.Children(r.Context(), parent, int(p), int(size), r.URL.Query().Get("keyword"))
+	out, err := h.reader.Children(r.Context(), parent, int(p), int(size), r.URL.Query().Get("keyword"), r.URL.Query().Get("envType"))
 	respond(w, out, err)
 }
 

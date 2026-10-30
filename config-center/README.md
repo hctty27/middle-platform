@@ -6,7 +6,7 @@
 
 - `cmd/config-center`：HTTP 服务启动入口。
 - `cmd/migrate`：独立的 MySQL 迁移 CLI。
-- `internal/migration/sql`：内置版本 V1–V4 的权威数据库迁移 SQL。
+- `internal/migration/sql`：内置版本 V1–V5 的权威数据库迁移 SQL。
 - `internal/app`：数据库连接、迁移初始化、HTTP 服务、优雅退出。
 - `internal/settings`：环境变量。
 - `internal/api`：HTTP 接口。
@@ -31,7 +31,7 @@ export CONFIG_GO_ENABLE_WEBHOOK=true
 go run ./cmd/config-center
 ```
 
-启动时自动检查并更新数据库结构，首次空库执行 V1→V4。也可在服务启动前单独运行：
+启动时自动检查并更新数据库结构，首次空库执行 V1→V5。也可在服务启动前单独运行：
 
 ```bash
 go run ./cmd/migrate
@@ -39,11 +39,11 @@ go run ./cmd/migrate
 
 ## 旧数据库安全升级
 
-- 如果数据库已有 V4 版本的历史迁移记录，会安全识别旧状态并建立 Go 迁移游标，不重复创建节点表。
+- 如果数据库已有 V4 版本的历史迁移记录，会识别并追加非破坏性的 V5，不重复创建节点表。
 - 对历史 V1–V3，程序默认拒绝自动升级，因为 V4 会删除旧渠道层级；先停写、备份并核对重复 Code。
 - 确认后使用 `go run ./cmd/migrate -allow-legacy-upgrade`（或启动服务时设置 `CONFIG_ALLOW_LEGACY_UPGRADE=true`）。
 - MySQL DDL 不是完整事务，迁移失败会标记 `config_schema_migrations.dirty=1`；必须先核查和恢复数据库，不允许自动重跑半完成的 DDL。
-- 新状态记录在 `config_schema_migrations`，不会修改历史迁移记录。对于已有 V4 的数据库，会验证四级节点列、订阅 epoch 字段和归档表。
+- 新状态记录在 `config_schema_migrations`，不会修改历史迁移记录。对于已有 V4 的数据库，会验证四级节点列、环境类型字段、订阅 epoch 字段和归档表。
 - 升级所有配置中心实例前，请先备份并停止旧写入实例。
 
 ## 配置
@@ -65,4 +65,11 @@ go vet ./...
 go build ./cmd/config-center ./cmd/migrate
 ```
 
-CI 会用 MySQL 8.4 检验全新建库、V1→V4 迁移、历史配置保留、双实例同步和 Go 接入端 Webhook。
+CI 会用 MySQL 8.4 检验全新建库、V1→V5 迁移、历史配置保留、双实例同步和 Go 接入端 Webhook。
+
+## 大区环境类型
+
+只给大区（`nodeType=region`）增加 `envType`：`test`（测试服）、`review`（提审服）、`production`（正式服）。
+新建大区必须选择类型，其他层级不能设置；已归类大区不能直接切换环境类型。
+已有大区迁移时保持 `NULL`（未分类），需要逐个核对用途并在管理端首次归类。
+迁移 V5 更新 `epoch`，通知接入端重新获取带环境类型的完整快照，保留现有 revision。

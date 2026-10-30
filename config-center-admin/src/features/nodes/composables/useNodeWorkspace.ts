@@ -1,7 +1,7 @@
 import { nextTick, onBeforeUnmount, reactive, ref, computed } from 'vue'
 import axios from 'axios'
 import { nodeApi } from '../../../api/nodeApi'
-import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch } from '../types'
+import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch, RegionEnvType } from '../types'
 import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
 import type { LoadFunction } from 'element-plus'
 
@@ -29,15 +29,17 @@ const childTotal = ref(0)
 const childPage = ref(1)
 const childSize = 20
 const childSearch = ref('')
+const regionFilter = ref<RegionEnvType | ''>('')
 const childrenLoading = ref(false)
 const drawerVisible = ref(false)
 const creating = ref(false)
+const envTypeLocked = ref(false)
 const editorNode = ref<NodeSummary | null>(null)
 const detailLoading = ref(false)
 const saving = ref(false)
 const form = reactive({
   parentId: 0, nodeType: 'game' as NodeType, code: '', name: '',
-  status: 1, config: '{}', remark: ''
+  status: 1, envType: null as RegionEnvType | null, config: '{}', remark: ''
 })
 const nextLabel = computed(() => {
   const type = selected.value && nextType[selected.value.nodeType]
@@ -56,17 +58,19 @@ let detailController: AbortController | undefined
 
 function toSummary(node: NodeRecord): NodeSummary {
   return { id: node.id, parentId: node.parentId, nodeType: node.nodeType,
-    code: node.code, name: node.name, status: node.status,
+    code: node.code, name: node.name, status: node.status, envType: node.envType,
     leaf: ['server_group', 'channel_app'].includes(node.nodeType) }
 }
 
 function resetForm(parentId: number, nodeType: NodeType) {
-  Object.assign(form, { parentId, nodeType, code: '', name: '', status: 1,
+  envTypeLocked.value = false
+  Object.assign(form, { parentId, nodeType, code: '', name: '', status: 1, envType: null,
     config: '{}', remark: '' })
   originalForm = JSON.stringify(form)
 }
 
 function setForm(node: NodeRecord) {
+  envTypeLocked.value = node.nodeType === 'region' && !!node.envType
   Object.assign(form, node, { remark: node.remark ?? '' })
   try { form.config = JSON.stringify(JSON.parse(node.config), null, 2) }
   catch { form.config = node.config }
@@ -191,7 +195,8 @@ async function loadChildren() {
   childController = controller
   childrenLoading.value = true
   try {
-    const result = await nodeApi.getChildren({ parentId: node.id, page: childPage.value, size: childSize, keyword: childSearch.value }, controller.signal)
+    const result = await nodeApi.getChildren({ parentId: node.id, page: childPage.value, size: childSize, keyword: childSearch.value,
+      envType: node.nodeType === 'game' ? regionFilter.value : '' }, controller.signal)
     if (sequence !== childSequence) return
     children.value = result.data.items
     childTotal.value = result.data.total
@@ -212,6 +217,7 @@ async function choose(node: NodeSummary, path: NodeSummary[]) {
   if (childTimer) clearTimeout(childTimer)
   childPage.value = 1
   childSearch.value = ''
+  regionFilter.value = ''
   const tree = treeRef.value
   tree?.setCurrentKey(tree.getNode(node.id) ? node.id : undefined)
   void loadChildren()
@@ -243,6 +249,10 @@ function navigateBreadcrumb(index: number) {
   const path = breadcrumbs.value.slice(0, index + 1)
   const node = path.at(-1)
   if (node) void choose(node, path)
+}
+function onRegionFilterChange() {
+  childPage.value = 1
+  void loadChildren()
 }
 function onChildSearch() {
   if (childTimer) clearTimeout(childTimer)
@@ -294,6 +304,10 @@ async function openCreate(parent: NodeSummary | null) {
 
 async function save() {
   if (saving.value) return
+  if (form.nodeType === 'region' && !form.envType) {
+    ElMessage.warning('请选择大区类型')
+    return
+  }
   if (!form.name.trim() || !form.code.trim()) {
     ElMessage.warning('请填写名称和编码')
     return
@@ -311,7 +325,7 @@ async function save() {
       }
     } else if (editorNode.value) {
       const result = await nodeApi.updateNode(editorNode.value.id, {
-        name: form.name, status: form.status, config: form.config, remark: form.remark
+        name: form.name, status: form.status, config: form.config, remark: form.remark, envType: form.envType
       })
       const summary = toSummary(result.data)
       if (selected.value?.id === summary.id) {
@@ -319,7 +333,7 @@ async function save() {
         breadcrumbs.value = breadcrumbs.value.map(item => item.id === summary.id ? summary : item)
       }
       const cached = treeRef.value?.getNode(summary.id)
-      if (cached) Object.assign(cached.data, { name: summary.name, status: summary.status })
+      if (cached) Object.assign(cached.data, { name: summary.name, status: summary.status, envType: summary.envType })
       await refreshTreeParent(summary.parentId)
       if (selected.value?.id === summary.parentId) await loadChildren()
     }
@@ -387,6 +401,6 @@ onBeforeUnmount(() => {
   detailController?.abort()
 })
   return {
-    labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh
+    labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh
   }
 }

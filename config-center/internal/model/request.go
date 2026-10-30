@@ -4,6 +4,7 @@ package model
 type CreateNodeRequest struct {
 	ParentID int64   `json:"parentId"`
 	NodeType string  `json:"nodeType"`
+	EnvType  *string `json:"envType"`
 	Code     string  `json:"code"`
 	Name     string  `json:"name"`
 	Status   *int    `json:"status"`
@@ -13,6 +14,7 @@ type CreateNodeRequest struct {
 
 // UpdateNodeRequest 定义修改节点允许更新的字段。
 type UpdateNodeRequest struct {
+	EnvType *string `json:"envType"`
 	Name   string  `json:"name"`
 	Status *int    `json:"status"`
 	Config string  `json:"config"`

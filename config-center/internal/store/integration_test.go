@@ -95,9 +95,16 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	enabled := 1
 	game, err := store.Create(ctx, CreateNodeRequest{NodeType: "game", Code: "g1", Name: "Game", Status: &enabled, Config: `{"x":1}`})
 	if err != nil { t.Fatal(err) }
-	region, err := store.Create(ctx, CreateNodeRequest{ParentID: game.ID, NodeType: "region", Code: "r1", Name: "Region", Status: &enabled, Config: "{}"})
+	regionEnv := "test"
+	region, err := store.Create(ctx, CreateNodeRequest{ParentID: game.ID, NodeType: "region", EnvType: &regionEnv, Code: "r1", Name: "Region", Status: &enabled, Config: "{}"})
 	if err != nil { t.Fatal(err) }
-	group, err := store.Create(ctx, CreateNodeRequest{ParentID: region.ID, NodeType: "server_group", Code: "s1", Name: "Group", Status: &enabled, Config: "{}"})
+    if region.EnvType == nil || *region.EnvType != "test" { t.Fatalf("region env not persisted: %+v", region) }
+    filtered, err := store.Children(ctx, game.ID, 1, 20, "", "test")
+    if err != nil || len(filtered.Items) != 1 || filtered.Items[0].EnvType == nil { t.Fatalf("region env filter: %+v, %v", filtered, err) }
+    rejected := "production"
+    _, err = store.Update(ctx, region.ID, UpdateNodeRequest{EnvType: &rejected, Name: region.Name, Status: &enabled, Config: "{}"})
+    if !errorsIs(err, ErrConflict) { t.Fatalf("changing categorized region type should conflict: %v", err) }
+    group, err := store.Create(ctx, CreateNodeRequest{ParentID: region.ID, NodeType: "server_group", Code: "s1", Name: "Group", Status: &enabled, Config: "{}"})
 	if err != nil { t.Fatal(err) }
 	leaf, err := store.Create(ctx, CreateNodeRequest{ParentID: group.ID, NodeType: "channel_app", Code: "a1", Name: "App", Status: &enabled, Config: "{}"})
 	if err != nil { t.Fatal(err) }
@@ -205,11 +212,15 @@ var integrationSchema = []string{
 	`CREATE TABLE config_node (
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		game_id BIGINT NULL,region_id BIGINT NULL,server_group_id BIGINT NULL,
-		node_type VARCHAR(20) NOT NULL,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+		node_type VARCHAR(20) NOT NULL,env_type VARCHAR(16) NULL,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
 		name VARCHAR(128) NOT NULL,status TINYINT NOT NULL DEFAULT 1,config JSON NOT NULL,
 		remark VARCHAR(500),created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
 		CONSTRAINT chk_config_node_type CHECK(node_type IN ('game','region','server_group','channel_app')),
 		CONSTRAINT chk_config_node_status CHECK(status IN(0,1)),
+        CONSTRAINT chk_config_node_env_type CHECK(
+            (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','production')))
+            OR (node_type<>'region' AND env_type IS NULL)
+        ),
 		CONSTRAINT chk_config_node_ancestry CHECK(
 			(node_type='game' AND game_id IS NULL AND region_id IS NULL AND server_group_id IS NULL)
 			OR (node_type='region' AND COALESCE(game_id,0)>0 AND region_id IS NULL AND server_group_id IS NULL)

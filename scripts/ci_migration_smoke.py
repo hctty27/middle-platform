@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Go SQL 迁移真实 MySQL V1→V4 与旧四级配置结构回归。"""
+"""Go SQL 迁移真实 MySQL V1→V5 与旧四级配置结构回归。"""
 
 import os
 import subprocess
@@ -92,9 +92,18 @@ def main():
     assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "4"
     assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") != old_epoch
     assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
-    migrate(4)  # 幂等性校验
-    # 验证已有历史 V4 记录的数据库能直接接入 Go，不重新执行破坏性 SQL。
+    migrate(5)
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "5"
+    assert mysql("SELECT COALESCE(env_type,'unclassified') FROM config_migration.config_node WHERE id=102") == "unclassified"
+    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") != old_epoch
+    mysql("UPDATE config_migration.config_node SET env_type='test' WHERE id=102")
+    assert mysql("SELECT env_type FROM config_migration.config_node WHERE id=102") == "test"
+    migrate(5)  # 幂等性校验
+    # 模拟已有 V4 结构且仅有历史 Flyway 记录，验证 V5 可以在旧表上直接升级。
+    # 回归数据库专用：撤销 V5 增量列，不触碰任何生产数据。
     mysql("""
+        ALTER TABLE config_migration.config_node
+            DROP CHECK chk_config_node_env_type, DROP COLUMN env_type;
         DROP TABLE config_migration.config_schema_migrations;
         CREATE TABLE config_migration.flyway_schema_history (
             installed_rank INT PRIMARY KEY, version VARCHAR(50), success TINYINT NOT NULL
@@ -102,10 +111,10 @@ def main():
         INSERT INTO config_migration.flyway_schema_history(installed_rank,version,success)
         VALUES(1,'4',1);
     """)
-    migrate(4)
-    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "4"
+    migrate(5)
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "5"
     assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
-    print("PASS Go SQL migrations V1-V4, legacy V4 baseline and idempotence", flush=True)
+    print("PASS Go SQL migrations V1-V5, legacy V4 baseline and idempotence", flush=True)
 
 
 if __name__ == "__main__":

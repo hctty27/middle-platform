@@ -24,6 +24,7 @@ func ValidateNode(name string, status *int, config string, remark *string) error
 func ValidateCreate(n model.CreateNodeRequest) error {
 	if err := ValidateNode(n.Name, n.Status, n.Config, n.Remark); err != nil { return err }
 	if strings.TrimSpace(n.Code) == "" || len([]rune(n.Code)) > 128 { return ErrInvalid }
+	if err := ValidateEnvType(n.NodeType, n.EnvType); err != nil { return err }
 	switch n.NodeType {
 	case "game":
 		if n.ParentID != 0 { return ErrInvalid }
@@ -33,4 +34,18 @@ func ValidateCreate(n model.CreateNodeRequest) error {
 		return ErrInvalid
 	}
 	return nil
+}
+
+
+// ValidateEnvType 大区必须选择环境类型，其他节点不允许携带该字段。
+func ValidateEnvType(nodeType string, envType *string) error {
+    if nodeType != "region" {
+        if envType != nil { return ErrInvalid }
+        return nil
+    }
+    if envType == nil { return ErrInvalid }
+    switch *envType {
+    case "test", "review", "production": return nil
+    default: return ErrInvalid
+    }
 }

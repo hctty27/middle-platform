@@ -17,7 +17,7 @@ import (
 //go:embed sql/*.sql
 var scripts embed.FS
 
-const Latest = 4
+const Latest = 5
 
 var files = [...]string{
  "",
@@ -25,6 +25,7 @@ var files = [...]string{
  "sql/V2__ancestor_ids.sql",
  "sql/V3__subscriber_epoch_cursor.sql",
  "sql/V4__channel_app_hierarchy.sql",
+ "sql/V5__region_env_type.sql",
 }
 
 // Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
@@ -95,8 +96,8 @@ func migrate(ctx context.Context, conn *sql.Conn, opts Options) error {
    if err := conn.QueryRowContext(ctx, "SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1").Scan(&last); err != nil { return err }
    if !last.Valid || last.Int64 < 1 || last.Int64 > Latest { return fmt.Errorf("unsupported legacy schema version: %v", last) }
    version = int(last.Int64)
-   if version < Latest && !opts.AllowLegacyUpgrade {
-    return fmt.Errorf("legacy schema V%d needs V4; back up, stop old writers and run migration with -allow-legacy-upgrade", version)
+   if version < 4 && !opts.AllowLegacyUpgrade {
+    return fmt.Errorf("legacy schema V%d needs V4/V5; back up, stop old writers and run migration with -allow-legacy-upgrade", version)
    }
   } else {
    hasNode, err := exists(ctx, conn, "config_node")
@@ -137,12 +138,12 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
  }
  // 对从旧版历史导入的数据库进行真实结构验证，避免仅凭历史记录跳过缺失 DDL。
  for _, statement := range []string{
-  "SELECT game_id,region_id,server_group_id FROM config_node LIMIT 0",
+  "SELECT game_id,region_id,server_group_id,env_type FROM config_node LIMIT 0",
   "SELECT acknowledged_epoch FROM config_delivery_state LIMIT 0",
   "SELECT id FROM config_node_v4_legacy_archive LIMIT 0",
  } {
   rows, err := conn.QueryContext(ctx, statement)
-  if err != nil { return fmt.Errorf("schema V4 validation failed: %w", err) }
+  if err != nil { return fmt.Errorf("schema V5 validation failed: %w", err) }
   if err := rows.Close(); err != nil { return err }
  }
  return nil

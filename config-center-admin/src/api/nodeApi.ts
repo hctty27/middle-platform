@@ -8,9 +8,9 @@ export const nodeApi = {
   search: (keyword: string, signal?: AbortSignal) =>
     api.get<NodeMatch[]>('/admin/nodes/search', { params: { keyword }, signal }),
 
-  getChildren: (params: { parentId: number; page: number; size: number; keyword: string }, signal?: AbortSignal) =>
+  getChildren: (params: { parentId: number; page: number; size: number; keyword: string; envType?: string }, signal?: AbortSignal) =>
     api.get<NodePage>('/admin/nodes/' + params.parentId + '/children', {
-      params: { page: params.page, size: params.size, keyword: params.keyword }, signal
+      params: { page: params.page, size: params.size, keyword: params.keyword, envType: params.envType }, signal
     }),
 
   getNode: (id: number, signal?: AbortSignal) =>
@@ -19,7 +19,7 @@ export const nodeApi = {
   createNode: (form: NodeForm) =>
     api.post<NodeRecord>('/admin/nodes', form),
 
-  updateNode: (id: number, changes: Pick<NodeForm, 'name' | 'status' | 'config' | 'remark'>) =>
+  updateNode: (id: number, changes: Pick<NodeForm, 'name' | 'status' | 'config' | 'remark' | 'envType'>) =>
     api.put<NodeRecord>('/admin/nodes/' + id, changes),
 
   deleteNode: (id: number) =>

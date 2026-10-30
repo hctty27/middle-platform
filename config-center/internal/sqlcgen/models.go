@@ -35,6 +35,7 @@ type ConfigNode struct {
 	RegionID      sql.NullInt64
 	ServerGroupID sql.NullInt64
 	NodeType      string
+	EnvType       sql.NullString
 	Code          string
 	Name          string
 	Status        int8
