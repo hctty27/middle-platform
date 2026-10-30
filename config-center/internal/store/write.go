@@ -58,9 +58,6 @@ func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, erro
 		case "server_group":
 			if parent.NodeType != "region" { return Node{}, ErrInvalid }
 			gameID, regionID = parent.GameID, &parent.ID
-		case "channel_app":
-			if parent.NodeType != "server_group" { return Node{}, ErrInvalid }
-			gameID, regionID, groupID = parent.GameID, parent.RegionID, &parent.ID
 		}
 	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO config_node(game_id,region_id,server_group_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
@@ -126,18 +123,25 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 	case "region":
 		childCondition = "node_type='server_group' AND region_id=?"
 	case "server_group":
-		childCondition = "node_type='channel_app' AND server_group_id=?"
-	case "channel_app":
 		childCondition = "1=0"
 	default:
 		return ErrInvalid
 	}
 	var count int64
-	if current.NodeType != "channel_app" {
+	if current.NodeType != "server_group" {
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_node WHERE "+childCondition, id).Scan(&count); err != nil {
 			return err
 		}
 		if count > 0 { return ErrConflict }
+	}
+	// 不能删除仍有渠道应用的游戏或仍有绑定的区服组。
+	if current.NodeType == "game" {
+		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE game_id=?",id).Scan(&count); err != nil { return err }
+		if count>0 { return ErrConflict }
+	}
+	if current.NodeType == "server_group" {
+		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app_binding WHERE server_group_id=?",id).Scan(&count); err != nil { return err }
+		if count>0 { return ErrConflict }
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil { return databaseError(err) }
 	if err := recordChange(ctx, tx, id, "DELETE"); err != nil { return err }
