@@ -155,7 +155,20 @@ def main():
     assert mysql("SELECT COUNT(*) FROM config_migration.config_node WHERE node_type='channel_app'") == "0"
     assert mysql("SELECT COUNT(*) FROM config_migration.config_node_v6_channel_app_archive") == "1"
     migrate(6)  # V6 幂等性校验
-    print("PASS Go SQL migrations V1-V6, legacy V4 baseline and app binding preservation", flush=True)
+
+    # 一些历史 V4/Flyway 基线没有生成 V4 归档；它仅供审计，不应阻止运行态 V6 校验。
+    # 本测试只操作独立的 CI 数据库，绝不可对真实业务库删除历史归档。
+    mysql("DROP TABLE config_migration.config_node_v4_legacy_archive")
+    migrate(6)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "6\t0"
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_node_v6_channel_app_archive") == "1"
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_channel_app_binding") == "1"
+
+    # V6 归档是真正的强制依赖，不能因为 V4 归档可选而放宽其校验。
+    mysql("DROP TABLE config_migration.config_node_v6_channel_app_archive")
+    migrate(6, expected_success=False)
+
+    print("PASS GTID-safe V6 migration, missing optional V4 archive and mandatory V6 schema checks", flush=True)
 
 
 if __name__ == "__main__":
