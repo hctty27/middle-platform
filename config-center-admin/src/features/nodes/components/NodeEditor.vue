@@ -48,7 +48,7 @@ const emit = defineEmits<{
           <el-form-item label="本节点 JSON 配置">
             <el-input v-model="form.config" type="textarea" :rows="15" class="json-input" />
           </el-form-item>
-          <div class="muted form-tip">配置不继承父节点；保存后版本递增并通知接入方拉取。</div>
+          <div class="muted form-tip">配置树节点独立保存；渠道应用公共配置与区服组覆盖配置在「渠道应用」页面维护。</div>
           <el-form-item label="备注">
             <el-input v-model="form.remark" type="textarea" maxlength="500" show-word-limit />
           </el-form-item>
