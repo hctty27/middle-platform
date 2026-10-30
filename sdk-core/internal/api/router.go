@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/hctty27/middle-platform/sdk-core/internal/model"
+	"github.com/hctty27/middle-platform/sdk-core/internal/mapping"
 )
 
 // Fetcher 隔离 HTTP 层与业务实现。
 type Fetcher interface {
-	Get(context.Context, string, string) (model.ConfigData, error)
+	Get(context.Context, string, string) (map[string]any, error)
 }
 
 type Pinger interface {
@@ -23,7 +24,7 @@ type Pinger interface {
 // Router 注册不带版本号的 SDK 配置接口和健康检查。
 func Router(fetcher Fetcher, db Pinger) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/core/{env}/{appid}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(mapping.RouteCoreConfig, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
