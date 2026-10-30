@@ -1,8 +1,0 @@
-# 复制为 config-prod.yaml；通过 CONFIG_DB_DSN 注入生产数据库密码
-server:
-  address: ":8080"
-admin:
-  writesEnabled: false
-webhook:
-  enabled: false
-  allowedHosts: []
