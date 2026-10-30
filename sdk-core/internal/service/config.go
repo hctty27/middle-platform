@@ -37,21 +37,40 @@ func (s *ConfigService) Get(ctx context.Context,env,appID string) (map[string]an
     if err!=nil { return nil,err }
     if group==nil { return nil,model.ErrNotFound }
 
-    appConfig,err:=mapping.DecodeObject(app.Config)
-    if err!=nil { return nil,fmt.Errorf("%w: channel app config: %v",model.ErrInvalidConfig,err) }
-    gameConfig,err:=mapping.DecodeObject(app.GameConfig)
-    if err!=nil { return nil,fmt.Errorf("%w: game config: %v",model.ErrInvalidConfig,err) }
-    regionConfig,err:=mapping.DecodeObject(group.RegionConfig)
-    if err!=nil { return nil,fmt.Errorf("%w: region config: %v",model.ErrInvalidConfig,err) }
-    groupConfig,err:=mapping.DecodeObject(group.Config)
-    if err!=nil { return nil,fmt.Errorf("%w: server group config: %v",model.ErrInvalidConfig,err) }
+    // 普通字段始终可用；只有映射引用 config 时才解析对应的 JSON。
+    appSource := map[string]any{"id":app.ID,"code":app.Code,"name":app.Name}
+    gameSource := map[string]any{"code":app.GameCode}
+    regionSource := map[string]any{"code":group.RegionCode}
+    groupSource := map[string]any{"code":group.ServerGroupCode}
+
+    const route = mapping.RouteCoreConfig
+    configInputs := []struct {
+        name string
+        raw []byte
+        target map[string]any
+    }{
+        {"channel_app",app.Config,appSource},
+        {"game",app.GameConfig,gameSource},
+        {"region",group.RegionConfig,regionSource},
+        {"server_group",group.Config,groupSource},
+    }
+    for _, input := range configInputs {
+        if !s.resolver.UsesConfig(route,input.name) {
+            continue
+        }
+        config,err:=mapping.DecodeObject(input.raw)
+        if err!=nil {
+            return nil,fmt.Errorf("%w: %s config: %v",model.ErrInvalidConfig,input.name,err)
+        }
+        input.target["config"]=config
+    }
 
     sources:=map[string]any{
         "env":env,
-        "channel_app":map[string]any{"id":app.ID,"code":app.Code,"name":app.Name,"config":appConfig},
-        "game":map[string]any{"code":app.GameCode,"config":gameConfig},
-        "region":map[string]any{"code":group.RegionCode,"config":regionConfig},
-        "server_group":map[string]any{"code":group.ServerGroupCode,"config":groupConfig},
+        "channel_app":appSource,
+        "game":gameSource,
+        "region":regionSource,
+        "server_group":groupSource,
     }
     result,err:=s.resolver.Resolve(mapping.RouteCoreConfig,sources)
     if err!=nil { return nil,fmt.Errorf("%w: %v",model.ErrInvalidConfig,err) }

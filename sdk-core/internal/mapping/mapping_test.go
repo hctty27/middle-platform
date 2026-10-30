@@ -234,3 +234,56 @@ func TestGameConfigNestedAndFullObjectMapping(t *testing.T) {
         t.Fatal("JSON numeric precision lost")
     }
 }
+
+func TestUsesConfigDependsOnRouteAndSource(t *testing.T) {
+    resolver,err:=Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "snKey": "channel_app.code",
+            "tsKey": "channel_app.config.tsKey",
+            "gameCode": "game.code"
+        },
+        "POST /api/core/login": {
+            "wholeGame": "game.config",
+            "nestedRegion": "region.config.login.url",
+            "groupConfig": "server_group.config"
+        },
+        "GET /api/core/health": {
+            "env": "env"
+        }
+    }`))
+    if err!=nil { t.Fatal(err) }
+
+    for _,tc:=range []struct{
+        route,source string
+        want bool
+    }{
+        {RouteCoreConfig,"channel_app",true},
+        {RouteCoreConfig,"game",false},
+        {RouteCoreConfig,"region",false},
+        {RouteCoreConfig,"server_group",false},
+        {"POST /api/core/login","channel_app",false},
+        {"POST /api/core/login","game",true},
+        {"POST /api/core/login","region",true},
+        {"POST /api/core/login","server_group",true},
+        {"GET /api/core/health","game",false},
+        {"GET /unknown","game",false},
+    } {
+        if got:=resolver.UsesConfig(tc.route,tc.source);got!=tc.want {
+            t.Errorf("UsesConfig(%q,%q)=%t, want %t",tc.route,tc.source,got,tc.want)
+        }
+    }
+    if (*Resolver)(nil).UsesConfig(RouteCoreConfig,"game") {
+        t.Fatal("nil resolver must not report usage")
+    }
+}
+
+func TestDefaultMappingOnlyNeedsChannelAppJSON(t *testing.T) {
+    resolver,err:=LoadDefault()
+    if err!=nil { t.Fatal(err) }
+    for _,source:=range []string{"channel_app","game","region","server_group"} {
+        want:=source=="channel_app"
+        if resolver.UsesConfig(RouteCoreConfig,source)!=want {
+            t.Errorf("%s: want %t",source,want)
+        }
+    }
+}
