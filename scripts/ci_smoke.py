@@ -208,7 +208,7 @@ def main():
     assert regions[0]["envType"] == "test", regions
     filtered = request(8080, f"/api/config/admin/nodes/{ids[0]}/children?envType=test")
     assert filtered["total"] == 1 and filtered["items"][0]["envType"] == "test", filtered
-    filtered = request(8080, f"/api/config/admin/nodes/{ids[0]}/children?envType=production")
+    filtered = request(8080, f"/api/config/admin/nodes/{ids[0]}/children?envType=prod")
     assert filtered["total"] == 0, filtered
     groups = request(8080, f"/api/config/admin/nodes/tree?parentId={ids[1]}")
     assert len(groups) == 1 and groups[0]["id"] == ids[2] and groups[0]["leaf"], groups
