@@ -96,6 +96,8 @@ func (s *Store) DeleteChannelApp(ctx context.Context,id int64) error {
 	tx,err:=s.DB.BeginTx(ctx,nil); if err!=nil { return err }; defer tx.Rollback()
 	if err=lockRevision(ctx,tx); err!=nil { return err }
 	var count int
+    if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE id=?",id).Scan(&count);err!=nil { return err }
+    if count==0 { return sql.ErrNoRows }
     if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE id=? AND (prod_server_group_id IS NOT NULL OR test_server_group_id IS NOT NULL OR review_server_group_id IS NOT NULL)",id).Scan(&count);err!=nil { return err }
     if count!=0 { return ErrConflict }
 	if _,err=tx.ExecContext(ctx,"DELETE FROM config_channel_app WHERE id=?",id); err!=nil { return databaseError(err) }
@@ -110,11 +112,11 @@ func validateAppGroups(ctx context.Context, tx *sql.Tx, gameID int64, prod, test
     for _,target := range targets {
         if target.id == nil { continue }
         if *target.id <= 0 { return ErrInvalid }
-        var env string
+        var env sql.NullString
         err := tx.QueryRowContext(ctx, "SELECT r.env_type FROM config_node sg JOIN config_node r ON r.id=sg.region_id WHERE sg.id=? AND sg.node_type='server_group' AND sg.game_id=? AND r.node_type='region' AND r.game_id=?",*target.id,gameID,gameID).Scan(&env)
         if err == sql.ErrNoRows { return ErrInvalid }
         if err != nil { return err }
-        if env != target.env { return ErrInvalid }
+        if !env.Valid || env.String != target.env { return ErrInvalid }
     }
     return nil
 }
