@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+	"github.com/hctty27/middle-platform/shared/logging"
 )
 
 type Config struct {
+	Log logging.Config `yaml:"log"`
 	Server struct {
 		Address string `yaml:"address"`
 	} `yaml:"server"`
@@ -27,6 +29,7 @@ type Config struct {
 
 func Load(path string) (Config, error) {
 	cfg := Config{}
+	cfg.Log = logging.Default()
 	cfg.Server.Address = ":8082"
 	cfg.Database.MaxOpenConns = 20
 	cfg.Database.MaxIdleConns = 10
@@ -54,6 +57,7 @@ func Load(path string) (Config, error) {
 	if value, ok := os.LookupEnv("SDK_CORE_ADDR"); ok {
 		cfg.Server.Address = value
 	}
+	if err := cfg.Log.ApplyEnv(); err != nil { return Config{}, err }
 	if strings.TrimSpace(cfg.Database.DSN) == "" {
 		return Config{}, errors.New("database.dsn or SDK_CORE_DB_DSN is required")
 	}
