@@ -1,0 +1,8 @@
+server:
+  address: ':8081'
+configCenter:
+  url: 'http://127.0.0.1:8080'
+sync:
+  connectTimeout: '2s'
+  requestTimeout: '15s'
+  reconcileInterval: '5m'
