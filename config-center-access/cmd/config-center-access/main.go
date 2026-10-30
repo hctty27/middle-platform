@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+    "flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,14 +22,16 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+    configPath := flag.String("config", "", "YAML configuration file")
+    flag.Parse()
+    if err := run(*configPath); err != nil {
 		slog.Error("config access stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	cfg, err := settings.Load()
+func run(configPath string) error {
+    cfg, err := settings.LoadFile(configPath)
 	if err != nil {
 		return err
 	}
