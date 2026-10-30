@@ -13,24 +13,23 @@ import (
 )
 
 const getNode = `-- name: GetNode :one
-SELECT id, node_type, game_id, region_id, server_group_id, code, name,
+SELECT id, node_type, game_id, region_id, code, name,
        status, config, remark, created_at, updated_at
 FROM config_node WHERE id = ?
 `
 
 type GetNodeRow struct {
-	ID            int64
-	NodeType      string
-	GameID        sql.NullInt64
-	RegionID      sql.NullInt64
-	ServerGroupID sql.NullInt64
-	Code          string
-	Name          string
-	Status        int8
-	Config        json.RawMessage
-	Remark        sql.NullString
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID        int64
+	NodeType  string
+	GameID    sql.NullInt64
+	RegionID  sql.NullInt64
+	Code      string
+	Name      string
+	Status    int8
+	Config    json.RawMessage
+	Remark    sql.NullString
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetNode(ctx context.Context, id int64) (GetNodeRow, error) {
@@ -41,7 +40,6 @@ func (q *Queries) GetNode(ctx context.Context, id int64) (GetNodeRow, error) {
 		&i.NodeType,
 		&i.GameID,
 		&i.RegionID,
-		&i.ServerGroupID,
 		&i.Code,
 		&i.Name,
 		&i.Status,
@@ -120,24 +118,23 @@ func (q *Queries) ListChanges(ctx context.Context, arg ListChangesParams) ([]Con
 }
 
 const listNodes = `-- name: ListNodes :many
-SELECT id, node_type, game_id, region_id, server_group_id, code, name,
+SELECT id, node_type, game_id, region_id, code, name,
        status, config, remark, created_at, updated_at
 FROM config_node ORDER BY id
 `
 
 type ListNodesRow struct {
-	ID            int64
-	NodeType      string
-	GameID        sql.NullInt64
-	RegionID      sql.NullInt64
-	ServerGroupID sql.NullInt64
-	Code          string
-	Name          string
-	Status        int8
-	Config        json.RawMessage
-	Remark        sql.NullString
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID        int64
+	NodeType  string
+	GameID    sql.NullInt64
+	RegionID  sql.NullInt64
+	Code      string
+	Name      string
+	Status    int8
+	Config    json.RawMessage
+	Remark    sql.NullString
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 func (q *Queries) ListNodes(ctx context.Context) ([]ListNodesRow, error) {
@@ -154,8 +151,7 @@ func (q *Queries) ListNodes(ctx context.Context) ([]ListNodesRow, error) {
 			&i.NodeType,
 			&i.GameID,
 			&i.RegionID,
-			&i.ServerGroupID,
-			&i.Code,
+				&i.Code,
 			&i.Name,
 			&i.Status,
 			&i.Config,

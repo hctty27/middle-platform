@@ -64,9 +64,9 @@ curl -X POST http://127.0.0.1:8080/api/config/admin/subscribers \
 
 ## 数据库升级边界
 
-新建库会自动创建包含大区环境类型的最新四级 `config_node` 和 `config_sync_state` 表；已有 V3 数据库须先手动执行 `db/migration/V4__region_env_type_replica.sql`，不会重置已有游标。
+新建库会自动创建包含大区环境类型的最新三级 `config_node` 和 `config_sync_state` 表；已有 V3 数据库须先后手动执行 `db/migration/V4__region_env_type_replica.sql`、`db/migration/V5__trim_node_group_id_replica.sql`，不会重置已有游标。
 
-若副本库尚停留在历史 V1/V2 五级结构，**必须先备份并手工执行缺失的 V2/V3 SQL 迁移**，再启动 Go 接入服务。原始 SQL 保留在 `db/migration`，不会由接入进程自动执行；已升级的 V3 库只需要再执行 V4 环境类型扩展，不需要重建。Go 服务不会自动删除旧表或历史数据。
+若副本库尚停留在历史 V1/V2 五级结构，**必须先备份并手工执行缺失的 V2/V3 SQL 迁移**，再启动 Go 接入服务。原始 SQL 保留在 `db/migration`，不会由接入进程自动执行；已升级的 V3 库先后执行 V4 环境类型扩展及 V5 冗余列清理，不需要重建。Go 服务不会自动删除旧表或历史数据。
 
 ## 验证
 
@@ -80,7 +80,7 @@ go build ./cmd/config-center-access
 
 `GET /api/access/nodes` 返回 `env_type`（`test` / `review` / `production`）字段。
 历史未分类大区返回 `null`；归类后通过权威端版本事件同步更新。
-已使用 V3 接入副本数据库的部署，请在升级配置中心 V5 前备份并执行 V4 SQL。
+已使用 V3 接入副本数据库的部署，请备份并依次执行 V4、V5 SQL。
 
 ## YAML 本地启动
 
@@ -101,3 +101,9 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 与 `config_node`、`config_sync_state` 在同一事务内全量写入。
 使用 `Replica.ChannelBindings(ctx, serverGroupID)` 获取当前区服组的生效 JSON。
 绑定配置可能包含 SDK 密钥，应只向可信内部模块提供，不要直接暴露公网 API。
+
+## V5 副本结构（适配权威库 V7）
+
+`config_node` 仅保留 `game_id` 与 `region_id` 两个祖先列，`config_channel_app_binding.server_group_id` 继续保留。
+已有副本库先停接入服务、备份并手工执行 `db/migration/V5__trim_node_group_id_replica.sql`，再启动新版。
+若旧库未升级，启动时会报错提示必须执行 V5，防止新旧 SQL 混用。

@@ -46,7 +46,7 @@ func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, erro
 	if err := lockRevision(ctx, tx); err != nil { return Node{}, err }
 
 	// 祖先 ID 在创建时从父节点推导，避免调用方伪造跨游戏、跨大区的层级关系。
-	var gameID, regionID, groupID *int64
+	var gameID, regionID *int64
 	if input.NodeType != "game" {
 		parent, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", input.ParentID))
 		if errors.Is(err, sql.ErrNoRows) { return Node{}, ErrInvalid }
@@ -60,9 +60,9 @@ func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, erro
 			gameID, regionID = parent.GameID, &parent.ID
 		}
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO config_node(game_id,region_id,server_group_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,
-		gameID, regionID, groupID, input.NodeType, input.EnvType, input.Code, input.Name, *input.Status, input.Config, input.Remark)
+	result, err := tx.ExecContext(ctx, `INSERT INTO config_node(game_id,region_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,
+		gameID, regionID, input.NodeType, input.EnvType, input.Code, input.Name, *input.Status, input.Config, input.Remark)
 	if err != nil { return Node{}, databaseError(err) }
 	id, err := result.LastInsertId()
 	if err != nil { return Node{}, err }

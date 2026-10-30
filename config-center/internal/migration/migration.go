@@ -19,7 +19,7 @@ import (
 var scripts embed.FS
 
 // Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
-const Latest = 6
+const Latest = 7
 
 var files = [...]string{
  "",
@@ -29,6 +29,7 @@ var files = [...]string{
  "sql/V4__channel_app_hierarchy.sql",
  "sql/V5__region_env_type.sql",
  "sql/V6__shared_channel_apps.sql",
+ "sql/V7__trim_node_group_id.sql",
 }
 
 // Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
@@ -197,22 +198,34 @@ func migrate(ctx context.Context, conn *sql.Conn, opts Options) error {
 
 // validate 用真实表结构检查替代仅相信迁移历史记录，防止部分 DDL 遗漏。
 func validate(ctx context.Context, conn *sql.Conn, version int) error {
- if version < Latest { return nil } // 仅迁移测试用的阶段性旧版本
+ if version < 6 { return nil } // V1–V5 仅迁移测试用的阶段性旧版本
  var rev int64
  if err := conn.QueryRowContext(ctx, "SELECT revision FROM config_revision WHERE id=1").Scan(&rev); err != nil {
   return fmt.Errorf("invalid schema revision singleton: %w", err)
  }
  // 对从旧版历史导入的数据库进行真实结构验证，避免仅凭历史记录跳过缺失 DDL。
+ nodeColumns := "SELECT game_id,region_id,env_type FROM config_node LIMIT 0"
+ if version == 6 {
+  nodeColumns = "SELECT game_id,region_id,server_group_id,env_type FROM config_node LIMIT 0"
+ }
  for _, statement := range []string{
-  "SELECT game_id,region_id,server_group_id,env_type FROM config_node LIMIT 0",
+  nodeColumns,
   "SELECT acknowledged_epoch FROM config_delivery_state LIMIT 0",
   "SELECT id,game_id,code,config FROM config_channel_app LIMIT 0",
   "SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0",
   "SELECT id FROM config_node_v6_channel_app_archive LIMIT 0",
  } {
   rows, err := conn.QueryContext(ctx, statement)
-  if err != nil { return fmt.Errorf("schema V6 validation failed: %w", err) }
+  if err != nil { return fmt.Errorf("schema V%d validation failed: %w", version, err) }
   if err := rows.Close(); err != nil { return err }
+ }
+ if version >= 7 {
+  var obsoleteColumns int
+  if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema=DATABASE() AND table_name='config_node' AND column_name='server_group_id'`).Scan(&obsoleteColumns); err != nil {
+   return fmt.Errorf("inspect V7 config_node columns: %w", err)
+  }
+  if obsoleteColumns != 0 { return errors.New("schema V7 validation failed: config_node.server_group_id still exists") }
  }
  // V4 归档表仅用于历史审计，非当前权威配置所需。
  // 旧 Flyway 基线或人工历史升级可能没有此表，不能因此否定已经完成的 V6。

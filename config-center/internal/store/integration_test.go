@@ -223,7 +223,7 @@ var integrationSchema = []string{
 	`INSERT INTO config_revision(id,revision,epoch) VALUES(1,0,UUID())`,
 	`CREATE TABLE config_node (
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		game_id BIGINT NULL,region_id BIGINT NULL,server_group_id BIGINT NULL,
+		game_id BIGINT NULL,region_id BIGINT NULL,
 		node_type VARCHAR(20) NOT NULL,env_type VARCHAR(16) NULL,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
 		name VARCHAR(128) NOT NULL,status TINYINT NOT NULL DEFAULT 1,config JSON NOT NULL,
 		remark VARCHAR(500),created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
@@ -234,13 +234,12 @@ var integrationSchema = []string{
             OR (node_type<>'region' AND env_type IS NULL)
         ),
 		CONSTRAINT chk_config_node_ancestry CHECK(
-			(node_type='game' AND game_id IS NULL AND region_id IS NULL AND server_group_id IS NULL)
-			OR (node_type='region' AND COALESCE(game_id,0)>0 AND region_id IS NULL AND server_group_id IS NULL)
-			OR (node_type='server_group' AND COALESCE(game_id,0)>0 AND COALESCE(region_id,0)>0 AND server_group_id IS NULL)
+			(node_type='game' AND game_id IS NULL AND region_id IS NULL)
+			OR (node_type='region' AND COALESCE(game_id,0)>0 AND region_id IS NULL)
+			OR (node_type='server_group' AND COALESCE(game_id,0)>0 AND COALESCE(region_id,0)>0)
 		),
-		UNIQUE KEY uq_config_node_sibling(node_type,code,((COALESCE(server_group_id,region_id,game_id,0)))),
-		KEY idx_config_node_game_type(game_id,node_type),KEY idx_config_node_region_type(region_id,node_type),
-		KEY idx_config_node_group_type(server_group_id,node_type)
+		UNIQUE KEY uq_config_node_sibling(node_type,code,((COALESCE(region_id,game_id,0)))),
+		KEY idx_config_node_game_type(game_id,node_type),KEY idx_config_node_region_type(region_id,node_type)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
 	`CREATE TABLE config_channel_app (
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,game_id BIGINT NOT NULL,

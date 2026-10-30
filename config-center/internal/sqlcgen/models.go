@@ -30,19 +30,18 @@ type ConfigDeliveryState struct {
 }
 
 type ConfigNode struct {
-	ID            int64
-	GameID        sql.NullInt64
-	RegionID      sql.NullInt64
-	ServerGroupID sql.NullInt64
-	NodeType      string
-	EnvType       sql.NullString
-	Code          string
-	Name          string
-	Status        int8
-	Config        json.RawMessage
-	Remark        sql.NullString
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID        int64
+	GameID    sql.NullInt64
+	RegionID  sql.NullInt64
+	NodeType  string
+	EnvType   sql.NullString
+	Code      string
+	Name      string
+	Status    int8
+	Config    json.RawMessage
+	Remark    sql.NullString
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type ConfigRevision struct {

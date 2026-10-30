@@ -24,7 +24,6 @@ type Node struct {
 	EnvType       *string `json:"envType"`
 	GameID        *int64  `json:"gameId"`
 	RegionID      *int64  `json:"regionId"`
-	ServerGroupID *int64  `json:"serverGroupId"`
 	Code          string  `json:"code"`
 	Name          string  `json:"name"`
 	Status        int     `json:"status"`

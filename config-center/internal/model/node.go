@@ -28,7 +28,6 @@ type Node struct {
 	EnvType       *string       `json:"envType"`
 	GameID        *int64        `json:"gameId"`
 	RegionID      *int64        `json:"regionId"`
-	ServerGroupID *int64        `json:"serverGroupId"`
 	Code          string        `json:"code"`
 	Name          string        `json:"name"`
 	Status        int           `json:"status"`
@@ -47,8 +46,6 @@ func (n Node) Parent() int64 {
 		return value(n.GameID)
 	case "server_group":
 		return value(n.RegionID)
-	case "channel_app":
-		return value(n.ServerGroupID)
 	default:
 		return 0
 	}

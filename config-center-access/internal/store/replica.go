@@ -23,7 +23,6 @@ type NodeView struct {
 	ID            int64  `json:"id"`
 	GameID        *int64 `json:"game_id"`
 	RegionID      *int64 `json:"region_id"`
-	ServerGroupID *int64 `json:"server_group_id"`
 	NodeType      string `json:"node_type"`
 	EnvType       *string `json:"env_type"`
 	Code          string `json:"code"`
@@ -37,13 +36,12 @@ type Replica struct{ DB *sql.DB }
 // New 绑定本地副本数据库，不与配置中心的权威库共享写连接。
 func New(db *sql.DB) *Replica { return &Replica{DB: db} }
 
-// EnsureSchema 对全新数据库建最新四级副本表；保留已有表及 Flyway 历史。
+// EnsureSchema 对全新数据库创建三级配置树副本；旧库需先完成手工迁移。
 func (s *Replica) EnsureSchema(ctx context.Context) error {
 	const nodes = `CREATE TABLE IF NOT EXISTS config_node (
 		id BIGINT NOT NULL PRIMARY KEY,
 		game_id BIGINT NULL,
 		region_id BIGINT NULL,
-		server_group_id BIGINT NULL,
 		node_type VARCHAR(20) NOT NULL,
 		env_type VARCHAR(16) COLLATE utf8mb4_bin NULL,
 		code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
@@ -55,16 +53,14 @@ func (s *Replica) EnsureSchema(ctx context.Context) error {
 		updated_at DATETIME(6) NOT NULL,
 		KEY idx_replica_game_type (game_id,node_type),
 		KEY idx_replica_region_type (region_id,node_type),
-		KEY idx_replica_group_type (server_group_id,node_type),
 		CONSTRAINT chk_replica_node_env_type CHECK (
             (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','production')))
             OR (node_type<>'region' AND env_type IS NULL)
         ),
         CONSTRAINT chk_replica_node_ancestry CHECK (
-			(node_type='game' AND game_id IS NULL AND region_id IS NULL AND server_group_id IS NULL)
-			OR (node_type='region' AND COALESCE(game_id,0)>0 AND region_id IS NULL AND server_group_id IS NULL)
-			OR (node_type='server_group' AND COALESCE(game_id,0)>0 AND COALESCE(region_id,0)>0 AND server_group_id IS NULL)
-			OR (node_type='channel_app' AND COALESCE(game_id,0)>0 AND COALESCE(region_id,0)>0 AND COALESCE(server_group_id,0)>0)
+			(node_type='game' AND game_id IS NULL AND region_id IS NULL)
+			OR (node_type='region' AND COALESCE(game_id,0)>0 AND region_id IS NULL)
+			OR (node_type='server_group' AND COALESCE(game_id,0)>0 AND COALESCE(region_id,0)>0)
 		)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
 	const apps = `CREATE TABLE IF NOT EXISTS config_channel_app (
@@ -90,11 +86,19 @@ func (s *Replica) EnsureSchema(ctx context.Context) error {
 		}
 	}
 	// 不对已有表做破坏性 ALTER；历史 V1/V2 数据库应先完成 Flyway V3。
-	rows, err := s.DB.QueryContext(ctx, `SELECT game_id,region_id,server_group_id,env_type,node_type FROM config_node LIMIT 0`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT game_id,region_id,env_type,node_type FROM config_node LIMIT 0`)
 	if err != nil {
-		return fmt.Errorf("obsolete replica schema: apply migrations through V4 first: %w", err)
+		return fmt.Errorf("obsolete replica schema: apply migrations through V5 first: %w", err)
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil { return err }
+	var obsoleteColumns int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_schema=DATABASE() AND table_name='config_node' AND column_name='server_group_id'`).Scan(&obsoleteColumns); err != nil {
+		return fmt.Errorf("inspect replica node schema: %w", err)
+	}
+	if obsoleteColumns != 0 {
+		return fmt.Errorf("obsolete replica schema: apply db/migration/V5__trim_node_group_id_replica.sql before startup")
+	}
 	if _, err := s.DB.ExecContext(ctx, `INSERT IGNORE INTO config_sync_state(id,epoch,revision,updated_at)
 		VALUES(1,NULL,0,UTC_TIMESTAMP(6))`); err != nil {
 		return err
@@ -174,15 +178,15 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 		updated, err := parseDate(node.UpdatedAt)
 		if err != nil { return false, err }
 		_, err = tx.ExecContext(ctx, `INSERT INTO config_node
-			(id,game_id,region_id,server_group_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+			(id,game_id,region_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
 			ON DUPLICATE KEY UPDATE
 			game_id=VALUES(game_id),region_id=VALUES(region_id),
-			server_group_id=VALUES(server_group_id),node_type=VALUES(node_type),env_type=VALUES(env_type),
+			node_type=VALUES(node_type),env_type=VALUES(env_type),
 			code=VALUES(code),name=VALUES(name),status=VALUES(status),
 			config=VALUES(config),remark=VALUES(remark),
 			created_at=VALUES(created_at),updated_at=VALUES(updated_at)`,
-			node.ID,node.GameID,node.RegionID,node.ServerGroupID,node.NodeType,node.EnvType,node.Code,
+			node.ID,node.GameID,node.RegionID,node.NodeType,node.EnvType,node.Code,
 			node.Name,node.Status,node.Config,node.Remark,created,updated)
 		if err != nil { return false, fmt.Errorf("store node %d: %w", node.ID, err) }
 	}
@@ -240,19 +244,18 @@ func parseDate(v string) (time.Time, error) {
 
 // Nodes 查询本地配置副本，不触发远程网络访问。
 func (s *Replica) Nodes(ctx context.Context) ([]NodeView, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,server_group_id,node_type,env_type,code,name,status
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,node_type,env_type,code,name,status
         FROM config_node ORDER BY id`)
 	if err != nil { return nil, err }
 	defer rows.Close()
 	out := make([]NodeView, 0)
 	for rows.Next() {
 		var n NodeView
-		var game, region, group sql.NullInt64
+		var game, region sql.NullInt64
         var envType sql.NullString
-		if err := rows.Scan(&n.ID, &game, &region, &group, &n.NodeType, &envType, &n.Code, &n.Name, &n.Status); err != nil { return nil, err }
+		if err := rows.Scan(&n.ID, &game, &region, &n.NodeType, &envType, &n.Code, &n.Name, &n.Status); err != nil { return nil, err }
 		if game.Valid { n.GameID = &game.Int64 }
 		if region.Valid { n.RegionID = &region.Int64 }
-		if group.Valid { n.ServerGroupID = &group.Int64 }
         if envType.Valid { n.EnvType = &envType.String }
 		out = append(out, n)
 	}

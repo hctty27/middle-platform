@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Go SQL 迁移真实 MySQL V1→V6 与旧四级配置结构回归。"""
+"""Go SQL 迁移真实 MySQL V1→V7 与旧版配置结构回归。"""
 
 import os
 import subprocess
@@ -156,19 +156,39 @@ def main():
     assert mysql("SELECT COUNT(*) FROM config_migration.config_node_v6_channel_app_archive") == "1"
     migrate(6)  # V6 幂等性校验
 
-    # 一些历史 V4/Flyway 基线没有生成 V4 归档；它仅供审计，不应阻止运行态 V6 校验。
+    # V7 删除节点冗余列，但应用游戏归属和区服组绑定必须保持。
+    migrate(7)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "7\t0"
+    assert mysql("""SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_schema='config_migration' AND table_name='config_node'
+        AND column_name='server_group_id'""") == "0"
+    assert_rows("""SELECT id,node_type,COALESCE(game_id,0),COALESCE(region_id,0)
+        FROM config_migration.config_node ORDER BY id""", [
+        "101\tgame\t0\t0",
+        "102\tregion\t101\t0",
+        "103\tserver_group\t101\t102",
+    ])
+    assert_rows("SELECT id,game_id,code FROM config_migration.config_channel_app", [
+        "105\t101\tlegacy-sdk"
+    ])
+    assert_rows("SELECT channel_app_id,server_group_id FROM config_migration.config_channel_app_binding", [
+        "105\t103"
+    ])
+    migrate(7)  # V7 幂等性校验
+
+    # 一些历史 V4/Flyway 基线没有生成 V4 归档；它仅供审计，不应阻止运行态 V7 校验。
     # 本测试只操作独立的 CI 数据库，绝不可对真实业务库删除历史归档。
     mysql("DROP TABLE config_migration.config_node_v4_legacy_archive")
-    migrate(6)
-    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "6\t0"
+    migrate(7)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "7\t0"
     assert mysql("SELECT COUNT(*) FROM config_migration.config_node_v6_channel_app_archive") == "1"
     assert mysql("SELECT COUNT(*) FROM config_migration.config_channel_app_binding") == "1"
 
     # V6 归档是真正的强制依赖，不能因为 V4 归档可选而放宽其校验。
     mysql("DROP TABLE config_migration.config_node_v6_channel_app_archive")
-    migrate(6, expected_success=False)
+    migrate(7, expected_success=False)
 
-    print("PASS GTID-safe V6 migration, missing optional V4 archive and mandatory V6 schema checks", flush=True)
+    print("PASS GTID-safe V1-V7 migration, optional V4 archive and mandatory V6/V7 checks", flush=True)
 
 
 if __name__ == "__main__":

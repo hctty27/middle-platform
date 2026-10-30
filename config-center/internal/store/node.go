@@ -10,7 +10,7 @@ import (
 )
 
 // 节点查询统一列顺序，必须与 scanNode 的扫描字段严格保持一致。
-const nodeColumns = "id,node_type,game_id,region_id,server_group_id,env_type,code,name,status,config,remark,created_at,updated_at"
+const nodeColumns = "id,node_type,game_id,region_id,env_type,code,name,status,config,remark,created_at,updated_at"
 
 // queryer 让普通连接与事务共用同一套节点读取实现。
 type queryer interface {
@@ -30,16 +30,15 @@ func (s *Store) Ready(ctx context.Context) error { return s.DB.PingContext(ctx) 
 // scanNode 将数据库字段扫描成统一节点对象。
 func scanNode(scanner interface{ Scan(...any) error }) (Node, error) {
 	var n Node
-	var game, region, group sql.NullInt64
+	var game, region sql.NullInt64
 	var remark, envType sql.NullString
 	var created, updated time.Time
-	err := scanner.Scan(&n.ID, &n.NodeType, &game, &region, &group, &envType, &n.Code, &n.Name, &n.Status, &n.Config, &remark, &created, &updated)
+	err := scanner.Scan(&n.ID, &n.NodeType, &game, &region, &envType, &n.Code, &n.Name, &n.Status, &n.Config, &remark, &created, &updated)
 	if err != nil {
 		return Node{}, err
 	}
 	if game.Valid { n.GameID = &game.Int64 }
 	if region.Valid { n.RegionID = &region.Int64 }
-	if group.Valid { n.ServerGroupID = &group.Int64 }
 	if envType.Valid { n.EnvType = &envType.String }
 	if remark.Valid { n.Remark = &remark.String }
 	n.CreatedAt, n.UpdatedAt = LocalDateTime(created), LocalDateTime(updated)
@@ -159,7 +158,7 @@ func (s *Store) Path(ctx context.Context, id int64) (NodeMatch, error) {
 	n, err := s.Node(ctx, id)
 	if err != nil { return NodeMatch{}, err }
 	ancestorIDs := []int64{}
-	for _, ancestor := range []*int64{n.GameID, n.RegionID, n.ServerGroupID} {
+	for _, ancestor := range []*int64{n.GameID, n.RegionID} {
 		if ancestor != nil { ancestorIDs = append(ancestorIDs, *ancestor) }
 	}
 	ancestors, err := s.Batch(ctx, ancestorIDs)
@@ -171,8 +170,8 @@ func (s *Store) Path(ctx context.Context, id int64) (NodeMatch, error) {
 
 // match 合并节点及祖先形成完整路径。
 func match(n Node, index map[int64]Node) (NodeMatch, error) {
-	path := make([]NodeSummary, 0, 4)
-	for _, id := range []int64{value(n.GameID), value(n.RegionID), value(n.ServerGroupID), n.ID} {
+	path := make([]NodeSummary, 0, 3)
+	for _, id := range []int64{value(n.GameID), value(n.RegionID), n.ID} {
 		if id == 0 { continue }
 		item, ok := index[id]
 		if !ok { return NodeMatch{}, fmt.Errorf("missing ancestor %d: %w", id, errors.New("inconsistent configuration hierarchy")) }
@@ -205,7 +204,7 @@ func (s *Store) Search(ctx context.Context, keyword string, limit int) ([]NodeMa
 	ancestorSet := map[int64]struct{}{}
 	for _, n := range found {
 		index[n.ID] = n
-		for _, ancestor := range []*int64{n.GameID, n.RegionID, n.ServerGroupID} {
+		for _, ancestor := range []*int64{n.GameID, n.RegionID} {
 			if ancestor != nil { ancestorSet[*ancestor] = struct{}{} }
 		}
 	}

@@ -6,7 +6,7 @@
 
 - `cmd/config-center`：HTTP 服务启动入口。
 - `cmd/migrate`：独立的 MySQL 迁移 CLI。
-- `internal/migration/sql`：内置版本 V1–V6 的权威数据库迁移 SQL。
+- `internal/migration/sql`：内置版本 V1–V7 的权威数据库迁移 SQL。
 - `internal/app`：数据库连接、迁移初始化、HTTP 服务、优雅退出。
 - `internal/settings`：环境变量。
 - `internal/api`：HTTP 接口。
@@ -31,7 +31,7 @@ export CONFIG_GO_ENABLE_WEBHOOK=true
 go run ./cmd/config-center
 ```
 
-启动时自动检查并更新数据库结构，首次空库执行 V1→V6。也可在服务启动前单独运行：
+启动时自动检查并更新数据库结构，首次空库执行 V1→V7。也可在服务启动前单独运行：
 
 ```bash
 go run ./cmd/migrate
@@ -112,6 +112,20 @@ DELETE /api/config/admin/channel-app-bindings/{id}
 迁移会合并同一游戏下相同 `channel_app.code`，并把旧区服组的完整 JSON 原样迁入绑定覆盖层，公共 JSON 初始为 `{}`，不会覆盖提审服的旧配置。
 原始渠道节点保存在 `config_node_v6_channel_app_archive`，不得自动删除。
 旧版接入端不认识快照中的 `channelApps` 和 `bindings`，必须一起升级。
+
+## V7：移除冗余祖先列
+
+V7 删除 `config_node.server_group_id` 及相关索引，重建同级唯一索引并更新 `epoch`；
+保留 `config_channel_app.game_id` 和 `config_channel_app_binding.server_group_id`。
+先确保 V6 完成、备份数据库并暂停旧版写入实例；已部署的接入端副本需先执行
+`config-center-access/db/migration/V5__trim_node_group_id_replica.sql`，
+然后升级两个 Go 服务并执行：
+
+```powershell
+go run ./cmd/migrate -config configs/config-dev.yaml
+```
+
+迁移失败时检查 `config_schema_migrations.dirty`，不要直接重跑部分成功的 DDL。
 
 ## V6 GTID 1786 失败恢复
 
