@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `config-center` | Go | 权威配置中心、四级配置树、版本日志、Webhooks、数据库迁移 |
 | `config-center-access` | Go | 独立接入示例、本地 MySQL 副本、增量同步与 HMAC 回调 |
+| `sdk-core` | Go | SDK 登录充值核心服务（首期提供按环境、AppID 查询绑定区服组和公共配置） |
 | `config-center-admin` | Vue 3 | 配置管理界面 |
 | `deploy` | MySQL | 本地测试数据库 |
 | `scripts` | Python | MySQL 迁移与 Go 双实例端到端测试 |
