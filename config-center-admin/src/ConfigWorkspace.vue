@@ -1,10 +1,13 @@
 <script setup lang="ts">
+// 配置工作区负责展示懒加载目录树、直属子项列表和节点编辑抽屉。
+// 数据加载、并发控制及表单状态集中交由 useNodeWorkspace 管理。
 import type { NodeType, RegionEnvType } from './features/nodes/types'
 import { regionEnvLabels } from './features/nodes/types'
 
 function envLabel(env: RegionEnvType | null | undefined) {
   return env ? regionEnvLabels[env] : '未分类'
 }
+// 环境类型仅影响展示标签，不参与数据过滤或后端写入校验。
 function envTagType(env: RegionEnvType | null | undefined): 'success' | 'warning' | 'primary' | 'info' {
   return env === 'production' ? 'success' : env === 'test' ? 'warning' : env === 'review' ? 'primary' : 'info'
 }
@@ -17,6 +20,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
 
 <template>
   <main class="workspace">
+    <!-- 目录树只展开适合导航的层级，末级渠道应用交由右侧列表分页展示。 -->
     <section class="tree-panel">
       <div class="panel-title">
         <strong>配置目录</strong>
@@ -59,6 +63,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
       <div class="tree-hint">目录只展开前三层，渠道应用在右侧列表中查看。</div>
     </section>
 
+    <!-- 右侧展示当前节点及直属子项，避免一次渲染整棵配置树。 -->
     <section class="editor-panel">
       <div class="page-crumbs" v-if="breadcrumbs.length">
         <el-breadcrumb separator="/">

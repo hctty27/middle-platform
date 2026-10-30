@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 回调订阅者管理页：展示投递进度和失败信息，并支持注册新的接入服务。
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { createSubscriber, listSubscribers } from '../../api/subscriberApi'
@@ -10,6 +11,7 @@ const showSubscriber = ref(false)
 const creatingSubscriber = ref(false)
 const newSubscriber = reactive({ code: '', callbackUrl: '', secret: '' })
 
+// 每次查询均更新加载状态，失败时保留可见的错误提示。
 async function loadSubscribers() {
   loadingSubscribers.value = true
   try {
@@ -18,6 +20,7 @@ async function loadSubscribers() {
   finally { loadingSubscribers.value = false }
 }
 
+// Webhook 密钥仅在创建时提交，不在订阅者列表中回显。
 async function addSubscriber() {
   if (!newSubscriber.code.trim() || !newSubscriber.callbackUrl.trim() || !newSubscriber.secret.trim()) {
     ElMessage.warning('请填写接入方编码、回调地址和签名密钥')

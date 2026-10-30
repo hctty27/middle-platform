@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 管理平台入口：切换配置管理与订阅者页面，并展示权威配置的当前版本。
 import { onMounted, ref } from 'vue'
 import SubscriberPage from './features/subscribers/SubscriberPage.vue'
 import { getRevision } from './api/syncApi'
@@ -10,6 +11,7 @@ const sidebarCollapsed = ref(false)
 const revision = ref(0)
 const epoch = ref('')
 
+// 页面首次加载及节点变更后刷新版本，避免展示过期的同步状态。
 async function refreshRevision() {
   try {
     const result = await getRevision()
