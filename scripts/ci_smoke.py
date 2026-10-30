@@ -170,9 +170,23 @@ def main():
         assert "serverGroupId" not in node
         assert node["parentId"] == (ids[index - 1] if index else 0)
     head = request(8080, "/api/config/sync/revision")
-    assert head["revision"] == 5, head
+    assert head["revision"] == 3, head
     history = request(8082, "/api/config/sync/changes?afterRevision=0&limit=100")
-    assert [event["revision"] for event in history] == list(range(1,6)), history
+    assert [event["revision"] for event in history] == list(range(1,4)), history
+    # 渠道应用、绑定 CRUD 不产生节点 revision，也不进入节点快照。
+    snapshot = request(8080, "/api/config/sync/snapshot")
+    assert set(snapshot) == {"epoch", "revision", "nodes"}, snapshot
+    assert len(snapshot["nodes"]) == 3 and snapshot["revision"] == 3
+    updated_app = request(8080, f'/api/config/admin/channel-apps/{app["id"]}', "PUT", {
+        "name": "Huawei Updated", "status": 1, "config": '{"appId":"10001","enabled":true}', "remark": "shared"
+    })
+    assert updated_app["name"] == "Huawei Updated"
+    updated_binding = request(8082, f'/api/config/admin/channel-app-bindings/{binding["id"]}', "PUT", {
+        "status": 1, "config": '{"authUrl":"auth-production"}'
+    })
+    assert json.loads(updated_binding["effectiveConfig"])["authUrl"] == "auth-production"
+    assert request(8080, "/api/config/sync/revision") == head
+    print("PASS channel CRUD does not affect node sync", flush=True)
     # 旧版版本化路由应彻底失效（404），统一无版本路径仍正常工作。
     legacy_prefix = "/api/" + "v1"
     request(8080, legacy_prefix + "/sync/revision", expected=404)
@@ -214,7 +228,7 @@ def main():
     assert request(8080, "/api/config/admin/nodes/search?keyword=x&limit=51", expected=400)
     print("PASS global search, deep navigation paths and input validation", flush=True)
 
-    wait_until("Webhook pull copied all three nodes", lambda: synchronized_nodes(3, 5))
+    wait_until("Webhook pull copied all three nodes", lambda: synchronized_nodes(3, 3))
     local = {row["id"]: row for row in replica()}
     for index, node_id in enumerate(ids):
         assert tuple(local[node_id][field] for field in
@@ -306,6 +320,7 @@ def main():
     request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=409)
     request(8082, f'/api/config/admin/channel-app-bindings/{binding["id"]}', "DELETE", expected=204)
     request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=204)
+    assert request(8080, "/api/config/sync/revision") == changed_head
     request(8082, f"/api/config/admin/nodes/{ids[-1]}", "DELETE", expected=204)
     wait_until("delete propagated to local replica",
                lambda: len(replica()) == 2 and all(row["id"] != ids[-1] for row in replica()))

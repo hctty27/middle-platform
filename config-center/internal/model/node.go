@@ -74,7 +74,7 @@ type NodeSummary struct {
 
 // Summary 将节点转换为树列表摘要。
 func Summary(n Node) NodeSummary {
-	return NodeSummary{ID: n.ID, ParentID: n.Parent(), NodeType: n.NodeType, EnvType: n.EnvType, Code: n.Code, Name: n.Name, Status: n.Status, Leaf: n.NodeType == "server_group" || n.NodeType == "channel_app"}
+	return NodeSummary{ID: n.ID, ParentID: n.Parent(), NodeType: n.NodeType, EnvType: n.EnvType, Code: n.Code, Name: n.Name, Status: n.Status, Leaf: n.NodeType == "server_group"}
 }
 
 // NodePage 定义分页节点结果。
@@ -110,8 +110,6 @@ type Snapshot struct {
 	Epoch    string `json:"epoch"`
 	Revision int64  `json:"revision"`
 	Nodes    []Node `json:"nodes"`
-	ChannelApps []ChannelApp `json:"channelApps"`
-	Bindings []ChannelAppBinding `json:"bindings"`
 }
 
 // Subscriber 定义回调订阅者及投递状态。

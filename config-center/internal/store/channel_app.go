@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -118,17 +117,12 @@ func (s *Store) ChannelAppBindings(ctx context.Context, appID int64) ([]model.Ch
 	return found,nil
 }
 
-// channelChanged 同步更新 epoch 和 revision，保证接入端重建完整渠道绑定副本。
-func channelChanged(ctx context.Context, tx *sql.Tx, nodeID int64) error {
-	if _,err := tx.ExecContext(ctx,"UPDATE config_revision SET epoch=UUID() WHERE id=1"); err != nil { return err }
-	return recordChange(ctx,tx,nodeID,"UPSERT")
-}
-
 func validApp(name string,status *int,config string,remark *string) error {
 	if service.ValidateNode(name,status,config,remark)!=nil || !validObject(config) { return ErrInvalid }
 	return nil
 }
 
+// 渠道 CRUD 不影响节点同步；仍锁定全局版本行，以便与节点删除串行，防止孤儿关联。
 func (s *Store) CreateChannelApp(ctx context.Context, input model.CreateChannelAppRequest) (model.ChannelApp,error) {
 	if input.GameID<=0 || strings.TrimSpace(input.Code)=="" || len([]rune(input.Code))>128 ||
 		validApp(input.Name,input.Status,input.Config,input.Remark)!=nil { return model.ChannelApp{},ErrInvalid }
@@ -140,7 +134,6 @@ func (s *Store) CreateChannelApp(ctx context.Context, input model.CreateChannelA
 		VALUES(?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,input.GameID,input.Code,input.Name,*input.Status,input.Config,input.Remark)
 	if err!=nil { return model.ChannelApp{},databaseError(err) }
 	id,err:=res.LastInsertId(); if err!=nil { return model.ChannelApp{},err }
-	if err=channelChanged(ctx,tx,input.GameID); err!=nil { return model.ChannelApp{},err }
 	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",id))
 	if err!=nil { return model.ChannelApp{},err }
 	return a,tx.Commit()
@@ -150,11 +143,10 @@ func (s *Store) UpdateChannelApp(ctx context.Context,id int64,input model.Update
 	if id<=0 || validApp(input.Name,input.Status,input.Config,input.Remark)!=nil { return model.ChannelApp{},ErrInvalid }
 	tx,err:=s.DB.BeginTx(ctx,nil); if err!=nil { return model.ChannelApp{},err }; defer tx.Rollback()
 	if err=lockRevision(ctx,tx); err!=nil { return model.ChannelApp{},err }
-	current,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",id))
+	_,err=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",id))
 	if err!=nil { return model.ChannelApp{},err }
 	_,err=tx.ExecContext(ctx,"UPDATE config_channel_app SET name=?,status=?,config=?,remark=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?",input.Name,*input.Status,input.Config,input.Remark,id)
 	if err!=nil { return model.ChannelApp{},databaseError(err) }
-	if err=channelChanged(ctx,tx,current.GameID); err!=nil { return model.ChannelApp{},err }
 	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",id))
 	if err!=nil { return model.ChannelApp{},err }
 	return a,tx.Commit()
@@ -170,7 +162,6 @@ func (s *Store) DeleteChannelApp(ctx context.Context,id int64) error {
 	if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app_binding WHERE channel_app_id=?",id).Scan(&count); err!=nil { return err }
 	if count!=0 { return ErrConflict }
 	if _,err=tx.ExecContext(ctx,"DELETE FROM config_channel_app WHERE id=?",id); err!=nil { return databaseError(err) }
-	if err=channelChanged(ctx,tx,gameID); err!=nil { return err }
 	return tx.Commit()
 }
 
@@ -188,7 +179,6 @@ func (s *Store) CreateChannelAppBinding(ctx context.Context,appID int64,input mo
 		VALUES(?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,appID,input.ServerGroupID,*input.Status,input.Config)
 	if err!=nil { return model.ChannelAppBinding{},databaseError(err) }
 	id,err:=res.LastInsertId(); if err!=nil { return model.ChannelAppBinding{},err }
-	if err=channelChanged(ctx,tx,input.ServerGroupID); err!=nil { return model.ChannelAppBinding{},err }
 	b,err:=scanBinding(tx.QueryRowContext(ctx,"SELECT "+bindingColumns+" FROM config_channel_app_binding WHERE id=?",id))
 	if err!=nil { return model.ChannelAppBinding{},err }
 	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",appID))
@@ -201,11 +191,10 @@ func (s *Store) UpdateChannelAppBinding(ctx context.Context,id int64,input model
 	if id<=0 || input.Status==nil || (*input.Status!=0 && *input.Status!=1) || !validObject(input.Config) { return model.ChannelAppBinding{},ErrInvalid }
 	tx,err:=s.DB.BeginTx(ctx,nil); if err!=nil { return model.ChannelAppBinding{},err }; defer tx.Rollback()
 	if err=lockRevision(ctx,tx); err!=nil { return model.ChannelAppBinding{},err }
-	current,err:=scanBinding(tx.QueryRowContext(ctx,"SELECT "+bindingColumns+" FROM config_channel_app_binding WHERE id=?",id))
+	_,err=scanBinding(tx.QueryRowContext(ctx,"SELECT "+bindingColumns+" FROM config_channel_app_binding WHERE id=?",id))
 	if err!=nil { return model.ChannelAppBinding{},err }
 	_,err=tx.ExecContext(ctx,"UPDATE config_channel_app_binding SET status=?,config=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?",*input.Status,input.Config,id)
 	if err!=nil { return model.ChannelAppBinding{},databaseError(err) }
-	if err=channelChanged(ctx,tx,current.ServerGroupID); err!=nil { return model.ChannelAppBinding{},err }
 	b,err:=scanBinding(tx.QueryRowContext(ctx,"SELECT "+bindingColumns+" FROM config_channel_app_binding WHERE id=?",id))
 	if err!=nil { return model.ChannelAppBinding{},err }
 	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",b.ChannelAppID))
@@ -221,21 +210,5 @@ func (s *Store) DeleteChannelAppBinding(ctx context.Context,id int64) error {
 	var groupID int64
 	if err=tx.QueryRowContext(ctx,"SELECT server_group_id FROM config_channel_app_binding WHERE id=?",id).Scan(&groupID); err!=nil { return err }
 	if _,err=tx.ExecContext(ctx,"DELETE FROM config_channel_app_binding WHERE id=?",id); err!=nil { return databaseError(err) }
-	if err=channelChanged(ctx,tx,groupID); err!=nil { return err }
 	return tx.Commit()
-}
-
-// 供全量快照复用事务中的一致性读取。
-func snapshotChannelApps(ctx context.Context,db queryer) ([]model.ChannelApp,[]model.ChannelAppBinding,error) {
-	a,err:=apps(ctx,db,0); if err!=nil { return nil,nil,err }
-	b,err:=bindings(ctx,db,0); if err!=nil { return nil,nil,err }
-	index:=make(map[int64]string,len(a))
-	for _,item:=range a { index[item.ID]=item.Config }
-	for i:=range b {
-		base,ok:=index[b[i].ChannelAppID]
-		if !ok { return nil,nil,errors.New("orphan channel app binding") }
-		b[i].EffectiveConfig,err=MergeChannelConfig(base,b[i].Config)
-		if err!=nil { return nil,nil,err }
-	}
-	return a,b,nil
 }

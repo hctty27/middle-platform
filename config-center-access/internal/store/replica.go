@@ -36,7 +36,7 @@ type Replica struct{ DB *sql.DB }
 // New 绑定本地副本数据库，不与配置中心的权威库共享写连接。
 func New(db *sql.DB) *Replica { return &Replica{DB: db} }
 
-// EnsureSchema 对全新数据库创建三级配置树副本；旧库需先完成手工迁移。
+// EnsureSchema 新库仅建立三级节点和游标；历史渠道副本表保留但不再读写。
 func (s *Replica) EnsureSchema(ctx context.Context) error {
 	const nodes = `CREATE TABLE IF NOT EXISTS config_node (
 		id BIGINT NOT NULL PRIMARY KEY,
@@ -63,24 +63,13 @@ func (s *Replica) EnsureSchema(ctx context.Context) error {
 			OR (node_type='server_group' AND COALESCE(game_id,0)>0 AND COALESCE(region_id,0)>0)
 		)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
-	const apps = `CREATE TABLE IF NOT EXISTS config_channel_app (
-		id BIGINT PRIMARY KEY,game_id BIGINT NOT NULL,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
-		name VARCHAR(128) NOT NULL,status TINYINT NOT NULL,config JSON NOT NULL,
-		KEY idx_replica_apps_game (game_id)
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
-	const bindings = `CREATE TABLE IF NOT EXISTS config_channel_app_binding (
-		id BIGINT PRIMARY KEY,channel_app_id BIGINT NOT NULL,server_group_id BIGINT NOT NULL,
-		status TINYINT NOT NULL,config JSON NOT NULL,effective_config JSON NOT NULL,
-		UNIQUE KEY uq_replica_app_group (channel_app_id,server_group_id),
-		KEY idx_replica_binding_group (server_group_id)
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
 	const state = `CREATE TABLE IF NOT EXISTS config_sync_state (
 		id TINYINT NOT NULL PRIMARY KEY,
 		epoch CHAR(36) NULL,
 		revision BIGINT NOT NULL,
 		updated_at DATETIME(6) NOT NULL
 	) ENGINE=InnoDB`
-	for _, ddl := range []string{nodes, apps, bindings, state} {
+	for _, ddl := range []string{nodes, state} {
 		if _, err := s.DB.ExecContext(ctx, ddl); err != nil {
 			return fmt.Errorf("initialize replica schema: %w", err)
 		}
@@ -125,7 +114,7 @@ func readState(_ context.Context, row scanner) (State, error) {
 }
 
 // Apply 对比期望游标，事务性执行全量快照或增量变更。
-func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remote.Node, deleted []int64, full bool, extras ...any) (bool, error) {
+func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remote.Node, deleted []int64, full bool) (bool, error) {
 	if next.Epoch == "" || next.Revision < 0 {
 		return false, fmt.Errorf("invalid target cursor")
 	}
@@ -133,18 +122,6 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 		if err := validateNode(node); err != nil {
 			return false, err
 		}
-	}
-	var apps []remote.ChannelApp
-	var bindings []remote.Binding
-	if len(extras)!=0 {
-		if len(extras)!=2 { return false,fmt.Errorf("invalid channel snapshot") }
-		var ok bool
-		apps,ok=extras[0].([]remote.ChannelApp); if !ok { return false,fmt.Errorf("invalid channel apps") }
-		bindings,ok=extras[1].([]remote.Binding); if !ok { return false,fmt.Errorf("invalid channel bindings") }
-	}
-	if full {
-		for _, a:=range apps { if a.ID<=0 || a.GameID<=0 || a.Code=="" || !json.Valid([]byte(a.Config)) { return false,fmt.Errorf("invalid app snapshot") } }
-		for _, b:=range bindings { if b.ID<=0 || b.ChannelAppID<=0 || b.ServerGroupID<=0 || !json.Valid([]byte(b.Config)) || !json.Valid([]byte(b.EffectiveConfig)) { return false,fmt.Errorf("invalid binding snapshot") } }
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -161,8 +138,6 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 		return false, nil
 	}
 	if full {
-		if _,err:=tx.ExecContext(ctx,"DELETE FROM config_channel_app_binding"); err!=nil { return false,err }
-		if _,err:=tx.ExecContext(ctx,"DELETE FROM config_channel_app"); err!=nil { return false,err }
 		if _, err := tx.ExecContext(ctx, "DELETE FROM config_node"); err != nil {
 			return false, err
 		}
@@ -189,18 +164,6 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 			node.ID,node.GameID,node.RegionID,node.NodeType,node.EnvType,node.Code,
 			node.Name,node.Status,node.Config,node.Remark,created,updated)
 		if err != nil { return false, fmt.Errorf("store node %d: %w", node.ID, err) }
-	}
-	if full {
-		for _,a:=range apps {
-			if _,err:=tx.ExecContext(ctx,`INSERT INTO config_channel_app(id,game_id,code,name,status,config)
-				VALUES(?,?,?,?,?,?)`,a.ID,a.GameID,a.Code,a.Name,a.Status,a.Config); err!=nil { return false,fmt.Errorf("store channel app %d: %w",a.ID,err) }
-		}
-		for _,b:=range bindings {
-			if _,err:=tx.ExecContext(ctx,`INSERT INTO config_channel_app_binding(id,channel_app_id,server_group_id,status,config,effective_config)
-				VALUES(?,?,?,?,?,?)`,b.ID,b.ChannelAppID,b.ServerGroupID,b.Status,b.Config,b.EffectiveConfig); err!=nil {
-				return false,fmt.Errorf("store channel binding %d: %w",b.ID,err)
-			}
-		}
 	}
 	var epoch any = next.Epoch
 	if next.Epoch == "" { epoch = nil }
@@ -280,20 +243,4 @@ func (s *Replica) Revision(ctx context.Context) (map[string]any, error) {
 func (s *Replica) Ready(ctx context.Context) error {
 	if s.DB == nil { return errors.New("missing replica database") }
 	return s.DB.PingContext(ctx)
-}
-
-// ChannelBindings 返回指定区服组已同步的生效配置；仅供可信内部模块调用。
-func (s *Replica) ChannelBindings(ctx context.Context,groupID int64) ([]remote.Binding,error) {
-	if groupID<=0 { return nil,fmt.Errorf("invalid server group") }
-	rows,err:=s.DB.QueryContext(ctx,`SELECT id,channel_app_id,server_group_id,status,config,effective_config
-		FROM config_channel_app_binding WHERE server_group_id=? ORDER BY id`,groupID)
-	if err!=nil { return nil,err }
-	defer rows.Close()
-	out:=make([]remote.Binding,0)
-	for rows.Next() {
-		var b remote.Binding
-		if err:=rows.Scan(&b.ID,&b.ChannelAppID,&b.ServerGroupID,&b.Status,&b.Config,&b.EffectiveConfig); err!=nil { return nil,err }
-		out=append(out,b)
-	}
-	return out,rows.Err()
 }

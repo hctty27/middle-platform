@@ -33,6 +33,15 @@ func TestRevisionContract(t *testing.T) {
 	if got.Epoch != "test-epoch" || got.Revision != 17 { t.Fatalf("response = %+v", got) }
 }
 
+// TestSnapshotContract 验证快照只包含三级节点。
+func TestSnapshotContract(t *testing.T) {
+	out, err := json.Marshal(Snapshot{Epoch:"test-epoch", Revision:3, Nodes:[]Node{}})
+	if err != nil { t.Fatal(err) }
+	var fields map[string]any
+	if err := json.Unmarshal(out, &fields); err != nil { t.Fatal(err) }
+	if len(fields)!=3 || fields["nodes"]==nil { t.Fatalf("unexpected snapshot: %s", out) }
+}
+
 // TestBatchGetContract 验证批量节点查询的数据结构与路径约定。
 func TestBatchGetContract(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/config/nodes/batch-get", strings.NewReader(`{"ids":[2,3]}`))

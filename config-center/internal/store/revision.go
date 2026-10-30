@@ -47,8 +47,6 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil { return Snapshot{}, err }
 	found, err := nodes(ctx, tx, "SELECT "+nodeColumns+" FROM config_node ORDER BY id")
 	if err != nil { return Snapshot{}, err }
-	apps, bindings, err := snapshotChannelApps(ctx,tx)
-	if err != nil { return Snapshot{},err }
 	if err := tx.Commit(); err != nil { return Snapshot{}, err }
-	return Snapshot{Epoch: v.Epoch, Revision: v.Revision, Nodes: found, ChannelApps: apps, Bindings: bindings}, nil
+	return Snapshot{Epoch: v.Epoch, Revision: v.Revision, Nodes: found}, nil
 }

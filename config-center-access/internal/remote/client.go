@@ -46,31 +46,11 @@ type Event struct {
 	Operation string `json:"operation"`
 }
 
-// ChannelApp 和 Binding 是游戏级应用定义与区服组差异配置。
-type ChannelApp struct {
- ID int64 `json:"id"`
- GameID int64 `json:"gameId"`
- Code string `json:"code"`
- Name string `json:"name"`
- Status int `json:"status"`
- Config string `json:"config"`
-}
-type Binding struct {
- ID int64 `json:"id"`
- ChannelAppID int64 `json:"channelAppId"`
- ServerGroupID int64 `json:"serverGroupId"`
- Status int `json:"status"`
- Config string `json:"config"`
- EffectiveConfig string `json:"effectiveConfig"`
-}
-
 // Snapshot 是服务端同一数据库版本的一致性快照。
 type Snapshot struct {
 	Epoch    string `json:"epoch"`
 	Revision int64  `json:"revision"`
 	Nodes    []Node `json:"nodes"`
- ChannelApps []ChannelApp `json:"channelApps"`
- Bindings []Binding `json:"bindings"`
 }
 
 // Client 不跟随 HTTP 重定向，避免在网关误配置时请求错误的服务。

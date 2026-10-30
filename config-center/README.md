@@ -6,7 +6,7 @@
 
 - `cmd/config-center`：HTTP 服务启动入口。
 - `cmd/migrate`：独立的 MySQL 迁移 CLI。
-- `internal/migration/sql`：内置版本 V1–V7 的权威数据库迁移 SQL。
+- `internal/migration/sql`：内置版本 V1–V8 的权威数据库迁移 SQL。
 - `internal/app`：数据库连接、迁移初始化、HTTP 服务、优雅退出。
 - `internal/settings`：环境变量。
 - `internal/api`：HTTP 接口。
@@ -31,7 +31,7 @@ export CONFIG_GO_ENABLE_WEBHOOK=true
 go run ./cmd/config-center
 ```
 
-启动时自动检查并更新数据库结构，首次空库执行 V1→V7。也可在服务启动前单独运行：
+启动时自动检查并更新数据库结构，首次空库执行 V1→V8。也可在服务启动前单独运行：
 
 ```bash
 go run ./cmd/migrate
@@ -91,7 +91,7 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 - `config_channel_app`：按 `game_id + code` 唯一的渠道应用公共定义，支持状态与公共 JSON。
 - `config_channel_app_binding`：按 `channel_app_id + server_group_id` 唯一；每个绑定独立控制状态并维护覆盖 JSON，禁止跨游戏绑定。
 - 公共配置与绑定覆盖配置按 JSON 对象的同名键合并，覆盖层优先；`null` 用于删除公共字段。
-- 应用或绑定变更时原子更新 `epoch + revision`，接入端收到通知后重建快照，副本保存公共定义及绑定生效配置。
+- 渠道应用及绑定完全独立管理，CRUD 不修改节点同步版本、不记录节点变更日志、不触发 Webhook。
 
 ### 管理 API
 
@@ -111,7 +111,7 @@ DELETE /api/config/admin/channel-app-bindings/{id}
 **V6 非向后兼容。** 上线前必须备份配置库、停写并协调接入端和配置中心升级。
 迁移会合并同一游戏下相同 `channel_app.code`，并把旧区服组的完整 JSON 原样迁入绑定覆盖层，公共 JSON 初始为 `{}`，不会覆盖提审服的旧配置。
 原始渠道节点保存在 `config_node_v6_channel_app_archive`，不得自动删除。
-旧版接入端不认识快照中的 `channelApps` 和 `bindings`，必须一起升级。
+V8 起同步快照不再包含 `channelApps` 和 `bindings`，接入端应与配置中心协调升级。
 
 ## V7：移除冗余祖先列
 
@@ -176,3 +176,11 @@ go run ./cmd/migrate -config configs/config-dev.yaml
 **不要重复使用 `-repair-v6-gtid`**，它只处理 `version=5,dirty=1` 且 V6 尚未执行的安全中断场景；
 也不要为通过校验而创建空的 V4 归档表，否则会误导历史数据审计。
 V4 历史归档缺失不会被自动恢复，若业务仍需旧渠道原始数据，请从备份或原始库恢复。
+
+## V8 仅同步三级节点
+
+- 只有 `config_node` 的 `game → region → server_group` 变更才推进 `revision` 并触发 Webhook。
+- `/api/config/sync/snapshot` 只包含 `epoch`、`revision`、`nodes`。
+- 渠道应用与绑定保留原来的 CRUD 和生效 JSON 合并逻辑，不参加节点同步。
+- V8 迁移只切换一次 `epoch`，不删除业务表；新版接入端自动重建纯节点快照。
+- 上线前备份并协调两个 Go 服务升级。旧接入库的渠道副本表不会自动删除，确认无依赖后手动清理。

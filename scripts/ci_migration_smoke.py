@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Go SQL 迁移真实 MySQL V1→V7 与旧版配置结构回归。"""
+"""Go SQL 迁移真实 MySQL V1→V8 与旧版配置结构回归。"""
 
 import os
 import subprocess
@@ -176,11 +176,22 @@ def main():
     ])
     migrate(7)  # V7 幂等性校验
 
-    # 一些历史 V4/Flyway 基线没有生成 V4 归档；它仅供审计，不应阻止运行态 V7 校验。
+    # V8 只切换 epoch，保留节点 revision 和渠道业务数据。
+    before_v8_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1")
+    migrate(8)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "8\\t0"
+    after_v8_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1")
+    assert after_v8_epoch != before_v8_epoch
+    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_channel_app_binding") == "1"
+    migrate(8)
+    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == after_v8_epoch
+
+    # 一些历史 V4/Flyway 基线没有生成 V4 归档；它仅供审计，不应阻止运行态 V8 校验。
     # 本测试只操作独立的 CI 数据库，绝不可对真实业务库删除历史归档。
     mysql("DROP TABLE config_migration.config_node_v4_legacy_archive")
-    migrate(7)
-    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "7\t0"
+    migrate(8)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "8\t0"
     assert mysql("SELECT COUNT(*) FROM config_migration.config_node_v6_channel_app_archive") == "1"
     assert mysql("SELECT COUNT(*) FROM config_migration.config_channel_app_binding") == "1"
 
@@ -188,7 +199,7 @@ def main():
     mysql("DROP TABLE config_migration.config_node_v6_channel_app_archive")
     migrate(7, expected_success=False)
 
-    print("PASS GTID-safe V1-V7 migration, optional V4 archive and mandatory V6/V7 checks", flush=True)
+    print("PASS GTID-safe V1-V8 migration, optional V4 archive and mandatory V6/V7/V8 checks", flush=True)
 
 
 if __name__ == "__main__":

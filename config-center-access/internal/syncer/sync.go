@@ -108,7 +108,7 @@ func (s *Synchronizer) snapshot(ctx context.Context, expected store.State) (bool
 	}
 	return s.local.Apply(ctx, expected, store.State{
 		Epoch: data.Epoch, Revision: data.Revision,
-	}, data.Nodes, nil, true, data.ChannelApps, data.Bindings)
+	}, data.Nodes, nil, true)
 }
 
 // contiguous 验证事件版本连续，缺失事件时必须重新拉取完整快照。

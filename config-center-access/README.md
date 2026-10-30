@@ -93,14 +93,14 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 通用配置在 `configs/config.yaml`，开发/生产配置与通用配置合并；环境变量优先级最高。省略 `-config` 时保留旧的环境变量启动方式。
 生产配置同样从 `configs/config.yaml` 复制为 `configs/config-prod.yaml`；建议通过 `ACCESS_DB_DSN` 和 `CONFIG_WEBHOOK_SECRET` 注入生产密钥。实际的 `config-dev.yaml`、`config-prod.yaml` 已加入 `.gitignore`。
 
-## V6 渠道应用副本
+## V8 三级节点同步
 
-配置中心把渠道应用公共定义和区服组绑定放在独立数组中同步：
-`snapshot.channelApps`、`snapshot.bindings`。Go 接入端创建
-`config_channel_app`、`config_channel_app_binding` 本地副本表，
-与 `config_node`、`config_sync_state` 在同一事务内全量写入。
-使用 `Replica.ChannelBindings(ctx, serverGroupID)` 获取当前区服组的生效 JSON。
-绑定配置可能包含 SDK 密钥，应只向可信内部模块提供，不要直接暴露公网 API。
+- 仅同步 `game`、`region`、`server_group` 三级节点与 `epoch + revision` 游标。
+- 初次启动、epoch 变化、日志断档时读取 `snapshot.nodes`；增量同步继续按 revision 拉取节点变更 ID。
+- 新副本库只建立 `config_node` 和 `config_sync_state` 两张表，不再建渠道应用和绑定副本表。
+- 已存在的渠道副本表不会被自动删除，但不再写入或读取；请确认业务无依赖后备份并自行清理。
+- 需要渠道应用配置的服务应使用配置中心独立的渠道应用查询接口，不可依赖遗留副本。
+- V8 迁移切换一次 epoch，让新版接入工程重建三级节点副本。
 
 ## V5 副本结构（适配权威库 V7）
 

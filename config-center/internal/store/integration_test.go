@@ -6,6 +6,7 @@ import (
 	"errors"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -114,26 +115,37 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	binding, err := store.CreateChannelAppBinding(ctx,app.ID,model.CreateChannelAppBindingRequest{ServerGroupID: group.ID,Status:&enabled,Config:`{"x":2}`})
 	if err != nil || binding.EffectiveConfig != `{"x":2}` { t.Fatalf("binding: %+v %v",binding,err) }
+	// 渠道绑定存在时快照仍仅包含节点，不能暴露渠道应用配置。
+	boundSnapshot, err := store.Snapshot(ctx)
+	if err != nil || len(boundSnapshot.Nodes) != 3 || boundSnapshot.Revision != 3 { t.Fatalf("snapshot: %+v %v",boundSnapshot,err) }
+	payload, err := json.Marshal(boundSnapshot)
+	if err != nil || strings.Contains(string(payload),"channelApps") || strings.Contains(string(payload),"bindings") {
+		t.Fatalf("channel data leaked into snapshot: %s %v",payload,err)
+	}
 	if _, err := store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "a1", Name: "Duplicate", Status: &enabled, Config: "{}"}); !errorsIs(err, ErrConflict) {
 		t.Fatalf("expected duplicate app conflict, got %v",err)
 	}
 	initial, err := store.Revision(ctx)
-	if err != nil || initial.Revision != 5 { t.Fatalf("revision after 5 creates: %+v %v",initial,err) }
+	if err != nil || initial.Revision != 3 { t.Fatalf("revision after 3 node creates: %+v %v",initial,err) }
 	_, err = store.Update(ctx,group.ID,UpdateNodeRequest{Name:group.Name,Status:&enabled,Config:"{ }"})
 	if err != nil { t.Fatal(err) }
 	same, err := store.Revision(ctx)
 	if err != nil || same.Revision != initial.Revision { t.Fatalf("node no-op changed revision: %+v %v",same,err) }
 	_, err = store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:"Updated App",Status:&enabled,Config:`{"x":3}`})
 	if err != nil { t.Fatal(err) }
+	channelRevision, err := store.Revision(ctx)
+	if err != nil || channelRevision != initial { t.Fatalf("channel write changed cursor: %+v vs %+v (%v)",channelRevision,initial,err) }
 	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected child conflict: %v",err) }
 	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected bound group conflict: %v",err) }
 	if err := store.DeleteChannelApp(ctx,app.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected bound app conflict: %v",err) }
 	if err := store.DeleteChannelAppBinding(ctx,binding.ID); err != nil { t.Fatalf("delete binding: %v",err) }
 	if err := store.DeleteChannelApp(ctx,app.ID); err != nil { t.Fatalf("delete app: %v",err) }
+	finalRevision, err := store.Revision(ctx)
+	if err != nil || finalRevision != initial { t.Fatalf("channel delete changed cursor: %+v vs %+v (%v)",finalRevision,initial,err) }
 	changeList, err := store.Changes(ctx, 0, 100)
-	if err != nil || len(changeList) != 8 { t.Fatalf("unexpected change log: count=%d err=%v",len(changeList),err) }
+	if err != nil || len(changeList) != 3 { t.Fatalf("unexpected change log: count=%d err=%v",len(changeList),err) }
 	snap, err := store.Snapshot(ctx)
-	if err != nil || snap.Revision != 8 || len(snap.Nodes) != 3 || len(snap.ChannelApps)!=0 || len(snap.Bindings)!=0 {
+	if err != nil || snap.Revision != 3 || len(snap.Nodes) != 3 {
 		t.Fatalf("snapshot: %+v %v",snap,err)
 	}
 	subscribers, err := store.Subscribers(ctx)
@@ -151,7 +163,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	duplicate, err = dispatcher.Claim(ctx)
 	if err != nil || duplicate != nil { t.Fatalf("acknowledged claim: %+v %v", duplicate, err) }
 	subscribers, err = store.Subscribers(ctx)
-	if err != nil || len(subscribers) != 1 || subscribers[0].AcknowledgedRevision != 8 {
+	if err != nil || len(subscribers) != 1 || subscribers[0].AcknowledgedRevision != 3 {
 		t.Fatalf("acknowledgment: %+v %v", subscribers, err)
 	}
 
@@ -173,7 +185,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	close(errs)
 	for err := range errs { if err != nil { t.Fatal(err) } }
 	all, err := store.Changes(ctx, 0, 100)
-	if err != nil || len(all) != 20 { t.Fatalf("concurrent change log count = %d, err = %v", len(all), err) }
+	if err != nil || len(all) != 15 { t.Fatalf("concurrent change log count = %d, err = %v", len(all), err) }
 	for i, event := range all {
 		if event.Revision != int64(i+1) { t.Fatalf("revision gap at %d: %d", i, event.Revision) }
 	}

@@ -19,7 +19,7 @@ import (
 var scripts embed.FS
 
 // Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
-const Latest = 7
+const Latest = 8
 
 var files = [...]string{
  "",
@@ -30,6 +30,7 @@ var files = [...]string{
  "sql/V5__region_env_type.sql",
  "sql/V6__shared_channel_apps.sql",
  "sql/V7__trim_node_group_id.sql",
+ "sql/V8__node_only_sync.sql",
 }
 
 // Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
