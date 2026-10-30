@@ -49,6 +49,25 @@ func TestCoreRouteUsesMappedResponseData(t *testing.T) {
     if _,ok:=response.Data["config"];ok { t.Fatal("raw config leaked") }
 }
 
+func TestCoreRouteReturnsSuccessWithOmittedFields(t *testing.T) {
+    f := &fakeFetcher{result: map[string]any{
+        "snKey": "app1001",
+        "zoneKey": "group1001",
+    }}
+    rec := httptest.NewRecorder()
+    Router(f, fakePinger{}).ServeHTTP(rec,
+        httptest.NewRequest(http.MethodGet, "/api/core/prod/app1001", nil))
+    if rec.Code != http.StatusOK { t.Fatalf("HTTP %d: %s", rec.Code, rec.Body.String()) }
+    var result struct {
+        Code int `json:"code"`
+        Message string `json:"message"`
+        Data map[string]any `json:"data"`
+    }
+    if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil { t.Fatal(err) }
+    if result.Code != 0 || result.Message != "success" { t.Fatalf("response: %+v", result) }
+    if _, exists := result.Data["tsKey"]; exists { t.Fatalf("unconfigured tsKey must be omitted: %+v", result.Data) }
+}
+
 func TestConfigErrors(t *testing.T) {
     cases:=[]struct{err error;want int}{
         {model.ErrInvalidRequest,400},

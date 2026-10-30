@@ -2,9 +2,7 @@ package mapping
 
 import (
     "encoding/json"
-    "errors"
     "reflect"
-    "strings"
     "testing"
 )
 
@@ -74,14 +72,91 @@ func TestRejectsInvalidMapping(t *testing.T) {
     }
 }
 
-func TestRejectsMissingFieldAndUnknownRoute(t *testing.T) {
-    resolver,err:=LoadDefault()
-    if err!=nil { t.Fatal(err) }
-    if err:=resolver.Require("GET /no-such-route");err==nil { t.Fatal("missing route accepted") }
-    _,err=resolver.Resolve(RouteCoreConfig,map[string]any{"channel_app":map[string]any{"code":"app"}})
-    if !errors.Is(err,ErrMissingField) || !strings.Contains(err.Error(),"tsKey") && !strings.Contains(err.Error(),"zoneKey") {
-        t.Fatalf("missing path error: %v",err)
+func TestMissingFieldsAreOmittedInsteadOfFailing(t *testing.T) {
+    resolver, err := LoadDefault()
+    if err != nil { t.Fatal(err) }
+    if err := resolver.Require("GET /no-such-route"); err == nil {
+        t.Fatal("missing route accepted")
     }
+
+    for _, tc := range []struct {
+        name string
+        source map[string]any
+        want map[string]any
+    }{
+        {
+            name: "missing config key",
+            source: map[string]any{
+                "channel_app": map[string]any{
+                    "code": "app1001",
+                    "config": map[string]any{},
+                },
+                "server_group": map[string]any{"code": "group1"},
+            },
+            want: map[string]any{"snKey": "app1001", "zoneKey": "group1"},
+        },
+        {
+            name: "null config value",
+            source: map[string]any{
+                "channel_app": map[string]any{
+                    "code": "app1001",
+                    "config": map[string]any{"tsKey": nil},
+                },
+                "server_group": map[string]any{"code": "group1"},
+            },
+            want: map[string]any{"snKey": "app1001", "zoneKey": "group1"},
+        },
+        {
+            name: "missing parent object",
+            source: map[string]any{
+                "channel_app": map[string]any{"code": "app1001"},
+                "server_group": map[string]any{"code": "group1"},
+            },
+            want: map[string]any{"snKey": "app1001", "zoneKey": "group1"},
+        },
+        {
+            name: "all fields absent",
+            source: map[string]any{},
+            want: map[string]any{},
+        },
+    } {
+        t.Run(tc.name, func(t *testing.T) {
+            got, err := resolver.Resolve(RouteCoreConfig, tc.source)
+            if err != nil { t.Fatal(err) }
+            if !reflect.DeepEqual(got, tc.want) {
+                t.Fatalf("got %+v, want %+v", got, tc.want)
+            }
+        })
+    }
+}
+
+func TestResolverPreservesConfiguredZeroValues(t *testing.T) {
+    resolver, err := Load([]byte(`{
+        "GET /core": {
+            "falseValue": "channel_app.config.falseValue",
+            "zeroValue": "channel_app.config.zeroValue",
+            "emptyString": "channel_app.config.emptyString",
+            "nullValue": "channel_app.config.nullValue",
+            "missingNested": "channel_app.config.login.token"
+        }
+    }`))
+    if err != nil { t.Fatal(err) }
+    got, err := resolver.Resolve("GET /core", map[string]any{
+        "channel_app": map[string]any{"config": map[string]any{
+            "falseValue": false,
+            "zeroValue": json.Number("0"),
+            "emptyString": "",
+            "nullValue": nil,
+            "login": "not an object",
+        }},
+    })
+    if err != nil { t.Fatal(err) }
+    want := map[string]any{
+        "falseValue": false,
+        "zeroValue": json.Number("0"),
+        "emptyString": "",
+    }
+    if !reflect.DeepEqual(got, want) { t.Fatalf("got %+v, want %+v", got, want) }
 }
 
 func TestDecodeObject(t *testing.T) {

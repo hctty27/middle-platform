@@ -58,13 +58,34 @@ func TestGetRejectsUnboundEnvironment(t *testing.T) {
 }
 
 func TestGetRejectsInvalidOrMissingConfig(t *testing.T) {
-    for _,appConfig:=range []string{"{}", "null", "[]", "invalid"} {
+    for _,appConfig:=range []string{"null", "[]", "invalid"} {
         f:=&fakeReader{
             app:model.ChannelApp{Code:"a1",Config:json.RawMessage(appConfig)},
             group:&model.BoundGroup{ServerGroupCode:"g1",Config:json.RawMessage("{}")},
         }
         _,err:=serviceWithReader(t,f).Get(context.Background(),"prod","a1")
         if !errors.Is(err,model.ErrInvalidConfig) { t.Fatalf("config %q: %v",appConfig,err) }
+    }
+}
+
+func TestGetOmitsUnsetOptionalMappingFields(t *testing.T) {
+    for _, config := range []string{
+        "{}",
+        `{"tsKey":null}`,
+    } {
+        f := &fakeReader{
+            app: model.ChannelApp{Code: "app1001", Config: json.RawMessage(config)},
+            group: &model.BoundGroup{
+                ServerGroupCode: "group1001",
+                Config: json.RawMessage("{}"),
+            },
+        }
+        got, err := serviceWithReader(t, f).Get(context.Background(), "prod", "app1001")
+        if err != nil { t.Fatalf("config=%s: %v", config, err) }
+        want := map[string]any{"snKey":"app1001","zoneKey":"group1001"}
+        if !reflect.DeepEqual(got, want) {
+            t.Fatalf("config=%s: got %+v, want %+v", config, got, want)
+        }
     }
 }
 

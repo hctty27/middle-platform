@@ -14,8 +14,6 @@ import (
 // RouteCoreConfig 同时用于接口注册和映射查询，避免路由名称漂移。
 const RouteCoreConfig = "GET /api/core/{env}/{appid}"
 
-var ErrMissingField = errors.New("response mapping field is missing")
-
 //go:embed response-mapping.json
 var defaultMapping []byte
 
@@ -99,27 +97,33 @@ func parsePath(source string) ([]string,error) {
     return nil,fmt.Errorf("unsupported source path %q",source)
 }
 
-// Resolve 把业务层构建的数据上下文映射为单个接口的 data JSON。
-func (r *Resolver) Resolve(route string, source map[string]any) (map[string]any,error) {
-    if err:=r.Require(route);err!=nil { return nil,err }
-    rules:=r.routes[route]
-    result:=make(map[string]any,len(rules))
-    for _,rule:=range rules {
-        var current any=source
-        for _,segment:=range rule.segments {
-            object,ok:=current.(map[string]any)
-            if !ok {
-                return nil,fmt.Errorf("%w: %s -> %s",ErrMissingField,rule.target,rule.source)
-            }
-            value,exists:=object[segment]
-            if !exists || value==nil {
-                return nil,fmt.Errorf("%w: %s -> %s",ErrMissingField,rule.target,rule.source)
-            }
-            current=value
-        }
-        result[rule.target]=current
+// Resolve 根据当前接口的映射只返回实际存在且非 null 的字段。
+func (r *Resolver) Resolve(route string, source map[string]any) (map[string]any, error) {
+    if err := r.Require(route); err != nil {
+        return nil, err
     }
-    return result,nil
+    result := make(map[string]any, len(r.routes[route]))
+    for _, rule := range r.routes[route] {
+        current := any(source)
+        found := true
+        for _, segment := range rule.segments {
+            object, ok := current.(map[string]any)
+            if !ok {
+                found = false
+                break
+            }
+            value, exists := object[segment]
+            if !exists || value == nil {
+                found = false
+                break
+            }
+            current = value
+        }
+        if found {
+            result[rule.target] = current
+        }
+    }
+    return result, nil
 }
 
 // DecodeObject 读取数据库 JSON 时保留数字精度；不接受非对象类型。
