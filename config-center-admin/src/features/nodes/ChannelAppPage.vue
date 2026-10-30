@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { nodeApi } from '../../api/nodeApi'
+import JsonConfigEditor from '../../components/JsonConfigEditor.vue'
 import { api } from '../../api/http'
 import { regionEnvLabels } from './types'
 import type { NodeSummary, RegionEnvType } from './types'
@@ -295,7 +296,7 @@ watch(() => props.gameId, () => {
           <el-form-item label="名称" required><el-input v-model="appForm.name" maxlength="128" /></el-form-item>
         </div>
         <el-form-item label="状态"><el-switch v-model="appForm.status" :active-value="1" :inactive-value="0" /></el-form-item>
-        <el-form-item label="公共配置（JSON 对象）" required><el-input v-model="appForm.config" type="textarea" class="json-input" :rows="14" /></el-form-item>
+        <el-form-item label="公共配置（JSON 对象）" required><JsonConfigEditor v-model="appForm.config" :rows="14" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="appForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="appVisible = false">取消</el-button>
@@ -325,7 +326,7 @@ watch(() => props.gameId, () => {
         <el-form-item v-else label="区服组 ID"><el-input :model-value="String(bindingForm.serverGroupId)" disabled /></el-form-item>
         <el-form-item label="绑定状态"><el-switch v-model="bindingForm.status" :active-value="1" :inactive-value="0" /></el-form-item>
         <el-form-item label="覆盖 JSON 配置" required>
-          <el-input v-model="bindingForm.config" type="textarea" class="json-input" :rows="14" />
+          <JsonConfigEditor v-model="bindingForm.config" :rows="14" />
         </el-form-item>
         <p class="muted">最终生效配置由 Go 后端按公共配置与覆盖配置合并计算。</p>
       </el-form>
