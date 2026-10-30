@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // 配置工作区负责展示懒加载目录树、直属子项列表和节点编辑抽屉。
 // 数据加载、并发控制及表单状态集中交由 useNodeWorkspace 管理。
+import { watch } from 'vue'
+import { focusNodeId } from './app/gameContext'
 import type { NodeType, RegionEnvType } from './features/nodes/types'
 import { regionEnvLabels } from './features/nodes/types'
 
@@ -13,9 +15,21 @@ function envTagType(env: RegionEnvType | null | undefined): 'success' | 'warning
 }
 import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
+import GroupBindings from './features/nodes/components/GroupBindings.vue'
 
+const props = defineProps<{ gameId: number | null }>()
 const emit = defineEmits<{ changed: [] }>()
-const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
+const { selectById, labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
+
+// 游戏切换与概览页跳转均直接定位目标节点。
+let focusSequence = 0
+watch(() => [props.gameId, focusNodeId.value], async ([gameId, nodeId]) => {
+  const targetId = Number(nodeId ?? gameId ?? 0)
+  if (!targetId) return
+  const current = ++focusSequence
+  const ok = await selectById(targetId)
+  if (ok && current === focusSequence && nodeId) focusNodeId.value = null
+}, { immediate: true })
 </script>
 
 <template>
@@ -98,7 +112,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
             <strong>{{ selected.nodeType === 'server_group' ? '渠道绑定' : nextLabel + '列表' }}</strong>
             <span v-if="selected.nodeType !== 'server_group'" class="muted">共 {{ childTotal }} 条</span>
           </div>
-          <div class="children-tools" v-if="selected.nodeType !== 'channel_app'">
+          <div class="children-tools" v-if="selected.nodeType === 'game' || selected.nodeType === 'region'">
             <el-select v-if="selected.nodeType === 'game'" v-model="regionFilter" placeholder="全部大区类型"
                        clearable @change="onRegionFilterChange" style="width: 140px">
               <el-option v-for="(label, key) in regionEnvLabels" :key="key" :label="label" :value="key" />
@@ -107,10 +121,9 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
             <el-button type="primary" @click="openCreate(selected)">+ 新增{{ nextLabel }}</el-button>
           </div>
         </div>
-        <div v-if="selected.nodeType === 'server_group'" class="leaf-tip">
-          渠道应用在「渠道应用」页面统一创建，通过绑定关联到此区服组。
-        </div>
-        <template v-else>
+        <GroupBindings v-if="selected.nodeType === 'server_group'" :key="selected.id"
+          :game-id="breadcrumbs[0]?.id ?? selected.id" :group-id="selected.id" @changed="emit('changed')" />
+        <template v-if="selected.nodeType !== 'server_group'">
           <div class="children-table">
             <el-table v-loading="childrenLoading" :data="children" stripe height="100%"
                       empty-text="暂无子项" @row-click="openChild">
