@@ -80,7 +80,7 @@ go build ./cmd/config-center-access
 
 `GET /api/access/nodes` 返回 `env_type`（`test` / `review` / `prod`）字段。
 历史未分类大区返回 `null`；归类后通过权威端版本事件同步更新。
-已使用 V3 接入副本数据库的部署，请备份并依次执行 V4、V5 SQL。
+已使用 V3 接入副本数据库的部署，请备份并依次执行 V4、V5、V6 SQL。
 
 ## YAML 本地启动
 
@@ -115,7 +115,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 停止接入服务并备份本地副本，在已完成 V5 的库上执行：
 
 ```powershell
-mysql -u root -p config_access < db/migration/V6__rename_region_env_prod_replica.sql
+cmd /c "mysql -u root -p config_access < db/migration/V6__rename_region_env_prod_replica.sql"
 ```
 
 该脚本不删除节点、不重置同步游标。新建空副本无需执行此 SQL。权威配置中心 V10 切换 `epoch` 后，接入端会自动重新拉取三级节点快照。若旧 CHECK 约束仍在，新接入服务会拒绝启动并提示先执行 V6。
