@@ -68,14 +68,31 @@ func bindings(ctx context.Context, db queryer, appID int64) ([]model.ChannelAppB
 
 // MergeChannelConfig 使用 JSON Merge Patch：覆盖层同名键优先，null 删除公共键。
 func MergeChannelConfig(common, override string) (string,error) {
-	var a,b map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(common), &a); err != nil || a == nil { return "", model.ErrInvalid }
-	if err := json.Unmarshal([]byte(override), &b); err != nil || b == nil { return "", model.ErrInvalid }
-	for key,value := range b {
-		if string(value) == "null" { delete(a,key) } else { a[key]=value }
-	}
-	out,err := json.Marshal(a)
+	var base, patch map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(common), &base); err != nil || base == nil { return "", model.ErrInvalid }
+	if err := json.Unmarshal([]byte(override), &patch); err != nil || patch == nil { return "", model.ErrInvalid }
+	if err := mergePatch(base,patch); err != nil { return "",err }
+	out,err := json.Marshal(base)
 	return string(out),err
+}
+
+// mergePatch 递归实现对象级 JSON Merge Patch，不将 64 位整数转为 float64。
+func mergePatch(base, patch map[string]json.RawMessage) error {
+	for key,value := range patch {
+		if strings.TrimSpace(string(value)) == "null" { delete(base,key); continue }
+		var nested map[string]json.RawMessage
+		if json.Unmarshal(value,&nested)==nil && nested!=nil {
+			var previous map[string]json.RawMessage
+			if old,found:=base[key]; found { _=json.Unmarshal(old,&previous) }
+			if previous==nil { previous=make(map[string]json.RawMessage) }
+			if err:=mergePatch(previous,nested); err!=nil { return err }
+			result,err:=json.Marshal(previous); if err!=nil { return err }
+			base[key]=result
+		} else {
+			base[key]=value
+		}
+	}
+	return nil
 }
 
 func validObject(config string) bool {
