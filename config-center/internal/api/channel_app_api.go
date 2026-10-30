@@ -64,3 +64,12 @@ func (h *api) deleteChannelAppBinding(w http.ResponseWriter,r *http.Request) {
 	if err=h.writer.DeleteChannelAppBinding(r.Context(),bindingID); err!=nil { respond(w,nil,err); return }
 	w.WriteHeader(http.StatusNoContent)
 }
+
+
+// serverGroupBindings 查询当前区服组已绑定的渠道应用，供工作台直接管理。
+func (h *api) serverGroupBindings(w http.ResponseWriter, r *http.Request) {
+	groupID, err := id(r)
+	if err != nil || groupID <= 0 { respond(w, nil, ErrInvalid); return }
+	out, err := h.reader.ServerGroupBindings(r.Context(), groupID)
+	respond(w, out, err)
+}
