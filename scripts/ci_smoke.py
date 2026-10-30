@@ -160,13 +160,14 @@ def main():
     assert len(request(8080, f'/api/config/admin/channel-apps?gameId={ids[0]}')) == 1
 
     expected = [
-        (None, None, None),
-        (ids[0], None, None),
-        (ids[0], ids[1], None),
+        (None, None),
+        (ids[0], None),
+        (ids[0], ids[1]),
     ]
     for index,node_id in enumerate(ids):
         node = request(8080, f"/api/config/nodes/{node_id}")
-        assert tuple(node[field] for field in ("gameId", "regionId", "serverGroupId")) == expected[index]
+        assert tuple(node[field] for field in ("gameId", "regionId")) == expected[index]
+        assert "serverGroupId" not in node
         assert node["parentId"] == (ids[index - 1] if index else 0)
     head = request(8080, "/api/config/sync/revision")
     assert head["revision"] == 5, head
