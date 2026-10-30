@@ -32,7 +32,12 @@ def request(port, path, method="GET", data=None, expected=200, extra_headers=Non
         body = ex.read().decode("utf-8")
     if status != expected:
         raise AssertionError(f"{method} {path}: HTTP {status} != {expected}: {body[:500]}")
-    return json.loads(body) if body else None
+    if not body:
+        return None
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return body
 
 
 def wait_until(label, predicate, seconds=75):

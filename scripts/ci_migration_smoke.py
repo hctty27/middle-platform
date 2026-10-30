@@ -93,7 +93,19 @@ def main():
     assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") != old_epoch
     assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
     migrate(4)  # 幂等性校验
-    print("PASS Go SQL migrations V1-V4, archived legacy nodes, epoch and idempotence", flush=True)
+    # 验证已有历史 V4 记录的数据库能直接接入 Go，不重新执行破坏性 SQL。
+    mysql("""
+        DROP TABLE config_migration.config_schema_migrations;
+        CREATE TABLE config_migration.flyway_schema_history (
+            installed_rank INT PRIMARY KEY, version VARCHAR(50), success TINYINT NOT NULL
+        );
+        INSERT INTO config_migration.flyway_schema_history(installed_rank,version,success)
+        VALUES(1,'4',1);
+    """)
+    migrate(4)
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "4"
+    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
+    print("PASS Go SQL migrations V1-V4, legacy V4 baseline and idempotence", flush=True)
 
 
 if __name__ == "__main__":
