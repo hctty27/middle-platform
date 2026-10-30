@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getRevision } from './api/syncApi'
-import { currentGameId, games, gamesLoading, loadGames } from './app/gameContext'
+import { currentGameId, focusNodeId, games, gamesLoading, loadGames } from './app/gameContext'
 import ConfigWorkspace from './ConfigWorkspace.vue'
 import GameOverview from './features/dashboard/GameOverview.vue'
 import ChannelAppPage from './features/nodes/ChannelAppPage.vue'
@@ -21,6 +21,7 @@ const titles: Record<Page, string> = {
 const currentTitle = computed(() => titles[navigation.value])
 const activeGame = computed(() => games.value.find(game => game.id === currentGameId.value))
 const updating = ref(false)
+watch(currentGameId, () => { focusNodeId.value = null }, { flush: 'sync' })
 
 function readRoute() {
   const target = window.location.hash.replace(/^#\/?/, '').split('/')[0] as Page
