@@ -112,3 +112,27 @@ DELETE /api/config/admin/channel-app-bindings/{id}
 迁移会合并同一游戏下相同 `channel_app.code`，并把旧区服组的完整 JSON 原样迁入绑定覆盖层，公共 JSON 初始为 `{}`，不会覆盖提审服的旧配置。
 原始渠道节点保存在 `config_node_v6_channel_app_archive`，不得自动删除。
 旧版接入端不认识快照中的 `channelApps` 和 `bindings`，必须一起升级。
+
+## V6 GTID 1786 失败恢复
+
+V6 早期版本曾使用 `CREATE TABLE ... SELECT`，在部分启用 GTID 一致性检查的 MySQL 上会报 `1786`，
+并在 `config_schema_migrations` 留下 `version=5, dirty=1`。当前 SQL 已拆分为 `CREATE TABLE ... LIKE` 与 `INSERT ... SELECT`。
+
+**不要直接把 dirty 设置为 0，也不要直接删除旧 `config_node` 或已归档数据。**
+确保数据库已完整备份、关闭所有配置中心写入实例，在更新至包含本修复的代码后，先确认数据库连接的是预期环境：
+
+```sql
+SELECT DATABASE(), @@version, @@global.gtid_mode, @@global.enforce_gtid_consistency;
+SELECT version,dirty FROM config_schema_migrations WHERE id=1;
+```
+
+若失败发生在创建归档表之前，执行：
+
+```powershell
+go run ./cmd/migrate -config configs/config-dev.yaml -repair-v6-gtid
+```
+
+此显式恢复参数在独占迁移锁下，只针对 `version=5,dirty=1` 且 `config_node` 仍是 V5、
+归档表不存在、两张新增表均没有数据的情况，清理这两张空表与 dirty 标志，随后继续执行 V6。
+任一条件不满足则停止，不清理数据，需要人工核查。该参数只用于此次确定的 1786 中断场景；
+它不是通用的数据库修复工具，正常迁移不应使用。生产环境同理，但必须先完成备份并按生产配置执行。
