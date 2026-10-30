@@ -14,7 +14,7 @@ import (
 func databaseError(err error) error {
 	var mysqlErr *mysql.MySQLError
 	if errors.As(err, &mysqlErr) {
-		if mysqlErr.Number == 1062 { return fmt.Errorf("%w: duplicate sibling code", ErrConflict) }
+		if mysqlErr.Number == 1062 { return fmt.Errorf("%w: duplicate unique code", ErrConflict) }
 		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 { return fmt.Errorf("%w: database constraint", ErrConflict) }
 	}
 	return err

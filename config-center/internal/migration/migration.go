@@ -231,6 +231,13 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
         present,err:=exists(ctx,conn,"config_channel_app_binding")
         if err!=nil { return err }
         if present { return errors.New("V11 validation failed: legacy binding table still exists") }
+        var indexCount int
+        err=conn.QueryRowContext(ctx,`SELECT COUNT(*) FROM information_schema.statistics
+            WHERE table_schema=DATABASE() AND table_name='config_channel_app'
+            AND index_name='uq_channel_app_code' AND column_name='code'
+            AND seq_in_index=1 AND non_unique=0`).Scan(&indexCount)
+        if err!=nil { return fmt.Errorf("V11 global channel code index validation: %w",err) }
+        if indexCount!=1 { return errors.New("V11 validation failed: unique code index missing") }
     } else {
         statements = append(statements,"SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0")
     }
@@ -287,9 +294,10 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
 }
 
 // preflightV11 在任何 DDL 发生前校验旧绑定能否无损收敛为三个环境和一个公共 JSON。
-// 发现重复环境、跨游戏引用、独立启停或不同最终配置时拒绝升级，不进入 dirty 状态。
+// 发现跨游戏重复 code、重复环境、跨游戏引用、独立启停或不同最终配置时拒绝升级，不进入 dirty 状态。
 func preflightV11(ctx context.Context,conn *sql.Conn) error {
     checks:=[]struct{name,query string}{
+        {"duplicate global channel code",`SELECT MIN(id) FROM config_channel_app GROUP BY code HAVING COUNT(*)>1 LIMIT 1`},
         {"invalid binding",`SELECT b.id FROM config_channel_app_binding b
             JOIN config_channel_app a ON a.id=b.channel_app_id
             LEFT JOIN config_node sg ON sg.id=b.server_group_id AND sg.node_type='server_group'

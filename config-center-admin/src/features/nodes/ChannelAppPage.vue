@@ -93,7 +93,7 @@ async function saveApp() {
     await loadApps()
     emit('changed')
     ElMessage.success('渠道应用已保存')
-  } catch { ElMessage.error('保存失败，请检查 Code 唯一性及三个环境的区服组归属') }
+  } catch { ElMessage.error('保存失败：渠道 Code 在所有游戏中必须唯一，请检查区服组所属游戏及环境') }
   finally { saving.value = false }
 }
 async function deleteApp(app: ChannelApp) {

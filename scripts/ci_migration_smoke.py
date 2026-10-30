@@ -237,6 +237,17 @@ def main():
     migrate(10)
     assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == after_v10_epoch
 
+    # V11 全局唯一预检：不同游戏使用相同渠道 code 时不能迁移，且 dirty 不变。
+    mysql("""INSERT INTO config_migration.config_node
+        (id,node_type,code,name,status,config,created_at,updated_at)
+        VALUES (201,'game','game-other','Other Game',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))""")
+    mysql("""INSERT INTO config_migration.config_channel_app
+        (id,game_id,code,name,status,config,created_at,updated_at)
+        VALUES (906,201,'legacy-sdk','Duplicated',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))""")
+    migrate(11, expected_success=False)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["10", "0"]
+    mysql("DELETE FROM config_migration.config_channel_app WHERE id=906")
+
     # 旧绑定独立状态不能无声丢失；预检失败不会标记 dirty。
     mysql("UPDATE config_migration.config_channel_app_binding SET status=0 WHERE channel_app_id=105")
     migrate(11, expected_success=False)
@@ -254,8 +265,22 @@ def main():
     assert mysql("""SELECT COUNT(*) FROM information_schema.tables
         WHERE table_schema='config_migration' AND table_name='config_channel_app_binding'""") == "0"
     migrate(11)
+    # 升级后的唯一索引确保跨游戏写入同 code 会失败，不影响其他 code。
+    assert mysql("""SELECT COUNT(*) FROM information_schema.statistics
+        WHERE table_schema='config_migration' AND table_name='config_channel_app'
+          AND index_name='uq_channel_app_code' AND column_name='code' AND non_unique=0""") == "1"
+    try:
+        mysql("""INSERT INTO config_migration.config_channel_app
+            (game_id,code,name,status,config,created_at,updated_at)
+            VALUES (201,'legacy-sdk','Duplicated',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))""")
+        raise AssertionError("global duplicate channel code accepted after V11")
+    except subprocess.CalledProcessError:
+        pass
+    mysql("""INSERT INTO config_migration.config_channel_app
+        (game_id,code,name,status,config,created_at,updated_at)
+        VALUES (201,'other-sdk','Other SDK',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))""")
 
-    print("PASS GTID-safe V1-V11 migration, environment binding collapse and archive-safe validation", flush=True)
+    print("PASS GTID-safe V1-V11 migration, global code uniqueness and environment binding collapse", flush=True)
 
 
 if __name__ == "__main__":

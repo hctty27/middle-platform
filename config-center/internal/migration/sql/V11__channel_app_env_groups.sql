@@ -1,9 +1,12 @@
 -- V11：将固定的 prod/test/review 一对一环境绑定内聚到渠道应用。
 -- Go 迁移器执行 preflightV11；必须停写备份，历史覆盖配置必须可合并为同一最终 JSON。
+-- code 全局唯一（utf8mb4_bin，区分大小写），不再按 game_id+code 唯一。
 ALTER TABLE config_channel_app
     ADD COLUMN prod_server_group_id BIGINT NULL COMMENT '正式服区服组',
     ADD COLUMN test_server_group_id BIGINT NULL COMMENT '测试服区服组',
     ADD COLUMN review_server_group_id BIGINT NULL COMMENT '提审服区服组',
+    DROP INDEX uq_channel_app_game_code,
+    ADD UNIQUE INDEX uq_channel_app_code (code),
     ADD CONSTRAINT fk_app_prod_group FOREIGN KEY (prod_server_group_id) REFERENCES config_node(id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_app_test_group FOREIGN KEY (test_server_group_id) REFERENCES config_node(id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_app_review_group FOREIGN KEY (review_server_group_id) REFERENCES config_node(id) ON DELETE RESTRICT;

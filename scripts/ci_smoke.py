@@ -273,7 +273,7 @@ def main():
         }, 400)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
     print("PASS legacy node types rejected", flush=True)
-    # 同一游戏下渠道应用编码唯一。
+    # 渠道应用编码全局唯一，同游戏重复同样会被拒绝。
     request(8080, "/api/config/admin/channel-apps", "POST", {
         "gameId": ids[0], "code": "ci-huawei", "name": "Duplicated",
         "status": 1, "config": "{}"
@@ -329,6 +329,18 @@ def main():
     request(8082, f"/api/config/admin/nodes/{ids[-1]}", "DELETE", expected=204)
     wait_until("delete propagated to local replica",
                lambda: len(replica()) == 2 and all(row["id"] != ids[-1] for row in replica()))
+
+    # 两个不同游戏不能共用同一渠道 Code，确保 sdk-core 可只用 appId 唯一定位。
+    second_game = create_node("game", 0, "ci-global-game")
+    request(8080, "/api/config/admin/channel-apps", "POST", {
+        "gameId": ids[0], "code": "ci-globally-unique", "name": "First",
+        "status": 1, "config": "{}"
+    }, 201)
+    request(8082, "/api/config/admin/channel-apps", "POST", {
+        "gameId": second_game["id"], "code": "ci-globally-unique", "name": "Duplicate",
+        "status": 1, "config": "{}"
+    }, 409)
+    print("PASS global channel code uniqueness across different games", flush=True)
 
     print("ALL END-TO-END SMOKE TESTS PASSED", flush=True)
 

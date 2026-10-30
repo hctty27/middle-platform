@@ -228,6 +228,9 @@ MySQL DDL 不能整体事务回滚；V10 中断时不得直接清除 dirty 状�
 ## V11：固定三环境区服组与共享应用 JSON
 
 - `config_channel_app` 内聚 `prod_server_group_id`、`test_server_group_id`、`review_server_group_id`，分别最多绑定一个区服组，可为空。
+- `config_channel_app.code` 为全局唯一，不再使用 `UNIQUE(game_id,code)`；迁移为 `UNIQUE(code)`，保持 `utf8mb4_bin` 的大小写敏感规则。
+- 升级 V11 前，预检检查跨游戏重复 code；有重复则拒绝升级且不标记 dirty，需人工先统一 code。
+
 - 三个环境共用应用的 `config` 和 `status`；移除 `config_channel_app_binding` 以及原独立覆盖配置 API。
 - 创建和更新应用时一起提交三个区服组 ID；后端校验区服组及大区的游戏归属和 `env_type`。
 - 区服组下只读关联应用：`GET /api/config/admin/server-groups/{id}/channel-apps`；环境下拉搜索：`GET /api/config/admin/channel-apps/server-groups?gameId=1&envType=prod&keyword=...`。

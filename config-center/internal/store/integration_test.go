@@ -214,6 +214,13 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		}
 	}
 	if successful != 1 { t.Fatalf("expected exactly one lease holder, got %d", successful) }
+    // 渠道 Code 在不同游戏之间也不得重复，由数据库唯一索引兜底。
+    otherGame,err:=store.Create(ctx,CreateNodeRequest{NodeType:"game",Code:"g2",Name:"Other Game",Status:&enabled,Config:"{}"})
+    if err!=nil { t.Fatal(err) }
+    if _,err=store.CreateChannelApp(ctx,model.CreateChannelAppRequest{GameID:game.ID,Code:"cross-game-unique",Name:"App",Status:&enabled,Config:"{}"});err!=nil { t.Fatal(err) }
+    if _,err=store.CreateChannelApp(ctx,model.CreateChannelAppRequest{GameID:otherGame.ID,Code:"cross-game-unique",Name:"Duplicate",Status:&enabled,Config:"{}"});!errorsIs(err,ErrConflict) {
+        t.Fatalf("expected global channel code conflict, got %v",err)
+    }
 }
 
 func errorsIs(err, target error) bool {
@@ -259,7 +266,7 @@ var integrationSchema = []string{
 		status TINYINT NOT NULL,config JSON NOT NULL,remark VARCHAR(500) NULL,
         prod_server_group_id BIGINT NULL,test_server_group_id BIGINT NULL,review_server_group_id BIGINT NULL,
         created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
-        UNIQUE KEY uq_channel_app_game_code(game_id,code)
+        UNIQUE KEY uq_channel_app_code(code)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
 	`CREATE TABLE config_node_change_log(
 		revision BIGINT NOT NULL PRIMARY KEY,node_id BIGINT NOT NULL,operation VARCHAR(10) NOT NULL,
