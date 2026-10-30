@@ -26,9 +26,8 @@ let focusSequence = 0
 watch(() => [props.gameId, focusNodeId.value], async ([gameId, nodeId]) => {
   const targetId = Number(nodeId ?? gameId ?? 0)
   if (!targetId) return
-  const current = ++focusSequence
-  const ok = await selectById(targetId)
-  if (ok && current === focusSequence && nodeId) focusNodeId.value = null
+  ++focusSequence
+  await selectById(targetId)
 }, { immediate: true })
 </script>
 
