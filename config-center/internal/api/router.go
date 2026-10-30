@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/hctty27/middle-platform/config-center/internal/model"
 )
 
@@ -71,7 +70,6 @@ func RouterWithWrites(reader Reader, writer Writer) http.Handler { return router
 func router(reader Reader, writer Writer) http.Handler {
 	h := &api{reader: reader, writer: writer}
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Logger)
 	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, map[string]string{"status": "UP"}) })
 	r.Get("/health/ready", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)

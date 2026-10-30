@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 	"github.com/go-sql-driver/mysql"
+	"github.com/hctty27/middle-platform/shared/logging"
 	"github.com/hctty27/middle-platform/config-center/internal/api"
 	"github.com/hctty27/middle-platform/config-center/internal/migration"
 	"github.com/hctty27/middle-platform/config-center/internal/settings"
@@ -25,6 +26,7 @@ import (
 func Run(configPath string) error {
     cfg, err := settings.LoadFile(configPath)
 	if err != nil { return err }
+	if err := logging.Init("config-center", cfg.Log); err != nil { return err }
 	dsn := cfg.DSN
 	parsed, err := mysql.ParseDSN(dsn)
 	if err != nil {
@@ -76,7 +78,7 @@ func Run(configPath string) error {
 	handler = withDrainReadiness(handler, &ready)
 	server := &http.Server{
 		Addr:              address,
-		Handler:           handler,
+		Handler:           logging.HTTP(cfg.Log, handler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      60 * time.Second,

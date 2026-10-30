@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hctty27/middle-platform/sdk-core/internal/model"
+	"github.com/hctty27/middle-platform/shared/logging"
 	"github.com/hctty27/middle-platform/sdk-core/internal/mapping"
 )
 
@@ -39,8 +40,10 @@ func Router(fetcher Fetcher, db Pinger) http.Handler {
 			case errors.Is(err, model.ErrAmbiguous):
 				writeJSON(w, http.StatusConflict, response{Code: 409, Message: "appid is not unique"})
 			case errors.Is(err, model.ErrInvalidConfig):
+				logging.FromContext(r.Context()).ErrorContext(r.Context(), "invalid sdk configuration", "error", err)
 				writeJSON(w, http.StatusInternalServerError, response{Code: 500, Message: "invalid channel app config"})
 			default:
+				logging.FromContext(r.Context()).ErrorContext(r.Context(), "sdk configuration lookup failed", "error", err)
 				writeJSON(w, http.StatusServiceUnavailable, response{Code: 503, Message: "configuration temporarily unavailable"})
 			}
 			return

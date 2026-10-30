@@ -11,3 +11,11 @@ database:
   maxOpenConns: 20
   maxIdleConns: 10
   connMaxLifetime: "30m"
+
+# 统一日志配置；默认交给 Docker / systemd 负责轮转。
+log:
+  level: info              # debug / info / warn / error；LOG_LEVEL
+  format: json             # json / text；LOG_FORMAT
+  output: stdout           # stdout / stderr；LOG_OUTPUT
+  accessEnabled: true      # 正常访问日志开关；LOG_ACCESS_ENABLED
+  slowThreshold: 500ms     # 慢请求阈值；LOG_SLOW_THRESHOLD

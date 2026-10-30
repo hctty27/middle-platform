@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'sdk-core/**'
+      - 'shared/logging/**'
       - '.github/workflows/sdk-core.yml'
   pull_request:
     paths:
       - 'sdk-core/**'
+      - 'shared/logging/**'
       - '.github/workflows/sdk-core.yml'
   workflow_dispatch:
 

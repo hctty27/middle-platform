@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/hctty27/middle-platform/shared/logging"
 	"github.com/hctty27/middle-platform/sdk-core/internal/api"
 	"github.com/hctty27/middle-platform/sdk-core/internal/mapping"
 	"github.com/hctty27/middle-platform/sdk-core/internal/service"
@@ -36,6 +37,7 @@ func run(configPath string) error {
 	if err != nil {
 		return err
 	}
+	if err := logging.Init("sdk-core", cfg.Log); err != nil { return fmt.Errorf("initialize logging: %w", err) }
 
 	dsn, err := mysql.ParseDSN(cfg.Database.DSN)
 	if err != nil {
@@ -75,7 +77,7 @@ func run(configPath string) error {
 	ready.Store(true)
 	server := &http.Server{
 		Addr:              cfg.Server.Address,
-		Handler:           withDrainReadiness(api.Router(service.NewConfigService(repository, resolver), db), &ready),
+		Handler:           logging.HTTP(cfg.Log, withDrainReadiness(api.Router(service.NewConfigService(repository, resolver), db), &ready)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      15 * time.Second,
