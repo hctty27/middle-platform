@@ -3,6 +3,8 @@
 
 import os
 import subprocess
+import re
+from pathlib import Path
 
 CONTAINER = subprocess.check_output(
     ["docker", "ps", "--filter", "ancestor=mysql:8.4", "--format", "{{.ID}}"],
@@ -18,13 +20,17 @@ def mysql(statement):
     return proc.stdout.strip()
 
 
-def migrate(version):
+def migrate(version, repair=False, expected_success=True):
     env = os.environ.copy()
     env["CONFIG_DB_DSN"] = (
         "root:integration-test@tcp(127.0.0.1:3306)/config_migration?parseTime=true&loc=UTC"
     )
-    subprocess.run(["/tmp/config-center-migrate-ci", "-target", str(version)],
-                   check=True, env=env)
+    command = ["/tmp/config-center-migrate-ci", "-target", str(version)]
+    if repair:
+        command.append("-repair-v6-gtid")
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+    if (result.returncode == 0) != expected_success:
+        raise AssertionError(f"unexpected migration status {result.returncode}: {result.stderr}")
 
 
 def assert_rows(sql, expected):
@@ -34,6 +40,12 @@ def assert_rows(sql, expected):
 
 def main():
     mysql("CREATE DATABASE config_migration CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci")
+    # 在 GTID 强制一致性环境中验证迁移；不用关闭 binlog 或 GTID 绕过限制。
+    mysql("""SET GLOBAL enforce_gtid_consistency=ON;
+        SET GLOBAL gtid_mode=OFF_PERMISSIVE;
+        SET GLOBAL gtid_mode=ON_PERMISSIVE;
+        SET GLOBAL gtid_mode=ON;""")
+    assert mysql("SELECT @@GLOBAL.gtid_mode,@@GLOBAL.enforce_gtid_consistency") == "ON\\tON"
     migrate(1)
     assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "1"
     mysql("""
@@ -114,7 +126,25 @@ def main():
     migrate(5)
     assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "5"
     assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
-    migrate(6)
+    # 测试 V6 归档前中断的实际脏状态：先执行原脚本的两张表，再标记 dirty=1。
+    v6 = Path("config-center/internal/migration/sql/V6__shared_channel_apps.sql").read_text(encoding="utf-8")
+    assert not re.search(r"CREATE\\s+TABLE\\s+[^;]+?\\s+AS\\s+SELECT", v6, flags=re.I | re.S)
+    prefix = v6.split("-- 历史数据保留原始 id 和配置，方便迁移后人工核对。")[0]
+    first_ddl = prefix[prefix.index("CREATE TABLE config_channel_app ("):]
+    assert first_ddl.count("CREATE TABLE ") == 2
+    mysql("USE config_migration; " + first_ddl)
+    mysql("UPDATE config_migration.config_schema_migrations SET dirty=1 WHERE id=1")
+    migrate(6, expected_success=False)  # 默认禁止无检查地重跑 dirty 迁移
+    # 注入业务数据时恢复工具必须拒绝清理。
+    mysql("""INSERT INTO config_migration.config_channel_app
+      (id,game_id,code,name,status,config,created_at,updated_at)
+      VALUES (9001,101,'manual-app','Manual app',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))""")
+    migrate(6, repair=True, expected_success=False)
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_channel_app WHERE id=9001") == "1"
+    mysql("DELETE FROM config_migration.config_channel_app WHERE id=9001")
+    # 仅清理上述两张空表及 dirty 标记，然后自动继续应用修复后的 V6。
+    migrate(6, repair=True)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "6\\t0"
     assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "6"
     assert_rows("SELECT id,game_id,code,config FROM config_migration.config_channel_app", [
         '105\t101\tlegacy-sdk\t{}'
