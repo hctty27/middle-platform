@@ -33,6 +33,7 @@ const regionFilter = ref<RegionEnvType | ''>('')
 const childrenLoading = ref(false)
 const drawerVisible = ref(false)
 const creating = ref(false)
+const envTypeLocked = ref(false)
 const editorNode = ref<NodeSummary | null>(null)
 const detailLoading = ref(false)
 const saving = ref(false)
@@ -62,12 +63,14 @@ function toSummary(node: NodeRecord): NodeSummary {
 }
 
 function resetForm(parentId: number, nodeType: NodeType) {
+  envTypeLocked.value = false
   Object.assign(form, { parentId, nodeType, code: '', name: '', status: 1, envType: null,
     config: '{}', remark: '' })
   originalForm = JSON.stringify(form)
 }
 
 function setForm(node: NodeRecord) {
+  envTypeLocked.value = node.nodeType === 'region' && !!node.envType
   Object.assign(form, node, { remark: node.remark ?? '' })
   try { form.config = JSON.stringify(JSON.parse(node.config), null, 2) }
   catch { form.config = node.config }
@@ -398,6 +401,6 @@ onBeforeUnmount(() => {
   detailController?.abort()
 })
   return {
-    labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh
+    labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh
   }
 }

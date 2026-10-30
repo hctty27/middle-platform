@@ -8,6 +8,7 @@ defineProps<{
   detailLoading: boolean
   saving: boolean
   creating: boolean
+  envTypeLocked: boolean
   form: NodeForm
   labels: Record<NodeType, string>
   beforeClose: (done: () => void) => void
@@ -32,7 +33,7 @@ const emit = defineEmits<{
             <el-form-item label="节点名称"><el-input v-model="form.name" maxlength="128" show-word-limit /></el-form-item>
           </div>
           <el-form-item v-if="form.nodeType === 'region'" label="大区类型" required>
-            <el-select v-model="form.envType" placeholder="请选择大区类型" :disabled="!creating && !!form.envType" clearable>
+            <el-select v-model="form.envType" placeholder="请选择大区类型" :disabled="envTypeLocked" clearable>
               <el-option v-for="(label, key) in regionEnvLabels" :key="key" :label="label" :value="key" />
             </el-select>
             <div class="muted form-tip" v-if="!creating && !form.envType">历史大区未分类，请核对用途后选择。</div>

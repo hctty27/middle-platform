@@ -12,7 +12,7 @@ import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
 
 const emit = defineEmits<{ changed: [] }>()
-const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
+const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
 </script>
 
 <template>
@@ -140,7 +140,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
     </section>
 
     <NodeEditor v-model:visible="drawerVisible" :title="editorTitle"
-                :detail-loading="detailLoading" :saving="saving" :creating="creating"
+                :detail-loading="detailLoading" :saving="saving" :creating="creating" :env-type-locked="envTypeLocked"
                 :form="form" :labels="labels" :before-close="beforeDrawerClose"
                 @cancel="closeEditor" @save="save" />
   </main>
