@@ -26,6 +26,7 @@ type fieldRule struct {
 // Resolver 在启动时编译映射规则，请求期间只读且可并发使用。
 type Resolver struct {
     routes map[string][]fieldRule
+    configUsage map[string]map[string]bool
 }
 
 func LoadDefault() (*Resolver, error) {
@@ -46,6 +47,7 @@ func Load(raw []byte) (*Resolver, error) {
         return nil, errors.New("response mapping has no routes")
     }
     compiled := make(map[string][]fieldRule, len(definitions))
+    configUsage := make(map[string]map[string]bool, len(definitions))
     for route, fields := range definitions {
         parts := strings.Fields(route)
         if len(parts) != 2 || parts[0] == "" || !strings.HasPrefix(parts[1], "/") || strings.Join(parts," ") != route {
@@ -55,6 +57,7 @@ func Load(raw []byte) (*Resolver, error) {
             return nil, fmt.Errorf("route %q has no mapping fields", route)
         }
         rules := make([]fieldRule, 0, len(fields))
+        needed := make(map[string]bool)
         for target, source := range fields {
             if strings.TrimSpace(target) != target || target == "" {
                 return nil, fmt.Errorf("invalid response field %q for %s", target, route)
@@ -64,10 +67,14 @@ func Load(raw []byte) (*Resolver, error) {
                 return nil, fmt.Errorf("route %s field %s: %w", route, target, err)
             }
             rules = append(rules, fieldRule{target:target, source:source, segments:segments})
+            if len(segments) >= 2 && segments[1] == "config" {
+                needed[segments[0]] = true
+            }
         }
         compiled[route] = rules
+        configUsage[route] = needed
     }
-    return &Resolver{routes:compiled},nil
+    return &Resolver{routes:compiled, configUsage:configUsage},nil
 }
 
 // Require 确保已注册的实际路由在映射文件中有规则，缺失时阻止服务启动。
@@ -76,6 +83,14 @@ func (r *Resolver) Require(route string) error {
         return fmt.Errorf("missing response mapping for route %s", route)
     }
     return nil
+}
+
+// UsesConfig 查询当前接口预编译的 JSON 依赖，不在请求期间扫描映射规则。
+func (r *Resolver) UsesConfig(route, source string) bool {
+    if r == nil {
+        return false
+    }
+    return r.configUsage[route][source]
 }
 
 func parsePath(source string) ([]string,error) {

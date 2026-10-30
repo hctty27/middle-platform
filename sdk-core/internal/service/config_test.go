@@ -5,6 +5,7 @@ import (
     "encoding/json"
     "errors"
     "reflect"
+    "strings"
     "testing"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/mapping"
@@ -185,6 +186,116 @@ func TestGetRejectsMalformedGameConfig(t *testing.T) {
             Config: json.RawMessage("{}"),
         },
     }
-    _,err := serviceWithReader(t,f).Get(context.Background(),"prod","app1001")
-    if !errors.Is(err,model.ErrInvalidConfig) { t.Fatalf("expected invalid game JSON: %v",err) }
+    resolver,err:=mapping.Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "gameTitle": "game.config.title"
+        }
+    }`))
+    if err!=nil { t.Fatal(err) }
+    _,err = NewConfigService(f,resolver).Get(context.Background(),"prod","app1001")
+    if !errors.Is(err,model.ErrInvalidConfig) { t.Fatalf("expected invalid referenced game JSON: %v",err) }
+}
+
+func TestGetSkipsUnusedJSONSources(t *testing.T) {
+    f:=&fakeReader{
+        app:model.ChannelApp{
+            Code:"app1001",
+            Config:json.RawMessage(`{"tsKey":"abc123"}`),
+            GameConfig:json.RawMessage("malformed game config"),
+        },
+        group:&model.BoundGroup{
+            RegionCode:"region1",
+            RegionConfig:json.RawMessage("malformed region config"),
+            ServerGroupCode:"group1",
+            Config:json.RawMessage("malformed server group config"),
+        },
+    }
+    got,err:=serviceWithReader(t,f).Get(context.Background(),"prod","app1001")
+    if err!=nil { t.Fatal(err) }
+    want:=map[string]any{"snKey":"app1001","zoneKey":"group1","tsKey":"abc123"}
+    if !reflect.DeepEqual(got,want) { t.Fatalf("got %+v, want %+v",got,want) }
+}
+
+func TestGetDoesNotParseJSONWhenRouteOnlyUsesCodes(t *testing.T) {
+    resolver,err:=mapping.Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "snKey": "channel_app.code",
+            "zoneKey": "server_group.code",
+            "gameCode": "game.code"
+        }
+    }`))
+    if err!=nil { t.Fatal(err) }
+    f:=&fakeReader{
+        app:model.ChannelApp{
+            Code:"app1001",GameCode:"game1",
+            Config:json.RawMessage("not JSON"),
+            GameConfig:json.RawMessage("not JSON"),
+        },
+        group:&model.BoundGroup{
+            ServerGroupCode:"group1",
+            RegionConfig:json.RawMessage("not JSON"),
+            Config:json.RawMessage("not JSON"),
+        },
+    }
+    got,err:=NewConfigService(f,resolver).Get(context.Background(),"review","app1001")
+    if err!=nil { t.Fatal(err) }
+    want:=map[string]any{"snKey":"app1001","zoneKey":"group1","gameCode":"game1"}
+    if !reflect.DeepEqual(got,want) { t.Fatalf("got %+v, want %+v",got,want) }
+}
+
+func TestGetMultipleFieldsReuseOneDecodedConfig(t *testing.T) {
+    resolver,err:=mapping.Load([]byte(`{
+        "GET /api/core/{env}/{appid}": {
+            "tsKey": "channel_app.config.tsKey",
+            "login": "channel_app.config.login.url",
+            "wholeApp": "channel_app.config",
+            "missing": "game.config.optional"
+        }
+    }`))
+    if err!=nil { t.Fatal(err) }
+    f:=&fakeReader{
+        app:model.ChannelApp{
+            Code:"app1001",
+            Config:json.RawMessage(`{"tsKey":"abc","login":{"url":"https://example.com"},"count":9007199254740993}`),
+            GameConfig:json.RawMessage("{}"),
+        },
+        group:&model.BoundGroup{
+            RegionConfig:json.RawMessage("bad"),
+            Config:json.RawMessage("bad"),
+        },
+    }
+    got,err:=NewConfigService(f,resolver).Get(context.Background(),"prod","app1001")
+    if err!=nil { t.Fatal(err) }
+    if got["tsKey"]!="abc" || got["login"]!="https://example.com" {
+        t.Fatalf("unexpected values: %+v",got)
+    }
+    app:=got["wholeApp"].(map[string]any)
+    if app["count"]!=json.Number("9007199254740993") {
+        t.Fatal("JSON numeric precision lost")
+    }
+    if _,exists:=got["missing"]; exists { t.Fatal("missing field must be omitted") }
+}
+
+func BenchmarkGetDefaultMapping(b *testing.B) {
+    resolver,err:=mapping.LoadDefault()
+    if err!=nil { b.Fatal(err) }
+    f:=&fakeReader{
+        app:model.ChannelApp{
+            Code:"app1001",GameCode:"game1",
+            Config:json.RawMessage(`{"tsKey":"abc","enabled":true}`),
+            GameConfig:json.RawMessage(`{"large":"`+strings.Repeat("x",16384)+`"}`),
+        },
+        group:&model.BoundGroup{
+            ServerGroupCode:"group1",
+            RegionConfig:json.RawMessage(`{"large":"`+strings.Repeat("y",16384)+`"}`),
+            Config:json.RawMessage(`{"large":"`+strings.Repeat("z",16384)+`"}`),
+        },
+    }
+    service:=NewConfigService(f,resolver)
+    b.ReportAllocs()
+    b.ResetTimer()
+    for i:=0;i<b.N;i++ {
+        _,err:=service.Get(context.Background(),"prod","app1001")
+        if err!=nil { b.Fatal(err) }
+    }
 }
