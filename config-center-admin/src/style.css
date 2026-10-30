@@ -163,3 +163,114 @@ button { font: inherit; }
   .children-tools .el-input { width: min(100%, 260px); }
   .form-grid { grid-template-columns: 1fr; }
 }
+
+/* V2 工作台：保留原业务组件样式，统一导航、卡片、列表和抽屉的视觉系统。 */
+:root { --el-color-primary: #386df6; --el-border-radius-base: 8px; }
+.v2-shell { background: #f4f6fb; }
+.v2-shell .sidebar { background: #142238; padding: 22px 12px; width: 224px; }
+.v2-shell .sidebar.collapsed { width: 68px; }
+.v2-shell .brand { margin: 0 -12px 24px; padding: 0 23px 24px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.v2-shell .brand-mark { background: #4a7afa; font-size: 20px; }
+.v2-shell .brand small { font-size: 10px; letter-spacing: 1.1px; }
+.v2-shell .group-title { padding: 0 13px 14px; }
+.v2-shell .sidebar > button { padding: 12px 14px; border-radius: 9px; font-size: 13px; }
+.v2-shell .sidebar > button.active { background: #2b4167; outline: 1px solid #395782; }
+.v2-shell .sidebar-bottom { border-top: 1px solid rgba(255,255,255,.07); }
+.v2-shell .main { display: flex; flex-direction: column; min-width: 0; }
+.v2-shell .topbar { min-height: 73px; padding: 10px 30px; flex-shrink: 0; }
+.v2-shell .topbar-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.v2-shell .topbar-heading > strong { font-size: 17px; }
+.v2-shell .topbar-breadcrumb { color: #91a0b7; font-size: 12px; }
+.v2-shell .topbar-breadcrumb span { color: #35465f; }
+.v2-shell .topbar-game-switcher { width: 190px; }
+.v2-shell .topbar-game-label { font-size: 12px; color: #8a98ac; white-space: nowrap; }
+.v2-shell .page-content { min-height: 0; flex: 1; }
+.v2-shell .workspace-shell { min-height: calc(100vh - 73px); }
+.v2-shell .workspace { height: calc(100vh - 73px); grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); gap: 16px; padding: 24px 28px; }
+.v2-shell .tree-panel, .v2-shell .editor-panel, .v2-shell .content-panel,
+.v2-shell .channel-list-panel, .v2-shell .channel-detail-panel, .v2-shell .overview-panel {
+  background: #fff; border: 1px solid #e7ecf4; border-radius: 12px;
+  box-shadow: 0 3px 18px rgba(28,48,86,.035);
+}
+.v2-shell .tree-panel { padding: 18px 14px; }
+.v2-shell .editor-panel { padding: 26px; }
+.v2-shell .node-heading-title h2 { font-size: 22px; }
+.v2-shell .node-meta { font-size: 12px; }
+.v2-shell .tree-panel .el-tree-node__content { height: 38px; }
+.v2-shell .tree-panel .el-tag { height: 18px; padding: 0 5px; }
+.v2-shell .tree-hint { font-size: 11px; }
+.v2-shell .editor-panel .children-toolbar { padding-top: 25px; }
+.v2-shell .el-table th.el-table__cell { background: #f7f9fc; color: #718198; font-size: 12px; }
+.v2-shell .el-table td.el-table__cell { padding-top: 14px; padding-bottom: 14px; }
+.v2-shell .el-button { font-weight: 500; }
+.v2-shell .el-button--primary { box-shadow: 0 3px 8px rgba(56,109,246,.12); }
+.v2-shell .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 24px; }
+.v2-shell .page-heading h1 { margin: 7px 0 8px; color: #192942; font-size: 25px; font-weight: 700; }
+.v2-shell .page-heading p { margin: 0; }
+.v2-shell .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.4px; color: #376cf7; }
+.v2-shell .section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.v2-shell .section-heading h2, .v2-shell .section-heading h3 { margin: 0 0 4px; font-size: 16px; color: #1e3049; }
+.v2-shell .section-heading p { margin: 0; }
+.v2-shell .dashboard-page, .v2-shell .channel-page { padding: 30px 32px; max-width: 1800px; margin: 0 auto; }
+.v2-shell .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+.v2-shell .metric-card { border: 1px solid #e7ecf4; border-radius: 12px; background: #fff; padding: 24px; display: flex; flex-direction: column; gap: 8px; }
+.v2-shell .metric-card span, .v2-shell .metric-card small { font-size: 12px; color: #8795a8; }
+.v2-shell .metric-card strong { color: #1d2e4b; font-size: 32px; line-height: 1.1; }
+.v2-shell .overview-panel { padding: 26px; min-height: 280px; }
+.v2-shell .region-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(215px,1fr)); gap: 12px; }
+.v2-shell .region-tile { cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 17px; border: 1px solid #e7ecf4; background: #fff; border-radius: 10px; color: #24334c; }
+.v2-shell .region-tile:hover { background: #f7faff; border-color: #b8ccff; }
+.v2-shell .region-tile-top { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.v2-shell .region-tile > span { color: #8191a7; font-size: 12px; }
+.v2-shell .quick-links { margin-top: 18px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+.v2-shell .quick-links button { display: flex; justify-content: space-between; gap: 12px; align-items: center; cursor: pointer; border: 1px solid #e7ecf4; border-radius: 10px; background: #fff; padding: 20px; color: #253754; text-align: left; }
+.v2-shell .quick-links button span { color: #6983ae; font-size: 12px; }
+.v2-shell .channel-layout { display: grid; grid-template-columns: 278px minmax(0,1fr); gap: 16px; min-height: calc(100vh - 230px); }
+.v2-shell .channel-list-panel { display: flex; flex-direction: column; min-height: 0; padding: 18px 14px; }
+.v2-shell .channel-list-scroll { display: flex; flex-direction: column; gap: 7px; margin-top: 16px; max-height: calc(100vh - 320px); overflow-y: auto; }
+.v2-shell .channel-list-item { cursor: pointer; display: flex; align-items: center; gap: 12px; min-height: 62px; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid transparent; background: #fff; border-radius: 9px; color: #233652; }
+.v2-shell .channel-list-item:hover, .v2-shell .channel-list-item.active { background: #eef3ff; border-color: #d5e1ff; }
+.v2-shell .app-icon { display: inline-grid; place-items: center; border-radius: 10px; background: #e5ecff; color: #376cf7; width: 38px; height: 38px; flex-shrink: 0; font-weight: 700; }
+.v2-shell .app-item-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; }
+.v2-shell .app-item-text strong, .v2-shell .app-item-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2-shell .app-item-text small { color: #8796ac; }
+.v2-shell .channel-detail-panel { min-width: 0; padding: 25px; }
+.v2-shell .channel-detail-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid #e7ecf4; margin-bottom: 12px; padding-bottom: 18px; }
+.v2-shell .channel-detail-header h2 { margin: 7px 0; font-size: 23px; }
+.v2-shell .channel-detail-header p { margin: 0; }
+.v2-shell .channel-tabs .el-tabs__header { margin-bottom: 25px; }
+.v2-shell .filter-toolbar { display: flex; gap: 10px; margin: 20px 0 16px; }
+.v2-shell .filter-toolbar .el-input { max-width: 270px; }
+.v2-shell .table-main { font-size: 13px; color: #253650; font-weight: 600; margin-bottom: 3px; }
+.v2-shell .group-bindings { flex: 1; overflow-y: auto; padding-top: 4px; }
+.v2-shell .config-preview { border: 1px solid #e5ebf4; border-radius: 9px; background: #f8fafe; padding: 18px; overflow: auto; color: #344965; font-size: 12px; line-height: 1.8; max-height: 52vh; white-space: pre-wrap; word-break: break-word; }
+@media(max-width: 1100px) {
+ .v2-shell .sidebar { width: 178px; } .v2-shell .workspace { padding: 16px; grid-template-columns: 260px minmax(0, 1fr); }
+ .v2-shell .channel-layout { grid-template-columns: 240px minmax(0,1fr); }
+ .v2-shell .topbar-game-label { display: none; } .v2-shell .metric-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media(max-width: 850px) {
+ .v2-shell .workspace { height: auto; grid-template-columns: 1fr; }
+ .v2-shell .channel-layout { grid-template-columns: 1fr; } .v2-shell .channel-list-scroll { max-height: 260px; }
+ .v2-shell .channel-list-panel { min-height: 220px; }
+ .v2-shell .dashboard-page, .v2-shell .channel-page { padding: 18px; }
+}
+@media(max-width: 580px) {
+ .v2-shell .sidebar { width: 56px; padding: 12px 6px; }
+ .v2-shell .topbar { padding: 10px; } .v2-shell .topbar-game-switcher { width: 122px; }
+ .v2-shell .topbar .el-tag { display: none; }
+ .v2-shell .metric-grid, .v2-shell .quick-links { grid-template-columns: 1fr; }
+ .v2-shell .page-heading { align-items: flex-start; flex-direction: column; }
+}
+
+/* 三级目录工作区标签和 JSON 编辑体验。 */
+.v2-shell .node-detail-tabs { flex-shrink: 0; margin-top: 16px; }
+.v2-shell .node-child-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.v2-shell .node-child-pane .children-toolbar { padding-top: 8px; }
+.v2-shell .node-detail-content { flex: 1; min-height: 230px; overflow: auto; padding-top: 12px; }
+.v2-shell .json-editor { width: 100%; }
+.v2-shell .json-editor-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #e6ecf5; background: #f8fafe; border-bottom: 0; border-radius: 8px 8px 0 0; }
+.v2-shell .json-editor .el-textarea__inner { border-radius: 0 0 8px 8px; }
+.v2-shell .json-valid { color: #15956e; font-size: 12px; }
+.v2-shell .json-invalid, .v2-shell .json-error { color: #d5565c; font-size: 12px; }
+.v2-shell .json-error { margin: 8px 0; word-break: break-word; }

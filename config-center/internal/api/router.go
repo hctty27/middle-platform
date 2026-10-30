@@ -41,6 +41,7 @@ type Reader interface {
 	Subscribers(context.Context) ([]Subscriber, error)
 	ChannelApps(context.Context,int64) ([]model.ChannelApp,error)
 	ChannelAppBindings(context.Context,int64) ([]model.ChannelAppBinding,error)
+	ServerGroupBindings(context.Context,int64) ([]model.ServerGroupBinding,error)
 }
 
 // Writer 定义可选的管理写操作。
@@ -95,6 +96,7 @@ func router(reader Reader, writer Writer) http.Handler {
 	r.Get("/api/config/admin/subscribers", h.subscribers)
 	r.Get("/api/config/admin/channel-apps",h.channelApps)
 	r.Get("/api/config/admin/channel-apps/{id}/bindings",h.channelAppBindings)
+	r.Get("/api/config/admin/server-groups/{id}/channel-app-bindings",h.serverGroupBindings)
 	r.Get("/api/config/nodes/{id}", h.node)
 	r.Post("/api/config/nodes/batch-get", h.batch)
 	r.Get("/api/config/sync/revision", h.revision)

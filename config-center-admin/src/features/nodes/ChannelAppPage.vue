@@ -1,122 +1,165 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { nodeApi } from '../../api/nodeApi'
+import JsonConfigEditor from '../../components/JsonConfigEditor.vue'
 import { api } from '../../api/http'
-import type { NodeMatch, NodeSummary } from './types'
+import { regionEnvLabels } from './types'
+import type { NodeSummary, RegionEnvType } from './types'
 
 interface ChannelApp {
-  id: number
-  gameId: number
-  code: string
-  name: string
-  status: number
-  config: string
-  remark: string | null
+  id: number; gameId: number; code: string; name: string
+  status: number; config: string; remark: string | null
 }
 interface Binding {
-  id: number
-  channelAppId: number
-  serverGroupId: number
-  status: number
-  config: string
-  effectiveConfig: string
+  id: number; channelAppId: number; serverGroupId: number
+  serverGroupName?: string; regionName?: string; regionEnvType?: RegionEnvType | null
+  status: number; config: string; effectiveConfig: string
 }
+const props = defineProps<{ gameId: number | null }>()
 const emit = defineEmits<{ changed: [] }>()
-const games = ref<NodeSummary[]>([])
-const gameId = ref<number | null>(null)
 const apps = ref<ChannelApp[]>([])
 const active = ref<ChannelApp | null>(null)
 const bindings = ref<Binding[]>([])
+const appSearch = ref('')
+const appLoading = ref(false)
+const bindingLoading = ref(false)
+const bindingSearch = ref('')
+const envFilter = ref<RegionEnvType | ''>('')
+const activeTab = ref<'bindings' | 'config' | 'details'>('bindings')
 const busy = ref(false)
 const appVisible = ref(false)
 const bindingVisible = ref(false)
 const editApp = ref<number | null>(null)
 const editBinding = ref<number | null>(null)
 const appForm = ref({ code: '', name: '', status: 1, config: '{}', remark: '' })
-const bindingForm = ref({ serverGroupId: null as number | null, status: 1, config: '{}' })
-const groupKeyword = ref('')
-const groupResults = ref<NodeMatch[]>([])
+const bindingForm = ref({ regionId: null as number | null, serverGroupId: null as number | null, status: 1, config: '{}' })
+const regions = ref<NodeSummary[]>([])
+const groups = ref<NodeSummary[]>([])
 const groupLoading = ref(false)
+const preview = ref<Binding | null>(null)
+const previewVisible = ref(false)
+const filteredApps = computed(() => apps.value.filter(app =>
+  (app.name + app.code).toLowerCase().includes(appSearch.value.trim().toLowerCase())))
+const filteredBindings = computed(() => bindings.value.filter(item =>
+  (!envFilter.value || item.regionEnvType === envFilter.value) &&
+  ((item.regionName ?? '') + (item.serverGroupName ?? '') + item.serverGroupId).toLowerCase().includes(bindingSearch.value.trim().toLowerCase())))
+let appSequence = 0
+let bindingSequence = 0
+let groupSequence = 0
 
-async function loadApps() {
-  if (!gameId.value) { apps.value = []; active.value = null; return }
-  try {
-    const response = await api.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: gameId.value } })
-    apps.value = response.data
-    if (active.value) {
-      active.value = apps.value.find(item => item.id === active.value?.id) ?? null
-      if (active.value) await loadBindings()
-      else bindings.value = []
-    }
-  } catch { ElMessage.error('加载渠道应用失败') }
-}
-async function loadBindings() {
-  if (!active.value) { bindings.value = []; return }
-  try {
-    bindings.value = (await api.get<Binding[]>(`/admin/channel-apps/${active.value.id}/bindings`)).data
-  } catch { ElMessage.error('加载区服组绑定失败') }
-}
-function selectApp(item: ChannelApp) { active.value = item; void loadBindings() }
-function openApp(item?: ChannelApp) {
-  editApp.value = item?.id ?? null
-  appForm.value = { code: item?.code ?? '', name: item?.name ?? '', status: item?.status ?? 1,
-    config: item ? pretty(item.config) : '{}', remark: item?.remark ?? '' }
-  appVisible.value = true
-}
 function pretty(value: string) {
   try { return JSON.stringify(JSON.parse(value), null, 2) } catch { return value }
 }
-function validJSON(text: string) {
-  try { return JSON.parse(text) !== null && !Array.isArray(JSON.parse(text)) && typeof JSON.parse(text) === 'object' }
+function validJSON(value: string) {
+  try { const v: unknown = JSON.parse(value); return v !== null && typeof v === 'object' && !Array.isArray(v) }
   catch { return false }
 }
+async function loadApps() {
+  const id = ++appSequence
+  if (!props.gameId) { apps.value = []; active.value = null; bindings.value = []; return }
+  appLoading.value = true
+  try {
+    const response = await api.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: props.gameId } })
+    if (id !== appSequence) return
+    apps.value = response.data
+    active.value = apps.value.find(item => item.id === active.value?.id) ?? apps.value[0] ?? null
+    await loadBindings()
+  } catch {
+    if (id === appSequence) ElMessage.error('加载渠道应用失败')
+  } finally { if (id === appSequence) appLoading.value = false }
+}
+async function loadBindings() {
+  const id = ++bindingSequence
+  if (!active.value) { bindings.value = []; return }
+  bindingLoading.value = true
+  try {
+    const response = await api.get<Binding[]>(`/admin/channel-apps/${active.value.id}/bindings`)
+    if (id === bindingSequence) bindings.value = response.data
+  } catch {
+    if (id === bindingSequence) ElMessage.error('加载绑定失败')
+  } finally { if (id === bindingSequence) bindingLoading.value = false }
+}
+function selectApp(app: ChannelApp) {
+  if (active.value?.id === app.id) return
+  active.value = app
+  envFilter.value = ''
+  bindingSearch.value = ''
+  activeTab.value = 'bindings'
+  bindings.value = []
+  void loadBindings()
+}
+function openApp(item?: ChannelApp) {
+  editApp.value = item?.id ?? null
+  appForm.value = {
+    code: item?.code ?? '', name: item?.name ?? '', status: item?.status ?? 1,
+    config: item ? pretty(item.config) : '{}', remark: item?.remark ?? ''
+  }
+  appVisible.value = true
+}
 async function saveApp() {
-  if (!gameId.value || !appForm.value.code.trim() || !appForm.value.name.trim() || !validJSON(appForm.value.config)) {
-    ElMessage.warning('请填写名称、编码，并输入 JSON 对象'); return
+  if (!props.gameId || !appForm.value.code.trim() || !appForm.value.name.trim() || !validJSON(appForm.value.config)) {
+    ElMessage.warning('请填写名称、编码及合法 JSON 对象'); return
   }
   busy.value = true
   try {
-    const payload = { ...appForm.value, gameId: gameId.value }
+    const payload = { ...appForm.value, gameId: props.gameId }
     if (editApp.value) await api.put(`/admin/channel-apps/${editApp.value}`, payload)
     else await api.post('/admin/channel-apps', payload)
     appVisible.value = false
     await loadApps()
     emit('changed')
-    ElMessage.success('应用配置已保存')
-  } catch { ElMessage.error('保存失败：检查应用编码是否重复') }
+    ElMessage.success('渠道应用已保存')
+  } catch { ElMessage.error('保存失败，请检查渠道编码是否重复') }
   finally { busy.value = false }
 }
-async function removeApp(item: ChannelApp) {
-  try { await ElMessageBox.confirm(`删除「${item.name}」？需先解除所有绑定。`, '确认删除', { type: 'warning' }) }
+async function removeApp(app: ChannelApp) {
+  try { await ElMessageBox.confirm(`删除「${app.name}」？请先解除所有区服组绑定。`, '删除渠道应用', { type: 'warning' }) }
   catch { return }
   try {
-    await api.delete(`/admin/channel-apps/${item.id}`)
-    if (active.value?.id === item.id) { active.value = null; bindings.value = [] }
-    await loadApps(); emit('changed'); ElMessage.success('已删除')
-  } catch { ElMessage.error('删除失败：应用仍有关联或数据库操作失败') }
+    await api.delete(`/admin/channel-apps/${app.id}`)
+    if (active.value?.id === app.id) { active.value = null; bindings.value = [] }
+    await loadApps()
+    emit('changed')
+    ElMessage.success('已删除渠道应用')
+  } catch { ElMessage.error('删除失败，渠道应用可能仍有关联') }
+}
+async function loadRegions() {
+  if (!props.gameId) return
+  try { regions.value = (await nodeApi.getTreeChildren(props.gameId)).data }
+  catch { ElMessage.error('加载大区列表失败') }
+}
+async function loadGroups(query = '') {
+  const id = ++groupSequence
+  if (!bindingForm.value.regionId) { groups.value = []; return }
+  groupLoading.value = true
+  try {
+    const response = await nodeApi.getChildren({
+      parentId: bindingForm.value.regionId, page: 1, size: 100, keyword: query
+    })
+    if (id === groupSequence) groups.value = response.data.items
+  } catch {
+    if (id === groupSequence) ElMessage.error('加载区服组失败')
+  } finally { if (id === groupSequence) groupLoading.value = false }
+}
+function onRegionChange() {
+  bindingForm.value.serverGroupId = null
+  void loadGroups()
 }
 function openBinding(item?: Binding) {
   editBinding.value = item?.id ?? null
-  bindingForm.value = { serverGroupId: item?.serverGroupId ?? null, status: item?.status ?? 1,
-    config: item ? pretty(item.config) : '{}' }
-  groupResults.value = []
-  groupKeyword.value = ''
+  bindingForm.value = {
+    regionId: null, serverGroupId: item?.serverGroupId ?? null,
+    status: item?.status ?? 1, config: item ? pretty(item.config) : '{}'
+  }
+  regions.value = []
+  groups.value = []
   bindingVisible.value = true
-}
-async function searchGroups(query: string) {
-  groupKeyword.value = query
-  if (!query.trim() || !gameId.value) { groupResults.value = []; return }
-  groupLoading.value = true
-  try {
-    const response = await nodeApi.search(query)
-    groupResults.value = response.data.filter(item => item.node.nodeType === 'server_group' && item.path[0]?.id === gameId.value)
-  } catch { ElMessage.error('搜索区服组失败') }
-  finally { groupLoading.value = false }
+  if (!item) void loadRegions()
 }
 async function saveBinding() {
   if (!active.value || !bindingForm.value.serverGroupId || !validJSON(bindingForm.value.config)) {
-    ElMessage.warning('选择区服组并填写合法 JSON 对象'); return
+    ElMessage.warning('请选择区服组并输入合法 JSON 对象'); return
   }
   busy.value = true
   try {
@@ -125,94 +168,178 @@ async function saveBinding() {
     else await api.post(`/admin/channel-apps/${active.value.id}/bindings`,
       { ...payload, serverGroupId: bindingForm.value.serverGroupId })
     bindingVisible.value = false
-    await loadBindings(); emit('changed')
-    ElMessage.success('绑定配置已保存')
-  } catch { ElMessage.error('保存失败：区服组可能属于其他游戏或已存在绑定') }
+    await loadBindings()
+    emit('changed')
+    ElMessage.success('绑定已保存')
+  } catch { ElMessage.error('保存失败，可能已绑定或区服组不属于当前游戏') }
   finally { busy.value = false }
 }
 async function removeBinding(item: Binding) {
-  try { await ElMessageBox.confirm(`解除区服组 ${item.serverGroupId} 的绑定？`, '确认解除', { type: 'warning' }) }
+  try { await ElMessageBox.confirm(`解除「${item.regionName ?? ''} / ${item.serverGroupName ?? item.serverGroupId}」的绑定？`, '解除绑定', { type: 'warning' }) }
   catch { return }
   try {
     await api.delete(`/admin/channel-app-bindings/${item.id}`)
-    await loadBindings(); emit('changed'); ElMessage.success('已解除绑定')
+    await loadBindings()
+    emit('changed')
+    ElMessage.success('已解除绑定')
   } catch { ElMessage.error('解除绑定失败') }
 }
-watch(gameId, () => { active.value = null; bindings.value = []; void loadApps() })
-onMounted(async () => {
-  try {
-    games.value = (await nodeApi.getTreeChildren(0)).data
-    if (games.value.length) gameId.value = games.value[0].id
-  } catch { ElMessage.error('加载游戏列表失败') }
-})
+function openPreview(item: Binding) { preview.value = item; previewVisible.value = true }
+
+watch(() => props.gameId, () => {
+  active.value = null
+  bindings.value = []
+  appSearch.value = ''
+  bindingSearch.value = ''
+  envFilter.value = ''
+  void loadApps()
+}, { immediate: true })
 </script>
 
 <template>
-  <main class="content-panel">
-    <h2>渠道应用管理</h2>
-    <p class="muted">一个游戏只创建一次渠道应用；在正式服、提审服等不同区服组绑定，并按需覆盖公共 JSON 配置。</p>
-    <div class="panel-actions" style="margin: 16px 0; display:flex; gap:12px; align-items:center">
-      <el-select v-model="gameId" placeholder="选择游戏" style="width:260px">
-        <el-option v-for="game in games" :key="game.id" :label="game.name" :value="game.id" />
-      </el-select>
-      <el-button type="primary" :disabled="!gameId" @click="openApp()">新增渠道应用</el-button>
+  <main class="channel-page">
+    <div class="page-heading">
+      <div><div class="eyebrow">CHANNEL APPLICATIONS</div><h1>渠道应用</h1>
+        <p class="muted">一个游戏只需创建一次渠道应用，通过绑定关联不同环境的区服组。</p></div>
+      <el-button type="primary" :disabled="!gameId" @click="openApp()">+ 新增渠道应用</el-button>
     </div>
-    <el-table :data="apps" stripe @row-click="selectApp">
-      <el-table-column prop="name" label="渠道应用" min-width="160" />
-      <el-table-column prop="code" label="编码" min-width="130" />
-      <el-table-column prop="status" label="状态" width="100">
-        <template #default="{ row }">{{ row.status ? '启用' : '停用' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="180">
-        <template #default="{ row }">
-          <el-button link type="primary" @click.stop="selectApp(row)">绑定</el-button>
-          <el-button link @click.stop="openApp(row)">编辑</el-button>
-          <el-button link type="danger" @click.stop="removeApp(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="channel-layout">
+      <section class="channel-list-panel">
+        <div class="section-heading"><h3>应用列表 <span class="muted">{{ apps.length }}</span></h3>
+          <el-button link @click="loadApps">刷新</el-button></div>
+        <el-input v-model="appSearch" clearable placeholder="搜索名称或 Code" />
+        <div v-loading="appLoading" class="channel-list-scroll">
+          <button v-for="app in filteredApps" :key="app.id" class="channel-list-item"
+                  :class="{ active: active?.id === app.id }" @click="selectApp(app)">
+            <span class="app-icon">{{ app.name.slice(0, 1) }}</span>
+            <span class="app-item-text"><strong>{{ app.name }}</strong><small>{{ app.code }}</small></span>
+            <el-tag v-if="app.status === 0" size="small" type="info">停用</el-tag>
+          </button>
+          <el-empty v-if="!appLoading && !filteredApps.length" description="暂无渠道应用" :image-size="75" />
+        </div>
+      </section>
 
-    <div v-if="active" style="margin-top:30px">
-      <div class="panel-actions" style="display:flex;align-items:center;justify-content:space-between">
-        <h3>{{ active.name }} · 区服组绑定</h3>
-        <el-button type="primary" @click="openBinding()">新增绑定</el-button>
-      </div>
-      <el-table :data="bindings" stripe>
-        <el-table-column prop="serverGroupId" label="区服组 ID" width="140" />
-        <el-table-column label="状态" width="90"><template #default="{row}">{{ row.status ? '启用' : '停用' }}</template></el-table-column>
-        <el-table-column label="差异配置" min-width="190"><template #default="{row}"><code>{{ row.config }}</code></template></el-table-column>
-        <el-table-column label="合并后配置" min-width="220"><template #default="{row}"><code>{{ row.effectiveConfig }}</code></template></el-table-column>
-        <el-table-column label="操作" width="140"><template #default="{row}">
-          <el-button link @click="openBinding(row)">编辑</el-button>
-          <el-button link type="danger" @click="removeBinding(row)">解除</el-button>
-        </template></el-table-column>
-      </el-table>
+      <section class="channel-detail-panel">
+        <el-empty v-if="!active" description="选择左侧渠道应用查看详情" />
+        <template v-else>
+          <div class="channel-detail-header">
+            <div><div class="eyebrow">CHANNEL DETAILS</div>
+              <h2>{{ active.name }} <el-tag :type="active.status ? 'success' : 'info'" size="small">{{ active.status ? '已启用' : '已停用' }}</el-tag></h2>
+              <p class="muted">Code: {{ active.code }} · ID {{ active.id }}</p></div>
+            <div class="panel-actions">
+              <el-button @click="openApp(active)">编辑应用</el-button>
+              <el-button type="danger" plain @click="removeApp(active)">删除</el-button>
+            </div>
+          </div>
+          <el-tabs v-model="activeTab" class="channel-tabs">
+            <el-tab-pane label="区服组绑定" name="bindings">
+              <div class="section-heading">
+                <div><h3>已绑定区服组 <span class="muted">{{ bindings.length }}</span></h3>
+                  <p class="muted">同一应用可以绑定正式服、提审服及测试服。</p></div>
+                <el-button type="primary" @click="openBinding()">+ 新增绑定</el-button>
+              </div>
+              <div class="filter-toolbar">
+                <el-select v-model="envFilter" clearable placeholder="全部环境" style="width: 160px">
+                  <el-option v-for="(label, key) in regionEnvLabels" :key="key" :label="label" :value="key" />
+                </el-select>
+                <el-input v-model="bindingSearch" clearable placeholder="搜索大区 / 区服组" />
+              </div>
+              <el-table v-loading="bindingLoading" :data="filteredBindings" stripe empty-text="暂无匹配的区服组绑定">
+                <el-table-column label="区服组" min-width="200">
+                  <template #default="{ row }">
+                    <div class="table-main">{{ row.serverGroupName || ('区服组 ' + row.serverGroupId) }}</div>
+                    <div class="muted">{{ row.regionName || '大区未知' }} · ID {{ row.serverGroupId }}</div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="环境" width="110">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.regionEnvType" size="small" :type="row.regionEnvType === 'prod' ? 'success' : row.regionEnvType === 'test' ? 'warning' : 'primary'">
+                      {{ regionEnvLabels[row.regionEnvType as RegionEnvType] }}</el-tag>
+                    <span v-else class="muted">未分类</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="88">
+                  <template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'" size="small">{{ row.status ? '启用' : '停用' }}</el-tag></template>
+                </el-table-column>
+                <el-table-column label="操作" width="190" fixed="right">
+                  <template #default="{ row }">
+                    <el-button link type="primary" @click="openPreview(row)">预览配置</el-button>
+                    <el-button link @click="openBinding(row)">编辑</el-button>
+                    <el-button link type="danger" @click="removeBinding(row)">解除</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="公共配置" name="config">
+              <div class="section-heading"><div><h3>公共 JSON 配置</h3>
+                <p class="muted">所有绑定的区服组默认继承此配置。</p></div>
+                <el-button @click="openApp(active)">修改公共配置</el-button></div>
+              <pre class="config-preview">{{ pretty(active.config) }}</pre>
+            </el-tab-pane>
+            <el-tab-pane label="应用信息" name="details">
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="名称">{{ active.name }}</el-descriptions-item>
+                <el-descriptions-item label="编码">{{ active.code }}</el-descriptions-item>
+                <el-descriptions-item label="状态">{{ active.status ? '启用' : '停用' }}</el-descriptions-item>
+                <el-descriptions-item label="备注">{{ active.remark || '—' }}</el-descriptions-item>
+              </el-descriptions>
+            </el-tab-pane>
+          </el-tabs>
+        </template>
+      </section>
     </div>
-    <el-dialog v-model="appVisible" :title="editApp ? '编辑渠道应用' : '新增渠道应用'" width="min(650px, 94vw)" :close-on-click-modal="false">
+
+    <el-drawer v-model="appVisible" :title="editApp ? '编辑渠道应用' : '新增渠道应用'" size="min(650px, 96vw)" :close-on-click-modal="false">
       <el-form label-position="top">
-        <el-form-item label="编码"><el-input v-model="appForm.code" :disabled="!!editApp" maxlength="128" /></el-form-item>
-        <el-form-item label="名称"><el-input v-model="appForm.name" maxlength="128" /></el-form-item>
+        <div class="form-grid">
+          <el-form-item label="编码" required><el-input v-model="appForm.code" :disabled="!!editApp" maxlength="128" /></el-form-item>
+          <el-form-item label="名称" required><el-input v-model="appForm.name" maxlength="128" /></el-form-item>
+        </div>
         <el-form-item label="状态"><el-switch v-model="appForm.status" :active-value="1" :inactive-value="0" /></el-form-item>
-        <el-form-item label="公共配置（JSON 对象）"><el-input v-model="appForm.config" type="textarea" :rows="8" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="appForm.remark" /></el-form-item>
+        <el-form-item label="公共配置（JSON 对象）" required><JsonConfigEditor v-model="appForm.config" :rows="14" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="appForm.remark" type="textarea" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="appVisible=false">取消</el-button><el-button type="primary" :loading="busy" @click="saveApp">保存</el-button></template>
-    </el-dialog>
-    <el-dialog v-model="bindingVisible" title="配置区服组绑定" width="min(650px, 94vw)" :close-on-click-modal="false">
+      <template #footer><el-button @click="appVisible = false">取消</el-button>
+        <el-button type="primary" :loading="busy" @click="saveApp">保存应用</el-button></template>
+    </el-drawer>
+
+    <el-drawer v-model="bindingVisible" :title="editBinding ? '编辑区服组绑定' : '新增区服组绑定'"
+               size="min(650px, 96vw)" :close-on-click-modal="false">
       <el-form label-position="top">
-        <el-form-item label="选择区服组（输入名称或 Code 检索）">
-          <el-select v-model="bindingForm.serverGroupId" filterable remote :remote-method="searchGroups" :loading="groupLoading"
-            :disabled="!!editBinding" placeholder="搜索本游戏下的区服组" style="width:100%">
-            <el-option v-if="editBinding && bindingForm.serverGroupId" :label="String(bindingForm.serverGroupId)" :value="bindingForm.serverGroupId" />
-            <el-option v-for="match in groupResults" :key="match.node.id" :value="match.node.id"
-              :label="match.path.map(item => item.name).join(' / ')" />
-          </el-select>
-        </el-form-item>
+        <template v-if="!editBinding">
+          <el-form-item label="选择大区" required>
+            <el-select v-model="bindingForm.regionId" filterable placeholder="从当前游戏选择大区"
+                       style="width:100%" @change="onRegionChange">
+              <el-option v-for="region in regions" :key="region.id" :value="region.id"
+                         :label="`${region.name} (${region.envType ? regionEnvLabels[region.envType] : '未分类'})`" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="选择区服组" required>
+            <el-select v-model="bindingForm.serverGroupId" filterable remote :remote-method="loadGroups"
+                       :loading="groupLoading" :disabled="!bindingForm.regionId"
+                       placeholder="输入名称或 Code 搜索当前大区的区服组" style="width:100%">
+              <el-option v-for="group in groups" :key="group.id" :value="group.id"
+                         :label="`${group.name} (${group.code})`" />
+            </el-select>
+          </el-form-item>
+        </template>
+        <el-form-item v-else label="区服组 ID"><el-input :model-value="String(bindingForm.serverGroupId)" disabled /></el-form-item>
         <el-form-item label="绑定状态"><el-switch v-model="bindingForm.status" :active-value="1" :inactive-value="0" /></el-form-item>
-        <el-form-item label="差异配置（JSON 对象）"><el-input v-model="bindingForm.config" type="textarea" :rows="8" /></el-form-item>
-        <p class="muted">最终配置 = 游戏渠道公共配置 + 此区服组覆盖配置；相同键以覆盖配置为准。</p>
+        <el-form-item label="覆盖 JSON 配置" required>
+          <JsonConfigEditor v-model="bindingForm.config" :rows="14" />
+        </el-form-item>
+        <p class="muted">最终生效配置由 Go 后端按公共配置与覆盖配置合并计算。</p>
       </el-form>
-      <template #footer><el-button @click="bindingVisible=false">取消</el-button><el-button type="primary" :loading="busy" @click="saveBinding">保存绑定</el-button></template>
-    </el-dialog>
+      <template #footer><el-button @click="bindingVisible = false">取消</el-button>
+        <el-button type="primary" :loading="busy" @click="saveBinding">保存绑定</el-button></template>
+    </el-drawer>
+
+    <el-drawer v-model="previewVisible" title="配置预览（服务端计算）" size="min(680px, 96vw)">
+      <div v-if="preview">
+        <p class="muted">{{ preview.regionName }} / {{ preview.serverGroupName }}</p>
+        <h4>当前覆盖配置</h4><pre class="config-preview">{{ pretty(preview.config) }}</pre>
+        <h4>最终生效配置</h4><pre class="config-preview">{{ pretty(preview.effectiveConfig) }}</pre>
+      </div>
+    </el-drawer>
   </main>
 </template>

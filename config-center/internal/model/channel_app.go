@@ -21,8 +21,19 @@ type ChannelAppBinding struct {
 	Status int `json:"status"`
 	Config string `json:"config"`
 	EffectiveConfig string `json:"effectiveConfig"`
+	ServerGroupName string `json:"serverGroupName,omitempty"`
+	RegionName string `json:"regionName,omitempty"`
+	RegionEnvType *string `json:"regionEnvType,omitempty"`
 	CreatedAt LocalDateTime `json:"createdAt"`
 	UpdatedAt LocalDateTime `json:"updatedAt"`
+}
+
+
+// ServerGroupBinding 在区服组详情中直接展示已绑定应用及覆盖配置。
+type ServerGroupBinding struct {
+	ChannelAppBinding
+	ChannelAppName string `json:"channelAppName"`
+	ChannelAppCode string `json:"channelAppCode"`
 }
 
 type CreateChannelAppRequest struct {
