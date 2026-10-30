@@ -23,6 +23,7 @@ func (f *fakeWriter) Update(_ context.Context, _ int64, input UpdateNodeRequest)
 func (f *fakeWriter) Delete(context.Context, int64) error { return nil }
 func (f *fakeWriter) CreateSubscriber(context.Context, CreateSubscriberRequest) error { return nil }
 
+// TestWriteRoutesDisabledByDefault 确保仅传入读取依赖时不注册写接口。
 func TestWriteRoutesDisabledByDefault(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/config/admin/nodes", strings.NewReader("{}"))
 	rec := httptest.NewRecorder()
@@ -30,6 +31,7 @@ func TestWriteRoutesDisabledByDefault(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed { t.Fatalf("status = %d", rec.Code) }
 }
 
+// TestCreateAndDeleteWriteRoutes 验证写入路由能够正确调用存储层接口。
 func TestCreateAndDeleteWriteRoutes(t *testing.T) {
 	writer := &fakeWriter{}
 	handler := RouterWithWrites(stubReader{}, writer)
@@ -47,6 +49,7 @@ func TestCreateAndDeleteWriteRoutes(t *testing.T) {
 	if rec.Code != http.StatusNoContent { t.Fatalf("status = %d", rec.Code) }
 }
 
+// TestCreateRejectsMalformedJSON 验证新建节点时拒绝格式不合法的请求体。
 func TestCreateRejectsMalformedJSON(t *testing.T) {
 	handler := RouterWithWrites(stubReader{}, &fakeWriter{})
 	req := httptest.NewRequest(http.MethodPost, "/api/config/admin/nodes", strings.NewReader(`{"nodeType":"game"}{}`))

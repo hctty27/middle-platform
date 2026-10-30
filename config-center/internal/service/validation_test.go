@@ -5,6 +5,7 @@ import (
     "github.com/hctty27/middle-platform/config-center/internal/model"
 )
 
+// TestRegionEnvironmentValidation 覆盖测试服、提审服、正式服枚举以及非法环境分类。
 func TestRegionEnvironmentValidation(t *testing.T) {
     status := 1
     for _, env := range []string{"test", "review", "production"} {

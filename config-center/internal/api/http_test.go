@@ -22,6 +22,7 @@ func (stubReader) Batch(_ context.Context, ids []int64) ([]Node, error) {
 	return []Node{}, nil
 }
 
+// TestRevisionContract 验证全局同步版本响应中的 epoch 与 revision 协议。
 func TestRevisionContract(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/config/sync/revision", nil)
 	rec := httptest.NewRecorder()
@@ -32,6 +33,7 @@ func TestRevisionContract(t *testing.T) {
 	if got.Epoch != "test-epoch" || got.Revision != 17 { t.Fatalf("response = %+v", got) }
 }
 
+// TestBatchGetContract 验证批量节点查询的数据结构与路径约定。
 func TestBatchGetContract(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/config/nodes/batch-get", strings.NewReader(`{"ids":[2,3]}`))
 	rec := httptest.NewRecorder()
@@ -41,6 +43,7 @@ func TestBatchGetContract(t *testing.T) {
 	}
 }
 
+// TestNoWriteRoute 验证只读路由实例不会暴露管理写入接口。
 func TestNoWriteRoute(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/config/admin/nodes", strings.NewReader("{}"))
 	rec := httptest.NewRecorder()
@@ -50,6 +53,7 @@ func TestNoWriteRoute(t *testing.T) {
 	}
 }
 
+// TestRejectInvalidPaging 验证非法分页参数会被 API 拒绝。
 func TestRejectInvalidPaging(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/config/admin/nodes/children?parentId=0&size=1000", nil)
 	rec := httptest.NewRecorder()
@@ -57,6 +61,7 @@ func TestRejectInvalidPaging(t *testing.T) {
 	if rec.Code != http.StatusBadRequest { t.Fatalf("status = %d", rec.Code) }
 }
 
+// TestLocalDateTimeContract 验证节点时间字段的 JSON 序列化兼容性。
 func TestLocalDateTimeContract(t *testing.T) {
 	n := Node{NodeType: "game", Config: `{"a":1}`}
 	out, err := json.Marshal(n)
