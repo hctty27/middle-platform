@@ -2,7 +2,7 @@
 // 配置工作区负责展示懒加载目录树、直属子项列表和节点编辑抽屉。
 // 数据加载、并发控制及表单状态集中交由 useNodeWorkspace 管理。
 import { watch } from 'vue'
-import { focusNodeId } from './app/gameContext'
+import { focusNodeId, focusNodeRequest } from './app/gameContext'
 import type { NodeType, RegionEnvType } from './features/nodes/types'
 import { regionEnvLabels } from './features/nodes/types'
 
@@ -23,7 +23,8 @@ const { selectById, labels, nextType, treeProps, treeRef, treeScrollRef, treeVer
 
 // 游戏切换与概览页跳转均直接定位目标节点。
 let focusSequence = 0
-watch(() => [props.gameId, focusNodeId.value], async ([gameId, nodeId]) => {
+watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
+  const nodeId = focusNodeId.value
   const targetId = Number(nodeId ?? gameId ?? 0)
   if (!targetId) return
   ++focusSequence
