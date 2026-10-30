@@ -1,4 +1,4 @@
--- sqlc analysis snapshot of Go migration V5. Do not use this file for migrations.
+-- sqlc analysis snapshot of Go migration V6. Do not use this file for migrations.
 -- Source migrations live in config-center/internal/migration/sql.
 CREATE TABLE config_node (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -49,4 +49,28 @@ CREATE TABLE config_delivery_state (
     failure_count INT NOT NULL,
     last_error VARCHAR(500),
     updated_at DATETIME(6) NOT NULL
+);
+
+-- Game-scoped channel definitions and per-group override rows.
+CREATE TABLE config_channel_app (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    game_id BIGINT NOT NULL,
+    code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    status TINYINT NOT NULL,
+    config JSON NOT NULL,
+    remark VARCHAR(500),
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    UNIQUE KEY uq_channel_app_game_code(game_id,code)
+);
+CREATE TABLE config_channel_app_binding (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    channel_app_id BIGINT NOT NULL,
+    server_group_id BIGINT NOT NULL,
+    status TINYINT NOT NULL,
+    config JSON NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    UNIQUE KEY uq_channel_app_group(channel_app_id,server_group_id)
 );
