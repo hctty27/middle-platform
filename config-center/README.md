@@ -6,7 +6,7 @@
 
 - `cmd/config-center`：HTTP 服务启动入口。
 - `cmd/migrate`：独立的 MySQL 迁移 CLI。
-- `internal/migration/sql`：内置版本 V1–V8 的权威数据库迁移 SQL。
+- `internal/migration/sql`：内置版本 V1–V9 的权威数据库迁移 SQL。
 - `internal/app`：数据库连接、迁移初始化、HTTP 服务、优雅退出。
 - `internal/settings`：环境变量。
 - `internal/api`：HTTP 接口。
@@ -31,7 +31,7 @@ export CONFIG_GO_ENABLE_WEBHOOK=true
 go run ./cmd/config-center
 ```
 
-启动时自动检查并更新数据库结构，首次空库执行 V1→V8。也可在服务启动前单独运行：
+启动时自动检查并更新数据库结构，首次空库执行 V1→V9。也可在服务启动前单独运行：
 
 ```bash
 go run ./cmd/migrate
@@ -184,3 +184,27 @@ V4 历史归档缺失不会被自动恢复，若业务仍需旧渠道原始数�
 - 渠道应用与绑定保留原来的 CRUD 和生效 JSON 合并逻辑，不参加节点同步。
 - V8 迁移只切换一次 `epoch`，不删除业务表；新版接入端自动重建纯节点快照。
 - 上线前备份并协调两个 Go 服务升级。旧接入库的渠道副本表不会自动删除，确认无依赖后手动清理。
+
+## V9：同步表更名与历史归档清理
+
+- `config_change_log` → `config_node_change_log`。
+- `config_delivery_state` → `config_subscriber_delivery_state`。
+- V9 为这两张表及其他六张正式表添加中文表说明；不会改变任何字段、数据、同步协议或 `epoch/revision`。
+- 不修改 V1–V8 的历史迁移文件；Go 查询、sqlc、Webhook 调度和集成测试全部使用新名称。
+- V9 以后 V4/V6 归档只用于历史审计，不作为启动校验的必需表。**升级不会自动删除任何归档数据。**
+
+升级前停止旧版配置中心写入并备份数据库，然后运行：
+
+```powershell
+go run ./cmd/migrate -config configs/config-dev.yaml
+```
+
+升级后核对：
+
+```sql
+SELECT version, dirty FROM config_schema_migrations WHERE id = 1;
+SHOW TABLES LIKE 'config_node_change_log';
+SHOW TABLES LIKE 'config_subscriber_delivery_state';
+```
+
+如需从当前业务库移除 `config_node_v6_channel_app_archive`，应先使用 `mysqldump` 单独备份并检查备份完整性，在 V9 成功且业务数据核对无误后才手工执行 `DROP TABLE`。旧版配置中心不得再连接升级后的数据库。具体操作参见 `docs/database-cleanup.md`。

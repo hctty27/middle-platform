@@ -34,7 +34,7 @@
 
 ## 数据一致性
 
-权威配置中心多实例共享同一个 MySQL。写事务先锁全局版本行，然后更新节点与 `config_change_log`，保证提交顺序和递增 revision 一致；重复无变化更新不增加版本。
+权威配置中心多实例共享同一个 MySQL。写事务先锁全局版本行，然后更新节点与 `config_node_change_log`，保证提交顺序和递增 revision 一致；重复无变化更新不增加版本。
 
 Webhook 仅发送 `epoch`、`revision`，由接入侧校验 HMAC-SHA256 和请求时间窗口，异步触发同步。接入端按 revision 连续拉取变更节点 ID，批量查询最新状态，并在短事务内一起更新本地节点副本和同步游标。删除事件会删除本地节点。渠道应用及绑定 CRUD 不影响节点版本、日志和回调。
 
@@ -46,7 +46,7 @@ Webhook 仅发送 `epoch`、`revision`，由接入侧校验 HMAC-SHA256 和请�
 
 Go 主程序在启动前校验 schema，通过 MySQL 命名锁避免多个配置中心同时执行 DDL。内置 V1–V4 SQL 保留历史迁移逻辑，包括旧 `channel`、`sdk_app` 到四级 `channel_app` 的迁移和归档。
 
-- 新数据库执行 V1→V8，记录 `config_schema_migrations` 版本。
+- 新数据库执行 V1→V9，记录 `config_schema_migrations` 版本。
 - 已迁到 V4 的旧数据库先验证结构，再建立 Go 迁移状态，不重复清理配置。
 - 历史 V1–V3 数据库需要人工备份、停写，再显式开启旧版升级。
 - MySQL DDL 隐式提交；失败后标记 dirty，禁止自动重跑半成功的迁移。
@@ -80,3 +80,10 @@ config-center/
 - 同步快照仅返回 `epoch`、`revision`、`nodes`；只有三级节点的增删改会推进 revision。
 - 渠道应用及区服组绑定继续独立管理，不再参与节点同步。
 - V8 升级仅切换一次 epoch，不删除现有渠道业务数据；旧接入副本中的渠道表不会自动删除。
+
+## V9 同步表命名规范
+
+- 节点事件日志改为 `config_node_change_log`，按 `revision` 记录三级节点增量。
+- Webhook 投递进度改为 `config_subscriber_delivery_state`，保持原有订阅者外键、租约和失败重试语义。
+- 仅调整表名和中文表注释；`config_revision` 的 epoch/revision 不变，接入副本协议无需改动。
+- V6/V4 历史归档不再是 V9 运行时依赖；迁移不自动删除归档，人工确认外部备份后方可清理。

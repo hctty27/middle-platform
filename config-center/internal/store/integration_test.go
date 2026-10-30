@@ -92,7 +92,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		if _, err := db.ExecContext(ctx, statement); err != nil { t.Fatalf("%s: %v", statement, err) }
 	}
 	defer func() {
-		for _, name := range []string{"config_channel_app_binding","config_channel_app","config_delivery_state", "config_subscriber", "config_change_log", "config_node", "config_revision"} {
+		for _, name := range []string{"config_channel_app_binding","config_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
 			if _, err := db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+name); err != nil { t.Log(err) }
 		}
 	}()
@@ -223,9 +223,9 @@ func errorsIs(err, target error) bool {
 var integrationSchema = []string{
 	`DROP TABLE IF EXISTS config_channel_app_binding`,
  `DROP TABLE IF EXISTS config_channel_app`,
- `DROP TABLE IF EXISTS config_delivery_state`,
+ `DROP TABLE IF EXISTS config_subscriber_delivery_state`,
 	`DROP TABLE IF EXISTS config_subscriber`,
-	`DROP TABLE IF EXISTS config_change_log`,
+	`DROP TABLE IF EXISTS config_node_change_log`,
 	`DROP TABLE IF EXISTS config_node`,
 	`DROP TABLE IF EXISTS config_revision`,
 	`CREATE TABLE config_revision (
@@ -267,7 +267,7 @@ var integrationSchema = []string{
 		UNIQUE KEY uq_channel_app_group(channel_app_id,server_group_id),
 		FOREIGN KEY (channel_app_id) REFERENCES config_channel_app(id) ON DELETE RESTRICT
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
-	`CREATE TABLE config_change_log(
+	`CREATE TABLE config_node_change_log(
 		revision BIGINT NOT NULL PRIMARY KEY,node_id BIGINT NOT NULL,operation VARCHAR(10) NOT NULL,
 		created_at DATETIME(6) NOT NULL,KEY idx_change_node(node_id),
 		CONSTRAINT chk_change_operation CHECK(operation IN ('UPSERT','DELETE'))
@@ -277,7 +277,7 @@ var integrationSchema = []string{
 		callback_url VARCHAR(1024) NOT NULL,webhook_secret VARCHAR(255) NOT NULL,enabled TINYINT NOT NULL DEFAULT 1,
 		created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-	`CREATE TABLE config_delivery_state(
+	`CREATE TABLE config_subscriber_delivery_state(
 		subscriber_id BIGINT NOT NULL PRIMARY KEY,acknowledged_revision BIGINT NOT NULL DEFAULT 0,
 		acknowledged_epoch CHAR(36) NULL,lease_owner VARCHAR(64) NULL,lease_until DATETIME(6) NULL,
 		next_attempt_at DATETIME(6) NOT NULL,failure_count INT NOT NULL DEFAULT 0,last_error VARCHAR(500) NULL,

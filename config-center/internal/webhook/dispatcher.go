@@ -67,7 +67,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	delivery := &Delivery{}
 	// SKIP LOCKED 让多实例跳过已被领取的任务，避免相互阻塞与重复投递。
 	err = tx.QueryRowContext(ctx, `SELECT d.subscriber_id,s.callback_url,s.webhook_secret,r.epoch,r.revision
-		FROM config_delivery_state d
+		FROM config_subscriber_delivery_state d
 		JOIN config_subscriber s ON s.id=d.subscriber_id
 		JOIN config_revision r ON r.id=1
 		WHERE s.enabled=1 AND
@@ -83,7 +83,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	if _, err := rand.Read(id[:]); err != nil { return nil, err }
 	// 随机租约标识用于回写时的所有权校验，过期任务不能覆盖新领取者的结果。
 	delivery.LeaseID = hex.EncodeToString(id[:])
-	result, err := tx.ExecContext(ctx, `UPDATE config_delivery_state
+	result, err := tx.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
 		SET lease_owner=?,lease_until=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 30 SECOND)
 		WHERE subscriber_id=?`, delivery.LeaseID, delivery.SubscriberID)
 	if err != nil { return nil, err }
@@ -124,7 +124,7 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 
 // delivered 在租约有效时更新已确认的同步版本。
 func (d *Dispatcher) delivered(ctx context.Context, job Delivery) error {
-	_, err := d.DB.ExecContext(ctx, `UPDATE config_delivery_state
+	_, err := d.DB.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
 		SET acknowledged_revision=CASE WHEN acknowledged_epoch=?
 			THEN GREATEST(acknowledged_revision,?) ELSE ? END,
 			acknowledged_epoch=?,
@@ -140,7 +140,7 @@ func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) err
 	message := []rune(reason.Error())
 	if len(message) > 500 { message = message[:500] }
 	// 指数退避上限为五分钟，防止故障订阅者持续消耗回调资源。
-	_, err := d.DB.ExecContext(ctx, `UPDATE config_delivery_state
+	_, err := d.DB.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
 		SET lease_owner=NULL,lease_until=NULL,failure_count=failure_count+1,
 			next_attempt_at=DATE_ADD(UTC_TIMESTAMP(6),
 				INTERVAL LEAST(300,POW(2,LEAST(failure_count+1,8))) SECOND),

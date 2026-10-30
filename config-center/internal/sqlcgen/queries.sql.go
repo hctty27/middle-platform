@@ -78,7 +78,7 @@ func (q *Queries) IncrementRevision(ctx context.Context) error {
 
 const listChanges = `-- name: ListChanges :many
 SELECT revision, node_id, operation, created_at
-FROM config_change_log
+FROM config_node_change_log
 WHERE revision > ?
 ORDER BY revision
 LIMIT ?

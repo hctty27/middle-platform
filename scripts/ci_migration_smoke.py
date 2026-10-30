@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Go SQL 迁移真实 MySQL V1→V8 与旧版配置结构回归。"""
+"""Go SQL 迁移真实 MySQL V1→V9 与旧版配置结构回归。"""
 
 import os
 import subprocess
@@ -199,7 +199,27 @@ def main():
     mysql("DROP TABLE config_migration.config_node_v6_channel_app_archive")
     migrate(8, expected_success=False)
 
-    print("PASS GTID-safe V1-V8 migration, optional V4 archive and mandatory V6/V7/V8 checks", flush=True)
+    # V9 允许归档在管理员外部备份后移除，不能阻断正在运行的配置中心。
+    # 两张活动表必须原子重命名，不丢失订阅游标，也不改变节点 revision/epoch。
+    before_v9_epoch = mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1")
+    before_v9_revision = mysql("SELECT revision FROM config_migration.config_revision WHERE id=1")
+    migrate(9)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1") == "9\t0"
+    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == before_v9_epoch
+    assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == before_v9_revision
+    assert mysql("SELECT acknowledged_revision FROM config_migration.config_subscriber_delivery_state WHERE subscriber_id=77") == "7"
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_node_change_log") == "0"
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_channel_app_binding") == "1"
+    assert mysql("""SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema='config_migration' AND table_name IN
+        ('config_change_log','config_delivery_state')""") == "0"
+    assert mysql("""SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema='config_migration' AND table_name IN
+        ('config_node_change_log','config_subscriber_delivery_state')""") == "2"
+    migrate(9)
+    assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == before_v9_epoch
+
+    print("PASS GTID-safe V1-V9 migration, V9 table renames and archive-safe validation", flush=True)
 
 
 if __name__ == "__main__":

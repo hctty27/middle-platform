@@ -9,7 +9,7 @@ import (
 
 // Subscribers 获取所有回调订阅者及对应投递进度。
 func (s *Store) Subscribers(ctx context.Context) ([]Subscriber, error) {
-	rows, err := s.DB.QueryContext(ctx, "SELECT s.id,s.code,s.callback_url,s.enabled,d.acknowledged_revision,d.failure_count,d.last_error FROM config_subscriber s JOIN config_delivery_state d ON d.subscriber_id=s.id ORDER BY s.id")
+	rows, err := s.DB.QueryContext(ctx, "SELECT s.id,s.code,s.callback_url,s.enabled,d.acknowledged_revision,d.failure_count,d.last_error FROM config_subscriber s JOIN config_subscriber_delivery_state d ON d.subscriber_id=s.id ORDER BY s.id")
 	if err != nil { return nil, err }
 	defer rows.Close()
 	out := make([]Subscriber, 0)
@@ -39,7 +39,7 @@ func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequ
 	if err != nil { return databaseError(err) }
 	id, err := result.LastInsertId()
 	if err != nil { return err }
-	_, err = tx.ExecContext(ctx, `INSERT INTO config_delivery_state(subscriber_id,next_attempt_at,updated_at)
+	_, err = tx.ExecContext(ctx, `INSERT INTO config_subscriber_delivery_state(subscriber_id,next_attempt_at,updated_at)
 		VALUES(?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`, id)
 	if err != nil { return err }
 	return tx.Commit()

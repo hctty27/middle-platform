@@ -26,7 +26,7 @@ func recordChange(ctx context.Context, tx *sql.Tx, nodeID int64, operation strin
 	if err := queries.IncrementRevision(ctx); err != nil { return err }
 	current, err := queries.GetRevision(ctx)
 	if err != nil { return err }
-	_, err = tx.ExecContext(ctx, "INSERT INTO config_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))", current.Revision, nodeID, operation)
+	_, err = tx.ExecContext(ctx, "INSERT INTO config_node_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))", current.Revision, nodeID, operation)
 	return err
 }
 

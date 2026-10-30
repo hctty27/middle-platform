@@ -309,7 +309,7 @@ def main():
     assert changed_head["epoch"] != old_head["epoch"], changed_head
     assert changed_head["revision"] == old_head["revision"], changed_head
     wait_until("epoch-only change triggers Webhook acknowledgement",
-               lambda: mysql("SELECT acknowledged_epoch FROM config_center.config_delivery_state "
+               lambda: mysql("SELECT acknowledged_epoch FROM config_center.config_subscriber_delivery_state "
                              "WHERE subscriber_id=(SELECT id FROM config_center.config_subscriber "
                              "WHERE code='ci-access')") == changed_head["epoch"], seconds=75)
     wait_until("client rebuilt snapshot for new epoch",

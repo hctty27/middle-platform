@@ -19,7 +19,7 @@ import (
 var scripts embed.FS
 
 // Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
-const Latest = 8
+const Latest = 9
 
 var files = [...]string{
  "",
@@ -31,6 +31,7 @@ var files = [...]string{
  "sql/V6__shared_channel_apps.sql",
  "sql/V7__trim_node_group_id.sql",
  "sql/V8__node_only_sync.sql",
+ "sql/V9__rename_sync_tables.sql",
 }
 
 // Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
@@ -209,16 +210,33 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
  if version == 6 {
   nodeColumns = "SELECT game_id,region_id,server_group_id,env_type FROM config_node LIMIT 0"
  }
- for _, statement := range []string{
+ // V9 只重命名两张同步表；V1-V8 的历史迁移和校验仍使用旧表名。
+ deliveryTable, changeLogTable := "config_delivery_state", "config_change_log"
+ if version >= 9 {
+  deliveryTable, changeLogTable = "config_subscriber_delivery_state", "config_node_change_log"
+ }
+ statements := []string{
   nodeColumns,
-  "SELECT acknowledged_epoch FROM config_delivery_state LIMIT 0",
+  "SELECT acknowledged_epoch FROM " + deliveryTable + " LIMIT 0",
+  "SELECT revision,node_id,operation FROM " + changeLogTable + " LIMIT 0",
   "SELECT id,game_id,code,config FROM config_channel_app LIMIT 0",
   "SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0",
-  "SELECT id FROM config_node_v6_channel_app_archive LIMIT 0",
- } {
+ }
+ // 历史归档在 V6-V8 必须存在；V9 后仅用于审计，不再作为服务启动条件。
+ if version < 9 {
+  statements = append(statements, "SELECT id FROM config_node_v6_channel_app_archive LIMIT 0")
+ }
+ for _, statement := range statements {
   rows, err := conn.QueryContext(ctx, statement)
   if err != nil { return fmt.Errorf("schema V%d validation failed: %w", version, err) }
   if err := rows.Close(); err != nil { return err }
+ }
+ if version >= 9 {
+  for _, oldTable := range []string{"config_delivery_state", "config_change_log"} {
+   present, err := exists(ctx, conn, oldTable)
+   if err != nil { return fmt.Errorf("inspect V9 legacy table %s: %w", oldTable, err) }
+   if present { return fmt.Errorf("schema V9 validation failed: legacy table %s still exists", oldTable) }
+  }
  }
  if version >= 7 {
   var obsoleteColumns int
@@ -231,10 +249,12 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
  // V4 归档表仅用于历史审计，非当前权威配置所需。
  // 旧 Flyway 基线或人工历史升级可能没有此表，不能因此否定已经完成的 V6。
  // 缺失时明确告警，但绝不自动创建空归档表伪造历史；V6 的权威表仍严格校验。
+ if version < 9 {
  hasV4Archive, err := exists(ctx, conn, "config_node_v4_legacy_archive")
  if err != nil { return fmt.Errorf("inspect optional V4 archive: %w", err) }
  if !hasV4Archive {
   slog.Warn("optional V4 legacy archive is missing; historical channel records cannot be verified")
+ }
  }
  return nil
 }

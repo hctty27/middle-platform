@@ -1,4 +1,4 @@
--- sqlc analysis snapshot of Go migration V7 (sqlc only; channel tables are accessed via database/sql). Do not use this file for migrations.
+-- sqlc analysis snapshot of Go migration V9 (sqlc only; channel tables are accessed via database/sql). Do not use this file for migrations.
 -- Source migrations live in config-center/internal/migration/sql.
 CREATE TABLE config_node (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -21,7 +21,7 @@ CREATE TABLE config_revision (
     epoch CHAR(36) NOT NULL
 );
 
-CREATE TABLE config_change_log (
+CREATE TABLE config_node_change_log (
     revision BIGINT NOT NULL PRIMARY KEY,
     node_id BIGINT NOT NULL,
     operation VARCHAR(10) NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE config_subscriber (
     updated_at DATETIME(6) NOT NULL
 );
 
-CREATE TABLE config_delivery_state (
+CREATE TABLE config_subscriber_delivery_state (
     subscriber_id BIGINT NOT NULL PRIMARY KEY,
     acknowledged_revision BIGINT NOT NULL,
     acknowledged_epoch CHAR(36),
