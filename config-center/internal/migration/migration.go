@@ -106,7 +106,9 @@ func repairV6GTID(ctx context.Context, conn *sql.Conn) error {
  var nodeTable,ddl string
  if err=conn.QueryRowContext(ctx,"SHOW CREATE TABLE config_node").Scan(&nodeTable,&ddl); err!=nil { return err }
  if !strings.Contains(ddl,"channel_app") { return errors.New("config_node no longer has V5 channel_app constraint") }
- if _,err=conn.ExecContext(ctx,"SELECT env_type FROM config_node LIMIT 0");err!=nil { return fmt.Errorf("config_node not V5: %w",err) }
+ rows,err:=conn.QueryContext(ctx,"SELECT env_type FROM config_node LIMIT 0")
+ if err!=nil { return fmt.Errorf("config_node not V5: %w",err) }
+ if err=rows.Close();err!=nil { return err }
  
  // 只有旧版脚本创建的前两张表允许删除，而且它们必须没有任何业务数据。
  tables:=[]string{"config_channel_app_binding","config_channel_app"}
