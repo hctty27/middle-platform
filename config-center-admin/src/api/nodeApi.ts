@@ -15,6 +15,9 @@ export const nodeApi = {
       params: { page: params.page, size: params.size, keyword: params.keyword, envType: params.envType }, signal
     }),
 
+  getPath: (id: number, signal?: AbortSignal) =>
+    api.get<NodeMatch>('/admin/nodes/' + id + '/path', { signal }),
+
   getNode: (id: number, signal?: AbortSignal) =>
     api.get<NodeRecord>('/admin/nodes/' + id, { signal }),
 
