@@ -1,0 +1,18 @@
+[Unit]
+Description=Middle Platform sdk-core
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=middle-platform
+Group=middle-platform
+WorkingDirectory=/opt/middle-platform/sdk-core
+ExecStart=/opt/middle-platform/sdk-core/sdk-core -config /etc/middle-platform/sdk-core.yaml
+Restart=on-failure
+RestartSec=3s
+KillSignal=SIGTERM
+TimeoutStopSec=40s
+
+[Install]
+WantedBy=multi-user.target

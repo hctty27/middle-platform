@@ -5,11 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
     "flag"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -61,24 +63,69 @@ func run(configPath string) error {
 	center := remote.New(cfg.CenterURL, cfg.ConnectTimeout, cfg.RequestTimeout)
 	sync := syncer.New(replica, center)
 	trigger := syncer.NewTrigger(sync, cfg.ReconcileInterval)
-	go trigger.Run(ctx)
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		trigger.Run(workerCtx)
+	}()
 
+	var ready atomic.Bool
+	ready.Store(true)
 	server := &http.Server{
 		Addr: cfg.Address,
-		Handler: api.Router(replica, trigger, cfg.WebhookSecret),
+		Handler: withDrainReadiness(api.Router(replica, trigger, cfg.WebhookSecret), &ready),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	errCh := make(chan error, 1)
 	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			slog.Error("HTTP shutdown failed", "error", err)
-		}
+		slog.Info("config access started", "address", cfg.Address, "center", cfg.CenterURL)
+		errCh <- server.ListenAndServe()
 	}()
-	slog.Info("config access started", "address", cfg.Address, "center", cfg.CenterURL)
-	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+
+	var listenErr error
+	select {
+	case <-ctx.Done():
+	case err := <-errCh:
+		if !errors.Is(err, http.ErrServerClosed) {
+			listenErr = err
+		}
+	}
+	ready.Store(false)
+	stop()
+	started := time.Now()
+	slog.Info("config access shutting down")
+	shutdownCtx, done := context.WithTimeout(context.Background(), 30*time.Second)
+	defer done()
+	cancelWorker()
+	shutdownErr := server.Shutdown(shutdownCtx)
+	if shutdownErr != nil {
+		slog.Warn("HTTP graceful shutdown failed; closing active connections", "error", shutdownErr)
+		shutdownErr = errors.Join(shutdownErr, server.Close())
+	}
+	var workerErr error
+	select {
+	case <-workerDone:
+	case <-shutdownCtx.Done():
+		workerErr = fmt.Errorf("sync worker shutdown exceeded deadline: %w", shutdownCtx.Err())
+	}
+	if err := errors.Join(listenErr, shutdownErr, workerErr); err != nil {
 		return err
 	}
+	slog.Info("config access stopped", "duration", time.Since(started))
 	return nil
+}
+
+func withDrainReadiness(next http.Handler, ready *atomic.Bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health/ready" && !ready.Load() {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("{\"status\":\"DOWN\"}\n"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

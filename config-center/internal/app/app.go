@@ -5,10 +5,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"github.com/go-sql-driver/mysql"
@@ -69,6 +71,9 @@ func Run(configPath string) error {
 	if writesEnabled { writer = repository }
 	var handler http.Handler = api.Router(repository)
 	if writer != nil { handler = api.RouterWithWrites(repository, writer) }
+	var ready atomic.Bool
+	ready.Store(true)
+	handler = withDrainReadiness(handler, &ready)
 	server := &http.Server{
 		Addr:              address,
 		Handler:           handler,
@@ -79,24 +84,67 @@ func Run(configPath string) error {
 	}
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	workerDone := make(chan struct{})
 	if webhookEnabled {
 		dispatcher := webhook.NewDispatcher(db, repository.AllowedHosts)
-		go dispatcher.Run(stopCtx)
+		go func() {
+			defer close(workerDone)
+			dispatcher.Run(workerCtx)
+		}()
+	} else {
+		close(workerDone)
 	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("Go config center started", "address", address, "revision", revision, "writes_enabled", writesEnabled, "webhook_enabled", webhookEnabled)
 		errCh <- server.ListenAndServe()
 	}()
+	var listenErr error
 	select {
 	case <-stopCtx.Done():
 	case err := <-errCh:
 		if !errors.Is(err, http.ErrServerClosed) {
-			return err
+			listenErr = err
 		}
-		return nil
 	}
-	shutdownCtx, done := context.WithTimeout(context.Background(), 15*time.Second)
+	ready.Store(false)
+	stop()
+	started := time.Now()
+	slog.Info("Go config center shutting down")
+	shutdownCtx, done := context.WithTimeout(context.Background(), 30*time.Second)
 	defer done()
-	return server.Shutdown(shutdownCtx)
+	cancelWorker()
+	shutdownErr := server.Shutdown(shutdownCtx)
+	if shutdownErr != nil {
+		slog.Warn("HTTP graceful shutdown failed; closing active connections", "error", shutdownErr)
+		shutdownErr = errors.Join(shutdownErr, server.Close())
+	}
+	var workerErr error
+	select {
+	case <-workerDone:
+	case <-shutdownCtx.Done():
+		workerErr = fmt.Errorf("webhook worker shutdown exceeded deadline: %w", shutdownCtx.Err())
+	}
+	if err := errors.Join(listenErr, shutdownErr, workerErr); err != nil {
+		return err
+	}
+	slog.Info("Go config center stopped", "duration", time.Since(started))
+	return nil
+}
+
+func withDrainReadiness(next http.Handler, ready *atomic.Bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health/ready" && !ready.Load() {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("{\"status\":\"DOWN\"}\n"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
