@@ -19,6 +19,8 @@ const visible = ref(false)
 const editId = ref<number | null>(null)
 const form = ref({ channelAppId: null as number | null, status: 1, config: '{}' })
 const preview = ref<GroupBinding | null>(null)
+const previewVisible = ref(false)
+function openPreview(binding: GroupBinding) { preview.value = binding; previewVisible.value = true }
 let sequence = 0
 
 function pretty(value: string) {
@@ -108,7 +110,7 @@ watch(() => [props.groupId, props.gameId], () => void reload(), { immediate: tru
       </el-table-column>
       <el-table-column label="操作" width="195" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="preview = row">预览</el-button>
+          <el-button link type="primary" @click="openPreview(row)">预览</el-button>
           <el-button link @click="openEdit(row)">编辑</el-button>
           <el-button link type="danger" @click="remove(row)">解除</el-button>
         </template>
@@ -131,7 +133,7 @@ watch(() => [props.groupId, props.gameId], () => void reload(), { immediate: tru
       <template #footer><el-button @click="visible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存绑定</el-button></template>
     </el-drawer>
-    <el-drawer v-model="preview" title="最终生效配置（服务端计算）" size="min(650px, 96vw)">
+    <el-drawer v-model="previewVisible" title="最终生效配置（服务端计算）" size="min(650px, 96vw)">
       <div v-if="preview">
         <p class="muted">{{ preview.channelAppName }} · 当前区服组</p>
         <h4>区服组覆盖配置</h4><pre class="config-preview">{{ pretty(preview.config) }}</pre>
