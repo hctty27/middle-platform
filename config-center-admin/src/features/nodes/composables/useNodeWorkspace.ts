@@ -14,7 +14,7 @@ const labels: Record<NodeType, string> = {
   game: '游戏', region: '大区', server_group: '区服组', channel_app: '渠道应用'
 }
 const nextType: Partial<Record<NodeType, NodeType>> = {
-  game: 'region', region: 'server_group', server_group: 'channel_app'
+  game: 'region', region: 'server_group'
 }
 const treeProps = { label: 'name', isLeaf: 'leaf' }
 const treeRef = ref<InstanceType<typeof ElTree> | null>(null)
@@ -195,7 +195,7 @@ async function loadChildren() {
   const node = selected.value
   const sequence = ++childSequence
   childController?.abort()
-  if (!node || node.nodeType === 'channel_app') {
+  if (!node || node.nodeType === 'server_group' || node.nodeType === 'channel_app') {
     children.value = []
     childTotal.value = 0
     childrenLoading.value = false

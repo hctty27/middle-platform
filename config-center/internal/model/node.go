@@ -113,6 +113,8 @@ type Snapshot struct {
 	Epoch    string `json:"epoch"`
 	Revision int64  `json:"revision"`
 	Nodes    []Node `json:"nodes"`
+	ChannelApps []ChannelApp `json:"channelApps"`
+	Bindings []ChannelAppBinding `json:"bindings"`
 }
 
 // Subscriber 定义回调订阅者及投递状态。

@@ -1,12 +1,12 @@
 # Go 配置中心
 
-`config-center` 是主配置中心工程，使用 Go 1.27.3、Chi、MySQL 8.0+，对外提供 `/api/config/**`、四级配置树和 `epoch + revision` 同步协议。
+`config-center` 是主配置中心工程，使用 Go 1.27.3、Chi、MySQL 8.0+，对外提供 `/api/config/**`、三级配置树 + 游戏级渠道应用绑定和 `epoch + revision` 同步协议。
 
 ## 代码目录
 
 - `cmd/config-center`：HTTP 服务启动入口。
 - `cmd/migrate`：独立的 MySQL 迁移 CLI。
-- `internal/migration/sql`：内置版本 V1–V5 的权威数据库迁移 SQL。
+- `internal/migration/sql`：内置版本 V1–V6 的权威数据库迁移 SQL。
 - `internal/app`：数据库连接、迁移初始化、HTTP 服务、优雅退出。
 - `internal/settings`：环境变量。
 - `internal/api`：HTTP 接口。
@@ -31,7 +31,7 @@ export CONFIG_GO_ENABLE_WEBHOOK=true
 go run ./cmd/config-center
 ```
 
-启动时自动检查并更新数据库结构，首次空库执行 V1→V5。也可在服务启动前单独运行：
+启动时自动检查并更新数据库结构，首次空库执行 V1→V6。也可在服务启动前单独运行：
 
 ```bash
 go run ./cmd/migrate
@@ -84,3 +84,31 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 数据库迁移可执行 `go run ./cmd/migrate -config configs/config-dev.yaml`。
 配置优先级：程序默认值 → 同目录 `config.yaml` → 指定 YAML → 环境变量。不加 `-config` 时继续使用旧的环境变量方式。生产同样从 `configs/config.yaml` 复制成 `configs/config-prod.yaml`，生产数据库凭证推荐通过 `CONFIG_DB_DSN` 注入，不提交实际配置文件。
+
+## 渠道应用与环境绑定（V6）
+
+- 配置树固定三层：`game → region → server_group`。
+- `config_channel_app`：按 `game_id + code` 唯一的渠道应用公共定义，支持状态与公共 JSON。
+- `config_channel_app_binding`：按 `channel_app_id + server_group_id` 唯一；每个绑定独立控制状态并维护覆盖 JSON，禁止跨游戏绑定。
+- 公共配置与绑定覆盖配置按 JSON 对象的同名键合并，覆盖层优先；`null` 用于删除公共字段。
+- 应用或绑定变更时原子更新 `epoch + revision`，接入端收到通知后重建快照，副本保存公共定义及绑定生效配置。
+
+### 管理 API
+
+```text
+GET    /api/config/admin/channel-apps?gameId=1
+POST   /api/config/admin/channel-apps
+PUT    /api/config/admin/channel-apps/{id}
+DELETE /api/config/admin/channel-apps/{id}
+GET    /api/config/admin/channel-apps/{id}/bindings
+POST   /api/config/admin/channel-apps/{id}/bindings
+PUT    /api/config/admin/channel-app-bindings/{id}
+DELETE /api/config/admin/channel-app-bindings/{id}
+```
+
+### 升级注意
+
+**V6 非向后兼容。** 上线前必须备份配置库、停写并协调接入端和配置中心升级。
+迁移会合并同一游戏下相同 `channel_app.code`，并把旧区服组的完整 JSON 原样迁入绑定覆盖层，公共 JSON 初始为 `{}`，不会覆盖提审服的旧配置。
+原始渠道节点保存在 `config_node_v6_channel_app_archive`，不得自动删除。
+旧版接入端不认识快照中的 `channelApps` 和 `bindings`，必须一起升级。

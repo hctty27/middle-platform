@@ -20,7 +20,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
 
 <template>
   <main class="workspace">
-    <!-- 目录树只展开适合导航的层级，末级渠道应用交由右侧列表分页展示。 -->
+    <!-- 目录树只展示游戏、大区和区服组；渠道应用独立管理。 -->
     <section class="tree-panel">
       <div class="panel-title">
         <strong>配置目录</strong>
@@ -60,7 +60,7 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
           </template>
         </el-tree>
       </div>
-      <div class="tree-hint">目录只展开前三层，渠道应用在右侧列表中查看。</div>
+      <div class="tree-hint">目录共三级；渠道应用请使用左侧「渠道应用」页面统一管理。</div>
     </section>
 
     <!-- 右侧展示当前节点及直属子项，避免一次渲染整棵配置树。 -->
@@ -95,8 +95,8 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
         </div>
         <div class="children-toolbar">
           <div>
-            <strong>{{ selected.nodeType === 'channel_app' ? '节点详情' : nextLabel + '列表' }}</strong>
-            <span v-if="selected.nodeType !== 'channel_app'" class="muted">共 {{ childTotal }} 条</span>
+            <strong>{{ selected.nodeType === 'server_group' ? '渠道绑定' : nextLabel + '列表' }}</strong>
+            <span v-if="selected.nodeType !== 'server_group'" class="muted">共 {{ childTotal }} 条</span>
           </div>
           <div class="children-tools" v-if="selected.nodeType !== 'channel_app'">
             <el-select v-if="selected.nodeType === 'game'" v-model="regionFilter" placeholder="全部大区类型"
@@ -107,8 +107,8 @@ const { labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restor
             <el-button type="primary" @click="openCreate(selected)">+ 新增{{ nextLabel }}</el-button>
           </div>
         </div>
-        <div v-if="selected.nodeType === 'channel_app'" class="leaf-tip">
-          渠道应用是末级节点，可以通过右上角“查看 / 编辑”维护配置。
+        <div v-if="selected.nodeType === 'server_group'" class="leaf-tip">
+          渠道应用在「渠道应用」页面统一创建，通过绑定关联到此区服组。
         </div>
         <template v-else>
           <div class="children-table">

@@ -142,31 +142,36 @@ def main():
                            "X-Config-Signature": "sha256=" + signature})
     print("PASS invalid callback rejected and valid callback acknowledged asynchronously", flush=True)
 
-    # Four-level hierarchy and versioned change log.
+    # 三层配置树 + 同一个游戏级渠道应用绑定到区服组。
     parent = 0
     ids = []
-    for kind in ("game", "region", "server_group", "channel_app"):
+    for kind in ("game", "region", "server_group"):
         node = create_node(kind, parent, f"ci-{kind}")
         ids.append(node["id"])
         parent = node["id"]
-    # 祖先 ID 只记录上层，不记录自身；API 仍通过计算属性提供 parentId。
+    app = request(8080, "/api/config/admin/channel-apps", "POST", {
+        "gameId": ids[0], "code": "ci-huawei", "name": "Huawei",
+        "status": 1, "config": '{"appId":"10001"}', "remark": "shared"
+    }, 201)
+    binding = request(8082, f'/api/config/admin/channel-apps/{app["id"]}/bindings', "POST", {
+        "serverGroupId": ids[2], "status": 1, "config": '{"authUrl":"auth-review"}'
+    }, 201)
+    assert json.loads(binding["effectiveConfig"]) == {"appId": "10001", "authUrl": "auth-review"}
+    assert len(request(8080, f'/api/config/admin/channel-apps?gameId={ids[0]}')) == 1
+
     expected = [
         (None, None, None),
         (ids[0], None, None),
         (ids[0], ids[1], None),
-        (ids[0], ids[1], ids[2]),
     ]
-    for index, node_id in enumerate(ids):
+    for index,node_id in enumerate(ids):
         node = request(8080, f"/api/config/nodes/{node_id}")
-        assert tuple(node[field] for field in
-                     ("gameId", "regionId", "serverGroupId")) == expected[index], node
-        assert node["parentId"] == (ids[index - 1] if index else 0), node
-    print("PASS fixed ancestor paths and computed parent IDs", flush=True)
+        assert tuple(node[field] for field in ("gameId", "regionId", "serverGroupId")) == expected[index]
+        assert node["parentId"] == (ids[index - 1] if index else 0)
     head = request(8080, "/api/config/sync/revision")
-    assert head["revision"] == 4, head
+    assert head["revision"] == 5, head
     history = request(8082, "/api/config/sync/changes?afterRevision=0&limit=100")
-    assert [event["revision"] for event in history] == list(range(1, 5)), history
-
+    assert [event["revision"] for event in history] == list(range(1,6)), history
     # 旧版版本化路由应彻底失效（404），统一无版本路径仍正常工作。
     legacy_prefix = "/api/" + "v1"
     request(8080, legacy_prefix + "/sync/revision", expected=404)
@@ -178,7 +183,7 @@ def main():
     request(8080, legacy_prefix + "/config/nodes/batch-get", "POST", {"ids": ids}, 404)
     print("PASS unversioned API routes and removal of legacy aliases", flush=True)
 
-    print("PASS four-level tree and cluster-wide ordered revisions", flush=True)
+    print("PASS three-level tree, shared channel app and cluster-wide revisions", flush=True)
     # Navigation endpoints must return small summaries without any JSON configuration.
     roots = request(8080, "/api/config/admin/nodes/tree?parentId=0")
     assert len(roots) == 1 and roots[0]["id"] == ids[0], roots
@@ -193,25 +198,22 @@ def main():
     groups = request(8080, f"/api/config/admin/nodes/tree?parentId={ids[1]}")
     assert len(groups) == 1 and groups[0]["id"] == ids[2] and groups[0]["leaf"], groups
     assert request(8080, f"/api/config/admin/nodes/tree?parentId={ids[2]}") == []
-    page = request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=1&size=1&keyword=ci-channel_app")
-    assert page["total"] == 1 and len(page["items"]) == 1, page
-    assert page["items"][0]["id"] == ids[3] and "config" not in page["items"][0], page
-    assert request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=2&size=1")["items"] == []
-    assert json.loads(request(8080, f"/api/config/admin/nodes/{ids[3]}")["config"]) == {"enabled": True}
+    page = request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=1&size=1")
+    assert page["total"] == 0 and page["items"] == [], page
     request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=0", expected=400)
-    print("PASS lightweight lazy tree and paginated child management APIs", flush=True)
+    print("PASS three-level lazy tree and paginated child management APIs", flush=True)
     # Global search must find unloaded descendants and return their complete ancestor path.
-    matches = request(8080, "/api/config/admin/nodes/search?keyword=ci-channel_app")
+    matches = request(8080, "/api/config/admin/nodes/search?keyword=ci-server_group")
     assert len(matches) == 1 and matches[0]["node"]["id"] == ids[-1], matches
     assert [node["id"] for node in matches[0]["path"]] == ids, matches
     assert "config" not in matches[0]["node"], matches
-    path = request(8082, f"/api/config/admin/nodes/{ids[3]}/path")
-    assert [node["id"] for node in path["path"]] == ids[:4], path
+    path = request(8082, f"/api/config/admin/nodes/{ids[2]}/path")
+    assert [node["id"] for node in path["path"]] == ids, path
     assert request(8080, "/api/config/admin/nodes/search?keyword=") == []
     assert request(8080, "/api/config/admin/nodes/search?keyword=x&limit=51", expected=400)
     print("PASS global search, deep navigation paths and input validation", flush=True)
 
-    wait_until("Webhook pull copied all four nodes", lambda: synchronized_nodes(4, 4))
+    wait_until("Webhook pull copied all three nodes", lambda: synchronized_nodes(3, 5))
     local = {row["id"]: row for row in replica()}
     for index, node_id in enumerate(ids):
         assert tuple(local[node_id][field] for field in
@@ -253,10 +255,10 @@ def main():
         }, 400)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
     print("PASS legacy node types rejected", flush=True)
-    # 同级 code 唯一性必须由数据库约束保证，不可依赖可空列组合 UNIQUE。
-    request(8080, "/api/config/admin/nodes", "POST", {
-        "parentId": ids[2], "nodeType": "channel_app", "code": "ci-channel_app",
-        "name": "duplicated", "status": 1, "config": "{}"
+    # 同一游戏下渠道应用编码唯一。
+    request(8080, "/api/config/admin/channel-apps", "POST", {
+        "gameId": ids[0], "code": "ci-huawei", "name": "Duplicated",
+        "status": 1, "config": "{}"
     }, 409)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
     print("PASS sibling code uniqueness under derived parent scope", flush=True)
@@ -298,10 +300,13 @@ def main():
                lambda: request(8081, "/api/access/revision")["epoch"] == changed_head["epoch"], seconds=75)
     print("PASS epoch-only change triggers notification and full snapshot", flush=True)
 
-    # Deletion must remove the local replica, not just disappear from batch-get.
+    # 删除时必须先解除绑定，避免区服组和应用出现孤儿引用。
+    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=409)
+    request(8082, f'/api/config/admin/channel-app-bindings/{binding["id"]}', "DELETE", expected=204)
+    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=204)
     request(8082, f"/api/config/admin/nodes/{ids[-1]}", "DELETE", expected=204)
     wait_until("delete propagated to local replica",
-               lambda: len(replica()) == 3 and all(row["id"] != ids[-1] for row in replica()))
+               lambda: len(replica()) == 2 and all(row["id"] != ids[-1] for row in replica()))
 
     print("ALL END-TO-END SMOKE TESTS PASSED", flush=True)
 

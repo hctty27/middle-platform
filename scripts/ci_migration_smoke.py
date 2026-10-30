@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Go SQL 迁移真实 MySQL V1→V5 与旧四级配置结构回归。"""
+"""Go SQL 迁移真实 MySQL V1→V6 与旧四级配置结构回归。"""
 
 import os
 import subprocess
@@ -114,7 +114,18 @@ def main():
     migrate(5)
     assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "5"
     assert mysql("SELECT revision FROM config_migration.config_revision WHERE id=1") == "7"
-    print("PASS Go SQL migrations V1-V5, legacy V4 baseline and idempotence", flush=True)
+    migrate(6)
+    assert mysql("SELECT version FROM config_migration.config_schema_migrations WHERE id=1") == "6"
+    assert_rows("SELECT id,game_id,code,config FROM config_migration.config_channel_app", [
+        '105\t101\tlegacy-sdk\t{}'
+    ])
+    assert_rows("SELECT id,channel_app_id,server_group_id,config FROM config_migration.config_channel_app_binding", [
+        '105\t105\t103\t{}'
+    ])
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_node WHERE node_type='channel_app'") == "0"
+    assert mysql("SELECT COUNT(*) FROM config_migration.config_node_v6_channel_app_archive") == "1"
+    migrate(6)  # V6 幂等性校验
+    print("PASS Go SQL migrations V1-V6, legacy V4 baseline and app binding preservation", flush=True)
 
 
 if __name__ == "__main__":
