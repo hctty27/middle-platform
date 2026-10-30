@@ -247,12 +247,7 @@ def main():
     migrate(11)
     assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["11", "0"]
     assert mysql("SELECT prod_server_group_id FROM config_migration.config_channel_app WHERE id=105") == "103"
-    assert mysql("SELECT JSON_EXTRACT(config,'
-
-
-if __name__ == "__main__":
-    main()
-) FROM config_migration.config_channel_app WHERE id=105") != "{}"
+    assert mysql("SELECT JSON_EXTRACT(config, '$') FROM config_migration.config_channel_app WHERE id=105") != "{}"
     assert mysql("""SELECT COUNT(*) FROM information_schema.tables
         WHERE table_schema='config_migration' AND table_name='config_channel_app_binding'""") == "0"
     migrate(11)
