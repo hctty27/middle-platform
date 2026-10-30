@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
-	"github.com/hctty27/middle-platform/config-center-go/internal/webhook"
+	"github.com/hctty27/middle-platform/config-center/internal/webhook"
 )
 
 // Subscribers 获取所有回调订阅者及对应投递进度。

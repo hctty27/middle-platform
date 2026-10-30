@@ -6,7 +6,7 @@
 - 游戏三个祖先列均为空；大区只保存游戏 ID；区服组保存游戏和大区 ID；渠道应用保存游戏、大区和区服组 ID。
 - API 中的 `parentId` 是按 `nodeType` 推导的兼容属性；写服务通过创建请求的 `parentId` 校验父类型并自动生成祖先路径。节点层级、类型、编码创建后不可修改。
 - 同级 `code` 的唯一性通过按 `nodeType` 和最深非空祖先 ID（根为 0）建立的 MySQL 函数唯一索引保证；`channel_app` 的直属父节点是 `server_group`。`config` 只保存本节点 JSON，不向上继承。
-- 配置中心多个无状态实例（Java 或 Go）共享单个 MySQL，应用无独立配置状态。
+- 配置中心的 Go 主服务与 Java 兼容服务均可使用同一个 MySQL，应用无独立配置状态。
 - 全局版本行必须在写事务内先锁定，确保提交顺序与 revision 一致；同时提交 config_node 与 change log。
 - Webhook 通知仅包含 epoch 和 revision，订阅者按 revision 获取 ID 列表并查询节点最新状态。
 - 重试允许重复通知，客户端需要实现幂等且严格连续推进本地游标。
@@ -63,9 +63,9 @@
 - 需要强持久通知、严格投递完成确认或更短恢复时间时，应进一步引入持久化任务表/消息队列或加强校对频率和告警，本阶段不引入新基础设施。
 
 
-## Java 配置中心包结构（接入工程已改为 Go）
+## Java 兼容配置中心包结构（`config-center-java`）
 
-`config-center` 保留 `com.hitall.platform.config.ConfigCenterApplication` 作为根启动类，按以下业务域组织：
+`config-center-java` 保留 `com.hitall.platform.config.ConfigCenterApplication` 作为根启动类，按以下业务域组织：
 
 ```text
 config/

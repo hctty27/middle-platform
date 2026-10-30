@@ -1,2 +1,2 @@
 rootProject.name = "middle-platform"
-include("config-center")
+include("config-center-java")

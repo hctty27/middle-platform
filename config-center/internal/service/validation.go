@@ -4,7 +4,7 @@ package service
 import (
 	"encoding/json"
 	"strings"
-	"github.com/hctty27/middle-platform/config-center-go/internal/model"
+	"github.com/hctty27/middle-platform/config-center/internal/model"
 )
 
 var ErrInvalid = model.ErrInvalid

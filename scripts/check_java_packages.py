@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 
-MODULES = ("config-center",)
+MODULES = ("config-center-java",)
 SOURCE_DIRS = ("src/main/java", "src/test/java")
 PATTERN = re.compile(r"^package\s+([\w.]+)\s*;", re.MULTILINE)
 
@@ -27,7 +27,7 @@ def main():
                 if actual != expected:
                     problems.append(f"{file}: package {actual}, expected {expected}")
 
-    server = Path("config-center/src/main/java/com/hitall/platform/config")
+    server = Path("config-center-java/src/main/java/com/hitall/platform/config")
     for area in ("node", "sync", "subscriber", "webhook"):
         if not (server / area).is_dir():
             problems.append(f"Missing business module: {area}")
@@ -44,11 +44,11 @@ def main():
 
     # HTTP entry-point naming convention: api package and *Api class.
     expected_apis = (
-        "config-center/src/main/java/com/hitall/platform/config/node/api/AdminNodeApi.java",
-        "config-center/src/main/java/com/hitall/platform/config/node/api/NodeApi.java",
-        "config-center/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
-        "config-center/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",
-        "config-center/src/main/java/com/hitall/platform/config/subscriber/api/SubscriberApi.java",
+        "config-center-java/src/main/java/com/hitall/platform/config/node/api/AdminNodeApi.java",
+        "config-center-java/src/main/java/com/hitall/platform/config/node/api/NodeApi.java",
+        "config-center-java/src/main/java/com/hitall/platform/config/node/api/NodeNavigationApi.java",
+        "config-center-java/src/main/java/com/hitall/platform/config/sync/api/SyncApi.java",
+        "config-center-java/src/main/java/com/hitall/platform/config/subscriber/api/SubscriberApi.java",
     )
     for path in expected_apis:
         if not Path(path).is_file():

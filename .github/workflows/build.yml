@@ -39,7 +39,7 @@ jobs:
           predicate-quantifier: some-with-excludes
           filters: |
             java:
-              - 'config-center/**'
+              - 'config-center-java/**'
               - 'build.gradle.kts'
               - 'settings.gradle.kts'
               - 'gradle.properties'
@@ -49,7 +49,7 @@ jobs:
             admin:
               - 'config-center-admin/**'
             integration:
-              - 'config-center/**'
+              - 'config-center-java/**'
               - 'config-center-access/**'
               - 'build.gradle.kts'
               - 'settings.gradle.kts'
@@ -65,6 +65,7 @@ jobs:
             unknown:
               - '**'
               - '!config-center-admin/**'
+              - '!config-center-java/**'
               - '!config-center/**'
               - '!config-center-access/**'
               - '!build.gradle.kts'
@@ -152,7 +153,7 @@ jobs:
           cache-dependency-path: config-center-access/go.mod
       - name: Package executable services
         run: |
-          ./gradlew :config-center:bootJar --no-daemon
+          ./gradlew :config-center-java:bootJar --no-daemon
           cd config-center-access
           go build -o /tmp/config-center-access-ci ./cmd/config-center-access
       - name: Test V1 legacy schema and ancestor migration

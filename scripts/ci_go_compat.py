@@ -48,7 +48,7 @@ def wait_ready(port, path, proc, label):
     raise AssertionError(f"{label} not ready; log: {pathlib.Path(LOGS[-1]).read_text()[-7000:]}")
 
 def start_java():
-    jars = [p for p in glob.glob("config-center/build/libs/*.jar")
+    jars = [p for p in glob.glob("config-center-java/build/libs/*.jar")
             if not p.endswith("-plain.jar")]
     assert len(jars) == 1, jars
     env = os.environ.copy()
@@ -65,7 +65,7 @@ def start_go():
                CONFIG_GO_ADDR=f":{GO_PORT}", CONFIG_GO_ENABLE_WRITES="true",
                CONFIG_GO_ENABLE_WEBHOOK="false",
                WEBHOOK_ALLOWED_HOSTS="localhost,127.0.0.1")
-    return start("go", ["/tmp/config-center-go-ci"], env)
+    return start("go", ["/tmp/config-center-ci"], env)
 
 def start(name, command, env):
     path = f"/tmp/config-center-compat-{name}.log"

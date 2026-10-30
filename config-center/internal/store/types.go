@@ -2,7 +2,7 @@
 package store
 
 import (
-	"github.com/hctty27/middle-platform/config-center-go/internal/model"
+	"github.com/hctty27/middle-platform/config-center/internal/model"
 )
 
 // 统一使用 model 中的数据结构，避免 HTTP 层与数据库层出现同义结构体。

@@ -3,13 +3,15 @@ name: Go config center
 on:
   push:
     paths:
-      - "config-center-go/**"
+      - "config-center/**"
+      - "config-center-java/**"
       - "scripts/ci_go_compat.py"
       - "scripts/ci_go_benchmark.py"
       - ".github/workflows/go-config-center.yml"
   pull_request:
     paths:
-      - "config-center-go/**"
+      - "config-center/**"
+      - "config-center-java/**"
       - "scripts/ci_go_compat.py"
       - "scripts/ci_go_benchmark.py"
       - ".github/workflows/go-config-center.yml"
@@ -32,7 +34,7 @@ jobs:
           --health-retries=20
     defaults:
       run:
-        working-directory: config-center-go
+        working-directory: config-center
     env:
       TEST_CONFIG_DB_DSN: "root:integration-test-only@tcp(127.0.0.1:3306)/config_center_go_test?parseTime=true&loc=UTC"
     steps:
@@ -40,7 +42,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
-          cache-dependency-path: config-center-go/go.mod
+          cache-dependency-path: config-center/go.mod
       - name: Verify go.mod and go.sum are tidy
         run: |
           go mod tidy
@@ -87,13 +89,13 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
-          cache-dependency-path: config-center-go/go.mod
+          cache-dependency-path: config-center/go.mod
       - name: Build Java and Go binaries
         run: |
-          ./gradlew :config-center:bootJar --no-daemon
-          cd config-center-go
+          ./gradlew :config-center-java:bootJar --no-daemon
+          cd config-center
           go mod tidy
-          go build -o /tmp/config-center-go-ci ./cmd/config-center
+          go build -o /tmp/config-center-ci ./cmd/config-center
       - name: Run existing real Flyway V1-V4 migration
         run: python3 scripts/ci_migration_smoke.py
       - name: Compare Java and Go API/transaction contracts

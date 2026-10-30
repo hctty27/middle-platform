@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/config-center-go/internal/webhook"
-	"github.com/hctty27/middle-platform/config-center-go/internal/service"
+	"github.com/hctty27/middle-platform/config-center/internal/webhook"
+	"github.com/hctty27/middle-platform/config-center/internal/service"
 )
 
 func TestWriteValidation(t *testing.T) {

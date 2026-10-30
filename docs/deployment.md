@@ -7,16 +7,36 @@ cd deploy
 docker compose up -d
 ```
 
-开发环境默认 root 密码仅供本机测试。生产中应使用独立账号和强密码、数据库备份。
+开发默认密码仅供本机测试。生产必须使用独立数据库账号、备份及恢复演练。
 
-## 启动服务
+## 首次初始化权威数据库（Java Flyway）
+
+目前 Go 配置中心**不负责数据库结构迁移**。新数据库先通过保留的 Java 工程执行 Flyway V1–V4：
 
 ```bash
 export CONFIG_DB_URL='jdbc:mysql://127.0.0.1:3306/config_center?connectionTimeZone=UTC'
 export CONFIG_DB_USER=root
 export CONFIG_DB_PASSWORD=local-dev-only
-gradle :config-center:bootRun
+./gradlew :config-center-java:bootRun
 ```
+
+确认 `flyway_schema_history` 已完成 V1–V4 后停止 Java 服务，不要让 Java 和 Go 服务同时监听相同端口。已有升级完成的数据库不需要重新执行迁移。
+
+## 启动 Go 配置中心（默认主服务）
+
+```bash
+cd config-center
+export CONFIG_DB_DSN='root:local-dev-only@tcp(127.0.0.1:3306)/config_center?charset=utf8mb4&parseTime=true&loc=UTC'
+export CONFIG_GO_ADDR=':8080'
+export CONFIG_GO_ENABLE_WRITES=true
+export CONFIG_GO_ENABLE_WEBHOOK=true
+export WEBHOOK_ALLOWED_HOSTS='localhost,127.0.0.1'
+go run ./cmd/config-center
+```
+
+`CONFIG_GO_ADDR` 是现有兼容环境变量名，本次只调整工程目录及 Go Module 路径，不改动既有部署参数。Go 服务默认监听 8081；本地建议显式使用 8080，留 8081 给接入端。
+
+Java 服务如需单独联调，可执行 `./gradlew :config-center-java:bootRun`，并设置 `CONFIG_CENTER_PORT=8082` 以避开 Go 的 8080。
 
 ## 启动 Go 接入服务
 
@@ -31,9 +51,9 @@ export CONFIG_WEBHOOK_SECRET='dev-signing-secret'
 go run ./cmd/config-center-access
 ```
 
-新库自动建最新四级副本表，旧库必须先执行历史 Flyway V3。Go 配置中心与接入端默认均监听 8081；需显式将配置中心设置为 `CONFIG_GO_ADDR=:8080`。
+新库自动建最新四级副本表，旧库必须先执行历史 Flyway V3。Go 配置中心和接入端默认均监听 8081；按上面的示例将 Go 配置中心设置为 `CONFIG_GO_ADDR=:8080`。
 
-创建订阅者（仅允许 localhost 回调地址，生产需要配置 `config.webhook.allowed-hosts`）：
+创建订阅者（仅允许 localhost 回调地址，生产 Go 配置中心需要配置 `WEBHOOK_ALLOWED_HOSTS`）：
 
 ```bash
 curl -X POST http://127.0.0.1:8080/api/config/admin/subscribers \
@@ -88,7 +108,7 @@ location ^~ /api/config/ {
 
 ## V4 四级配置树上线（非兼容数据库迁移）
 
-原有 `game → region → server_group → channel → sdk_app` 改为 `game → region → server_group → channel_app`。配置中心 Flyway V4 与历史接入工程 Flyway V3 必须在切换 Go 前升级，旧实例不可在新表结构下继续读写。
+原有 `game → region → server_group → channel → sdk_app` 改为 `game → region → server_group → channel_app`。Java 配置中心中的 Flyway V4 与历史接入工程 Flyway V3 必须在切换 Go 前升级，旧实例不可在新表结构下继续读写。
 
 1. **停止写入与通知**：停止旧配置中心、管理端及接入实例，确认无活跃旧版应用后再迁移。备份权威 MySQL 和接入副本数据库，并在测试环境演练恢复。
 2. **预检 Code 冲突**：不同旧渠道下的 SDK 应用提升为同一区服组直属节点后，`code` 不能重复。执行下列查询，必须返回空结果：
@@ -102,8 +122,8 @@ HAVING COUNT(*) > 1;
 ```
 
 3. **检查渠道配置**：原渠道节点的 `config`、`remark`、`status` 不会自动合并进新渠道应用。V4 自动备份所有旧渠道和 SDK 应用（含 `channel_id` 对应关系）到 `config_node_v4_legacy_archive`；如业务依赖渠道层配置，先人工决定新归属。
-4. **部署配置中心**：首次启动会执行 V4，完成类型重命名、删除旧渠道节点和 `channel_id`、重建约束/索引并更新 `epoch`。必须确认 `flyway_schema_history` 已有 V4 的成功记录。
-5. **部署接入工程与前端**：旧版 Flyway V3 清空旧副本并重置游标；Go 接入服务启动后自动重建四级快照。升级前端，核对区服组的渠道应用列表、全局搜索路径及增量同步。
+4. **执行 Java 迁移**：运行 `config-center-java`，首次启动会执行 V4，完成类型重命名、删除旧渠道节点和 `channel_id`、重建约束/索引并更新 `epoch`。必须确认 `flyway_schema_history` 已有 V4 的成功记录。
+5. **启动 Go 配置中心并部署接入工程与前端**：旧版 Flyway V3 清空旧副本并重置游标；Go 接入服务启动后自动重建四级快照。升级前端，核对区服组的渠道应用列表、全局搜索路径及增量同步。
 6. **恢复服务**：确认多个配置中心实例和所有接入实例的 `epoch` 相同、应用数量一致后再恢复写入。不要让旧实例混入集群。
 
 **注意**：MySQL DDL 存在隐式提交，迁移失败后数据库可能已部分升级；不要跳过 Flyway 失败记录或盲目重试，应根据备份和实际 DDL 状态修复后重试。代码层不提供旧 `channel` / `sdk_app` 类型兼容。

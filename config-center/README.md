@@ -17,7 +17,7 @@ Go 1.27、Chi、MySQL 8.4。兼容现有四级配置树、`/api/config` 接口�
 ## 启动
 
 ```bash
-cd config-center-go
+cd config-center
 export CONFIG_DB_DSN='user:password@tcp(127.0.0.1:3306)/config_center?charset=utf8mb4&parseTime=true&loc=UTC'
 export CONFIG_GO_ADDR=':8081'
 go run ./cmd/config-center

@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
-	"github.com/hctty27/middle-platform/config-center-go/internal/sqlcgen"
+	"github.com/hctty27/middle-platform/config-center/internal/sqlcgen"
 )
 
 // Revision 读取全局同步版本号。

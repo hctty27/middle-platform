@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/config-center-go/internal/service"
-	"github.com/hctty27/middle-platform/config-center-go/internal/sqlcgen"
+	"github.com/hctty27/middle-platform/config-center/internal/service"
+	"github.com/hctty27/middle-platform/config-center/internal/sqlcgen"
 )
 
 // databaseError 将已知的 MySQL 错误转换为业务冲突。

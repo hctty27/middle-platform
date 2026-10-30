@@ -1,30 +1,31 @@
 # Middle Platform · 研发中台
 
-研发中台配置中心：Go 与 Java 配置服务并存，前端 Vue 3，MySQL 8.0+。接入工程已经改为 Go。
+研发中台配置中心采用 **Go + MySQL**，管理前端使用 Vue 3，接入示例同样使用 Go。原 Java 实现作为兼容与数据库迁移工程保留。
 
-## 组成
+## 工程组成
 
-- `config-center`：多实例无状态服务，共用一个权威 MySQL，管理四级配置树与变更日志。
-- `config-center-admin`：无需登录的管理页（仅限可信网络部署）。
-- `config-center-go`：Go 配置中心（推荐），兼容 `/api/config` 接口。
-- `config-center-access`：Go 独立接入工程，内置 Webhook 验签、增量同步、定期补偿和 MySQL 本地副本，不对外发布 Starter。
+| 工程 | 技术栈 | 说明 |
+| --- | --- | --- |
+| `config-center` | Go | **主配置中心**，管理四级配置树、变更日志、订阅者和 Webhook |
+| `config-center-java` | Java 25 / Spring Boot | 旧版配置中心，保留 Flyway V1–V4 数据库迁移和 Java/Go 兼容性测试 |
+| `config-center-access` | Go | 独立接入示例，Webhook 验签、增量同步、定期补偿和 MySQL 本地副本 |
+| `config-center-admin` | Vue 3 | 无登录的配置管理页面，仅允许可信网络访问 |
 
 ## 同步协议
 
-配置变更与单调递增 `revision`、`config_change_log` 同事务提交。Webhook 仅发送 `epoch` 和最新 `revision`；接入方查询变更 ID 并批量读取最新节点，事务更新本地副本和游标。删除使用 `DELETE` 事件。持久化投递、失败重试、断线补偿、全量初始化。详见 `docs/architecture.md`。
+配置变更与单调递增的 `revision`、`config_change_log` 在同一事务提交。Webhook 仅发送 `epoch` 和最新 `revision`；接入端获取变更节点 ID，再查询节点最新状态，并在一个事务内更新本地副本和游标。删除、重试、断线补偿和快照重建均受支持，详见 [架构说明](docs/architecture.md)。
 
-## 本地启动
+## 本地运行
 
-1. JDK 25，MySQL 8.0+。
-2. 通过 Gradle Wrapper 启动：Linux/macOS 执行 `./gradlew :config-center:bootRun`，Windows 执行 `gradlew.bat :config-center:bootRun`。首次运行会自动下载 Gradle 9.8.2。配置 `CONFIG_DB_URL`、`CONFIG_DB_USER` 和 `CONFIG_DB_PASSWORD`。
+1. 准备 MySQL 8.0+，首次部署权威数据库仍须运行 `config-center-java` 中的 Flyway 迁移（不能直接跳过 Java 数据库初始化）。
+2. 进入 `config-center`，设置 `CONFIG_DB_DSN`、`CONFIG_GO_ADDR=:8080`，执行 `go run ./cmd/config-center`。需要管理写入、回调投递时显式配置 `CONFIG_GO_ENABLE_WRITES=true` 和 `CONFIG_GO_ENABLE_WEBHOOK=true`。
 3. 管理页：`cd config-center-admin && npm ci && npm run dev`。
-4. Go 配置中心：进入 `config-center-go`，设置 `CONFIG_DB_DSN`、`CONFIG_GO_ADDR=:8080`，执行 `go run ./cmd/config-center`；管理写入与回调须显式开启。
-5. Go 接入工程：进入 `config-center-access`，配置 `ACCESS_DB_DSN`、`CONFIG_CENTER_URL`、`CONFIG_WEBHOOK_SECRET`，执行 `go run ./cmd/config-center-access`，详见 [接入说明](config-center-access/README.md)。
+4. 接入端：进入 `config-center-access`，设置 `ACCESS_DB_DSN`、`CONFIG_CENTER_URL`、`CONFIG_WEBHOOK_SECRET`，执行 `go run ./cmd/config-center-access`。
 
-**重要：不实现用户登录和角色权限。所有配置管理接口相当于管理员级权限，必须限制到受信任的内网/网关。Webhook 必须由接入方验证签名，禁止任意内网回调 URL。**
+完整步骤参见 [部署文档](docs/deployment.md)、[Go 配置中心](config-center/README.md) 和 [Go 接入端](config-center-access/README.md)。
 
-本项目使用 Flyway 管理数据库演进。已执行的 V1/V2 版本迁移不可直接改写；新增数据库结构变更需继续使用更高版本迁移。
+**安全边界：** 项目没有用户登录和角色权限，管理 API 必须限制到可信内网或受控网关。内部 Webhook 必须进行 HMAC 验签，不应暴露为公共管理接口。
 
 ## 四级配置树
 
-当前业务层级为 `game → region → server_group → channel_app`（游戏 → 大区 → 区服组 → 渠道应用）。旧 `channel` 层级和 `sdk_app` 类型已经取消；配置中心使用 Flyway V4 升级，旧接入端本地副本使用 Flyway V3 升级。新版 Go 接入端自动初始化新库，对旧库不自动执行 Flyway。原有 SDK 应用 ID、Code、JSON 配置不变，旧渠道及其应用关联保存在配置中心的 `config_node_v4_legacy_archive` 归档表中。部署前务必完成备份、重名预检和停写切换，详见 `docs/deployment.md`。
+业务层级为 `game → region → server_group → channel_app`（游戏 → 大区 → 区服组 → 渠道应用）。旧 `channel` 和 `sdk_app` 类型已经取消。权威数据库通过 Java Flyway V4 升级；历史接入端使用 Flyway V3 升级本地副本。Go 接入端会为全新数据库创建最新副本表，但不会自动执行旧库 Flyway。旧渠道及应用数据归档在 `config_node_v4_legacy_archive`。生产部署前需备份并验证迁移。

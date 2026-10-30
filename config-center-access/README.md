@@ -1,6 +1,6 @@
 # Go 接入工程
 
-`config-center-access` 是独立 Go 接入示例，不作为 SDK/Starter 给其他项目依赖。与 `config-center-go` 的 `/api/config/**` 完全兼容。
+`config-center-access` 是独立 Go 接入示例，不作为 SDK/Starter 给其他项目依赖。与 `config-center` 的 `/api/config/**` 完全兼容。
 
 ## 主要功能
 

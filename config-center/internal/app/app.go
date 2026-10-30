@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 	"github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/config-center-go/internal/api"
-	"github.com/hctty27/middle-platform/config-center-go/internal/settings"
-	"github.com/hctty27/middle-platform/config-center-go/internal/store"
-	"github.com/hctty27/middle-platform/config-center-go/internal/webhook"
+	"github.com/hctty27/middle-platform/config-center/internal/api"
+	"github.com/hctty27/middle-platform/config-center/internal/settings"
+	"github.com/hctty27/middle-platform/config-center/internal/store"
+	"github.com/hctty27/middle-platform/config-center/internal/webhook"
 )
 
 func Run() error {

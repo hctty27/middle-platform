@@ -1,4 +1,4 @@
-module github.com/hctty27/middle-platform/config-center-go
+module github.com/hctty27/middle-platform/config-center
 
 go 1.27.3
 
