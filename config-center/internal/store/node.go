@@ -99,8 +99,6 @@ func (s *Store) scope(ctx context.Context, parentID int64) (string, []any, error
 	case "region":
 		return "n.node_type='server_group' AND n.region_id=?", []any{parentID}, nil
 	case "server_group":
-		return "n.node_type='channel_app' AND n.server_group_id=?", []any{parentID}, nil
-	case "channel_app":
 		return "1=0", nil, nil
 	default:
 		return "", nil, ErrInvalid
