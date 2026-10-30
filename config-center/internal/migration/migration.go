@@ -18,7 +18,7 @@ import (
 var scripts embed.FS
 
 // Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
-const Latest = 5
+const Latest = 6
 
 var files = [...]string{
  "",
@@ -27,6 +27,7 @@ var files = [...]string{
  "sql/V3__subscriber_epoch_cursor.sql",
  "sql/V4__channel_app_hierarchy.sql",
  "sql/V5__region_env_type.sql",
+ "sql/V6__shared_channel_apps.sql",
 }
 
 // Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
@@ -100,7 +101,7 @@ func migrate(ctx context.Context, conn *sql.Conn, opts Options) error {
    if !last.Valid || last.Int64 < 1 || last.Int64 > Latest { return fmt.Errorf("unsupported legacy schema version: %v", last) }
    version = int(last.Int64)
    if version < 4 && !opts.AllowLegacyUpgrade {
-    return fmt.Errorf("legacy schema V%d needs V4/V5; back up, stop old writers and run migration with -allow-legacy-upgrade", version)
+    return fmt.Errorf("legacy schema V%d needs V4-V6; back up, stop old writers and run migration with -allow-legacy-upgrade", version)
    }
   } else {
    hasNode, err := exists(ctx, conn, "config_node")
@@ -145,9 +146,12 @@ func validate(ctx context.Context, conn *sql.Conn, version int) error {
   "SELECT game_id,region_id,server_group_id,env_type FROM config_node LIMIT 0",
   "SELECT acknowledged_epoch FROM config_delivery_state LIMIT 0",
   "SELECT id FROM config_node_v4_legacy_archive LIMIT 0",
+  "SELECT id,game_id,code,config FROM config_channel_app LIMIT 0",
+  "SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0",
+  "SELECT id FROM config_node_v6_channel_app_archive LIMIT 0",
  } {
   rows, err := conn.QueryContext(ctx, statement)
-  if err != nil { return fmt.Errorf("schema V5 validation failed: %w", err) }
+  if err != nil { return fmt.Errorf("schema V6 validation failed: %w", err) }
   if err := rows.Close(); err != nil { return err }
  }
  return nil
