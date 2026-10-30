@@ -9,6 +9,7 @@ import (
  "errors"
  "fmt"
  "log/slog"
+ "strings"
  "time"
 
  "github.com/go-sql-driver/mysql"
@@ -34,6 +35,8 @@ var files = [...]string{
 type Options struct {
  Target int
  AllowLegacyUpgrade bool
+ // RepairV6GTID 只清理 V6 归档建表前失败留下的空表和 dirty 状态。
+ RepairV6GTID bool
 }
 
 // Run 使用 MySQL 命名锁协调多实例，执行完后立即关闭独立迁移连接。
@@ -69,6 +72,9 @@ func Run(ctx context.Context, dsn string, opts Options) error {
    slog.Warn("schema migration lock release failed", "error", err)
   }
  }()
+ if opts.RepairV6GTID {
+  if err := repairV6GTID(ctx,conn); err != nil { return fmt.Errorf("refuse V6 GTID repair: %w",err) }
+ }
  return migrate(ctx, conn, opts)
 }
 
@@ -77,6 +83,59 @@ func exists(ctx context.Context, conn *sql.Conn, table string) (bool, error) {
  var count int
  err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&count)
  return count != 0, err
+}
+
+// repairV6GTID 修复旧版 V6 因 CREATE TABLE ... SELECT (1786) 中断时留下的脏状态。
+// 只接受明确的 V5/dirty 状态、尚未进入归档阶段、且新增表完全为空的场景。
+// 此操作会删除迁移产生的两张空表，必须由管理员显式指定开关并提前备份数据库。
+func repairV6GTID(ctx context.Context, conn *sql.Conn) error {
+ hasState,err:=exists(ctx,conn,"config_schema_migrations")
+ if err!=nil { return err }
+ if !hasState { return errors.New("migration state table missing") }
+ var version int
+ var dirty bool
+ if err=conn.QueryRowContext(ctx,"SELECT version,dirty FROM config_schema_migrations WHERE id=1").Scan(&version,&dirty);err!=nil {return err}
+ if version!=5 || !dirty { return fmt.Errorf("expected schema version=5 dirty=1; got version=%d dirty=%t",version,dirty) }
+
+ // 若归档表已存在，则可能已经执行数据复制；不可自动清理。
+ hasArchive,err:=exists(ctx,conn,"config_node_v6_channel_app_archive")
+ if err!=nil { return err }
+ if hasArchive { return errors.New("V6 archive exists; inspect partial migration manually") }
+ 
+ // 校验原节点表仍是支持 channel_app 的 V5 结构，防止误清除更晚阶段的 dirty。
+ var nodeTable,ddl string
+ if err=conn.QueryRowContext(ctx,"SHOW CREATE TABLE config_node").Scan(&nodeTable,&ddl); err!=nil { return err }
+ if !strings.Contains(ddl,"channel_app") { return errors.New("config_node no longer has V5 channel_app constraint") }
+ if _,err=conn.ExecContext(ctx,"SELECT env_type FROM config_node LIMIT 0");err!=nil { return fmt.Errorf("config_node not V5: %w",err) }
+ 
+ // 只有旧版脚本创建的前两张表允许删除，而且它们必须没有任何业务数据。
+ tables:=[]string{"config_channel_app_binding","config_channel_app"}
+ anyFound:=false
+ for _,table:=range tables {
+  present,err:=exists(ctx,conn,table)
+  if err!=nil { return err }
+  if !present {continue}
+  anyFound=true
+  var count int64
+  if err=conn.QueryRowContext(ctx,"SELECT COUNT(*) FROM "+table).Scan(&count); err!=nil {return err}
+  if count!=0 { return fmt.Errorf("%s contains %d rows; manual recovery required",table,count) }
+ }
+ if !anyFound { return errors.New("no V6 partial tables found; manual recovery required") }
+ for _,table:=range tables {
+  present,err:=exists(ctx,conn,table)
+  if err!=nil {return err}
+  if !present {continue}
+  if _,err=conn.ExecContext(ctx,"DROP TABLE "+table);err!=nil {return err}
+ }
+ result,err:=conn.ExecContext(ctx,`UPDATE config_schema_migrations
+  SET dirty=0,updated_at=UTC_TIMESTAMP(6)
+  WHERE id=1 AND version=5 AND dirty=1`)
+ if err!=nil {return err}
+ affected,err:=result.RowsAffected()
+ if err!=nil {return err}
+ if affected!=1 {return errors.New("migration state changed during V6 repair") }
+ slog.Info("repaired interrupted V6 GTID migration; resuming upgrade")
+ return nil
 }
 
 // migrate 按历史版本递进升级；无法确认的旧库拒绝自动改写。
