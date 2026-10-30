@@ -62,9 +62,9 @@ func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, erro
 			gameID, regionID, groupID = parent.GameID, parent.RegionID, &parent.ID
 		}
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO config_node(game_id,region_id,server_group_id,node_type,code,name,status,config,remark,created_at,updated_at)
-		VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,
-		gameID, regionID, groupID, input.NodeType, input.Code, input.Name, *input.Status, input.Config, input.Remark)
+	result, err := tx.ExecContext(ctx, `INSERT INTO config_node(game_id,region_id,server_group_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,
+		gameID, regionID, groupID, input.NodeType, input.EnvType, input.Code, input.Name, *input.Status, input.Config, input.Remark)
 	if err != nil { return Node{}, databaseError(err) }
 	id, err := result.LastInsertId()
 	if err != nil { return Node{}, err }
@@ -84,16 +84,20 @@ func (s *Store) Update(ctx context.Context, id int64, input UpdateNodeRequest) (
 	defer tx.Rollback()
 	if err := lockRevision(ctx, tx); err != nil { return Node{}, err }
 	current, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
-	if err != nil { return Node{}, err }
-	var unchanged sql.NullBool
+    if err != nil { return Node{}, err }
+    if err := service.ValidateEnvType(current.NodeType, input.EnvType); err != nil { return Node{}, err }
+    if current.NodeType == "region" && current.EnvType != nil && *current.EnvType != *input.EnvType {
+        return Node{}, ErrConflict
+    }
+    var unchanged sql.NullBool
 	if err := tx.QueryRowContext(ctx, `SELECT (name <=> ?) AND (status <=> ?) AND (remark <=> ?)
-		AND (config = CAST(? AS JSON)) FROM config_node WHERE id=?`,
-		input.Name, *input.Status, input.Remark, input.Config, id).Scan(&unchanged); err != nil {
+		AND (config = CAST(? AS JSON)) AND (env_type <=> ?) FROM config_node WHERE id=?`,
+		input.Name, *input.Status, input.Remark, input.Config, input.EnvType, id).Scan(&unchanged); err != nil {
 		return Node{}, err
 	}
 	if !unchanged.Valid || !unchanged.Bool {
-		_, err := tx.ExecContext(ctx, `UPDATE config_node SET name=?,status=?,config=?,remark=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`,
-			input.Name, *input.Status, input.Config, input.Remark, id)
+		_, err := tx.ExecContext(ctx, `UPDATE config_node SET name=?,status=?,config=?,remark=?,env_type=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`,
+			input.Name, *input.Status, input.Config, input.Remark, input.EnvType, id)
 		if err != nil { return Node{}, databaseError(err) }
 		if err := recordChange(ctx, tx, id, "UPSERT"); err != nil { return Node{}, err }
 		current, err = scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))

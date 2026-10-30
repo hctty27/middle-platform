@@ -1,11 +1,12 @@
--- sqlc analysis snapshot of Flyway V4. Do not use this file for migrations.
--- Flyway V1..V4 in config-center/src/main/resources/db/migration are authoritative.
+-- sqlc analysis snapshot of Go migration V5. Do not use this file for migrations.
+-- Source migrations live in config-center/internal/migration/sql.
 CREATE TABLE config_node (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     game_id BIGINT NULL,
     region_id BIGINT NULL,
     server_group_id BIGINT NULL,
     node_type VARCHAR(20) NOT NULL,
+    env_type VARCHAR(16) NULL,
     code VARCHAR(128) NOT NULL,
     name VARCHAR(128) NOT NULL,
     status TINYINT NOT NULL,

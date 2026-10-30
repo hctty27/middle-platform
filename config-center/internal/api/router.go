@@ -32,7 +32,7 @@ type Reader interface {
 	Node(context.Context, int64) (Node, error)
 	Batch(context.Context, []int64) ([]Node, error)
 	Tree(context.Context, int64) ([]NodeSummary, error)
-	Children(context.Context, int64, int, int, string) (NodePage, error)
+	Children(context.Context, int64, int, int, string, string) (NodePage, error)
 	Search(context.Context, string, int) ([]NodeMatch, error)
 	Path(context.Context, int64) (NodeMatch, error)
 	Revision(context.Context) (Revision, error)
