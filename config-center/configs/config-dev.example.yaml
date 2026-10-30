@@ -1,7 +1,0 @@
-# 复制为 config-dev.yaml，然后按实际数据库修改
-database:
-  dsn: "root:local-dev-only@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC"
-admin:
-  writesEnabled: true
-webhook:
-  enabled: true

@@ -84,11 +84,11 @@ go build ./cmd/config-center-access
 
 ## YAML 本地启动
 
-复制 `configs/config-dev.example.yaml` 为 `configs/config-dev.yaml`，修改数据库和回调密钥，然后执行：
+复制 `configs/config.yaml` 为 `configs/config-dev.yaml`，填写 `database.dsn` 和 `webhook.secret`，然后执行：
 
 ```powershell
 go run ./cmd/config-center-access -config configs/config-dev.yaml
 ```
 
 通用配置在 `configs/config.yaml`，开发/生产配置与通用配置合并；环境变量优先级最高。省略 `-config` 时保留旧的环境变量启动方式。
-生产模板：`configs/config-prod.example.yaml`；建议通过 `ACCESS_DB_DSN` 和 `CONFIG_WEBHOOK_SECRET` 注入生产密钥。实际的 `config-dev.yaml`、`config-prod.yaml` 已加入 `.gitignore`。
+生产配置同样从 `configs/config.yaml` 复制为 `configs/config-prod.yaml`；建议通过 `ACCESS_DB_DSN` 和 `CONFIG_WEBHOOK_SECRET` 注入生产密钥。实际的 `config-dev.yaml`、`config-prod.yaml` 已加入 `.gitignore`。

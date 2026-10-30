@@ -16,7 +16,7 @@
 
 两个 Go 工程都支持指定 YAML 配置文件，公共默认配置在各自的 `configs/config.yaml`，实际的开发/生产配置不提交到 Git。
 
-在对应工程目录下，将 `configs/config-dev.example.yaml` 复制为 `configs/config-dev.yaml`，修改数据库配置后启动：
+在对应工程目录下，将 `configs/config.yaml` 复制为 `configs/config-dev.yaml`，填写数据库连接等配置后启动（`config.yaml` 保留为空凭证模板）：
 
 ```powershell
 go run ./cmd/config-center -config configs/config-dev.yaml
@@ -32,7 +32,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 
 ## 启动 Go 配置中心
 
-新环境只需要 Go 1.27.3 和 MySQL 8.0+。先创建 `config_center` 数据库；程序启动时会自动执行内置 V1–V4 迁移。
+新环境只需要 Go 1.27.3 和 MySQL 8.0+。先创建 `config_center` 数据库；程序启动时会自动执行内置 V1–V5 迁移。
 
 ```bash
 cd config-center

@@ -1,9 +1,66 @@
+# ============================================================
+# 配置中心（config-center）通用配置模板
+# ============================================================
+# 用法：
+# 1. 本地开发：复制为 configs/config-dev.yaml，再修改数据库及功能开关。
+# 2. 生产部署：复制为 configs/config-prod.yaml，按实际环境调整。
+# 3. 启动示例：go run ./cmd/config-center -config configs/config-dev.yaml
+# 4. 独立迁移：go run ./cmd/migrate -config configs/config-dev.yaml
+#
+# 配置优先级：程序默认值 < 同目录 config.yaml < 指定的环境 YAML < 环境变量。
+# 真实的 config-dev.yaml / config-prod.yaml 已加入 .gitignore。
+# 请勿把数据库密码、访问密钥等真实凭据直接写入本模板并提交 Git。
+# 本项目只识别下方定义的配置项，拼错字段会导致启动时解析失败。
+
+# HTTP 服务配置
 server:
+  # 监听地址（Go net/http 格式）。
+  # ":8080" 监听本机所有网络接口的 8080 端口；
+  # 只允许当前电脑访问可写成 "127.0.0.1:8080"。
+  # 对应环境变量：CONFIG_GO_ADDR
   address: ":8080"
+
+# MySQL 权威配置数据库
+database:
+  # Go MySQL DSN，非 Java JDBC URL。
+  # 格式示例：root:你的密码@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC
+  # 空字符串仅用于模板；启动前必须在环境配置中填写，或设置 CONFIG_DB_DSN。
+  # 首次使用空库时，服务会自动执行数据库迁移至当前版本（V5）。
+  # 对应环境变量：CONFIG_DB_DSN
+  dsn: ""
+
+# 管理接口控制（/api/config/admin/**）
 admin:
+  # 是否开放新增、修改、删除等写入操作。
+  # false：管理读接口可用，但写接口不启用。
+  # true：允许写入；本项目没有账号权限系统，只能在可信内网使用。
+  # 本地需要通过管理页面创建节点时，复制后改为 true。
+  # 对应环境变量：CONFIG_GO_ENABLE_WRITES
   writesEnabled: false
+
+# 配置变更回调（Webhook），通知接入端主动拉取最新配置
 webhook:
+  # 是否启动回调投递服务。
+  # 必须先将 admin.writesEnabled 设为 true，才能将此项设为 true。
+  # 不启用回调不影响管理页面的配置查询与写入（写入还受上面的开关控制）。
+  # 对应环境变量：CONFIG_GO_ENABLE_WEBHOOK
   enabled: false
-  allowedHosts: [localhost, 127.0.0.1]
+
+  # 允许配置的回调目标主机白名单，避免将通知发送到任意地址。
+  # 填主机名或 IP，不填写协议、端口和 URL 路径。
+  # 以下只允许回调 localhost 和 127.0.0.1，适合单机联调。
+  # 接入服务部署到其他主机时，需要额外加入其主机名或地址；
+  # 生产环境建议使用 HTTPS 并限制到可信目标。
+  # 对应环境变量：WEBHOOK_ALLOWED_HOSTS（逗号分隔的字符串）
+  allowedHosts:
+    - localhost
+    - 127.0.0.1
+
+# 数据库版本迁移安全开关
 migration:
+  # 是否允许执行旧版 V1–V3 数据库到新版结构的迁移。
+  # 该操作可能改变历史数据结构，必须先停止写入、备份并核对。
+  # 旧版 V4 升级 V5 不需要开启这个开关。
+  # 常规本地启动和生产运行都应保持 false。
+  # 对应环境变量：CONFIG_ALLOW_LEGACY_UPGRADE
   allowLegacyUpgrade: false
