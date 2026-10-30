@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../../../api/http'
+import JsonConfigEditor from '../../../components/JsonConfigEditor.vue'
 
 interface AppOption { id: number; name: string; code: string }
 interface GroupBinding {
@@ -126,7 +127,7 @@ watch(() => [props.groupId, props.gameId], () => void reload(), { immediate: tru
         </el-form-item>
         <el-form-item label="绑定状态"><el-switch v-model="form.status" :active-value="1" :inactive-value="0" /></el-form-item>
         <el-form-item label="区服组覆盖配置（JSON 对象）" required>
-          <el-input v-model="form.config" type="textarea" class="json-input" :rows="14" />
+          <JsonConfigEditor v-model="form.config" :rows="14" />
         </el-form-item>
         <p class="muted">公共配置由渠道应用管理维护。本次保存只修改该区服组的覆盖配置。</p>
       </el-form>
