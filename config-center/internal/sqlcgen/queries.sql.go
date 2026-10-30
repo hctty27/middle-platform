@@ -151,7 +151,7 @@ func (q *Queries) ListNodes(ctx context.Context) ([]ListNodesRow, error) {
 			&i.NodeType,
 			&i.GameID,
 			&i.RegionID,
-				&i.Code,
+			&i.Code,
 			&i.Name,
 			&i.Status,
 			&i.Config,
