@@ -10,7 +10,7 @@ GET /api/core/{env}/{appid}
 
 - `env` 只接受 `test`、`review`、`prod`。
 - `appid` 对应 `config_channel_app.code`。
-- 返回 `config_channel_app.config` 原始 JSON 对象，不读取或合并绑定覆盖 JSON。
+- 返回三个环境共用的 `config_channel_app.config` JSON；根据 `prod_server_group_id` / `test_server_group_id` / `review_server_group_id` 选择唯一的环境区服组。
 - `regions` 只包含当前 AppID 在指定环境下 **实际存在且已启用的绑定区服组**；没有有效绑定的大区不返回。
 - 渠道应用及所属游戏必须启用，大区、区服组、绑定也必须启用。
 - 已找到 AppID 但指定环境没有绑定，返回 200 和 `regions: []`。

@@ -224,3 +224,16 @@ SELECT env_type,COUNT(*) FROM config_node WHERE node_type='region' GROUP BY env_
 ```
 
 MySQL DDL 不能整体事务回滚；V10 中断时不得直接清除 dirty 状态，应检查实际表结构并通过备份人工恢复。
+
+## V11：固定三环境区服组与共享应用 JSON
+
+- `config_channel_app` 内聚 `prod_server_group_id`、`test_server_group_id`、`review_server_group_id`，分别最多绑定一个区服组，可为空。
+- 三个环境共用应用的 `config` 和 `status`；移除 `config_channel_app_binding` 以及原独立覆盖配置 API。
+- 创建和更新应用时一起提交三个区服组 ID；后端校验区服组及大区的游戏归属和 `env_type`。
+- 区服组下只读关联应用：`GET /api/config/admin/server-groups/{id}/channel-apps`；环境下拉搜索：`GET /api/config/admin/channel-apps/server-groups?gameId=1&envType=prod&keyword=...`。
+- 升级前**停写、备份**。V11 迁移预检拒绝同一应用同一环境多组、跨游戏关联、独立启停状态不一致或不同环境最终 JSON 不相同的历史数据；需要人工统一后再执行迁移。预检通过时旧覆盖配置会合并进公共 `config`，然后删除旧绑定表。
+- 不回写节点的 `revision` / `epoch`，不参与节点回调。`sdk-core` 必须与配置中心协调升级，以读取新的三个外键字段。
+
+```powershell
+go run ./cmd/migrate -config configs/config-dev.yaml
+```

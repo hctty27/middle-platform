@@ -237,7 +237,21 @@ def main():
     migrate(10)
     assert mysql("SELECT epoch FROM config_migration.config_revision WHERE id=1") == after_v10_epoch
 
-    print("PASS GTID-safe V1-V10 migration, production-to-prod conversion and archive-safe validation", flush=True)
+    # V11 安全收敛：唯一旧环境绑定的有效 JSON 迁入应用公共配置。
+    migrate(11)
+    assert mysql("SELECT version,dirty FROM config_migration.config_schema_migrations WHERE id=1").split() == ["11", "0"]
+    assert mysql("SELECT prod_server_group_id FROM config_migration.config_channel_app WHERE id=105") == "103"
+    assert mysql("SELECT JSON_EXTRACT(config,'
+
+
+if __name__ == "__main__":
+    main()
+) FROM config_migration.config_channel_app WHERE id=105") != "{}"
+    assert mysql("""SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema='config_migration' AND table_name='config_channel_app_binding'""") == "0"
+    migrate(11)
+
+    print("PASS GTID-safe V1-V11 migration, environment binding collapse and archive-safe validation", flush=True)
 
 
 if __name__ == "__main__":
