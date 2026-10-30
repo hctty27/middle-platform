@@ -11,7 +11,7 @@ GET /api/core/{env}/{appid}
 - `env` 只接受 `prod`、`test`、`review`，用于选择对应区服组，不用于决定映射规则。
 - `appid` 为全局唯一的 `config_channel_app.code`。
 - 应用、游戏、大区和区服组均须启用；环境没有有效绑定时返回 HTTP 404。
-- 直接读取配置中心权威 MySQL，同一只读 Repeatable Read 事务获取业务上下文。
+- 直接读取配置中心权威 MySQL，单条 JOIN 查询获取渠道、游戏、大区和区服组所需字段，无需拆分查询和额外的显式事务。
 - 统一响应外壳为 `code`、`message`、`data`；`data` 字段由接口级映射决定。
 
 ### 全局响应映射
@@ -47,12 +47,16 @@ GET /api/core/{env}/{appid}
 | 来源 | 含义 |
 |---|---|
 | `channel_app.id` / `channel_app.code` / `channel_app.name` | 渠道应用信息 |
-| `channel_app.config.xxx` | 共享应用 JSON，可多层访问 |
+| `channel_app.config` / `channel_app.config.xxx` | 完整共享应用 JSON / 其中字段 |
 | `game.code` | 游戏 Code |
+| `game.config` / `game.config.xxx` | 游戏完整 JSON / 游戏 JSON 内字段（支持多层） |
 | `region.code` | 当前环境大区 Code |
+| `region.config` / `region.config.xxx` | 大区完整 JSON / 其中字段 |
 | `server_group.code` | 当前环境区服组 Code |
-| `server_group.config.xxx` | 区服组 JSON，可多层访问 |
+| `server_group.config` / `server_group.config.xxx` | 区服组完整 JSON / 其中字段 |
 | `env` | 请求参数（环境名） |
+
+例如在映射中添加 `"regionKey": "region.config.regionKey"`、`"gameKey": "game.config.gameKey"`，或 `"gameConfig": "game.config"` 返回完整游戏 JSON。单 SQL 已读取游戏、大区、区服组、渠道应用的配置，后续新增以上路径只需修改映射文件并重新编译部署，不需要再修改 SQL。
 
 映射字段保留 JSON 原始值类型；数字解析使用 `json.Number` 避免精度丢失。当前仅支持字段提取，不支持表达式、SQL 或默认值。
 
@@ -62,7 +66,7 @@ GET /api/core/{env}/{appid}
 
 **缺失字段处理：** 映射指定的配置路径不存在、为 `null`，或中间对象缺失时，直接省略对应的 `data` 字段，仍返回 HTTP 200；其他已配置字段正常返回。`false`、`0`、空字符串属于有效值，保留输出。未绑定环境或目标配置停用仍返回 HTTP 404；业务 JSON 本身不是合法对象、映射规则非法或数据库查询失败，仍按原有错误处理。
 
-**安全：** 此接口可被客户端访问。任何被映射的 JSON 值都会对外暴露，不要映射支付私钥、登录签名密钥、数据库密码等服务端秘密；这些应该保存在仅服务端可访问的位置。
+**安全：** 此接口可被客户端访问。任何被映射的 JSON 值都会对外暴露，特别是 `game.config` 等完整对象会暴露对象内的全部属性。不要映射支付私钥、登录签名密钥、数据库密码等服务端秘密；这些应该保存在仅服务端可访问的位置。优先选取必须的子字段，而不是返回整个对象。
 
 ## 本地启动（PowerShell）
 
@@ -99,6 +103,7 @@ Invoke-RestMethod http://127.0.0.1:8082/api/core/prod/app1001
 - Nginx 通过 `/api/core/` 转发到多个 `sdk-core` 实例。
 - 映射随程序发布；修改后对多实例执行滚动更新，避免同一接口出现长时间不同 JSON 版本。
 - 修改当前响应结构属于客户端接口契约变化，需协调现有 SDK 客户端。
+- 单条 SELECT 在数据库内一次性读取同一快照，但不承诺性能倍增；建议结合实际访问量和执行计划评估索引与数据库连接池。
 - 默认使用 `Cache-Control: no-store`，避免配置在共享代理中意外缓存。
 
 ## 验证

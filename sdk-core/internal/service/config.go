@@ -39,14 +39,18 @@ func (s *ConfigService) Get(ctx context.Context,env,appID string) (map[string]an
 
     appConfig,err:=mapping.DecodeObject(app.Config)
     if err!=nil { return nil,fmt.Errorf("%w: channel app config: %v",model.ErrInvalidConfig,err) }
+    gameConfig,err:=mapping.DecodeObject(app.GameConfig)
+    if err!=nil { return nil,fmt.Errorf("%w: game config: %v",model.ErrInvalidConfig,err) }
+    regionConfig,err:=mapping.DecodeObject(group.RegionConfig)
+    if err!=nil { return nil,fmt.Errorf("%w: region config: %v",model.ErrInvalidConfig,err) }
     groupConfig,err:=mapping.DecodeObject(group.Config)
     if err!=nil { return nil,fmt.Errorf("%w: server group config: %v",model.ErrInvalidConfig,err) }
 
     sources:=map[string]any{
         "env":env,
         "channel_app":map[string]any{"id":app.ID,"code":app.Code,"name":app.Name,"config":appConfig},
-        "game":map[string]any{"code":app.GameCode},
-        "region":map[string]any{"code":group.RegionCode},
+        "game":map[string]any{"code":app.GameCode,"config":gameConfig},
+        "region":map[string]any{"code":group.RegionCode,"config":regionConfig},
         "server_group":map[string]any{"code":group.ServerGroupCode,"config":groupConfig},
     }
     result,err:=s.resolver.Resolve(mapping.RouteCoreConfig,sources)
