@@ -44,8 +44,8 @@ onMounted(() => void refreshRevision())
       <button title="渠道应用" :class="{ active: navigation === 'channel_apps' }" @click="navigate('channel_apps')">
         <span class="nav-symbol">▣</span><span v-if="!sidebarCollapsed">渠道应用</span>
       </button>
-      <button title="接入与同步" :class="{ active: navigation === 'subscribers' }" @click="navigate('subscribers')">
-        <span class="nav-symbol">↗</span><span v-if="!sidebarCollapsed">接入与同步</span>
+      <button title="接入同步" :class="{ active: navigation === 'subscribers' }" @click="navigate('subscribers')">
+        <span class="nav-symbol">↗</span><span v-if="!sidebarCollapsed">接入同步</span>
       </button>
       <button title="系统说明" :class="{ active: navigation === 'about' }" @click="navigate('about')">
         <span class="nav-symbol">ⓘ</span><span v-if="!sidebarCollapsed">系统说明</span>
@@ -61,7 +61,7 @@ onMounted(() => void refreshRevision())
     <div class="main">
       <header class="topbar">
         <div class="topbar-heading">
-          <strong>{{ navigation === 'nodes' ? '配置管理' : navigation === 'channel_apps' ? '渠道应用' : navigation === 'subscribers' ? '接入与同步' : '系统说明' }}</strong>
+          <strong>{{ navigation === 'nodes' ? '配置管理' : navigation === 'channel_apps' ? '渠道应用' : navigation === 'subscribers' ? '接入同步' : '系统说明' }}</strong>
           <span class="subline">研发中台 / 配置中心</span>
         </div>
         <div class="top-right">
