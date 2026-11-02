@@ -36,23 +36,29 @@ jobs:
       - name: Build binary and frontend release package
         shell: pwsh
         run: ./scripts/package-supervisor.ps1 -Arch amd64 -Version ${{ github.sha }}
-      # 上传前校验文件清单、Linux 架构及 SHA256 完整性。
-      - name: Verify Linux package contents
+      # Linux tar.gz 保留 0755 执行位；上传前必须真实解压、校验架构及 SHA256。
+      - name: Verify Linux executable archive
         shell: bash
         run: |
           set -euo pipefail
-          zipfile="dist/supervisor/middle-platform-${GITHUB_SHA}-linux-amd64.zip"
-          test -s "$zipfile"
+          tarball="dist/supervisor/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
+          test -s "$tarball"
           for item in bin/config-center bin/config-center-access bin/sdk-core bin/migrate admin/index.html SHA256SUMS.txt BUILD_INFO.txt; do
-            unzip -Z -1 "$zipfile" | grep -Fx "$item"
+            tar -tzf "$tarball" | grep -Fx "./$item"
           done
           tmpdir="$(mktemp -d)"
-          unzip -q "$zipfile" -d "$tmpdir"
+          trap 'rm -rf "$tmpdir"' EXIT
+          tar -xzf "$tarball" -C "$tmpdir"
           (cd "$tmpdir" && sha256sum -c SHA256SUMS.txt)
-          file "$tmpdir/bin/"*
+          for binary in config-center config-center-access sdk-core migrate; do
+            test -x "$tmpdir/bin/$binary"
+            test "$(stat -c %a "$tmpdir/bin/$binary")" = "755"
+            file "$tmpdir/bin/$binary" | grep -E 'ELF 64-bit .*x86-64'
+          done
+      # Actions Artifact 外层下载为 ZIP，内层 tar.gz 的 Linux 权限不会丢失。
       - uses: actions/upload-artifact@v4
         with:
           name: middle-platform-supervisor-linux-amd64
-          path: dist/supervisor/*.zip
+          path: dist/supervisor/*.tar.gz
           if-no-files-found: error
           retention-days: 14
