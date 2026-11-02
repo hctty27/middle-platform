@@ -49,16 +49,21 @@ jobs:
 
           data = json.loads(Path("/tmp/compose.json").read_text())
           services = data["services"]
-          for name, host_port in (("sdk-core-1", 8082), ("sdk-core-2", 8084)):
+          for name, host_port in (("sdk-core-1", 8100), ("sdk-core-2", 8101)):
               service = services[name]
               assert any(int(port["published"]) == host_port and int(port["target"]) == 8082
                          for port in service["ports"]), name
               assert service["image"] == services["sdk-core-1"]["image"], name
               assert service["volumes"] == services["sdk-core-1"]["volumes"], name
+          admin = services["admin"]
+          assert any(int(port["published"]) == 8090 and int(port["target"]) == 80
+                     for port in admin["ports"])
           gateway = Path("deploy/nginx/gateway.conf.example").read_text()
           for host in ("10.0.0.11", "10.0.0.12"):
-              for port in (8082, 8084):
+              for port in (8100, 8101):
                   assert f"server {host}:{port} " in gateway
+          for host in ("10.0.0.11", "10.0.0.12"):
+              assert f"server {host}:8090 " in gateway
           PY
       - name: Validate Nginx configuration
         run: |
