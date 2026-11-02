@@ -43,7 +43,7 @@ SDK 只需 `config_center` 业务查询所需的 SELECT 权限。多台 sdk-core
 | sdk-core-1 | 8211 | 8211 |
 | sdk-core-2 | 8212 | 8212 |
 
-约定：**配置中心从 8201 开始、Core 从 8211 开始、Service 从 8221 开始**；管理端使用 8281、Access 使用 8291。预留 `8202+` 给配置中心新增实例、`8213+` 给 Core 扩容，`8221+` 为未来 Service（目前尚无对应 Compose 服务，不应提前占用）。容器内 Go 进程实际监听端口与宿主机映射一致：生产 Compose 使用 `CONFIG_GO_ADDR=:8201`、`CONFIG_ACCESS_ADDR=:8291`、`SDK_CORE_ADDR=:8211/:8212` 覆盖各自 YAML 的 `server.address`。管理端容器内 Nginx 也监听 8281，不再占用容器 80。开发环境的默认 YAML 端口可以保持不变，生产 Compose 环境变量优先。对外的网关 Nginx 仍监听 80/443，应用端口必须绑定可信内网 IP 并通过防火墙限制。
+约定：**配置中心从 8201 开始、Core 从 8211 开始、Service 从 8221 开始**；管理端使用 8281、Access 使用 8291。端口段规划为：配置中心 `8201～8210`、Core `8211～8220`、未来 Service 从 `8221` 开始（建议预留到 `8280`），管理端 `8281`、Access `8291`。目前预留 `8202～8210` 给配置中心新增实例、`8213～8220` 给 Core 扩容，Service 尚无对应 Compose 服务，不提前占用 `8221`。容器内 Go 进程实际监听端口与宿主机映射一致：生产 Compose 使用 `CONFIG_GO_ADDR=:8201`、`CONFIG_ACCESS_ADDR=:8291`、`SDK_CORE_ADDR=:8211/:8212` 覆盖各自 YAML 的 `server.address`。管理端容器内 Nginx 也监听 8281，不再占用容器 80。开发环境的默认 YAML 端口可以保持不变，生产 Compose 环境变量优先。对外的网关 Nginx 仍监听 80/443，应用端口必须绑定可信内网 IP 并通过防火墙限制。
 
 
 ### 网关和后台端口
