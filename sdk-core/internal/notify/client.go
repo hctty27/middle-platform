@@ -36,11 +36,10 @@ var denyNetworks = func() []netip.Prefix {
 type Client struct {
     http *http.Client
     allowed map[string]bool
-    secrets map[string]string
 }
 
 // NewClient 限定目标域名并在 TCP 连接时再次检查 DNS 解析结果。
-func NewClient(hosts []string,secrets map[string]string) *Client {
+func NewClient(hosts []string) *Client {
     allow:=make(map[string]bool,len(hosts))
     for _,h:=range hosts {allow[strings.ToLower(h)]=true}
     tr:=&http.Transport{
@@ -60,7 +59,7 @@ func NewClient(hosts []string,secrets map[string]string) *Client {
     }
     h:=&http.Client{Timeout:5*time.Second,Transport:tr,
         CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}
-    return &Client{http:h,allowed:allow,secrets:secrets}
+    return &Client{http:h,allowed:allow}
 }
 
 func publicIP(ip netip.Addr)bool {
@@ -81,10 +80,9 @@ func (c *Client) ValidateTarget(raw string)error {
 
 // Send 使用 SDK Core 与游戏间的 HMAC-SHA256，不转发平台密钥。
 // 签名串: appid, POST, path, timestamp, nonce, SHA256(rawBody)，以 LF 连接。
-func(c *Client)Send(ctx context.Context,o model.Order)error {
+func(c *Client)Send(ctx context.Context,o model.Order,key []byte)error {
     if err:=c.ValidateTarget(o.GameNotifyURL);err!=nil{return err}
-    secret:=c.secrets[o.AppID]
-    if len(secret)<32{return errors.New("missing game notification secret")}
+    if len(key)!=32{return errors.New("invalid notification signing key")}
     body,err:=json.Marshal(model.PaymentCallback{
         OrderNo:o.PlatformOrderNo,GameOrderID:o.GameOrderID,
         Amount:o.Amount,Attach:o.Attach,PaidAt:o.PaidAt.UTC().Format(time.RFC3339),
@@ -97,7 +95,7 @@ func(c *Client)Send(ctx context.Context,o model.Order)error {
     ts:=strconv.FormatInt(time.Now().Unix(),10)
     sum:=sha256.Sum256(body)
     canonical:=fmt.Sprintf("%s\nPOST\n%s\n%s\n%s\n%x",o.AppID,u.EscapedPath(),ts,nonce,sum)
-    mac:=hmac.New(sha256.New,[]byte(secret))
+    mac:=hmac.New(sha256.New,key)
     mac.Write([]byte(canonical))
     req,err:=http.NewRequestWithContext(ctx,http.MethodPost,o.GameNotifyURL,bytes.NewReader(body))
     if err!=nil{return err}

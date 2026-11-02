@@ -123,3 +123,15 @@ func (s *Store) LookupPlatformSecret(ctx context.Context, appID string) (string,
     }
     return value.AppSecret, nil
 }
+
+// LookupGameConfig 通过订单登记时保存的游戏 ID 获取当前游戏主密钥配置。
+// 不依赖当前环境绑定或 status，避免关服后无法补偿已支付订单。
+func(s *Store) LookupGameConfig(ctx context.Context,gameID int64)(json.RawMessage,error){
+    if gameID<=0{return nil,model.ErrNotFound}
+    var raw []byte
+    err:=s.db.QueryRowContext(ctx,
+        "SELECT config FROM config_node WHERE id=? AND node_type='game' LIMIT 1",gameID).Scan(&raw)
+    if errors.Is(err,sql.ErrNoRows){return nil,model.ErrNotFound}
+    if err!=nil{return nil,fmt.Errorf("query order game secret: %w",err)}
+    return json.RawMessage(raw),nil
+}

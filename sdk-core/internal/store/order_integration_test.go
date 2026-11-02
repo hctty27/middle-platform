@@ -30,7 +30,7 @@ func TestOrderStoreLifecycle(t *testing.T) {
     if err!=nil{t.Fatal(err)}
     if _,err=db.ExecContext(ctx,string(schema));err!=nil{t.Fatal(err)}
     repo:=NewOrderStore(db)
-    source:=model.Order{AppID:"app1",Env:"test",GameOrderID:"g1",Amount:600,Attach:"",GameNotifyURL:"https://game.example.com/notify"}
+    source:=model.Order{AppID:"app1",GameID:1,Env:"test",GameOrderID:"g1",Amount:600,Attach:"",GameNotifyURL:"https://game.example.com/notify"}
     if err=repo.Register(ctx,source);err!=nil{t.Fatal(err)}
     if err=repo.Register(ctx,source);err!=nil{t.Fatalf("repeat should be idempotent: %v",err)}
     moved:=source
@@ -44,7 +44,7 @@ func TestOrderStoreLifecycle(t *testing.T) {
     if err=repo.Register(ctx,duplicateEnv);!errors.Is(err,model.ErrOrderConflict){t.Fatalf("cross-env key not enforced: %v",err)}
     found,err:=repo.Find(ctx,"app1","g1")
     if err!=nil{t.Fatal(err)}
-    if found.GameNotifyURL!=source.GameNotifyURL {t.Fatal("snapshot overwritten")}
+    if found.GameID!=source.GameID||found.GameNotifyURL!=source.GameNotifyURL {t.Fatal("snapshot overwritten")}
     paidAt:=time.Now().UTC().Truncate(time.Second)
     if err=repo.ConfirmPayment(ctx,found.ID,"p1",paidAt);err!=nil{t.Fatal(err)}
     if err=repo.ConfirmPayment(ctx,found.ID,"p1",paidAt);err!=nil{t.Fatalf("duplicate payment: %v",err)}

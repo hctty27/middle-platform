@@ -17,7 +17,6 @@ import (
 
     "github.com/go-sql-driver/mysql"
     "github.com/hctty27/middle-platform/sdk-core/internal/api"
-    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
     "github.com/hctty27/middle-platform/sdk-core/internal/mapping"
     "github.com/hctty27/middle-platform/sdk-core/internal/notify"
     "github.com/hctty27/middle-platform/sdk-core/internal/service"
@@ -89,9 +88,9 @@ func run(configPath string)error{
         }
         orders:=&service.OrderService{
             ConfigReader:repository,Orders:store.NewOrderStore(ordersDB),
-            GameAuth:&auth.GameAuth{Keys:cfg.GameAuth.Keys},
             PlatformSecretReader:repository,
-            Notifier:notify.NewClient(cfg.GameNotify.AllowedHosts,cfg.GameNotify.Secrets),
+            GameSecretReader:repository,
+            Notifier:notify.NewClient(cfg.GameNotify.AllowedHosts),
             AllowUnverifiedNonProd:cfg.Payment.AllowUnverifiedNonProd,
         }
         if err=orders.Validate();err!=nil{return err}

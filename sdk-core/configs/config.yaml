@@ -16,19 +16,17 @@ orderDatabase:
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 游戏服登记签名 HMAC-SHA256，凭据绑定 AppID 与环境
-gameAuth:
-  keys: {}
+# 游戏通信主密钥只保存在配置中心 game.config.gameSecret 中（Base64 编码的 32 随机字节）。
+# SDK Core 与游戏服对两个用途分别派生 HKDF 密钥；这里不再配置 gameAuth.keys。
 
 # 平台密钥从 config_channel_app.config.appSecret（渠道包 JSON 顶层）读取，跨环境共享。
 # 不在此处重复配置 payment.secrets；平台 v1 未签金额，正式环境拒绝确认支付。
 payment:
   allowUnverifiedNonProd: false
 
-# SDK Core 向游戏发货使用独立 HMAC；域名严格准入
+# SDK Core 向游戏发货：使用 gameSecret 派生的通知密钥；只配置允许的 HTTPS 域名。
 gameNotify:
   allowedHosts: []
-  secrets: {}
 
 log:
   level: info

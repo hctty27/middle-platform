@@ -20,6 +20,7 @@ type RegisterOrder struct {
 type Order struct {
     ID int64
     AppID string
+    GameID int64
     Env string
     GameOrderID string
     Amount int64

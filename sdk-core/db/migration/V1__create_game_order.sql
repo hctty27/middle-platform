@@ -3,6 +3,7 @@
 CREATE TABLE game_order (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '内部主键',
     appid VARCHAR(128) COLLATE utf8mb4_bin NOT NULL COMMENT '应用 Code',
+    game_id BIGINT NOT NULL COMMENT '登记时所属游戏 ID，通知补偿固定读取该游戏的主密钥',
     env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL COMMENT 'prod/test/review',
     game_order_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL COMMENT '游戏订单号',
     amount BIGINT UNSIGNED NOT NULL COMMENT '预期实付，人民币分',

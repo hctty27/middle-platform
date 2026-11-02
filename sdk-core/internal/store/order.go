@@ -17,13 +17,13 @@ type OrderStore struct { db *sql.DB }
 
 func NewOrderStore(db *sql.DB) *OrderStore { return &OrderStore{db: db} }
 
-const orderColumns = `id, appid, env, game_order_id, amount, attach, game_notify_url,
+const orderColumns = `id, appid, game_id, env, game_order_id, amount, attach, game_notify_url,
     COALESCE(platform_order_no,''), paid_at, payment_status, notify_status, notify_attempts, next_notify_at`
 
 func scanOrder(row interface{ Scan(...any) error }) (model.Order, error) {
     var o model.Order
     var paid, next sql.NullTime
-    err := row.Scan(&o.ID, &o.AppID, &o.Env, &o.GameOrderID, &o.Amount, &o.Attach,
+    err := row.Scan(&o.ID, &o.AppID, &o.GameID, &o.Env, &o.GameOrderID, &o.Amount, &o.Attach,
         &o.GameNotifyURL, &o.PlatformOrderNo, &paid, &o.PaymentStatus, &o.NotifyStatus,
         &o.NotifyAttempts, &next)
     if paid.Valid { o.PaidAt = paid.Time }
@@ -49,9 +49,9 @@ func (s *OrderStore) ByID(ctx context.Context, id int64) (model.Order, error) {
 // Register 以数据库唯一索引实现跨实例幂等，重复登记不刷新通知地址。
 func (s *OrderStore) Register(ctx context.Context, incoming model.Order) error {
     _, err := s.db.ExecContext(ctx, `
-        INSERT INTO game_order(appid,env,game_order_id,amount,attach,game_notify_url)
-        VALUES(?,?,?,?,?,?)`,
-        incoming.AppID, incoming.Env, incoming.GameOrderID, incoming.Amount,
+        INSERT INTO game_order(appid,game_id,env,game_order_id,amount,attach,game_notify_url)
+        VALUES(?,?,?,?,?,?,?)`,
+        incoming.AppID, incoming.GameID, incoming.Env, incoming.GameOrderID, incoming.Amount,
         incoming.Attach, incoming.GameNotifyURL)
     if err == nil { return nil }
     var mysqlErr *mysql.MySQLError
@@ -60,7 +60,7 @@ func (s *OrderStore) Register(ctx context.Context, incoming model.Order) error {
     }
     old, lookupErr := s.Find(ctx, incoming.AppID, incoming.GameOrderID)
     if lookupErr != nil { return fmt.Errorf("check duplicate order: %w", lookupErr) }
-    if old.Env != incoming.Env || old.Amount != incoming.Amount || old.Attach != incoming.Attach {
+    if old.GameID != incoming.GameID || old.Env != incoming.Env || old.Amount != incoming.Amount || old.Attach != incoming.Attach {
         return model.ErrOrderConflict
     }
     return nil

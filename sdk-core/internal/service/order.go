@@ -7,7 +7,6 @@ import (
     "fmt"
     "net/http"
     "regexp"
-    "strings"
     "time"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/auth"
@@ -24,7 +23,9 @@ var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 type OrderService struct {
     ConfigReader Reader
     Orders *store.OrderStore
-    GameAuth *auth.GameAuth
+    GameSecretReader interface {
+        LookupGameConfig(context.Context,int64) (json.RawMessage,error)
+    }
     PlatformSecretReader interface {
         LookupPlatformSecret(context.Context, string) (string, error)
     }
@@ -33,8 +34,13 @@ type OrderService struct {
 }
 
 func(s *OrderService) VerifyRegistration(r *http.Request,body []byte,env,appid string)error {
-    if s.GameAuth==nil{return auth.ErrUnauthorized}
-    return s.GameAuth.Verify(r,body,env,appid)
+    if !validEnv(env)||!orderIDPattern.MatchString(appid){return ErrInvalidOrder}
+    app,group,err:=s.ConfigReader.Lookup(r.Context(),appid,env)
+    if err!=nil{return err}
+    if group==nil{return model.ErrNotFound}
+    secret,err:=auth.ParseGameSecret(app.GameConfig)
+    if err!=nil{return model.ErrInvalidConfig}
+    return auth.VerifyRegistration(r,body,secret)
 }
 
 func validEnv(env string)bool {return env=="prod"||env=="test"||env=="review"}
@@ -54,7 +60,7 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
         return nil
     }
     if !errors.Is(lookupErr, model.ErrOrderNotFound) { return lookupErr }
-    _,group,err:=s.ConfigReader.Lookup(ctx,appid,env)
+    app,group,err:=s.ConfigReader.Lookup(ctx,appid,env)
     if err!=nil{return err}
     if group==nil {return model.ErrNotFound}
     var config map[string]json.RawMessage
@@ -65,7 +71,7 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
     if err=json.Unmarshal(raw,&url);err!=nil||url==""{return model.ErrInvalidConfig}
     if err=s.Notifier.ValidateTarget(url);err!=nil{return model.ErrInvalidConfig}
     return s.Orders.Register(ctx,model.Order{
-        AppID:appid,Env:env,GameOrderID:req.GameOrderID,
+        AppID:appid,GameID:app.GameID,Env:env,GameOrderID:req.GameOrderID,
         Amount:req.Amount,Attach:req.Attach,GameNotifyURL:url,
     })
 }
@@ -106,7 +112,14 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
 func(s *OrderService) deliver(ctx context.Context,o model.Order)error {
     sendCtx,cancel:=context.WithTimeout(ctx,5*time.Second)
     defer cancel()
-    err:=s.Notifier.Send(sendCtx,o)
+    raw,err:=s.GameSecretReader.LookupGameConfig(sendCtx,o.GameID)
+    var key []byte
+    if err==nil {
+        var secret []byte
+        secret,err=auth.ParseGameSecret(raw)
+        if err!=nil{err=model.ErrInvalidConfig}else{key,err=auth.Derive(secret,auth.PurposePaymentNotify)}
+    }
+    if err==nil{err=s.Notifier.Send(sendCtx,o,key)}
     commitCtx,commitCancel:=context.WithTimeout(context.Background(),2*time.Second)
     defer commitCancel()
     if saveErr:=s.Orders.CompleteNotify(commitCtx,o.ID,err);saveErr!=nil {
@@ -133,14 +146,8 @@ func(s *OrderService) RunWorker(ctx context.Context) {
 }
 
 func(s *OrderService) Validate()error {
-    if s.Orders==nil||s.ConfigReader==nil||s.PlatformSecretReader==nil||s.Notifier==nil||s.GameAuth==nil {
+    if s.Orders==nil||s.ConfigReader==nil||s.GameSecretReader==nil||s.PlatformSecretReader==nil||s.Notifier==nil {
         return errors.New("order service dependency missing")
     }
-    if len(s.GameAuth.Keys)==0{return errors.New("game auth credentials missing")}
-    for id,c:=range s.GameAuth.Keys {
-        if strings.TrimSpace(id)==""||len(c.Secret)<32||len(c.AppIDs)==0||len(c.Envs)==0 {
-            return fmt.Errorf("invalid game auth credential: %s",id)
-        }
-    }
-    return nil
+     return nil
 }

@@ -12,7 +12,6 @@ import (
 
     "gopkg.in/yaml.v3"
     "github.com/hctty27/middle-platform/shared/logging"
-    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
 )
 
 type Database struct {
@@ -27,13 +26,11 @@ type Config struct {
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
     Database Database `yaml:"database"`
     OrderDatabase Database `yaml:"orderDatabase"`
-    GameAuth struct{ Keys map[string]auth.Credential `yaml:"keys"`} `yaml:"gameAuth"`
     Payment struct {
         AllowUnverifiedNonProd bool `yaml:"allowUnverifiedNonProd"`
     } `yaml:"payment"`
     GameNotify struct {
         AllowedHosts []string `yaml:"allowedHosts"`
-        Secrets map[string]string `yaml:"secrets"`
     } `yaml:"gameNotify"`
 }
 
