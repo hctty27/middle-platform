@@ -87,7 +87,7 @@ jobs:
           cache-dependency-path: config-center/go.sum
       - name: Build from Windows PowerShell
         shell: pwsh
-        run: .\\scripts\\package-supervisor.ps1 -Arch amd64 -Version windows-test -SkipFrontend
+        run: .\scripts\package-supervisor.ps1 -Arch amd64 -Version windows-test -SkipFrontend
       - name: Verify tar.gz on Windows
         shell: pwsh
         run: |
@@ -103,7 +103,7 @@ jobs:
           $details = @(& tar -tvzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to inspect tar permissions' }
           foreach ($name in @('config-center', 'config-center-access', 'sdk-core', 'migrate')) {
-            if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\\s' -and $_.Trim().EndsWith("bin/$name") })) {
+            if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\s' -and $_.Trim().EndsWith("bin/$name") })) {
               throw "Missing executable permission in tar header: $name"
             }
           }
