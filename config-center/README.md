@@ -5,7 +5,7 @@
 ## 本地启动
 
 1. 创建空 `config_center` 库，复制 `configs/config.yaml` 为 `configs/config-dev.yaml`。
-2. 填写 `database.dsn`；需要管理后台写入时，在可信内网显式启用 `admin.writesEnabled`。Webhook Worker 默认常驻，运行后新增订阅者自动生效。
+2. 填写 `database.dsn`；管理读写接口与 Webhook Worker 均随服务启动。**管理 API 无内建鉴权，必须限制到可信内网或受认证的管理网关**。
 3. 在本目录执行（必须先迁移、后启动）：
 
 ```powershell
@@ -13,7 +13,7 @@ go run ./cmd/migrate -config configs/config-dev.yaml
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
-启动后检查 `GET /health/ready`；Webhook 每 3 秒轮询待投递的已启用订阅者，运行中新增无需重启；`/api/config/admin/**` 管理写路由仅在启用写开关时注册。当前管理 API 无内建认证，仅可在受保护网络访问。
+启动后检查 `GET /health/ready`；Webhook 每 3 秒查询待投递订阅者，运行中新增无需重启。管理写路由始终注册，部署时必须先完成网关访问控制。
 
 ## 关键约束
 
@@ -29,7 +29,6 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 | --- | --- | --- |
 | `database.dsn` | `CONFIG_DB_DSN` | 权威库连接 |
 | `server.address` | `CONFIG_GO_ADDR` | HTTP 监听地址 |
-| `admin.writesEnabled` | `CONFIG_GO_ENABLE_WRITES` | 管理写接口 |
 | `webhook.allowedHosts` | `WEBHOOK_ALLOWED_HOSTS` | 回调目标主机白名单 |
 
 ## 测试与详细文档
@@ -43,3 +42,5 @@ go build ./cmd/config-center ./cmd/migrate
 [接口文档](../docs/api.md) · [数据库与迁移](../docs/database.md) · [本地开发](../docs/development.md) · [生产部署](../docs/production.md)
 
 已移除废弃配置 `webhook.enabled`、`migration.allowLegacyUpgrade` 和环境变量 `CONFIG_GO_ENABLE_WEBHOOK`。升级旧配置时请删除对应 YAML 字段。
+
+已移除 `admin.writesEnabled` 和 `CONFIG_GO_ENABLE_WRITES`。旧 YAML 的 `admin` 块需删掉；合并代码后管理写接口将始终存在。仅从防火墙/网关受控网络允许访问 `/api/config/`，不要公开包含游戏和渠道密钥的原始配置接口。

@@ -63,8 +63,7 @@ MySQL DDL 不保证事务回滚。遇到 `dirty=1` 或中途失败，先核对�
 ## SDK Core 的单连接池与权限
 
 SDK Core **只使用 `database.dsn`**，配置查询和订单操作共享一个 `*sql.DB` 连接池，
-目标为同一个 `config_center` 数据库。订单由 `order.enabled` 控制，默认 `false`，
-关闭时不会注册订单/支付回调路由，也不会启动发货补偿 Worker。
+目标为同一个 `config_center` 数据库。订单登记、支付回调和发货补偿 Worker 默认随 SDK Core 启动，需要 V12 `game_order` 表和相应的表级权限；平台 v1 未完成可信支付认证，仍不可确认支付。
 
 如需启用订单，建议使用 `sdk_core` 专用 MySQL 账号，仅授予下列表级权限（账号须先创建）：
 

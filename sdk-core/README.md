@@ -44,7 +44,7 @@ GET /api/core/{env}/{appid}
 
 ## 本地启动
 
-在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已完成 V12 迁移的 `config_center`：若 `order.enabled=false` 可使用只读账号；启用订单时，需要同一账号拥有订单表限定读写权限：
+在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已完成 V12 迁移的 `config_center`。订单功能始终加载，数据库账号必须具备配置表 SELECT 和订单表 SELECT/INSERT/UPDATE 权限：
 
 ```powershell
 Copy-Item configs/config.yaml configs/config-dev.yaml
@@ -69,8 +69,7 @@ go build ./cmd/sdk-core
 数据库建表只由 `config-center/cmd/migrate` 统一执行 V12（从 V11 升级），
 不再提供 SDK Core 独立的 V1 建表脚本。
 只保留 **`database.dsn` 一个配置项** 和一个 `*sql.DB` 连接池，`configStore`、`orderStore` 共享连接。
-`order.enabled=false`（默认）不注册订单/支付回调路由，不启动补偿 Worker，也不需要订单表 DML 权限。
-显式设置 `order.enabled=true` 后，启动时要求 V12 `game_order` 表存在并具备订单表查询及写入权限；配置表依旧只读。
+订单登记与平台回调路由始终注册，通知补偿 Worker 始终启动；SDK Core 在启动时必须验证 V12 `game_order` 表结构。若表不存在或读取权限不足，则启动失败。配置表依旧只读。
 
 接口：
 - POST /api/core/{env}/{appid}/orders：游戏服签名登记订单
@@ -92,7 +91,7 @@ go build ./cmd/sdk-core
 
 `env` 只用于记录原订单归属、选择登记时大区的 `payNotifyUrl`，以及决定是否允许非正式支付联调；不参与平台密钥查找。修改渠道包密钥前应保留历史回调所需密钥版本，目前尚未实现旧密钥轮换兼容。
 **重大安全限制：平台 v1 未签名 amount、attach、paid_at，不能证明真实支付金额。正式环境回调默认且无条件返回失败（不会确认支付）。**
-仅非正式环境在明确开启 payment.allowUnverifiedNonProd 后可以进行链路联调。
+已移除 `payment.allowUnverifiedNonProd`。平台 v1 未签名实付金额，**现在所有环境的 v1 支付回调均不会确认付款或发货**，直到实现可信查单或覆盖实付金额的协议。若需联调，请使用专门的测试平台或待实现的可信支付验证接口。
 上线生产需先接入平台可信查单或可验证金额的升级签名协议。
 
 SDK Core -> 游戏的发货通知不采用平台签名透明转发，而是独立签名。
@@ -157,7 +156,7 @@ SDK Core 通过 AppID/环境查找已绑定且启用的游戏，从 `game.config
 已完成的派生逻辑仅在 PR 分支；**真正平台 v1 不签金额，prod 支付确认仍然禁用**。
 
 
-## 单库单连接池配置（默认关闭订单）
+## 单库单连接池配置（订单与通知模块常驻）
 
 ```yaml
 database:
@@ -165,11 +164,9 @@ database:
   maxOpenConns: 20
   maxIdleConns: 10
   connMaxLifetime: "30m"
-order:
-  enabled: false
 ```
 
-`order.enabled=true` 仅用于明确开启功能，不解除平台 v1 未签金额的正式环境安全门禁。
+原配置中的 `order.enabled`、`payment.allowUnverifiedNonProd` 均需删除（严格 YAML 校验会拒绝旧字段）。订单回调路径始终注册，但 v1 付款确认始终拒绝。
 **升级旧版 YAML**：删除 `orderDatabase`，不要保留 `SDK_CORE_ORDER_DB_DSN`。
 启用订单前先备份数据库，由 `config-center/cmd/migrate` 将 V11 升至 V12；
 运行时账号仅需配置表 SELECT、订单表 SELECT/INSERT/UPDATE，不需要 DDL。
