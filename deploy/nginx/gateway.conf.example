@@ -1,27 +1,27 @@
 # Nginx reverse-proxy example for a dedicated gateway host.
 # Replace upstream IPs, domains, TLS certificate paths, admin CIDR, and htpasswd path.
 # Both nodes must bind to private IPs; firewall must only allow this gateway to reach them.
-# App-node admin port 80 requires a DEDICATED gateway host: never bind a second Nginx to the same IP:80.
+# The admin container listens on :8281; gateway may listen on :80 on the same host if IP bindings permit.
 
-# On each application host: sdk-core-1 = :8201, sdk-core-2 = :8202.
+# On each application host: sdk-core-1 = :8211, sdk-core-2 = :8212.
 upstream mp_core {
     least_conn;
-    server 10.0.0.11:8201 max_fails=3 fail_timeout=10s;
-    server 10.0.0.11:8202 max_fails=3 fail_timeout=10s;
-    server 10.0.0.12:8201 max_fails=3 fail_timeout=10s;
-    server 10.0.0.12:8202 max_fails=3 fail_timeout=10s;
+    server 10.0.0.11:8211 max_fails=3 fail_timeout=10s;
+    server 10.0.0.11:8212 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8211 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8212 max_fails=3 fail_timeout=10s;
     keepalive 16;
 }
 
 upstream mp_config {
-    server 10.0.0.11:8101 max_fails=3 fail_timeout=10s;
-    server 10.0.0.12:8101 max_fails=3 fail_timeout=10s;
+    server 10.0.0.11:8201 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8201 max_fails=3 fail_timeout=10s;
     keepalive 16;
 }
 
 upstream mp_admin {
-    server 10.0.0.11:80 max_fails=3 fail_timeout=10s;
-    server 10.0.0.12:80 max_fails=3 fail_timeout=10s;
+    server 10.0.0.11:8281 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8281 max_fails=3 fail_timeout=10s;
     keepalive 16;
 }
 
