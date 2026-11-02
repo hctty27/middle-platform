@@ -119,10 +119,28 @@ func (s *OrderStore) CompleteNotify(ctx context.Context,id int64, attempt int, n
     return err
 }
 
-// ClaimDue 使用 SKIP LOCKED 领取到期任务，在短事务内设置 60 秒租约。
-// 返回行包含领取时的 notify_attempts，旧任务完成时需以此序号防止覆盖新结果。
+// ClaimDue 使用 READ COMMITTED + SKIP LOCKED 领取到期任务，减少高并发扫描的间隙锁冲突。
+// InnoDB 仍可能返回 1213 死锁或 1205 锁等待超时；短暂重试，不允许重复提交任务。
 func (s *OrderStore) ClaimDue(ctx context.Context) (*model.Order,error) {
-    tx,err:=s.db.BeginTx(ctx,nil)
+    for retry:=0;retry<3;retry++ {
+        order,err:=s.claimDueOnce(ctx)
+        if err==nil||ctx.Err()!=nil{return order,err}
+        var myErr *mysql.MySQLError
+        if !errors.As(err,&myErr)||(myErr.Number!=1213&&myErr.Number!=1205){
+            return nil,err
+        }
+        select {
+        case <-ctx.Done():return nil,ctx.Err()
+        case <-time.After(time.Duration(retry+1)*10*time.Millisecond):
+        }
+    }
+    return s.claimDueOnce(ctx)
+}
+
+// claimDueOnce 在事务内写入 60 秒租约，并取得稳定的尝试序号。
+// 只在提交事务后将订单交给网络通知，不在事务中调用游戏服务器。
+func (s *OrderStore) claimDueOnce(ctx context.Context) (*model.Order,error) {
+    tx,err:=s.db.BeginTx(ctx,&sql.TxOptions{Isolation:sql.LevelReadCommitted})
     if err!=nil {return nil,err}
     defer tx.Rollback()
     var id int64
