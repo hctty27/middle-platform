@@ -74,3 +74,36 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 14
+
+  # 验证 Windows 本地执行同一脚本，也能生成带 Unix 755 权限的 tar.gz。
+  package-windows-amd64:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.3"
+          cache-dependency-path: config-center/go.sum
+      - name: Build from Windows PowerShell
+        shell: pwsh
+        run: .\\scripts\\package-supervisor.ps1 -Arch amd64 -Version windows-test -SkipFrontend
+      - name: Verify tar.gz on Windows
+        shell: pwsh
+        run: |
+          $archive = 'dist/middle-platform-windows-test-linux-amd64.tar.gz'
+          if (-not (Test-Path $archive)) { throw "Missing archive: $archive" }
+          $names = @(& tar -tzf $archive)
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/migrate')) {
+            if ($name -notin $names) { throw "Missing binary: $name" }
+          }
+          if (@(Get-ChildItem dist -File).Count -ne 1) { throw 'Unexpected dist files' }
+          if (@(Get-ChildItem dist -Directory).Count -ne 0) { throw 'Unexpected dist directories' }
+          $details = @(& tar -tvzf $archive)
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to inspect tar permissions' }
+          foreach ($name in @('config-center', 'config-center-access', 'sdk-core', 'migrate')) {
+            if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\\s' -and $_.Trim().EndsWith("bin/$name") })) {
+              throw "Missing executable permission in tar header: $name"
+            }
+          }
