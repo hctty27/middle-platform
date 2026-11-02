@@ -38,14 +38,9 @@ admin:
   # 对应环境变量：CONFIG_GO_ENABLE_WRITES
   writesEnabled: false
 
-# 配置变更回调（Webhook），通知接入端主动拉取最新配置
+# Webhook 投递 Worker 随配置中心启动，定时检查数据库中的已启用订阅者。
+# 启动后新增订阅者也会在下一轮被发现，无需配置 webhook.enabled 或重启。
 webhook:
-  # 是否启动回调投递服务。
-  # 必须先将 admin.writesEnabled 设为 true，才能将此项设为 true。
-  # 不启用回调不影响管理页面的配置查询与写入（写入还受上面的开关控制）。
-  # 对应环境变量：CONFIG_GO_ENABLE_WEBHOOK
-  enabled: false
-
   # 允许配置的回调目标主机白名单，避免将通知发送到任意地址。
   # 填主机名或 IP，不填写协议、端口和 URL 路径。
   # 以下只允许回调 localhost 和 127.0.0.1，适合单机联调。
