@@ -1,4 +1,5 @@
 # 将 Go 服务和 Vue 前端交叉编译、校验，并打包为 Linux 发布归档。
+# Windows 本地生成 ZIP；Linux / GitHub Actions 生成保留可执行权限的 tar.gz。
 # 用法：.\scripts\package-supervisor.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
 # 依赖：Go；启用前端构建时还需要 npm。真实凭据和生产 YAML 不打包。
 [CmdletBinding()]
@@ -35,6 +36,11 @@ function Assert-ExitCode {
 }
 
 Require-Command 'go'
+$isWindowsHost = $env:OS -eq 'Windows_NT'
+if (-not $isWindowsHost) {
+    Require-Command 'chmod'
+    Require-Command 'tar'
+}
 if (-not $SkipFrontend) {
     $npmCommand = if ($env:OS -eq 'Windows_NT') { 'npm.cmd' } else { 'npm' }
     Require-Command $npmCommand
@@ -71,7 +77,8 @@ if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') {
 $releaseName = "middle-platform-$Version-linux-$Arch"
 $stageDir = Join-Path $outputRoot $releaseName
 $binDir = Join-Path $stageDir 'bin'
-$archivePath = Join-Path $outputRoot "$releaseName.zip"
+$archiveExtension = if ($isWindowsHost) { ".zip" } else { ".tar.gz" }
+$archivePath = Join-Path $outputRoot "$releaseName$archiveExtension"
 
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 if (Test-Path -LiteralPath $stageDir) {
@@ -161,7 +168,19 @@ try {
     $hashLines | Set-Content -LiteralPath (Join-Path $stageDir 'SHA256SUMS.txt') -Encoding Ascii
 
     Write-Host "Compressing $archivePath..."
-    Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $archivePath -CompressionLevel Optimal -Force
+    if ($isWindowsHost) {
+        # Windows ZIP 不保证保留 Linux 执行位，服务器解压后仍需 chmod。
+        Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $archivePath -CompressionLevel Optimal -Force
+    } else {
+        # Linux Runner 先设置可执行权限，再写入 tar 元数据。
+        # tar.gz 下载和解压后可以直接启动 Go ELF，无需补 chmod。
+        Get-ChildItem -LiteralPath $binDir -File | ForEach-Object {
+            & chmod 0755 $_.FullName
+            Assert-ExitCode "chmod $($_.Name)"
+        }
+        & tar -czf $archivePath -C $stageDir .
+        Assert-ExitCode 'tar.gz creation'
+    }
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
         throw "Archive was not created: $archivePath"
     }
@@ -169,7 +188,11 @@ try {
     Write-Host ''
     Write-Host "Package ready: $archivePath"
     Write-Host 'Archive layout: bin/, admin/ (unless skipped), BUILD_INFO.txt, SHA256SUMS.txt'
-    Write-Host 'After extracting on Linux, run: chmod +x bin/*'
+    if ($isWindowsHost) {
+        Write-Host 'ZIP from Windows: run chmod +x bin/* after extracting on Linux.'
+    } else {
+        Write-Host 'Linux tar.gz: binaries include executable permissions (0755).'
+    }
 }
 # 无论前端或后端构建是否成功，都恢复进程原有的 Go 环境变量。
 finally {
