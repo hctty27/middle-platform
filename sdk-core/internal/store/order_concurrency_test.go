@@ -113,6 +113,8 @@ func TestConcurrentNotifyClaims(t *testing.T) {
     if err!=nil||current==nil||current.ID!=item.ID||current.NotifyAttempts!=stale.NotifyAttempts+1{
         t.Fatalf("takeover lease: %+v err=%v",current,err)
     }
+    // 新租约出现后，旧租约无论返回成功或失败均不能抢占状态。
+    if err=stores[0].CompleteNotify(ctx,item.ID,stale.NotifyAttempts,nil);err!=nil{t.Fatal(err)}
     if err=stores[0].CompleteNotify(ctx,item.ID,stale.NotifyAttempts,errors.New("stale failure"));err!=nil{t.Fatal(err)}
     var status,attempts int
     if err=first.QueryRowContext(ctx,"SELECT notify_status,notify_attempts FROM game_order WHERE id=?",item.ID).Scan(&status,&attempts);err!=nil{t.Fatal(err)}

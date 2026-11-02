@@ -9,6 +9,7 @@ import (
     "regexp"
     "time"
     "sync"
+    "log/slog"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/auth"
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
@@ -142,6 +143,7 @@ func(s *OrderService) RunWorker(ctx context.Context) {
             defer wg.Done()
             ticker:=time.NewTicker(500*time.Millisecond)
             defer ticker.Stop()
+            var lastClaimErrorLog time.Time
             for {
                 select {
                 case <-ctx.Done():return
@@ -149,8 +151,21 @@ func(s *OrderService) RunWorker(ctx context.Context) {
                     jobCtx,cancel:=context.WithTimeout(ctx,3*time.Second)
                     order,err:=s.Orders.ClaimDue(jobCtx)
                     cancel()
-                    if err!=nil||order==nil{continue}
-                    _=s.deliver(ctx,*order)
+                    if err!=nil {
+                        if ctx.Err()==nil {
+                            // 避免数据库故障时每 500ms 刷屏，同一消费者 30 秒最多记录一次。
+                            if time.Since(lastClaimErrorLog)>=30*time.Second {
+                                slog.Warn("claim game notification failed","error",err)
+                                lastClaimErrorLog=time.Now()
+                            }
+                        }
+                        continue
+                    }
+                    if order==nil{continue}
+                    if notifyErr:=s.deliver(ctx,*order);notifyErr!=nil&&ctx.Err()==nil {
+                        slog.Warn("game notification failed","order_id",order.ID,
+                            "attempt",order.NotifyAttempts,"error",notifyErr)
+                    }
                 }
             }
         }()
