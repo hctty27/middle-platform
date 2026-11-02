@@ -3,6 +3,7 @@
 **/.git
 **/.env
 **/.env.*
+**/configs/config.yaml
 **/configs/config-dev.yaml
 **/configs/config-prod.yaml
 **/configs/*.local.yaml
