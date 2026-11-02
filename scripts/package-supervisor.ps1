@@ -186,28 +186,3 @@ finally {
         Remove-Item -LiteralPath $stageDir -Recurse -Force
     }
 }
- -and
-            $_.FullName -ne $archivePath
-        } |
-        Remove-Item -Force
-
-    $legacyDir = Join-Path $outputRoot 'supervisor'
-    if (Test-Path -LiteralPath $legacyDir) {
-        Remove-Item -LiteralPath $legacyDir -Recurse -Force
-    }
-
-    Write-Host ''
-    Write-Host "Package ready: $archivePath"
-    Write-Host 'Archive layout: bin/, admin/ (unless skipped)'
-    Write-Host 'All Linux binaries carry 0755 executable permissions.'
-
-}
-# 无论前端或后端构建是否成功，都恢复进程原有的 Go 环境变量。
-finally {
-    [Environment]::SetEnvironmentVariable('GOOS', $originalGoOS, 'Process')
-    [Environment]::SetEnvironmentVariable('GOARCH', $originalGoArch, 'Process')
-    [Environment]::SetEnvironmentVariable('CGO_ENABLED', $originalCgo, 'Process')
-    if (Test-Path -LiteralPath $stageDir) {
-        Remove-Item -LiteralPath $stageDir -Recurse -Force
-    }
-}
