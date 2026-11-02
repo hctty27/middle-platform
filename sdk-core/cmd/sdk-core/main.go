@@ -41,7 +41,7 @@ func openDB(cfg settings.Database)(*sql.DB,error){
     parsed.ReadTimeout=10*time.Second
     parsed.WriteTimeout=10*time.Second
     if parsed.Params==nil{parsed.Params=make(map[string]string)}
-    parsed.Params["time_zone"]="'%2B00:00'"
+    parsed.Params["time_zone"]="'+00:00'"
     db,err:=sql.Open("mysql",parsed.FormatDSN())
     if err!=nil{return nil,err}
     db.SetMaxOpenConns(cfg.MaxOpenConns)
