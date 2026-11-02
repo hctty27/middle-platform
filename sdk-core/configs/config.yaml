@@ -20,10 +20,9 @@ orderDatabase:
 gameAuth:
   keys: {}
 
-# 真实平台 v1 的 SHA-1 密钥；签名不覆盖金额
-# 正式环境始终拒绝根据 v1 直接确认支付
+# 平台密钥从 config_channel_app.config.appSecret（渠道包 JSON 顶层）读取，跨环境共享。
+# 不在此处重复配置 payment.secrets；平台 v1 未签金额，正式环境拒绝确认支付。
 payment:
-  secrets: {}
   allowUnverifiedNonProd: false
 
 # SDK Core 向游戏发货使用独立 HMAC；域名严格准入
