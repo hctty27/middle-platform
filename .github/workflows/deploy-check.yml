@@ -40,6 +40,26 @@ jobs:
         run: |
           docker compose -f deploy/compose.prod.yml config --quiet
           bash -n deploy/deploy.sh
+      - name: Verify dual SDK Core instances and port mapping
+        run: |
+          docker compose -f deploy/compose.prod.yml config --format json > /tmp/compose.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("/tmp/compose.json").read_text())
+          services = data["services"]
+          for name, host_port in (("sdk-core-1", 8082), ("sdk-core-2", 8084)):
+              service = services[name]
+              assert any(int(port["published"]) == host_port and int(port["target"]) == 8082
+                         for port in service["ports"]), name
+              assert service["image"] == services["sdk-core-1"]["image"], name
+              assert service["volumes"] == services["sdk-core-1"]["volumes"], name
+          gateway = Path("deploy/nginx/gateway.conf.example").read_text()
+          for host in ("10.0.0.11", "10.0.0.12"):
+              for port in (8082, 8084):
+                  assert f"server {host}:{port} " in gateway
+          PY
       - name: Validate Nginx configuration
         run: |
           mkdir -p "$RUNNER_TEMP/nginx-certs"
