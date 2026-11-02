@@ -43,8 +43,15 @@ if (Get-Command 'git' -ErrorAction SilentlyContinue) {
         $gitOutput = @(& git -C $repoRoot rev-parse --verify HEAD 2>$null)
         if ($LASTEXITCODE -eq 0 -and $gitOutput.Count -gt 0) {
             $candidate = ([string]$gitOutput[0]).Trim()
-            if ($candidate -match '^[0-9a-fA-F]{40}
-
+            if ($candidate -match '^[0-9a-fA-F]{40}$') {
+                $gitCommit = $candidate
+            }
+        }
+    }
+    catch {
+        $gitCommit = 'unknown'
+    }
+}
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     if ($gitCommit -ne 'unknown') {
