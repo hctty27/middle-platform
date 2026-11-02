@@ -1,326 +1,274 @@
-// Package migration 在 Go 进程中执行配置中心的增量数据库迁移。
+// Package migration 管理 V11 基线初始化和后续增量升级。
 package migration
 
 import (
- "context"
- "crypto/sha256"
- "database/sql"
- "embed"
- "errors"
- "fmt"
- "log/slog"
- "strings"
- "time"
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"embed"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
 
- "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 )
 
 //go:embed sql/*.sql
 var scripts embed.FS
 
-// Latest 是当前内置的最新数据库结构版本，新增迁移时需同步更新文件列表。
-const Latest = 11
+// BaselineVersion 是当前全量初始化脚本所对应的数据库版本。
+const BaselineVersion = 11
 
-var files = [...]string{
- "",
- "sql/V1__config_schema.sql",
- "sql/V2__ancestor_ids.sql",
- "sql/V3__subscriber_epoch_cursor.sql",
- "sql/V4__channel_app_hierarchy.sql",
- "sql/V5__region_env_type.sql",
- "sql/V6__shared_channel_apps.sql",
- "sql/V7__trim_node_group_id.sql",
- "sql/V8__node_only_sync.sql",
- "sql/V9__rename_sync_tables.sql",
- "sql/V10__rename_region_env_prod.sql",
- "sql/V11__channel_app_env_groups.sql",
-}
+// Latest 为代码支持的最新数据库版本；后续新增 V12 时同步维护。
+const Latest = BaselineVersion
 
-// Options 控制迁移终点和旧版数据库升级。生产默认不自动执行破坏性旧库升级。
+// upgrades 只存放基线之后的增量 SQL，历史 V1～V11 不再逐步回放。
+var upgrades = map[int]string{}
+
+// Options 控制独立迁移命令的目标版本。
 type Options struct {
- Target int
- AllowLegacyUpgrade bool
- // RepairV6GTID 只清理 V6 归档建表前失败留下的空表和 dirty 状态。
- RepairV6GTID bool
+	Target int
 }
 
-// Run 使用 MySQL 命名锁协调多实例，执行完后立即关闭独立迁移连接。
+// Run 对空库执行 V11 基线，对已初始化数据库执行后续增量迁移。
 func Run(ctx context.Context, dsn string, opts Options) error {
- if opts.Target == 0 { opts.Target = Latest }
- if opts.Target < 1 || opts.Target > Latest { return fmt.Errorf("invalid schema target %d", opts.Target) }
- cfg, err := mysql.ParseDSN(dsn)
- if err != nil { return err }
- if cfg.DBName == "" { return errors.New("database name is required for migration") }
- cfg.MultiStatements = true
- cfg.ParseTime = true
- cfg.Loc = time.UTC
- cfg.Timeout = 5*time.Second
- cfg.ReadTimeout = 90*time.Second
- cfg.WriteTimeout = 90*time.Second
- db, err := sql.Open("mysql", cfg.FormatDSN())
- if err != nil { return err }
- defer db.Close()
- conn, err := db.Conn(ctx)
- if err != nil { return err }
- defer conn.Close()
-
- // 锁名采用数据库名摘要，避免超过 MySQL 64 字节的限制。
- name := fmt.Sprintf("config-schema-%x", sha256.Sum256([]byte(cfg.DBName)))
- name = name[:48]
- var got sql.NullInt64
- if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, 30)", name).Scan(&got); err != nil { return err }
- if !got.Valid || got.Int64 != 1 { return errors.New("failed to acquire schema migration lock") }
- defer func() {
-  release, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-  defer cancel()
-  if _, err := conn.ExecContext(release, "SELECT RELEASE_LOCK(?)", name); err != nil {
-   slog.Warn("schema migration lock release failed", "error", err)
-  }
- }()
- if opts.RepairV6GTID {
-  if err := repairV6GTID(ctx,conn); err != nil { return fmt.Errorf("refuse V6 GTID repair: %w",err) }
- }
- return migrate(ctx, conn, opts)
+	target := opts.Target
+	if target == 0 {
+		target = Latest
+	}
+	if target < BaselineVersion || target > Latest {
+		return fmt.Errorf("unsupported schema target %d (supported %d..%d)", target, BaselineVersion, Latest)
+	}
+	return withConnection(ctx, dsn, true, func(conn *sql.Conn) error {
+		if err := lock(ctx, conn); err != nil {
+			return err
+		}
+		return migrate(ctx, conn, target)
+	})
 }
 
-// exists 检查指定表是否存在，用于判定全新安装、Go 历史或旧版 Flyway 历史。
-func exists(ctx context.Context, conn *sql.Conn, table string) (bool, error) {
- var count int
- err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&count)
- return count != 0, err
+// Validate 在业务服务启动时只校验数据库，不执行任何 DDL。
+func Validate(ctx context.Context, dsn string) error {
+	return withConnection(ctx, dsn, false, func(conn *sql.Conn) error {
+		version, dirty, err := readVersion(ctx, conn)
+		if err != nil {
+			return err
+		}
+		if dirty || version != Latest {
+			return fmt.Errorf("database schema version=%d dirty=%t; expected version=%d dirty=false; run cmd/migrate first", version, dirty, Latest)
+		}
+		return validateSchema(ctx, conn)
+	})
 }
 
-// repairV6GTID 修复旧版 V6 因 CREATE TABLE ... SELECT (1786) 中断时留下的脏状态。
-// 只接受明确的 V5/dirty 状态、尚未进入归档阶段、且新增表完全为空的场景。
-// 此操作会删除迁移产生的两张空表，必须由管理员显式指定开关并提前备份数据库。
-func repairV6GTID(ctx context.Context, conn *sql.Conn) error {
- hasState,err:=exists(ctx,conn,"config_schema_migrations")
- if err!=nil { return err }
- if !hasState { return errors.New("migration state table missing") }
- var version int
- var dirty bool
- if err=conn.QueryRowContext(ctx,"SELECT version,dirty FROM config_schema_migrations WHERE id=1").Scan(&version,&dirty);err!=nil {return err}
- if version!=5 || !dirty { return fmt.Errorf("expected schema version=5 dirty=1; got version=%d dirty=%t",version,dirty) }
-
- // 若归档表已存在，则可能已经执行数据复制；不可自动清理。
- hasArchive,err:=exists(ctx,conn,"config_node_v6_channel_app_archive")
- if err!=nil { return err }
- if hasArchive { return errors.New("V6 archive exists; inspect partial migration manually") }
- 
- // 校验原节点表仍是支持 channel_app 的 V5 结构，防止误清除更晚阶段的 dirty。
- var nodeTable,ddl string
- if err=conn.QueryRowContext(ctx,"SHOW CREATE TABLE config_node").Scan(&nodeTable,&ddl); err!=nil { return err }
- if !strings.Contains(ddl,"channel_app") { return errors.New("config_node no longer has V5 channel_app constraint") }
- rows,err:=conn.QueryContext(ctx,"SELECT env_type FROM config_node LIMIT 0")
- if err!=nil { return fmt.Errorf("config_node not V5: %w",err) }
- if err=rows.Close();err!=nil { return err }
- 
- // 只有旧版脚本创建的前两张表允许删除，而且它们必须没有任何业务数据。
- tables:=[]string{"config_channel_app_binding","config_channel_app"}
- anyFound:=false
- for _,table:=range tables {
-  present,err:=exists(ctx,conn,table)
-  if err!=nil { return err }
-  if !present {continue}
-  anyFound=true
-  var count int64
-  if err=conn.QueryRowContext(ctx,"SELECT COUNT(*) FROM "+table).Scan(&count); err!=nil {return err}
-  if count!=0 { return fmt.Errorf("%s contains %d rows; manual recovery required",table,count) }
- }
- if !anyFound { return errors.New("no V6 partial tables found; manual recovery required") }
- for _,table:=range tables {
-  present,err:=exists(ctx,conn,table)
-  if err!=nil {return err}
-  if !present {continue}
-  if _,err=conn.ExecContext(ctx,"DROP TABLE "+table);err!=nil {return err}
- }
- result,err:=conn.ExecContext(ctx,`UPDATE config_schema_migrations
-  SET dirty=0,updated_at=UTC_TIMESTAMP(6)
-  WHERE id=1 AND version=5 AND dirty=1`)
- if err!=nil {return err}
- affected,err:=result.RowsAffected()
- if err!=nil {return err}
- if affected!=1 {return errors.New("migration state changed during V6 repair") }
- slog.Info("repaired interrupted V6 GTID migration; resuming upgrade")
- return nil
+func withConnection(ctx context.Context, dsn string, multiStatements bool, fn func(*sql.Conn) error) error {
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return err
+	}
+	if cfg.DBName == "" {
+		return errors.New("database name is required")
+	}
+	cfg.MultiStatements = multiStatements
+	cfg.ParseTime = true
+	cfg.Loc = time.UTC
+	cfg.Timeout = 5 * time.Second
+	cfg.ReadTimeout = 90 * time.Second
+	cfg.WriteTimeout = 90 * time.Second
+	db, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return fn(conn)
 }
 
-// migrate 按历史版本递进升级；无法确认的旧库拒绝自动改写。
-func migrate(ctx context.Context, conn *sql.Conn, opts Options) error {
- hasState, err := exists(ctx, conn, "config_schema_migrations")
- if err != nil { return err }
- version := 0
- if hasState {
-  var dirty bool
-  err = conn.QueryRowContext(ctx, "SELECT version,dirty FROM config_schema_migrations WHERE id=1").Scan(&version, &dirty)
-  if err != nil { return fmt.Errorf("read Go schema state: %w", err) }
-  if dirty { return errors.New("database schema is marked dirty; inspect and recover the partial MySQL DDL before retrying") }
- } else {
-  legacy, err := exists(ctx, conn, "flyway_schema_history")
-  if err != nil { return err }
-  if legacy {
-   var failures int
-   if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM flyway_schema_history WHERE success=0").Scan(&failures); err != nil { return err }
-   if failures != 0 { return errors.New("legacy migration history contains failed entries; recover before switching to Go") }
-   var last sql.NullInt64
-   if err := conn.QueryRowContext(ctx, "SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1").Scan(&last); err != nil { return err }
-   if !last.Valid || last.Int64 < 1 || last.Int64 > Latest { return fmt.Errorf("unsupported legacy schema version: %v", last) }
-   version = int(last.Int64)
-   if version < 4 && !opts.AllowLegacyUpgrade {
-    return fmt.Errorf("legacy schema V%d needs V4-V6; back up, stop old writers and run migration with -allow-legacy-upgrade", version)
-   }
-  } else {
-   hasNode, err := exists(ctx, conn, "config_node")
-   if err != nil { return err }
-   if hasNode { return errors.New("existing config_node has no known schema history; refuse automatic migration") }
-  }
-  if _, err := conn.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS config_schema_migrations (
-   id TINYINT NOT NULL PRIMARY KEY,
-   version INT NOT NULL,
-   dirty BOOLEAN NOT NULL,
-   updated_at DATETIME(6) NOT NULL
-  ) ENGINE=InnoDB`); err != nil { return err }
-  if _, err := conn.ExecContext(ctx, "INSERT INTO config_schema_migrations(id,version,dirty,updated_at) VALUES(1,?,?,UTC_TIMESTAMP(6))", version, false); err != nil { return err }
- }
- if version > opts.Target { return fmt.Errorf("schema version %d exceeds requested target %d", version, opts.Target) }
- if version == opts.Target { return validate(ctx, conn, version) }
- for next := version+1; next <= opts.Target; next++ {
-  if next == 11 {
-            if err := preflightV11(ctx,conn);err!=nil { return fmt.Errorf("V11 preflight failed (schema unchanged): %w",err) }
-        }
-  body, err := scripts.ReadFile(files[next])
-  if err != nil { return err }
-  // MySQL DDL 会隐式提交，失败时保留 dirty 标志，阻止再次自动执行半成品脚本。
-  if _, err := conn.ExecContext(ctx, "UPDATE config_schema_migrations SET dirty=1,updated_at=UTC_TIMESTAMP(6) WHERE id=1"); err != nil { return err }
-  slog.Info("applying config schema migration", "version", next)
-  if _, err := conn.ExecContext(ctx, string(body)); err != nil {
-   return fmt.Errorf("apply config schema V%d failed (dirty): %w", next, err)
-  }
-  if _, err := conn.ExecContext(ctx, "UPDATE config_schema_migrations SET version=?,dirty=0,updated_at=UTC_TIMESTAMP(6) WHERE id=1", next); err != nil {
-   return fmt.Errorf("mark config schema V%d completed: %w", next, err)
-  }
- }
- return validate(ctx, conn, opts.Target)
+func lock(ctx context.Context, conn *sql.Conn) error {
+	var database string
+	if err := conn.QueryRowContext(ctx, "SELECT DATABASE()").Scan(&database); err != nil {
+		return err
+	}
+	sum := sha256.Sum256([]byte(database))
+	name := fmt.Sprintf("config-schema-%x", sum)
+	name = name[:48]
+	var acquired sql.NullInt64
+	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, 30)", name).Scan(&acquired); err != nil {
+		return err
+	}
+	if !acquired.Valid || acquired.Int64 != 1 {
+		return errors.New("failed to acquire schema migration lock")
+	}
+	// 锁属于当前连接；迁移完成前不会释放连接。
+	// 此处通过连接生命周期释放锁，避免在错误路径中误用已取消的 ctx。
+	return nil
 }
 
-// validate 用真实表结构检查替代仅相信迁移历史记录，防止部分 DDL 遗漏。
-func validate(ctx context.Context, conn *sql.Conn, version int) error {
- if version < 6 { return nil } // V1–V5 仅迁移测试用的阶段性旧版本
- var rev int64
- if err := conn.QueryRowContext(ctx, "SELECT revision FROM config_revision WHERE id=1").Scan(&rev); err != nil {
-  return fmt.Errorf("invalid schema revision singleton: %w", err)
- }
- // 对从旧版历史导入的数据库进行真实结构验证，避免仅凭历史记录跳过缺失 DDL。
- nodeColumns := "SELECT game_id,region_id,env_type FROM config_node LIMIT 0"
- if version == 6 {
-  nodeColumns = "SELECT game_id,region_id,server_group_id,env_type FROM config_node LIMIT 0"
- }
- // V9 只重命名两张同步表；V1-V8 的历史迁移和校验仍使用旧表名。
- deliveryTable, changeLogTable := "config_delivery_state", "config_change_log"
- if version >= 9 {
-  deliveryTable, changeLogTable = "config_subscriber_delivery_state", "config_node_change_log"
- }
- statements := []string{
-  nodeColumns,
-  "SELECT acknowledged_epoch FROM " + deliveryTable + " LIMIT 0",
-  "SELECT revision,node_id,operation FROM " + changeLogTable + " LIMIT 0",
-  "SELECT id,game_id,code,config FROM config_channel_app LIMIT 0",
- }
- if version >= 11 {
-        statements = append(statements,"SELECT prod_server_group_id,test_server_group_id,review_server_group_id FROM config_channel_app LIMIT 0")
-        present,err:=exists(ctx,conn,"config_channel_app_binding")
-        if err!=nil { return err }
-        if present { return errors.New("V11 validation failed: legacy binding table still exists") }
-        var indexCount int
-        err=conn.QueryRowContext(ctx,`SELECT COUNT(*) FROM information_schema.statistics
-            WHERE table_schema=DATABASE() AND table_name='config_channel_app'
-            AND index_name='uq_channel_app_code' AND column_name='code'
-            AND seq_in_index=1 AND non_unique=0`).Scan(&indexCount)
-        if err!=nil { return fmt.Errorf("V11 global channel code index validation: %w",err) }
-        if indexCount!=1 { return errors.New("V11 validation failed: unique code index missing") }
-    } else {
-        statements = append(statements,"SELECT id,channel_app_id,server_group_id,config FROM config_channel_app_binding LIMIT 0")
-    }
- // 历史归档在 V6-V8 必须存在；V9 后仅用于审计，不再作为服务启动条件。
- if version < 9 {
-  statements = append(statements, "SELECT id FROM config_node_v6_channel_app_archive LIMIT 0")
- }
- for _, statement := range statements {
-  rows, err := conn.QueryContext(ctx, statement)
-  if err != nil { return fmt.Errorf("schema V%d validation failed: %w", version, err) }
-  if err := rows.Close(); err != nil { return err }
- }
- if version >= 9 {
-  for _, oldTable := range []string{"config_delivery_state", "config_change_log"} {
-   present, err := exists(ctx, conn, oldTable)
-   if err != nil { return fmt.Errorf("inspect V9 legacy table %s: %w", oldTable, err) }
-   if present { return fmt.Errorf("schema V9 validation failed: legacy table %s still exists", oldTable) }
-  }
- }
- if version >= 7 {
-  var obsoleteColumns int
-  if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
-      WHERE table_schema=DATABASE() AND table_name='config_node' AND column_name='server_group_id'`).Scan(&obsoleteColumns); err != nil {
-   return fmt.Errorf("inspect V7 config_node columns: %w", err)
-  }
-  if obsoleteColumns != 0 { return errors.New("schema V7 validation failed: config_node.server_group_id still exists") }
- }
- // V10 必须完成历史值转换，且数据库约束只允许 prod。
- if version >= 10 {
-  var obsolete int
-  if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_node WHERE env_type='production'").Scan(&obsolete); err != nil {
-   return fmt.Errorf("inspect V10 region env values: %w", err)
-  }
-  if obsolete != 0 { return fmt.Errorf("schema V10 validation failed: %d legacy production regions remain", obsolete) }
-  var clause string
-  if err := conn.QueryRowContext(ctx, "SELECT check_clause FROM information_schema.check_constraints WHERE constraint_schema=DATABASE() AND constraint_name='chk_config_node_env_type'").Scan(&clause); err != nil {
-   return fmt.Errorf("inspect V10 region env constraint: %w", err)
-  }
-  if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
-   return errors.New("schema V10 validation failed: region environment constraint is outdated")
-  }
- }
- // V4 归档表仅用于历史审计，非当前权威配置所需。
- // 旧 Flyway 基线或人工历史升级可能没有此表，不能因此否定已经完成的 V6。
- // 缺失时明确告警，但绝不自动创建空归档表伪造历史；V6 的权威表仍严格校验。
- if version < 9 {
- hasV4Archive, err := exists(ctx, conn, "config_node_v4_legacy_archive")
- if err != nil { return fmt.Errorf("inspect optional V4 archive: %w", err) }
- if !hasV4Archive {
-  slog.Warn("optional V4 legacy archive is missing; historical channel records cannot be verified")
- }
- }
- return nil
+func hasTable(ctx context.Context, conn *sql.Conn, table string) (bool, error) {
+	var count int
+	err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&count)
+	return count > 0, err
 }
 
-// preflightV11 在任何 DDL 发生前校验旧绑定能否无损收敛为三个环境和一个公共 JSON。
-// 发现跨游戏重复 code、重复环境、跨游戏引用、独立启停或不同最终配置时拒绝升级，不进入 dirty 状态。
-func preflightV11(ctx context.Context,conn *sql.Conn) error {
-    checks:=[]struct{name,query string}{
-        {"duplicate global channel code",`SELECT MIN(id) FROM config_channel_app GROUP BY code HAVING COUNT(*)>1 LIMIT 1`},
-        {"invalid binding",`SELECT b.id FROM config_channel_app_binding b
-            JOIN config_channel_app a ON a.id=b.channel_app_id
-            LEFT JOIN config_node sg ON sg.id=b.server_group_id AND sg.node_type='server_group'
-            LEFT JOIN config_node r ON r.id=sg.region_id AND r.node_type='region'
-            WHERE sg.id IS NULL OR r.id IS NULL OR sg.game_id<>a.game_id OR r.game_id<>a.game_id
-               OR r.env_type NOT IN ('prod','test','review') OR r.env_type IS NULL
-               OR b.status<>a.status OR JSON_TYPE(b.config)<>'OBJECT' OR JSON_TYPE(a.config)<>'OBJECT' LIMIT 1`},
-        {"duplicate environment",`SELECT b.channel_app_id FROM config_channel_app_binding b
-            JOIN config_node sg ON sg.id=b.server_group_id
-            JOIN config_node r ON r.id=sg.region_id
-            GROUP BY b.channel_app_id,r.env_type HAVING COUNT(*)>1 LIMIT 1`},
-        {"different effective config",`SELECT b1.channel_app_id FROM config_channel_app_binding b1
-            JOIN config_channel_app a ON a.id=b1.channel_app_id
-            JOIN config_channel_app_binding b2 ON b2.channel_app_id=b1.channel_app_id AND b2.id>b1.id
-            WHERE JSON_MERGE_PATCH(a.config,b1.config)<>JSON_MERGE_PATCH(a.config,b2.config)
-            LIMIT 1`},
-    }
-    for _,check:=range checks {
-        var id int64
-        err:=conn.QueryRowContext(ctx,check.query).Scan(&id)
-        if err==sql.ErrNoRows { continue }
-        if err!=nil { return err }
-        return fmt.Errorf("%s at id=%d; reconcile old bindings before migration",check.name,id)
-    }
-    return nil
+func readVersion(ctx context.Context, conn *sql.Conn) (int, bool, error) {
+	exists, err := hasTable(ctx, conn, "config_schema_migrations")
+	if err != nil {
+		return 0, false, err
+	}
+	if !exists {
+		return 0, false, errors.New("database migration state missing; initialize an empty database with cmd/migrate")
+	}
+	var version int
+	var dirty bool
+	if err := conn.QueryRowContext(ctx, "SELECT version,dirty FROM config_schema_migrations WHERE id=1").Scan(&version, &dirty); err != nil {
+		return 0, false, fmt.Errorf("read migration state: %w", err)
+	}
+	return version, dirty, nil
+}
+
+func migrate(ctx context.Context, conn *sql.Conn, target int) error {
+	hasState, err := hasTable(ctx, conn, "config_schema_migrations")
+	if err != nil {
+		return err
+	}
+	if !hasState {
+		var tables int
+		if err := conn.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()").Scan(&tables); err != nil {
+			return err
+		}
+		if tables != 0 {
+			return errors.New("refuse to baseline a non-empty database without migration history; recover its historical migrations first")
+		}
+		if _, err := conn.ExecContext(ctx, `CREATE TABLE config_schema_migrations (
+			id TINYINT NOT NULL PRIMARY KEY,
+			version INT NOT NULL,
+			dirty BOOLEAN NOT NULL,
+			updated_at DATETIME(6) NOT NULL
+		) ENGINE=InnoDB COMMENT='配置中心数据库迁移版本记录'`); err != nil {
+			return err
+		}
+		if _, err := conn.ExecContext(ctx,
+			"INSERT INTO config_schema_migrations(id,version,dirty,updated_at) VALUES(1,0,0,UTC_TIMESTAMP(6))"); err != nil {
+			return err
+		}
+	}
+	version, dirty, err := readVersion(ctx, conn)
+	if err != nil {
+		return err
+	}
+	if dirty {
+		return fmt.Errorf("schema version=%d is dirty; inspect partial MySQL DDL and restore from backup", version)
+	}
+	if version > target {
+		return fmt.Errorf("database version=%d exceeds requested target=%d", version, target)
+	}
+	if version > 0 && version < BaselineVersion {
+		return fmt.Errorf("schema V%d is older than V%d baseline; use pre-baseline code to upgrade to V%d before deploying", version, BaselineVersion, BaselineVersion)
+	}
+	if version == 0 {
+		body, err := scripts.ReadFile("sql/schema.sql")
+		if err != nil {
+			return err
+		}
+		if err := apply(ctx, conn, BaselineVersion, string(body)); err != nil {
+			return err
+		}
+		version = BaselineVersion
+	}
+	for next := version + 1; next <= target; next++ {
+		path, ok := upgrades[next]
+		if !ok {
+			return fmt.Errorf("missing migration file for V%d", next)
+		}
+		body, err := scripts.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := apply(ctx, conn, next, string(body)); err != nil {
+			return err
+		}
+	}
+	return validateSchema(ctx, conn)
+}
+
+func apply(ctx context.Context, conn *sql.Conn, version int, sqlBody string) error {
+	if _, err := conn.ExecContext(ctx,
+		"UPDATE config_schema_migrations SET dirty=1,updated_at=UTC_TIMESTAMP(6) WHERE id=1"); err != nil {
+		return err
+	}
+	slog.Info("applying database schema", "version", version)
+	if _, err := conn.ExecContext(ctx, sqlBody); err != nil {
+		return fmt.Errorf("apply schema V%d failed (dirty): %w", version, err)
+	}
+	if _, err := conn.ExecContext(ctx,
+		"UPDATE config_schema_migrations SET version=?,dirty=0,updated_at=UTC_TIMESTAMP(6) WHERE id=1", version); err != nil {
+		return fmt.Errorf("mark schema V%d completed: %w", version, err)
+	}
+	return nil
+}
+
+func validateSchema(ctx context.Context, conn *sql.Conn) error {
+	// 运行态表和关键字段必须真实存在，不能只相信迁移记录。
+	statements := []string{
+		"SELECT revision,epoch FROM config_revision WHERE id=1",
+		"SELECT id,game_id,region_id,env_type,node_type FROM config_node LIMIT 0",
+		"SELECT revision,node_id,operation FROM config_node_change_log LIMIT 0",
+		"SELECT id,code,webhook_secret FROM config_subscriber LIMIT 0",
+		"SELECT acknowledged_revision,acknowledged_epoch FROM config_subscriber_delivery_state LIMIT 0",
+		"SELECT id,game_id,code,prod_server_group_id,test_server_group_id,review_server_group_id FROM config_channel_app LIMIT 0",
+	}
+	for _, statement := range statements {
+		rows, err := conn.QueryContext(ctx, statement)
+		if err != nil {
+			return fmt.Errorf("database schema validation failed: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+	}
+	for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state"} {
+		exists, err := hasTable(ctx, conn, obsolete)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return fmt.Errorf("obsolete table %s still exists", obsolete)
+		}
+	}
+	var indexCount int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
+		WHERE table_schema=DATABASE() AND table_name='config_channel_app'
+		AND index_name='uq_channel_app_code' AND column_name='code'
+		AND seq_in_index=1 AND non_unique=0`).Scan(&indexCount); err != nil {
+		return err
+	}
+	if indexCount != 1 {
+		return errors.New("config_channel_app global code unique index missing")
+	}
+	for _, constraint := range []string{"chk_config_node_env_type", "fk_app_prod_group", "fk_app_test_group", "fk_app_review_group"} {
+		var count int
+		if err := conn.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM information_schema.table_constraints WHERE constraint_schema=DATABASE() AND constraint_name=?", constraint).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			return fmt.Errorf("missing schema constraint %s", constraint)
+		}
+	}
+	var clause string
+	if err := conn.QueryRowContext(ctx, `SELECT check_clause FROM information_schema.check_constraints
+		WHERE constraint_schema=DATABASE() AND constraint_name='chk_config_node_env_type'`).Scan(&clause); err != nil {
+		return err
+	}
+	if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
+		return errors.New("region environment CHECK constraint is obsolete")
+	}
+	return nil
 }

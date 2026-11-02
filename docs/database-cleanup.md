@@ -1,22 +1,20 @@
-# 配置中心数据库整理（V11，保留 V9 历史说明）
+# 数据库 V11 基线与历史归档清理
 
-## 正式表（7 张）
+## 权威库正式表
 
-| 分类 | 表名 | 用途 |
-|---|---|---|
-| 业务 | `config_node` | 游戏、大区、区服组 |
-| 业务 | `config_channel_app` | 游戏级渠道应用及三环境绑定 ID、共享 JSON |
-| 同步 | `config_revision` | epoch 和 revision |
-| 同步 | `config_node_change_log` | 三级节点增量日志 |
-| Webhook | `config_subscriber` | 接入方及回调配置 |
-| Webhook | `config_subscriber_delivery_state` | ACK、租约与失败重试 |
-| 元数据 | `config_schema_migrations` | 数据库结构版本 |
+| 表 | 用途 |
+|---|---|
+| config_node | 游戏、大区、区服组 |
+| config_channel_app | 渠道应用和三环境绑定 |
+| config_revision | 全局 epoch、revision |
+| config_node_change_log | 节点增量日志 |
+| config_subscriber | 订阅方和回调信息 |
+| config_subscriber_delivery_state | 投递游标、租约与重试 |
+| config_schema_migrations | 当前数据库结构版本 |
 
-V9 只调整两张表名并增加中文表注释，沿用原有数据、索引、外键和业务字段。
-数据库升级前请备份并停止所有旧版 `config-center` 实例；升级成功后只能使用 V9 对应的服务版本。
-`config-center-access` 的本地数据库不需要变更，它只维护三级节点副本与同步游标。
+新增的空库直接执行 `cmd/migrate` 初始化 `internal/migration/sql/schema.sql`（V11 基线）；不需要回放历史 V1～V11 SQL。迁移脚本通过 `go:embed` 内置于发布二进制中。
 
-## 升级检查
+现有 V11 数据库不会重复初始化，`config_schema_migrations` 表必须保留。低于 V11 或没有历史表的非空数据库不能直接使用新的迁移程序，须先备份并使用基线重构前的 Git 历史代码升级到 V11。
 
 ```sql
 SELECT DATABASE();
@@ -27,40 +25,16 @@ WHERE table_schema = DATABASE()
 ORDER BY table_name;
 ```
 
-新部署正常应为 `version=11` 且 `dirty=0`；V9 的两个同步表更名须保留，V11 的旧绑定表须不存在。
-旧表名只留在 V1–V8 的不可变历史迁移文件、升级兼容校验和历史回归测试中。
+预期 version=11、dirty=0，并且没有 `config_channel_app_binding` 等旧版运行态表。
 
-## V4/V6 归档清理（必须人工执行）
+## 历史归档表
 
-`config_node_v4_legacy_archive` 和 `config_node_v6_channel_app_archive` 是不可从现有业务表完整重建的历史数据。
-V9 不自动删除这些表；如需让数据库界面只保留正式业务表，请先完整备份、验证可恢复，再手动清理。
+已完成 V11 升级的历史库可能仍有 `config_node_v4_legacy_archive`、`config_node_v6_channel_app_archive`；它们不属于新库基线，但保留的数据可能无法从当前业务库恢复。
 
-1. 核对实际连接的是权威配置中心库，不是 `config_access` 接入副本库；确认 V9 迁移完成。
-2. 记录归档表行数，并将存在的归档表分别导出到库外持久存储。以下示例适用于 PowerShell 或 CMD，使用 MySQL 客户端的 `--result-file` 避免重定向编码问题。
-3. 将导出文件恢复到临时库核验数据行数，长期保存备份。
-4. 确认不再需要历史审计后才执行下面的手动删除语句。
+绝不能由迁移器自动删除。若明确不需要历史审计，应先单独备份、验证恢复和行数，再人工删除归档表。缺少归档表不影响 V11 运行态校验。
 
 ```powershell
 mysqldump --host=127.0.0.1 --port=3306 --user=root --password --single-transaction --set-gtid-purged=OFF --default-character-set=utf8mb4 --result-file=config-node-v6-archive.sql config_center config_node_v6_channel_app_archive
 ```
 
-```sql
-SELECT COUNT(*) FROM config_node_v6_channel_app_archive;
--- V4 归档存在时也要单独导出、验证后再考虑删除。
--- 只在备份恢复验证通过后手工执行：
-DROP TABLE config_node_v6_channel_app_archive;
--- DROP TABLE config_node_v4_legacy_archive;
-```
-
-没有对应归档表时不需要创建空表。不得修改 `config_schema_migrations.version` 或 `dirty` 来绕过校验。
-如果 V9 的 DDL 部分成功后中断，必须先人工核对真实表结构与迁移状态，**不要直接重复执行 RENAME TABLE 或重置 dirty**。
-
-## V11 后的业务表核对
-
-```sql
-SELECT version, dirty FROM config_schema_migrations WHERE id=1;
-SHOW COLUMNS FROM config_channel_app LIKE '%server_group_id';
-SHOW TABLES LIKE 'config_channel_app_binding';
-```
-
-预期迁移版本为 `11`、`dirty=0`，三个区服组字段存在，旧绑定表查询无结果。历史迁移及审计说明不可作为现行绑定接口使用说明。
+数据库 `schema.sql` 只用于空库初始化，不包含业务数据。接入副本使用自己独立的 `internal/store/sql/schema.sql`，不能混用。MySQL DDL 非完整事务；dirty=1 时必须人工恢复，不能通过修改版本字段或删除迁移记录来“修复”。

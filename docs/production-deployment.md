@@ -76,13 +76,13 @@ sudo systemctl status config-center
 
 ## 4. MySQL 迁移
 
-创建 `config_center` 数据库，分配配置中心所需的最小权限账号；`sdk-core` 使用只读账号。旧库操作前先**备份、停写、确认迁移方案**。可先运行发布包的独立 `bin/migrate` 校验和迁移，再启动服务：
+创建 `config_center` 数据库，分配配置中心所需的最小权限账号；`sdk-core` 使用只读账号。旧库操作前先**备份、停写、确认迁移方案**。必须先运行发布包的独立 `bin/migrate` 初始化或校验，再启动服务：
 
 ```bash
 /opt/middle-platform/releases/v1.0.0/bin/migrate -config /etc/middle-platform/config-center.yaml
 ```
 
-MySQL DDL 非事务性；失败后不得盲目清理迁移记录或直接重试。历史迁移见 [配置中心文档](../config-center/README.md)。
+已有 V1～V10 权威库需先通过旧版迁移工具升至 V11；新程序不支持跨基线升级。MySQL DDL 非事务性，失败后不得盲目清理迁移记录或直接重试。详见 [配置中心文档](../config-center/README.md)。
 
 ## 5. Nginx 静态管理页与网关
 

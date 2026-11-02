@@ -6,7 +6,7 @@
 
 | 目录 | 技术栈 | 用途 |
 | --- | --- | --- |
-| `config-center` | Go | 权威配置中心、四级配置树、版本日志、Webhooks、数据库迁移 |
+| `config-center` | Go | 权威配置中心、三级配置树、版本日志、Webhooks、数据库迁移 |
 | `config-center-access` | Go | 独立接入示例、本地 MySQL 副本、增量同步与 HMAC 回调 |
 | `sdk-core` | Go | SDK 登录充值核心服务（首期提供按环境、AppID 查询绑定区服组和公共配置） |
 | `config-center-admin` | Vue 3 | 配置管理界面 |
@@ -32,7 +32,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 
 ## 启动 Go 配置中心
 
-新环境只需要 Go 1.27.3 和 MySQL 8.0+。先创建 `config_center` 数据库；程序启动时会自动执行内置 V1–V5 迁移。
+新环境需要 Go 1.27.3 和 MySQL 8.0+。先创建空的 `config_center` 数据库，**执行独立迁移命令初始化 V11 基线，然后再启动配置中心服务**。
 
 ```bash
 cd config-center
@@ -43,7 +43,7 @@ export CONFIG_GO_ENABLE_WEBHOOK=true
 go run ./cmd/config-center
 ```
 
-也可以先独立执行数据库迁移：`go run ./cmd/migrate`。历史旧库如果尚未升级到 V4，必须先备份、停写并显式执行 `go run ./cmd/migrate -allow-legacy-upgrade`。
+首次启动必须先执行 `go run ./cmd/migrate -config configs/config-dev.yaml`。已有低于 V11 的历史数据库，应先使用旧版本迁移工具升至 V11；新迁移器拒绝直接处理旧库。
 
 ## 启动接入工程
 

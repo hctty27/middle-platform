@@ -25,7 +25,7 @@ database:
   # Go MySQL DSN，非 Java JDBC URL。
   # 格式示例：root:你的密码@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC
   # 空字符串仅用于模板；启动前必须在环境配置中填写，或设置 CONFIG_DB_DSN。
-  # 首次使用空库时，服务会自动执行数据库迁移至当前版本（V11）。
+  # 首次使用空库时，请先独立运行 cmd/migrate 初始化 V11 数据库。
   # 对应环境变量：CONFIG_DB_DSN
   dsn: ""
 
@@ -55,15 +55,6 @@ webhook:
   allowedHosts:
     - localhost
     - 127.0.0.1
-
-# 数据库版本迁移安全开关
-migration:
-  # 是否允许执行旧版 V1–V3 数据库到新版结构的迁移。
-  # 该操作可能改变历史数据结构，必须先停止写入、备份并核对。
-  # 旧版 V4 升级 V5 不需要开启这个开关。
-  # 常规本地启动和生产运行都应保持 false。
-  # 对应环境变量：CONFIG_ALLOW_LEGACY_UPGRADE
-  allowLegacyUpgrade: false
 
 # 统一日志配置：输出到 stdout/stderr，由 systemd（journald）或 Supervisor 负责采集和轮转。
 log:
