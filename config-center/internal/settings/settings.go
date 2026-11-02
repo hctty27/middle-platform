@@ -45,7 +45,7 @@ func LoadFile(path string) (Settings,error) {
   }
   if err:=readYAML(path,&data);err!=nil { return Settings{},err }
  }
- cfg:=Settings{Address:":8081",DSN:data.Database.DSN,AllowedHosts:strings.Join(data.Webhook.AllowedHosts,","),Log:data.Log}
+ cfg:=Settings{Address:"127.0.0.1:8080",DSN:data.Database.DSN,AllowedHosts:strings.Join(data.Webhook.AllowedHosts,","),Log:data.Log}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
  // 环境变量优先级最高；管理接口的安全边界由受保护的网关负责。
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
