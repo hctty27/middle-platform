@@ -17,11 +17,7 @@ func TestVerifyGameSignature(t *testing.T){
     r:=httptest.NewRequest("POST","https://sdk.example.com/api/core/test/app1/orders",nil)
     ts:=fmt.Sprint(time.Now().Unix())
     digest:=sha256.Sum256(raw)
-    canonical:=fmt.Sprintf("k1
-POST
-/api/core/test/app1/orders
-%s
-%x",ts,digest)
+    canonical:=fmt.Sprintf("k1\nPOST\n/api/core/test/app1/orders\n%s\n%x",ts,digest)
     mac:=hmac.New(sha256.New,[]byte(secret));mac.Write([]byte(canonical))
     r.Header.Set("X-Game-Key-Id","k1")
     r.Header.Set("X-Game-Timestamp",ts)
