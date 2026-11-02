@@ -68,6 +68,5 @@ func writeJSON(w http.ResponseWriter,status int,payload any){
     if err!=nil{http.Error(w,"JSON serialization failed",http.StatusInternalServerError);return}
     w.Header().Set("Content-Type","application/json; charset=utf-8")
     w.WriteHeader(status)
-    _,_=w.Write(append(body,'
-'))
+    _,_=w.Write(append(body,'\n'))
 }
