@@ -98,7 +98,7 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     secret, err := s.PlatformSecretReader.LookupPlatformSecret(ctx, appid)
     if err != nil { return "", err }
     if err=payment.VerifyV1(h,callback,secret);err!=nil{return "",err}
-    if callback.Amount!=o.Amount||callback.Attach!=o.Attach {return "",model.ErrOrderConflict}
+    if err=validateCallbackDetails(o,callback);err!=nil{return "",err}
     paidAt,err:=time.Parse(time.RFC3339,callback.PaidAt)
     if err!=nil{return "",ErrInvalidOrder}
     if err=s.Orders.ConfirmPayment(ctx,o.ID,callback.OrderNo,paidAt);err!=nil{return "",err}
@@ -159,3 +159,13 @@ func(s *OrderService) Validate()error {
      return nil
 }
 
+
+
+// validateCallbackDetails 只核对回调与已登记的业务字段一致性。
+// v1 签名没有覆盖 amount/attach，不能由此证明回调字段未被篡改。
+func validateCallbackDetails(order model.Order, callback model.PaymentCallback) error {
+    if callback.Amount != order.Amount || callback.Attach != order.Attach {
+        return model.ErrOrderConflict
+    }
+    return nil
+}
