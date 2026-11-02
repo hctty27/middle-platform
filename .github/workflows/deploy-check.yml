@@ -42,7 +42,7 @@ jobs:
           bash -n deploy/deploy.sh
       - name: Verify production service port map
         run: |
-          docker compose -f deploy/compose.prod.yml config --format json > /tmp/compose.json
+          docker compose --profile access -f deploy/compose.prod.yml config --format json > /tmp/compose.json
           python3 - <<'PY'
           import json
           from pathlib import Path
