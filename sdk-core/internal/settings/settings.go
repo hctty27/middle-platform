@@ -25,7 +25,7 @@ type Config struct {
     Log logging.Config `yaml:"log"`
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
     Database Database `yaml:"database"`
-    OrderDatabase Database `yaml:"orderDatabase"`
+    Order struct { Enabled bool `yaml:"enabled"` } `yaml:"order"`
     Payment struct {
         AllowUnverifiedNonProd bool `yaml:"allowUnverifiedNonProd"`
     } `yaml:"payment"`
@@ -51,7 +51,6 @@ func Load(path string)(Config,error){
     cfg.Log=logging.Default()
     cfg.Server.Address=":8082"
     cfg.Database=defaultDB()
-    cfg.OrderDatabase=defaultDB()
     if path==""{path="configs/config.yaml"}
     raw,err:=os.ReadFile(path)
     if err!=nil{return Config{},fmt.Errorf("read configuration %s: %w",path,err)}
@@ -63,7 +62,6 @@ func Load(path string)(Config,error){
         return Config{},errors.New("configuration must contain exactly one YAML document")
     }
     if v,ok:=os.LookupEnv("SDK_CORE_DB_DSN");ok{cfg.Database.DSN=v}
-    if v,ok:=os.LookupEnv("SDK_CORE_ORDER_DB_DSN");ok{cfg.OrderDatabase.DSN=v}
     if v,ok:=os.LookupEnv("SDK_CORE_ADDR");ok{cfg.Server.Address=v}
     if err=cfg.Log.ApplyEnv();err!=nil{return Config{},err}
     if strings.TrimSpace(cfg.Database.DSN)==""{
@@ -73,6 +71,5 @@ func Load(path string)(Config,error){
         return Config{},errors.New("server.address is required")
     }
     if err=validateDB(cfg.Database);err!=nil{return Config{},err}
-    if err=validateDB(cfg.OrderDatabase);err!=nil{return Config{},err}
     return cfg,nil
 }

@@ -50,40 +50,6 @@ func openDB(cfg settings.Database)(*sql.DB,error){
     return db,nil
 }
 
-// databaseIdentity 标识同一 MySQL 实例上的权威库，允许两个连接使用不同数据库账号。
-type databaseIdentity struct{ serverUUID, schema string }
-
-func readDatabaseIdentity(ctx context.Context, db *sql.DB) (databaseIdentity, error) {
-    var identity databaseIdentity
-    err := db.QueryRowContext(ctx, "SELECT @@server_uuid, DATABASE()").
-        Scan(&identity.serverUUID, &identity.schema)
-    if err != nil { return identity, fmt.Errorf("read MySQL database identity: %w", err) }
-    if identity.serverUUID == "" || identity.schema == "" {
-        return identity, errors.New("MySQL server UUID or database name is missing")
-    }
-    return identity, nil
-}
-
-// verifySharedDatabase 确保配置读取与订单写入使用同一物理权威库，避免误写其他库。
-func verifySharedDatabase(ctx context.Context, configDB, orderDB *sql.DB) error {
-    configIdentity, err := readDatabaseIdentity(ctx, configDB)
-    if err != nil { return err }
-    orderIdentity, err := readDatabaseIdentity(ctx, orderDB)
-    if err != nil { return err }
-    if configIdentity != orderIdentity {
-        return fmt.Errorf("orderDatabase.dsn must point to the same MySQL server and schema as database.dsn (config=%s, order=%s)",
-            configIdentity.schema, orderIdentity.schema)
-    }
-    return nil
-}
-
-type readyDB struct {config *sql.DB;orders *sql.DB}
-func(r readyDB)PingContext(ctx context.Context)error{
-    if err:=r.config.PingContext(ctx);err!=nil{return err}
-    if r.orders!=nil{return r.orders.PingContext(ctx)}
-    return nil
-}
-
 func run(configPath string)error{
     cfg,err:=settings.Load(configPath)
     if err!=nil{return err}
@@ -100,22 +66,24 @@ func run(configPath string)error{
     if err!=nil{return fmt.Errorf("load response mapping: %w",err)}
     if err=resolver.Require(mapping.RouteCoreConfig);err!=nil{return err}
 
-    var ordersDB *sql.DB
+    // 配置查询与订单读写共用一个 sql.DB，order.enabled 仅控制业务路由和补偿 Worker。
     var extra []api.OrderAPI
     var workerCancel context.CancelFunc
     var workerWG sync.WaitGroup
-    if cfg.OrderDatabase.DSN!=""{
-        ordersDB,err=openDB(cfg.OrderDatabase)
-        if err!=nil{return err}
-        defer ordersDB.Close()
-        if err=ordersDB.PingContext(initCtx);err!=nil{return fmt.Errorf("connect order database: %w",err)}
-        if err=verifySharedDatabase(initCtx, db, ordersDB);err!=nil{return err}
-        var check int
-        if err=ordersDB.QueryRowContext(initCtx,"SELECT COUNT(*) FROM game_order WHERE 1=0").Scan(&check);err!=nil{
-            return fmt.Errorf("verify order schema: %w",err)
+    if cfg.Order.Enabled {
+        // 不自动建表：必须先通过 config-center/cmd/migrate 执行 V12。
+        rows, checkErr := db.QueryContext(initCtx, `SELECT id,appid,game_id,env,game_order_id,
+            amount,attach,game_notify_url,platform_order_no,paid_at,payment_status,
+            notify_status,notify_attempts,last_notify_at,last_notify_error,
+            notify_success_at,next_notify_at,created_at,updated_at
+            FROM game_order LIMIT 0`)
+        if checkErr != nil {
+            return fmt.Errorf("verify game_order schema (requires V12): %w", checkErr)
         }
+        if err=rows.Close();err!=nil{return fmt.Errorf("close game_order schema check: %w",err)}
         orders:=&service.OrderService{
-            ConfigReader:repository,Orders:store.NewOrderStore(ordersDB),
+            ConfigReader:repository,
+            Orders:store.NewOrderStore(db),
             PlatformSecretReader:repository,
             GameSecretReader:repository,
             Notifier:notify.NewClient(cfg.GameNotify.AllowedHosts),
@@ -134,7 +102,7 @@ func run(configPath string)error{
     server:=&http.Server{
         Addr:cfg.Server.Address,
         Handler:logging.HTTP(cfg.Log,withDrainReadiness(api.Router(
-            service.NewConfigService(repository,resolver),readyDB{config:db,orders:ordersDB},extra...),&ready)),
+            service.NewConfigService(repository,resolver),db,extra...),&ready)),
         ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,
         WriteTimeout:15*time.Second,IdleTimeout:60*time.Second,
     }

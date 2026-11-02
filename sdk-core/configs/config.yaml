@@ -2,20 +2,18 @@
 server:
   address: ":8082"
 
-# config_center 权威库：读取游戏与渠道包配置，使用只读账号
+# config_center 权威库：同一个连接池供配置查询和订单读写共享。
+# 账号仅需配置表 SELECT 与 game_order 表 SELECT/INSERT/UPDATE，不授予全库写权限。
 database:
   dsn: ""
   maxOpenConns: 20
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 与 database.dsn 指向同一 MySQL 实例、同一 config_center 库，但建议使用仅可读写 game_order 的独立账号。
-# 留空时订单和支付回调接口不注册；建表仅由 config-center/cmd/migrate 的 V12 执行。
-orderDatabase:
-  dsn: ""
-  maxOpenConns: 20
-  maxIdleConns: 10
-  connMaxLifetime: "30m"
+# 默认关闭订单功能，不注册订单/支付回调路由，也不启动通知补偿 Worker。
+# 启用前必须先由 config-center/cmd/migrate 执行 V12，完成联调与支付安全评审。
+order:
+  enabled: false
 
 # 游戏通信主密钥只保存在配置中心 game.config.gameSecret 中（Base64 编码的 32 随机字节）。
 # SDK Core 与游戏服对两个用途分别派生 HKDF 密钥；这里不再配置 gameAuth.keys。
