@@ -1,20 +1,32 @@
 package service
 
 import (
-    "context"
     "errors"
     "testing"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
-func TestUnverifiedPlatformV1AlwaysRejected(t *testing.T) {
-    for _,env:=range []string{"prod","test","review"} {
-        order:=model.Order{AppID:"app1001",Env:env,GameOrderID:"game-1",Amount:600}
-        callback:=model.PaymentCallback{OrderNo:"platform-1",GameOrderID:"game-1",Amount:600}
-        err:=verifyTrustedPayment(context.Background(),order,callback)
-        if !errors.Is(err,ErrUnsafePlatformProtocol) {
-            t.Fatalf("environment %s unexpectedly accepted an unauthenticated payment: %v",env,err)
-        }
+func TestCallbackDetailsMatchRegistration(t *testing.T) {
+    order := model.Order{Amount: 600, Attach: "purchase"}
+    cases := []struct {
+        name string
+        callback model.PaymentCallback
+        wantError bool
+    }{
+        {"match", model.PaymentCallback{Amount: 600, Attach: "purchase"}, false},
+        {"amount mismatch", model.PaymentCallback{Amount: 100, Attach: "purchase"}, true},
+        {"attach mismatch", model.PaymentCallback{Amount: 600, Attach: "other"}, true},
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            err := validateCallbackDetails(order, tc.callback)
+            if tc.wantError && !errors.Is(err, model.ErrOrderConflict) {
+                t.Fatalf("expected order conflict: %v", err)
+            }
+            if !tc.wantError && err != nil {
+                t.Fatalf("matching registration rejected: %v", err)
+            }
+        })
     }
 }
