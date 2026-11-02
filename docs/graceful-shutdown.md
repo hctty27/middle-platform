@@ -28,16 +28,15 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml
 
 ## Linux 生产（systemd）
 
-仓库已提供 `deploy/systemd/` 下的三个 unit 示例。请提前创建独立运行账号 `middle-platform`，并准备：
+生产服务 unit 配置由服务器独立维护，不再随代码仓库提供。请按 [生产部署说明](production-deployment.md) 创建 unit，提前准备独立运行账号 `middle-platform`，并确认：
 
 - 可执行程序：`/opt/middle-platform/<service>/<service>`
 - 私有 YAML 配置：`/etc/middle-platform/<service>.yaml`
 - 账号对目录和配置文件的读取权限，以及对应数据库所需的最小权限。
 
-以 SDK Core 为例，在仓库根目录执行：
+已按生产部署文档创建 `sdk-core.service` 后，在 Linux 服务器执行：
 
 ```bash
-sudo cp deploy/systemd/sdk-core.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now sdk-core
 sudo systemctl status sdk-core
