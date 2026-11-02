@@ -50,10 +50,10 @@ jobs:
           data = json.loads(Path("/tmp/compose.json").read_text())
           services = data["services"]
           expected_ports = {
-              "config-center": (8101, 8080),
-              "config-center-access": (8090, 8081),
-              "sdk-core-1": (8201, 8082),
-              "sdk-core-2": (8202, 8082),
+              "config-center": (8101, 8101),
+              "config-center-access": (8090, 8090),
+              "sdk-core-1": (8201, 8201),
+              "sdk-core-2": (8202, 8202),
               "admin": (80, 80),
           }
           for name, (host_port, container_port) in expected_ports.items():
@@ -62,6 +62,19 @@ jobs:
               assert int(service["ports"][0]["published"]) == host_port, name
               assert int(service["ports"][0]["target"]) == container_port, name
           assert len(set(p[0] for p in expected_ports.values())) == len(expected_ports)
+
+          listen_variables = {
+              "config-center": ("CONFIG_GO_ADDR", ":8101"),
+              "config-center-access": ("CONFIG_ACCESS_ADDR", ":8090"),
+              "sdk-core-1": ("SDK_CORE_ADDR", ":8201"),
+              "sdk-core-2": ("SDK_CORE_ADDR", ":8202"),
+          }
+          for name, (key, address) in listen_variables.items():
+              service = services[name]
+              assert service["environment"][key] == address, name
+              assert f"http://127.0.0.1:{address[1:]}/health/ready" in " ".join(
+                  service["healthcheck"]["test"]
+              ), name
 
           for name in ("sdk-core-1", "sdk-core-2"):
               service = services[name]
