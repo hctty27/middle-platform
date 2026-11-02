@@ -287,3 +287,14 @@ func TestDefaultMappingOnlyNeedsChannelAppJSON(t *testing.T) {
         }
     }
 }
+
+func TestRejectPaymentSecretResponseMapping(t *testing.T) {
+    for _, path := range []string{"channel_app.config.appSecret", "channel_app.config.APPSECRET",
+        "channel_app.config.appSecret.value"} {
+        raw, err := json.Marshal(map[string]map[string]string{
+            "GET /api/core/{env}/{appid}": {"unsafe":path},
+        })
+        if err != nil {t.Fatal(err)}
+        if _,err=Load(raw);err==nil {t.Errorf("payment secret mapping accepted: %s",path)}
+    }
+}
