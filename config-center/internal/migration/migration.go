@@ -22,10 +22,10 @@ var scripts embed.FS
 const BaselineVersion = 11
 
 // Latest 为代码支持的最新数据库版本；后续新增 V12 时同步维护。
-const Latest = BaselineVersion
+const Latest = 12
 
 // upgrades 只存放基线之后的增量 SQL，历史 V1～V11 不再逐步回放。
-var upgrades = map[int]string{}
+var upgrades = map[int]string{12: "sql/V12__create_game_order.sql"}
 
 // Options 控制独立迁移命令的目标版本。
 type Options struct {
@@ -59,7 +59,7 @@ func Validate(ctx context.Context, dsn string) error {
 		if dirty || version != Latest {
 			return fmt.Errorf("database schema version=%d dirty=%t; expected version=%d dirty=false; run cmd/migrate first", version, dirty, Latest)
 		}
-		return validateSchema(ctx, conn)
+		return validateSchema(ctx, conn, version)
 	})
 }
 
@@ -191,11 +191,17 @@ func migrate(ctx context.Context, conn *sql.Conn, target int) error {
 		if err != nil {
 			return err
 		}
+		// 旧版 sdk-core 若已手工建过订单表，不可静默跳过 V12，否则迁移版本与真实结构会失去一致性。
+		if next == 12 {
+			exists, checkErr := hasTable(ctx, conn, "game_order")
+			if checkErr != nil { return checkErr }
+			if exists { return errors.New("game_order already exists before V12: back up and reconcile manually; no migration was applied") }
+		}
 		if err := apply(ctx, conn, next, string(body)); err != nil {
 			return err
 		}
 	}
-	return validateSchema(ctx, conn)
+	return validateSchema(ctx, conn, target)
 }
 
 func apply(ctx context.Context, conn *sql.Conn, version int, sqlBody string) error {
@@ -214,7 +220,7 @@ func apply(ctx context.Context, conn *sql.Conn, version int, sqlBody string) err
 	return nil
 }
 
-func validateSchema(ctx context.Context, conn *sql.Conn) error {
+func validateSchema(ctx context.Context, conn *sql.Conn, version int) error {
 	// 运行态表和关键字段必须真实存在，不能只相信迁移记录。
 	statements := []string{
 		"SELECT revision,epoch FROM config_revision WHERE id=1",
@@ -223,6 +229,9 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		"SELECT id,code,webhook_secret FROM config_subscriber LIMIT 0",
 		"SELECT acknowledged_revision,acknowledged_epoch FROM config_subscriber_delivery_state LIMIT 0",
 		"SELECT id,game_id,code,prod_server_group_id,test_server_group_id,review_server_group_id FROM config_channel_app LIMIT 0",
+	}
+	if version >= 12 {
+		statements = append(statements, "SELECT id,appid,game_id,env,game_order_id,amount,attach,game_notify_url,platform_order_no,paid_at,payment_status,notify_status,notify_attempts,last_notify_at,last_notify_error,notify_success_at,next_notify_at,created_at,updated_at FROM game_order LIMIT 0")
 	}
 	for _, statement := range statements {
 		rows, err := conn.QueryContext(ctx, statement)
@@ -269,6 +278,21 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 	}
 	if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
 		return errors.New("region environment CHECK constraint is obsolete")
+	}
+	if version >= 12 {
+		for _, index := range []struct { name, column string; position int }{
+			{"uk_app_game_order", "appid", 1},
+			{"uk_app_game_order", "game_order_id", 2},
+			{"uk_platform_order", "platform_order_no", 1},
+		} {
+			var count int
+			err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
+				WHERE table_schema=DATABASE() AND table_name='game_order'
+				AND index_name=? AND column_name=? AND seq_in_index=? AND non_unique=0`,
+				index.name,index.column,index.position).Scan(&count)
+			if err != nil { return err }
+			if count != 1 { return fmt.Errorf("game_order unique index %s column %s missing",index.name,index.column) }
+		}
 	}
 	return nil
 }
