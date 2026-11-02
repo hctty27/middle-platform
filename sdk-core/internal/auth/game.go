@@ -40,11 +40,7 @@ func (g *GameAuth) Verify(r *http.Request, body []byte, env, appID string) error
     supplied,err:=hex.DecodeString(sig)
     if err!=nil {return ErrUnauthorized}
     sum:=sha256.Sum256(body)
-    canonical:=fmt.Sprintf("%s
-%s
-%s
-%s
-%x",id,r.Method,r.URL.EscapedPath(),ts,sum)
+    canonical:=fmt.Sprintf("%s\n%s\n%s\n%s\n%x",id,r.Method,r.URL.EscapedPath(),ts,sum)
     mac:=hmac.New(sha256.New,[]byte(key.Secret))
     mac.Write([]byte(canonical))
     if !hmac.Equal(supplied,mac.Sum(nil)) {return ErrUnauthorized}
