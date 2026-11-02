@@ -29,7 +29,6 @@ type Config struct {
     OrderDatabase Database `yaml:"orderDatabase"`
     GameAuth struct{ Keys map[string]auth.Credential `yaml:"keys"`} `yaml:"gameAuth"`
     Payment struct {
-        Secrets map[string]map[string]string `yaml:"secrets"`
         AllowUnverifiedNonProd bool `yaml:"allowUnverifiedNonProd"`
     } `yaml:"payment"`
     GameNotify struct {
