@@ -1,5 +1,5 @@
--- 订单业务库独立迁移；不要在 config_center 权威配置库执行。
--- MySQL 8.0.16+，服务连接会话需采用 UTC。
+-- V12：在 config_center 权威库创建订单表，统一由 config-center/cmd/migrate 执行。
+-- 基于 V11 增量升级，不得手工执行或重置迁移记录；MySQL 8.0.16+，订单时区 UTC。
 CREATE TABLE game_order (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '内部主键',
     appid VARCHAR(128) COLLATE utf8mb4_bin NOT NULL COMMENT '应用 Code',

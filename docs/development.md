@@ -70,7 +70,9 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/config/admin/subs
 ```powershell
 cd sdk-core
 Copy-Item configs/config.yaml configs/config-dev.yaml
-# 将 database.dsn 设置为 config_center 的只读连接
+# 将 database.dsn 设置为 config_center 的只读连接。
+# 如果需要启用订单，将 orderDatabase.dsn 指向同一 config_center（可用独立订单账号），
+# 先运行 config-center/cmd/migrate 更新至 V12；留空则不注册订单接口。
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
 

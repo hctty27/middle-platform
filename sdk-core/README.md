@@ -44,7 +44,7 @@ GET /api/core/{env}/{appid}
 
 ## 本地启动
 
-在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已完成 V11 及后续所需迁移的 `config_center` **只读账号**：
+在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已完成 V12 迁移的 `config_center` **只读账号**：
 
 ```powershell
 Copy-Item configs/config.yaml configs/config-dev.yaml
@@ -65,8 +65,12 @@ go build ./cmd/sdk-core
 
 ## 订单登记与支付通知（功能分支）
 
-此模块需要在独立 MySQL 订单库手动执行 sdk-core/db/migration/V1__create_game_order.sql。
-订单库连接独立于配置中心只读账号；未配置 orderDatabase.dsn 时，订单接口不会注册。
+订单表 `game_order` 与所有配置中心表**共用一个 `config_center` 数据库**。
+数据库建表只由 `config-center/cmd/migrate` 统一执行 V12（从 V11 升级），
+不再提供 SDK Core 独立的 V1 建表脚本。
+`database.dsn` 读取配置，`orderDatabase.dsn` 读写订单，两者必须连接相同 MySQL 实例和同一库；
+可以使用不同数据库账号和连接池以隔离权限。SDK Core 启动时验证连接目标。
+`orderDatabase.dsn` 留空时，不注册订单/支付回调接口，现有配置查询继续可用。
 
 接口：
 - POST /api/core/{env}/{appid}/orders：游戏服签名登记订单
@@ -151,3 +155,17 @@ SDK Core 通过 AppID/环境查找已绑定且启用的游戏，从 `game.config
 
 当前没有密钥版本与双密钥轮换；直接更换 gameSecret 可能让存量未发货订单的补偿失败。
 已完成的派生逻辑仅在 PR 分支；**真正平台 v1 不签金额，prod 支付确认仍然禁用**。
+
+
+## 共用 config_center 数据库的本地启动示例
+
+```yaml
+database:
+  dsn: "sdk_reader:密码@tcp(127.0.0.1:3306)/config_center?parseTime=true"
+orderDatabase:
+  dsn: "sdk_order:密码@tcp(127.0.0.1:3306)/config_center?parseTime=true"
+```
+
+只有同一 MySQL 实例与同一数据库名的连接才会被接受；不要使用独立的 `sdk_order` 库。
+升级前备份数据；从 V11 执行 `config-center/cmd/migrate` 将 schema 升到 V12；运行时账号不需要 DDL。
+已有人工创建的 `game_order` 需先核对迁移，切勿直接删除旧订单数据。

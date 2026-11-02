@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'sdk-core/**'
+      - 'config-center/internal/migration/**'
       - 'shared/logging/**'
       - '.github/workflows/sdk-core.yml'
   pull_request:
     paths:
       - 'sdk-core/**'
+      - 'config-center/internal/migration/**'
       - 'shared/logging/**'
       - '.github/workflows/sdk-core.yml'
   workflow_dispatch:

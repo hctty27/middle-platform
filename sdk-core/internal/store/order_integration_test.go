@@ -26,7 +26,7 @@ func TestOrderStoreLifecycle(t *testing.T) {
     if err=db.PingContext(ctx);err!=nil{t.Fatal(err)}
     if _,err=db.ExecContext(ctx,"DROP TABLE IF EXISTS game_order");err!=nil{t.Fatal(err)}
     defer db.ExecContext(context.Background(),"DROP TABLE IF EXISTS game_order")
-    schema,err:=os.ReadFile(filepath.Join("..","..","db","migration","V1__create_game_order.sql"))
+    schema,err:=os.ReadFile(filepath.Join("..","..","..","config-center","internal","migration","sql","V12__create_game_order.sql"))
     if err!=nil{t.Fatal(err)}
     if _,err=db.ExecContext(ctx,string(schema));err!=nil{t.Fatal(err)}
     repo:=NewOrderStore(db)
