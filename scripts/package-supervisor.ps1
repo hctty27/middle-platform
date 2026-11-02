@@ -1,5 +1,5 @@
 # 将 Go 服务和 Vue 前端交叉编译、校验，并打包为 Linux 发布归档。
-# Windows 本地生成 ZIP；Linux / GitHub Actions 生成保留可执行权限的 tar.gz。
+# Windows / Linux 统一生成 tar.gz，显式设置 bin/ 下 Linux ELF 的 0755 执行权限。
 # 用法：.\scripts\package-supervisor.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
 # 依赖：Go；启用前端构建时还需要 npm。真实凭据和生产 YAML 不打包。
 [CmdletBinding()]
@@ -16,7 +16,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$outputRoot = Join-Path $repoRoot 'dist/supervisor'
+$outputRoot = Join-Path $repoRoot 'dist'
 $gitCommit = 'unknown'
 
 # 校验本地构建工具是否存在，缺失时直接失败，避免生成不完整发布包。
@@ -36,10 +36,10 @@ function Assert-ExitCode {
 }
 
 Require-Command 'go'
-$isWindowsHost = $env:OS -eq 'Windows_NT'
-if (-not $isWindowsHost) {
-    Require-Command 'chmod'
-    Require-Command 'tar'
+$goHost = @(& go env GOHOSTOS GOHOSTARCH)
+Assert-ExitCode 'go env GOHOSTOS GOHOSTARCH'
+if ($goHost.Count -ne 2) {
+    throw 'Could not determine Go host platform'
 }
 if (-not $SkipFrontend) {
     $npmCommand = if ($env:OS -eq 'Windows_NT') { 'npm.cmd' } else { 'npm' }
@@ -75,15 +75,12 @@ if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') {
 }
 
 $releaseName = "middle-platform-$Version-linux-$Arch"
-$stageDir = Join-Path $outputRoot $releaseName
+# 临时构建目录不放进 dist，避免留下解压目录或中间文件。
+$stageDir = Join-Path ([System.IO.Path]::GetTempPath()) ("middle-platform-" + [guid]::NewGuid().ToString('N'))
 $binDir = Join-Path $stageDir 'bin'
-$archiveExtension = if ($isWindowsHost) { ".zip" } else { ".tar.gz" }
-$archivePath = Join-Path $outputRoot "$releaseName$archiveExtension"
+$archivePath = Join-Path $outputRoot "$releaseName.tar.gz"
 
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-if (Test-Path -LiteralPath $stageDir) {
-    Remove-Item -LiteralPath $stageDir -Recurse -Force
-}
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 
 # 保存调用者的 Go 环境变量；结束时恢复，避免跨平台编译设置残留。
@@ -146,57 +143,46 @@ try {
         Copy-Item -Path (Join-Path $distDir '*') -Destination $adminDir -Recurse -Force
     }
 
-    # 记录版本、Git 提交与编译平台；文件不包含生产密钥。
-    $buildInfo = @(
-        "Version: $Version"
-        "GitCommit: $gitCommit"
-        "Platform: linux/$Arch"
-        "BuiltAtUTC: $((Get-Date).ToUniversalTime().ToString('o'))"
-        "FrontendIncluded: $(-not $SkipFrontend)"
-        'Production credentials and YAML files are intentionally excluded.'
-    )
-    $buildInfo | Set-Content -LiteralPath (Join-Path $stageDir 'BUILD_INFO.txt') -Encoding UTF8
+    # 发布包只包含 bin/ 和可选的 admin/，不附加校验文件或构建说明。
+    # 在本机运行 Go 打包辅助程序，避免 Windows 交叉编译环境阻止 go run。
+    $env:GOOS = ([string]$goHost[0]).Trim()
+    $env:GOARCH = ([string]$goHost[1]).Trim()
+    $env:CGO_ENABLED = '0'
 
-    # 对所有待打包文件计算 SHA-256，方便在生产服务器验证传输完整性。
-    $hashLines = @(Get-ChildItem -LiteralPath $stageDir -File -Recurse |
-        Sort-Object FullName |
-        ForEach-Object {
-            $relative = $_.FullName.Substring($stageDir.Length + 1).Replace('\', '/')
-            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $relative"
-        })
-    $hashLines | Set-Content -LiteralPath (Join-Path $stageDir 'SHA256SUMS.txt') -Encoding Ascii
-
-    Write-Host "Compressing $archivePath..."
-    if ($isWindowsHost) {
-        # Windows ZIP 不保证保留 Linux 执行位，服务器解压后仍需 chmod。
-        Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $archivePath -CompressionLevel Optimal -Force
-    } else {
-        # Linux Runner 先设置可执行权限，再写入 tar 元数据。
-        # tar.gz 下载和解压后可以直接启动 Go ELF，无需补 chmod。
-        Get-ChildItem -LiteralPath $binDir -File | ForEach-Object {
-            & chmod 0755 $_.FullName
-            Assert-ExitCode "chmod $($_.Name)"
-        }
-        & tar -czf $archivePath -C $stageDir .
-        Assert-ExitCode 'tar.gz creation'
-    }
+    $archiveTool = Join-Path $PSScriptRoot 'package-supervisor-archive.go'
+    Write-Host "Creating $archivePath..."
+    & go run -buildvcs=false $archiveTool -source $stageDir -output $archivePath
+    Assert-ExitCode 'create Linux tar.gz'
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
         throw "Archive was not created: $archivePath"
     }
 
+    # 仅清理本脚本的历史归档和旧版 dist/supervisor 中间目录。
+    # 不删除用户自己放在 dist 下的其他文件。
+    Get-ChildItem -LiteralPath $outputRoot -File |
+        Where-Object {
+            $_.Name -match '^middle-platform-.*-linux-(amd64|arm64)\\.(zip|tar\\.gz)$' -and
+            $_.FullName -ne $archivePath
+        } |
+        Remove-Item -Force
+
+    $legacyDir = Join-Path $outputRoot 'supervisor'
+    if (Test-Path -LiteralPath $legacyDir) {
+        Remove-Item -LiteralPath $legacyDir -Recurse -Force
+    }
+
     Write-Host ''
     Write-Host "Package ready: $archivePath"
-    Write-Host 'Archive layout: bin/, admin/ (unless skipped), BUILD_INFO.txt, SHA256SUMS.txt'
-    if ($isWindowsHost) {
-        Write-Host 'ZIP from Windows: run chmod +x bin/* after extracting on Linux.'
-    } else {
-        Write-Host 'Linux tar.gz: binaries include executable permissions (0755).'
-    }
+    Write-Host 'Archive layout: bin/, admin/ (unless skipped)'
+    Write-Host 'All Linux binaries carry 0755 executable permissions.'
+
 }
 # 无论前端或后端构建是否成功，都恢复进程原有的 Go 环境变量。
 finally {
     [Environment]::SetEnvironmentVariable('GOOS', $originalGoOS, 'Process')
     [Environment]::SetEnvironmentVariable('GOARCH', $originalGoArch, 'Process')
     [Environment]::SetEnvironmentVariable('CGO_ENABLED', $originalCgo, 'Process')
+    if (Test-Path -LiteralPath $stageDir) {
+        Remove-Item -LiteralPath $stageDir -Recurse -Force
+    }
 }
