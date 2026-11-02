@@ -167,6 +167,47 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		t.Fatalf("acknowledgment: %+v %v", subscribers, err)
 	}
 
+	// Worker 已经运行、当前订阅者已全部确认后，再创建新的订阅者。
+	// 不重启 Worker，下一轮数据库查询应自动领取新增订阅者。
+	workerCtx, stopWorker := context.WithCancel(ctx)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		webhook.NewDispatcher(db, "127.0.0.1").Run(workerCtx)
+	}()
+	time.Sleep(150 * time.Millisecond) // 让常驻 Worker 先完成一次空队列检查。
+	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{
+		Code: "access-late", CallbackURL: server.URL + "/internal/config/callback", Secret: "late-secret",
+	}); err != nil {
+		stopWorker()
+		<-workerDone
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(8 * time.Second)
+	lateDelivered := false
+	for time.Now().Before(deadline) {
+		current, readErr := store.Subscribers(ctx)
+		if readErr != nil { t.Fatal(readErr) }
+		for _, sub := range current {
+			if sub.Code == "access-late" && sub.AcknowledgedRevision == initial.Revision {
+				lateDelivered = true
+				break
+			}
+		}
+		if lateDelivered { break }
+		time.Sleep(100 * time.Millisecond)
+	}
+	stopWorker()
+	select {
+	case <-workerDone:
+	case <-time.After(2 * time.Second): t.Fatal("webhook worker did not shut down")
+	}
+	if !lateDelivered { t.Fatal("subscriber added after worker start was never delivered") }
+	// 不让这个额外订阅者影响下面已有的多实例领取测试。
+	if _, err := db.ExecContext(ctx, "UPDATE config_subscriber SET enabled=0 WHERE code='access-late'"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Every concurrent writer must receive exactly one monotonically increasing revision.
 	var wg sync.WaitGroup
 	errs := make(chan error, 12)
