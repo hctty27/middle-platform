@@ -139,13 +139,6 @@ try {
         Copy-Item -Path (Join-Path $distDir '*') -Destination $adminDir -Recurse -Force
     }
 
-    # 随发布包携带原生 Linux 的 systemd 和 Nginx 模板，服务器无需另外拉取源码。
-    $serviceDir = Join-Path $stageDir 'deploy/systemd'
-    $nginxDir = Join-Path $stageDir 'deploy/nginx'
-    New-Item -ItemType Directory -Force -Path $serviceDir, $nginxDir | Out-Null
-    Copy-Item -Path (Join-Path $repoRoot 'deploy/systemd/*.service') -Destination $serviceDir -Force
-    Copy-Item -Path (Join-Path $repoRoot 'deploy/nginx/*') -Destination $nginxDir -Force
-
     # 记录版本、Git 提交与编译平台；文件不包含生产密钥。
     $buildInfo = @(
         "Version: $Version"
@@ -175,7 +168,7 @@ try {
 
     Write-Host ''
     Write-Host "Package ready: $archivePath"
-    Write-Host 'Archive layout: bin/, admin/ (unless skipped), deploy/, BUILD_INFO.txt, SHA256SUMS.txt'
+    Write-Host 'Archive layout: bin/, admin/ (unless skipped), BUILD_INFO.txt, SHA256SUMS.txt'
     Write-Host 'After extracting on Linux, run: chmod +x bin/*'
 }
 # 无论前端或后端构建是否成功，都恢复进程原有的 Go 环境变量。

@@ -15,7 +15,7 @@
 | config-center-admin | 8281 | 仅管理网关或内网 |
 | config-center-access（可选） | 8291 | 内网及签名回调 |
 
-可在多台应用机上运行相同二进制，各实例通过监听环境变量使用不同端口。配置中心实例共用权威库；接入端使用独立副本库。生产 Nginx 模板为 `deploy/nginx/gateway.conf.example`，部署时需替换 IP、证书、域名和管理白名单。
+可在多台应用机上运行相同二进制，各实例通过监听环境变量使用不同端口。配置中心实例共用权威库；接入端使用独立副本库。Nginx 网关配置由运维环境独立维护，按实际部署设置 upstream 节点、TLS 证书、域名和管理白名单。
 
 ## 2. 构建和上传
 
@@ -39,26 +39,40 @@ sudo chmod 0755 bin/*
 
 ## 3. 安装并启动服务
 
-仓库附带 systemd 模板，默认使用 `middle-platform` 系统用户，并假定下列二进制位置：
+服务管理配置不再随代码仓库及发布包提供，建议由生产机器上的 Supervisor 或 systemd 独立管理。为 Go 服务创建低权限系统账号 `middle-platform`，并确保程序有权读取对应 YAML。
 
-- `/opt/middle-platform/config-center/config-center`
-- `/opt/middle-platform/config-center-access/config-center-access`
-- `/opt/middle-platform/sdk-core/sdk-core`
-
-可将解压包中的 `bin/` 各文件复制到对应目录；或按自己的版本化部署策略修改 unit 文件的 `WorkingDirectory` 和 `ExecStart`。创建用户、目录并设置可执行文件权限后：
+以下示例以 `config-center` 为例（文件路径和服务账号需要根据实际环境调整）：
 
 ```bash
 sudo install -d -m 0750 /etc/middle-platform
-sudo cp deploy/systemd/config-center.service /etc/systemd/system/
-sudo cp deploy/systemd/sdk-core.service /etc/systemd/system/
+sudo tee /etc/systemd/system/config-center.service >/dev/null <<'EOF'
+[Unit]
+Description=Middle Platform Config Center
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=middle-platform
+Group=middle-platform
+Environment=CONFIG_GO_ADDR=:8201
+ExecStart=/opt/middle-platform/releases/v1.0.0/bin/config-center -config /etc/middle-platform/config-center.yaml
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=40s
+
+[Install]
+WantedBy=multi-user.target
+EOF
 sudo systemctl daemon-reload
-sudo systemctl enable --now config-center sdk-core
-sudo systemctl status config-center sdk-core
+sudo systemctl enable --now config-center
+sudo systemctl status config-center
 ```
 
-在 systemd unit 中通过 `Environment=CONFIG_GO_ADDR=:8201`、`Environment=SDK_CORE_ADDR=:8211` 设置端口。第二个 SDK Core 实例应使用**独立的 unit 名称与端口**，共用只读的 `sdk-core.yaml`，并确保两个实例的连接池总量不会超过 MySQL 容量。接入端仅在需要本地副本时部署。
+创建 unit 前先确保二进制已部署、账号存在，且 `/etc/middle-platform/config-center.yaml` 中已经填写有效 DSN 和其他生产配置。两个 SDK Core 实例使用同一个 `bin/sdk-core`，但必须分别创建服务、配置 `SDK_CORE_ADDR=:8211` 与 `:8212`，按数据库容量分配连接池。接入端仅在需要本地副本时部署。
 
-> `ExecStart` 的参数 `-config` 已指向 `/etc/middle-platform/`。请先建立配置文件并赋予运行账号读取权限，不要把示例空 DSN 当成可运行的生产配置。
+> 停机宽限时间应大于应用自身的优雅退出窗口；不要在多个实例间共享相同的监听端口。完整启停原则参见 [优雅停机说明](graceful-shutdown.md)。
 
 ## 4. MySQL 迁移
 
@@ -72,7 +86,7 @@ MySQL DDL 非事务性；失败后不得盲目清理迁移记录或直接重试�
 
 ## 5. Nginx 静态管理页与网关
 
-将发布包中的 `admin/` 文件同步到 `/opt/middle-platform/admin/`。静态服务模板 `deploy/nginx/admin-static.conf` 监听 `8281`，`/api/` 不做 SPA 回退。
+将发布包中的 `admin/` 文件同步到 `/opt/middle-platform/admin/`。自行配置静态站点（建议内网端口 `8281`），`root` 指向该目录，`/api/` 不应回退到 Vue SPA。生产网关与应用静态站点的 Nginx 配置不再由代码仓库托管。
 
 ```bash
 sudo nginx -t

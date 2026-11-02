@@ -33,14 +33,6 @@ bin/
 admin/
   index.html
   assets/...
-deploy/
-  systemd/
-    config-center.service
-    config-center-access.service
-    sdk-core.service
-  nginx/
-    admin-static.conf
-    gateway.conf.example
 BUILD_INFO.txt
 SHA256SUMS.txt
 ```
@@ -48,7 +40,7 @@ SHA256SUMS.txt
 - Core-1 和 Core-2 使用同一个 `bin/sdk-core`，不需要单独编译两次。
 - 生成包**不包含**数据库密码、生产 YAML、Webhook 密钥、源码或 node_modules。
 - `-SkipFrontend` 不构建 `admin/`。
-- 发布包同时包含原生 systemd 和 Nginx 配置模板，无需在生产机额外下载部署配置。
+- 发布包仅携带二进制、前端静态资源和校验文件；systemd / Supervisor / Nginx 配置由部署环境独立维护。
 - 默认版本号包括 Git 提交号与构建时间；`-Version` 可指定自定义版本。
 
 ## 二、GitHub Actions 一键打包
@@ -89,7 +81,7 @@ ZIP 不能可靠保留 Windows → Linux 的文件可执行位，解压后要运
 | sdk-core-2 | `SDK_CORE_ADDR="127.0.0.1:8212"` |
 | config-center-access | `CONFIG_ACCESS_ADDR="127.0.0.1:8291"` |
 
-管理台的 `admin/` 交由 Nginx 托管（内部端口 8281），不需要 Supervisor。仓库内的 `deploy/nginx/admin-static.conf` 默认从 `/opt/middle-platform/admin` 提供静态文件；上传时需将发布包内的 `admin/` 同步到该目录。
+管理台的 `admin/` 交由 Nginx 托管（建议仅在内网监听 8281），不需要 Supervisor。请将发布包中的 `admin/` 同步至服务器静态站点目录（如 `/opt/middle-platform/admin`），并在独立维护的 Nginx 配置中设置对应 `root`、SPA 回退和管理接口代理。
 
 发布时先备份数据库并完成兼容性迁移；滚动发布前摘除目标 Nginx upstream，更新后验证 `/health/ready` 再恢复流量。不要直接把旧、新二进制覆盖在相同目录；保留版本目录以便回滚。共享 `current` 软链接不是严格的逐实例原子切换：应给需要分别滚动的服务设置独立版本路径或软链接，避免其他进程意外重启时加载新版本。
 

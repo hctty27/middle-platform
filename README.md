@@ -10,7 +10,6 @@
 | `config-center-access` | Go | 独立接入示例、本地 MySQL 副本、增量同步与 HMAC 回调 |
 | `sdk-core` | Go | SDK 登录充值核心服务（首期提供按环境、AppID 查询绑定区服组和公共配置） |
 | `config-center-admin` | Vue 3 | 配置管理界面 |
-| `deploy` | Nginx / systemd | 原生 Linux 服务部署及网关配置 |
 | `scripts` | PowerShell / Python | Linux 发布包构建、MySQL 迁移及双实例端到端测试 |
 
 ## 推荐：使用 YAML 本地启动
