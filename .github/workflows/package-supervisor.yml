@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           zipfile="dist/supervisor/middle-platform-${GITHUB_SHA}-linux-amd64.zip"
           test -s "$zipfile"
-          for item in bin/config-center bin/config-center-access bin/sdk-core bin/migrate admin/index.html SHA256SUMS.txt BUILD_INFO.txt; do
+          for item in bin/config-center bin/config-center-access bin/sdk-core bin/migrate admin/index.html deploy/systemd/config-center.service deploy/systemd/sdk-core.service deploy/nginx/admin-static.conf SHA256SUMS.txt BUILD_INFO.txt; do
             unzip -Z -1 "$zipfile" | grep -Fx "$item"
           done
           tmpdir="$(mktemp -d)"

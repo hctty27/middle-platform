@@ -33,6 +33,14 @@ bin/
 admin/
   index.html
   assets/...
+deploy/
+  systemd/
+    config-center.service
+    config-center-access.service
+    sdk-core.service
+  nginx/
+    admin-static.conf
+    gateway.conf.example
 BUILD_INFO.txt
 SHA256SUMS.txt
 ```
@@ -40,6 +48,7 @@ SHA256SUMS.txt
 - Core-1 和 Core-2 使用同一个 `bin/sdk-core`，不需要单独编译两次。
 - 生成包**不包含**数据库密码、生产 YAML、Webhook 密钥、源码或 node_modules。
 - `-SkipFrontend` 不构建 `admin/`。
+- 发布包同时包含原生 systemd 和 Nginx 配置模板，无需在生产机额外下载部署配置。
 - 默认版本号包括 Git 提交号与构建时间；`-Version` 可指定自定义版本。
 
 ## 二、GitHub Actions 一键打包
