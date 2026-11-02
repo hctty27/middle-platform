@@ -116,8 +116,7 @@ func (s *OrderStore) CompleteNotify(ctx context.Context,id int64, notifyErr erro
             WHERE id=? AND notify_status<>1`,id)
         return err
     }
-    summary:=strings.ReplaceAll(notifyErr.Error(),"
-"," ")
+    summary:=strings.ReplaceAll(notifyErr.Error(),"\n"," ")
     if len(summary)>256 { summary=summary[:256] }
     _,err:=s.db.ExecContext(ctx,`
         UPDATE game_order SET notify_status=2,last_notify_error=?,
