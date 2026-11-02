@@ -17,7 +17,7 @@
 建议：`config-center:8201`、`sdk-core-1:8211`、`sdk-core-2:8212`、`config-center-access:8291`（可选），管理端由内部 Nginx 提供。具体端口按现有主机资源调整；不同实例不得占用同一监听地址。
 
 - `config-center` 多实例共享 `config_center` 权威库。
-- `sdk-core` 使用单一 `database.dsn` 和单连接池，配置表只读、`config_center.game_order` 限定读写；订单接口及补偿 Worker 随服务启动。多实例可共用一份 YAML，并通过 `SDK_CORE_ADDR` 覆盖监听端口。平台 v1 付款确认在所有环境仍然不可用。
+- `sdk-core` 使用单一 `database.dsn` 和单连接池，配置表只读、`config_center.game_order` 限定读写；订单接口及补偿 Worker 随服务启动。多实例可共用一份 YAML，并通过 `SDK_CORE_ADDR` 覆盖监听端口。平台 v1 通过签名、订单与金额一致性校验后确认支付；不查单，但签名未覆盖金额的残余风险必须明确接受。
 - `config-center-access` 只有需要本地三级节点副本时才部署，使用独立 `config_access` 库。
 
 ## 2. 打包上传与首次安装
@@ -186,5 +186,5 @@ log:
 
 - 配置中心管理写接口**始终注册**：升级部署前必须由防火墙、私有网络或具备身份验证的网关限制整个 `/api/config/` 前缀，特别是 `/api/config/admin/`、节点原始 JSON 和同步快照，避免任意用户写入或读取服务端密钥。不要仅隐藏管理网页。
 - SDK Core 订单接口与补偿 Worker 始终加载，数据库必须完成 V12 `game_order` 迁移，账号仅需配置表 SELECT 与订单表 SELECT/INSERT/UPDATE；启动会验证关键字段。
-- 平台 v1 缺少实付金额完整性认证，所有环境的 v1 付款确认都会拒绝；删除 `payment.allowUnverifiedNonProd` 不代表支付已具备上线条件。
+- 平台 v1 缺少实付金额字段的签名完整性认证；SDK Core 不做二次查单，按签名和登记金额一致性执行支付确认。上线前须核实平台服务端可信定价、支付成功回调保障和游戏幂等发货，并接受现有回调协议的残余风险。
 - 部署前从旧私有配置删除 `admin.writesEnabled`、`order.enabled`、`payment.allowUnverifiedNonProd`；停用的 `CONFIG_GO_ENABLE_WRITES` 环境变量也应清除。代码合并不代表已经更新 Nginx ACL、线上配置或数据库。

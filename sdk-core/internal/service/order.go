@@ -11,25 +11,33 @@ import (
 
     "github.com/hctty27/middle-platform/sdk-core/internal/auth"
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
-    "github.com/hctty27/middle-platform/sdk-core/internal/notify"
     "github.com/hctty27/middle-platform/sdk-core/internal/payment"
-    "github.com/hctty27/middle-platform/sdk-core/internal/store"
 )
 
-var ErrUnsafePlatformProtocol = errors.New("platform amount verification not available")
 var ErrInvalidOrder = errors.New("invalid order request")
 var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 type OrderService struct {
     ConfigReader Reader
-    Orders *store.OrderStore
+    Orders interface {
+        Find(context.Context, string, string) (model.Order, error)
+        Register(context.Context, model.Order) error
+        ConfirmPayment(context.Context, int64, string, time.Time) error
+        ByID(context.Context, int64) (model.Order, error)
+        BeginNotify(context.Context, int64) (bool, error)
+        CompleteNotify(context.Context, int64, error) error
+        ClaimDue(context.Context) (*model.Order, error)
+    }
     GameSecretReader interface {
         LookupGameConfig(context.Context,int64) (json.RawMessage,error)
     }
     PlatformSecretReader interface {
         LookupPlatformSecret(context.Context, string) (string, error)
     }
-    Notifier *notify.Client
+    Notifier interface {
+        ValidateTarget(string) error
+        Send(context.Context, model.Order, []byte) error
+    }
 }
 
 func(s *OrderService) VerifyRegistration(r *http.Request,body []byte,env,appid string)error {
@@ -76,8 +84,9 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
 }
 
 // Receive 根据已登记订单定位 AppID，直接读取渠道包共享 appSecret 验签。
-// env 保留在订单内用于环境归属及安全限制，但不参与支付密钥选择。
-// v1 未覆盖实付金额：保留协议解析，但支付确认必须先通过可信查单/完整签名认证。
+// env 仅标识登记订单所属环境，不参与平台验签密钥选择。
+// 平台负责核对实际收款；SDK Core 按既有 v1 协议验签并核对登记金额，不发起二次查单。
+// 注意：v1 签名不覆盖 amount/attach/paid_at，金额比较无法证明这些回调字段的完整性。
 func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     callback model.PaymentCallback)(string,error){
     if !orderIDPattern.MatchString(appid)||!orderIDPattern.MatchString(callback.GameOrderID)||
@@ -92,7 +101,6 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     if callback.Amount!=o.Amount||callback.Attach!=o.Attach {return "",model.ErrOrderConflict}
     paidAt,err:=time.Parse(time.RFC3339,callback.PaidAt)
     if err!=nil{return "",ErrInvalidOrder}
-    if err=verifyTrustedPayment(ctx,o,callback);err!=nil {return "",err}
     if err=s.Orders.ConfirmPayment(ctx,o.ID,callback.OrderNo,paidAt);err!=nil{return "",err}
     updated,err:=s.Orders.ByID(ctx,o.ID)
     if err!=nil{return "",err}
@@ -151,9 +159,3 @@ func(s *OrderService) Validate()error {
      return nil
 }
 
-
-// verifyTrustedPayment 是支付可信金额验证的预留边界。
-// 平台 v1 签名不包含实付金额，也没有接入查单 API；在有可信验证前所有环境均不能确认支付。
-func verifyTrustedPayment(_ context.Context, _ model.Order, _ model.PaymentCallback) error {
-    return ErrUnsafePlatformProtocol
-}

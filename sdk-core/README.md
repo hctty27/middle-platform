@@ -1,6 +1,6 @@
 # sdk-core · SDK 核心服务
 
-本工程保持按环境与 AppID 查询 SDK 配置；订单登记与支付通知中转作为可选模块开发，正式支付尚不可上线。SDK Core **直接读取 `config_center` 权威库**，不建立副本，也不执行 DDL。
+本工程保持按环境与 AppID 查询 SDK 配置，同时提供订单登记、支付回调中转与发货通知。SDK Core **直接读取 `config_center` 权威库**，不建立副本，也不执行 DDL。
 
 ## 配置查询
 
@@ -63,7 +63,7 @@ go build ./cmd/sdk-core
 [HTTP API](../docs/api.md) · [开发联调](../docs/development.md) · [生产部署](../docs/production.md)
 
 
-## 订单登记与支付通知（功能分支）
+## 订单登记与支付通知
 
 订单表 `game_order` 与所有配置中心表**共用一个 `config_center` 数据库**。
 数据库建表只由 `config-center/cmd/migrate` 统一执行 V12（从 V11 升级），
@@ -78,7 +78,6 @@ go build ./cmd/sdk-core
 
 登记 Body：game_order_id（同 AppID 跨环境唯一）、amount（人民币分）、attach（原样字符串）。
 服务从绑定大区的 region.config 顶层读取 payNotifyUrl，首次登记后快照存储。
-登记签名 Header：X-Game-Key-Id、X-Game-Timestamp、X-Game-Signature（HMAC-SHA256）。
 游戏登记不再使用 `X-Game-Key-Id`。仅需 `X-Game-Timestamp` 与 `X-Game-Signature`：先从 AppID 所属游戏读取 `game.config.gameSecret`，经 HKDF 派生登记密钥，签名串为 `POST`、请求路径、Unix 秒时间戳、原始 Body 的 SHA256 小写十六进制四段，LF 连接且无末尾换行。具体见下文。
 
 平台回调使用文档指定的 v1 SHA-1 协议，并校验已登记订单及绑定的平台订单号。平台密钥不是按环境配置在本服务 YAML 中，而是通过全局唯一 AppID 从 `config_channel_app.config` 的顶层 `appSecret` 读取；渠道包 JSON 跨 `prod/test/review` 环境共享同一份支付密钥，不要求当前环境仍处于绑定/启用状态，避免历史回调受影响。
@@ -89,10 +88,11 @@ go build ./cmd/sdk-core
 {"tsKey":"public-client-key","appSecret":"platform-server-secret"}
 ```
 
-`env` 只用于记录原订单归属、选择登记时大区的 `payNotifyUrl`，以及决定是否允许非正式支付联调；不参与平台密钥查找。修改渠道包密钥前应保留历史回调所需密钥版本，目前尚未实现旧密钥轮换兼容。
-**重大安全限制：平台 v1 未签名 amount、attach、paid_at，不能证明真实支付金额。正式环境回调默认且无条件返回失败（不会确认支付）。**
-已移除 `payment.allowUnverifiedNonProd`。平台 v1 未签名实付金额，**现在所有环境的 v1 支付回调均不会确认付款或发货**，直到实现可信查单或覆盖实付金额的协议。若需联调，请使用专门的测试平台或待实现的可信支付验证接口。
-上线生产需先接入平台可信查单或可验证金额的升级签名协议。
+`env` 只用于记录原订单归属与登记时选择大区的 `payNotifyUrl`，不参与平台密钥查找。修改渠道包密钥前应保留历史回调所需密钥版本，目前尚未实现旧密钥轮换兼容。
+**现有平台 v1 回调的信任边界**：平台内部负责核对真实收款及其订单金额，SDK Core 不再额外调用查单接口；SDK Core 会按 v1 验证签名与时间戳，校验已登记的 AppID、游戏订单号、金额和 attach，以及平台订单号唯一性，再将支付状态持久化，通知游戏服。
+平台 v1 签名**没有覆盖** `amount`、`attach`、`paid_at`。因此 SDK Core 仅比较登记值与回调值，**不能通过签名证明回调金额未遭修改**。这是沿用现有平台协议所接受的残余风险，不应在文档中表述为“可信验证实付金额”。
+
+不新增二次查单逻辑，也不新增功能开关。上线前仍须确认平台下单金额由可信服务端确定，回调只能在支付成功后发出，且同步完善网关和密钥访问控制。
 
 SDK Core -> 游戏的发货通知不采用平台签名透明转发，而是独立签名。
 请求 Body 包含 order_no、game_order_id、amount、attach、paid_at。
@@ -153,7 +153,7 @@ SDK Core 通过 AppID/环境查找已绑定且启用的游戏，从 `game.config
 不能仅依赖前端隐藏字段。游戏服应使用受信任的服务端渠道取得主密钥。
 
 当前没有密钥版本与双密钥轮换；直接更换 gameSecret 可能让存量未发货订单的补偿失败。
-已完成的派生逻辑仅在 PR 分支；**真正平台 v1 不签金额，prod 支付确认仍然禁用**。
+游戏服必须按订单号进行事务内幂等发货；平台 v1 不签金额的风险仍存在，应通过平台可信下单和支付回调来源控制降低风险。
 
 
 ## 单库单连接池配置（订单与通知模块常驻）
@@ -166,7 +166,7 @@ database:
   connMaxLifetime: "30m"
 ```
 
-原配置中的 `order.enabled`、`payment.allowUnverifiedNonProd` 均需删除（严格 YAML 校验会拒绝旧字段）。订单回调路径始终注册，但 v1 付款确认始终拒绝。
+原配置中的 `order.enabled`、`payment.allowUnverifiedNonProd` 均需删除（严格 YAML 校验会拒绝旧字段）。支付回调通过 v1 验签、订单与金额一致性核对后进入支付确认和游戏发货，不额外查单。
 **升级旧版 YAML**：删除 `orderDatabase`，不要保留 `SDK_CORE_ORDER_DB_DSN`。
 启用订单前先备份数据库，由 `config-center/cmd/migrate` 将 V11 升至 V12；
 运行时账号仅需配置表 SELECT、订单表 SELECT/INSERT/UPDATE，不需要 DDL。
