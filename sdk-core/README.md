@@ -39,7 +39,7 @@ GET /api/core/{env}/{appid}
 - JSON 数值按原类型保留；当前不支持映射表达式、SQL 或默认值。
 - 新增来源路径在支持范围内时只需修改映射并**重新编译滚动发布**；新增接口的 JSON 键不会自动注册 Go HTTP 路由。
 - 请求中引用的 JSON 非法、映射规则非法或数据库失败仍按错误处理，不能当作“字段缺失”静默忽略。
-- 不要映射支付私钥、签名密钥、数据库密码等服务端秘密；完整 `game.config` / `channel_app.config` 可能暴露所有属性。
+- 渠道包 `channel_app.config.appSecret` 是平台验签密钥，公开字段映射禁止直接引用该路径；映射整个 `channel_app.config` 时会自动删除 `appSecret`，其他非敏感字段保持兼容。注意其他配置层级的秘密仍需自行控制映射与权限。
 - 默认设置 `Cache-Control: no-store`，避免共享代理意外缓存敏感配置。
 
 ## 本地启动
@@ -78,7 +78,15 @@ go build ./cmd/sdk-core
 登记签名 Header：X-Game-Key-Id、X-Game-Timestamp、X-Game-Signature（HMAC-SHA256）。
 游戏登记签名的五行文本依次为：keyID、POST、外部请求路径、Unix秒时间戳、原始Body的SHA256小写十六进制；以 LF 连接。
 
-平台回调使用文档指定的 v1 SHA-1 协议，并校验已登记订单及绑定的平台订单号。
+平台回调使用文档指定的 v1 SHA-1 协议，并校验已登记订单及绑定的平台订单号。平台密钥不是按环境配置在本服务 YAML 中，而是通过全局唯一 AppID 从 `config_channel_app.config` 的顶层 `appSecret` 读取；渠道包 JSON 跨 `prod/test/review` 环境共享同一份支付密钥，不要求当前环境仍处于绑定/启用状态，避免历史回调受影响。
+
+渠道包示例（仅后台服务端配置，真实密钥不要提交仓库）：
+
+```json
+{"tsKey":"public-client-key","appSecret":"platform-server-secret"}
+```
+
+`env` 只用于记录原订单归属、选择登记时大区的 `payNotifyUrl`，以及决定是否允许非正式支付联调；不参与平台密钥查找。修改渠道包密钥前应保留历史回调所需密钥版本，目前尚未实现旧密钥轮换兼容。
 **重大安全限制：平台 v1 未签名 amount、attach、paid_at，不能证明真实支付金额。正式环境回调默认且无条件返回失败（不会确认支付）。**
 仅非正式环境在明确开启 payment.allowUnverifiedNonProd 后可以进行链路联调。
 上线生产需先接入平台可信查单或可验证金额的升级签名协议。
@@ -94,6 +102,6 @@ Header：X-SDK-AppID、X-SDK-Timestamp、X-SDK-Nonce、X-SDK-Signature。
 重试签名独立生成，不复用过期平台 Header；通知发送不持有数据库事务。
 仅允许 gameNotify.allowedHosts 明确批准的 HTTPS 公网域名，生产限制 443 端口且不跟随重定向。
 
-配置示例参考 sdk-core/configs/config.yaml。所有签名密钥放在未提交 Git 的私人配置中，长度至少 32 字节。
+配置示例参考 sdk-core/configs/config.yaml。平台 `appSecret` 在渠道包 `config` 中维护，**不要**配置 `payment.secrets`；游戏登记及 SDK Core → 游戏通知所用 HMAC 密钥仍保存在服务端私有配置中，长度至少 32 字节。如果已复制旧版 `config.yaml`，请删除旧的 `payment.secrets` 字段，否则配置严格校验会拒绝启动。
 可使用 SDK_CORE_ORDER_DB_DSN 覆盖订单库 DSN。
 验证：在 sdk-core 目录执行 go test -race ./...、go vet ./...、go build ./cmd/sdk-core。
