@@ -17,7 +17,7 @@
 建议：`config-center:8201`、`sdk-core-1:8211`、`sdk-core-2:8212`、`config-center-access:8291`（可选），管理端由内部 Nginx 提供。具体端口按现有主机资源调整；不同实例不得占用同一监听地址。
 
 - `config-center` 多实例共享 `config_center` 权威库。
-- `sdk-core` 多实例共享权威库的只读账号，可共用同一二进制，通过环境变量覆盖不同监听端口。
+- `sdk-core` 多实例共享权威库的只读配置账号；如启用订单功能，另外使用同一 `config_center` 的订单表读写账号，两个 DSN 须指向同一 MySQL 实例和 schema。可共用同一二进制，通过环境变量覆盖不同监听端口。
 - `config-center-access` 只有需要本地三级节点副本时才部署，使用独立 `config_access` 库。
 
 ## 2. 打包上传与首次安装
@@ -50,7 +50,7 @@ sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/
 /data/middle-platform/bin/migrate -config /data/middle-platform/config/config-center.yaml
 ```
 
-新空库通过当前迁移器建立 V11 基线；已有低于 V11 的权威库必须先用旧版本迁移工具升级。迁移前要备份并停写；多个 config-center 实例不得各自启动迁移。`dirty=1` 或迁移异常时检查实际表结构，禁止篡改迁移表。参见 [数据库说明](database.md)。
+新空库先建立 V11 基线再执行 V12 订单表迁移；已有 V11 权威库由当前迁移器升级到 V12，低于 V11 的权威库必须先用旧版工具升级。迁移前要备份并停写；多个 config-center 实例不得各自启动迁移。`dirty=1` 或迁移异常时检查实际表结构，禁止篡改迁移表。参见 [数据库说明](database.md)。
 
 ## 4. Supervisor 管理服务
 

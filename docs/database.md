@@ -1,6 +1,6 @@
 # 数据库结构与迁移
 
-**以实际 SQL 为准**：[权威库基线](../config-center/internal/migration/sql/schema.sql) · [接入副本基线](../config-center-access/internal/store/sql/schema.sql)。本文描述当前结构和安全操作，不作为历史版本逐条升级指南。
+**以实际 SQL 为准**：[权威库 V11 基线](../config-center/internal/migration/sql/schema.sql) · [V12 订单表增量](../config-center/internal/migration/sql/V12__create_game_order.sql) · [接入副本基线](../config-center-access/internal/store/sql/schema.sql)。本文描述当前结构和安全操作，不作为历史版本逐条升级指南。
 
 ## 权威配置库：config_center
 
@@ -13,6 +13,7 @@
 | `config_subscriber` | Webhook 订阅者、回调地址、签名密钥 |
 | `config_subscriber_delivery_state` | 回调确认进度、租约与失败重试 |
 | `config_schema_migrations` | 迁移版本、`dirty` 状态，由迁移器维护 |
+| `game_order` | SDK Core 订单登记、支付状态、发货通知及失败补偿；与配置表同属 `config_center` |
 
 ### 关键约束
 
@@ -24,7 +25,7 @@
 
 ## 权威库初始化（仅新建空库）
 
-要求 MySQL 8.0+。执行独立命令 `cmd/migrate`，当前**基线版本是 V11**：
+要求 MySQL 8.0+。执行独立命令 `cmd/migrate`，当前**基线版本是 V11，最新版本是 V12**：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS config_center
@@ -47,16 +48,31 @@ FROM config_schema_migrations
 WHERE id = 1;
 ```
 
-初始化成功应为 `version=11`、`dirty=0`。应用启动只读验证结构，**不执行 DDL**。集群部署期间迁移仅执行一次，不能让各实例在启动时并发迁移。
+初始化成功应为 `version=12`、`dirty=0`（新空库按顺序执行 V11→V12）。应用启动只读验证结构，**不执行 DDL**。集群部署期间迁移仅执行一次，不能让各实例在启动时并发迁移。
 
 ## 已有库与后续升级
 
-- **已有 V11 库：** 保留迁移状态及业务数据，运行当前迁移 CLI 可做幂等校验。
+- **已有 V11 库：** 在备份并协调停写后，使用 `config-center/cmd/migrate` 自动升级到 V12，保留配置数据，仅新增 `game_order` 表；升级后的新程序要求 V12。
 - **已有 V1～V10 权威库：** 当前 CLI 不支持直接跨越基线升级。先备份，再使用基线重构前的旧版迁移工具升级至 V11，确认成功后更换新程序。
 - **非空但没有迁移记录：** 新迁移器会拒绝“认领”该库。不得删除表、伪造版本、修改 dirty 值来绕过检查。
-- **未来 V12+：** 在 `config-center/internal/migration/sql/` 增加增量 SQL，并更新 `migration.go` 中的版本定义和升级注册；升级前执行备份、停写与测试。
+- **未来 V13+：** 在 `config-center/internal/migration/sql/` 增加增量 SQL，并更新 `migration.go` 中的版本定义和升级注册；升级前执行备份、停写与测试。
+- **曾手工执行旧版 sdk-core V1 建表脚本：** V12 会在写入 dirty 前拒绝已有 `game_order` 表。必须先核对真实列/索引、数据与迁移状态，备份并制定人工迁移方案；不要直接删表、重置迁移记录或使用 `CREATE TABLE IF NOT EXISTS` 掩盖结构差异。
 
 MySQL DDL 不保证事务回滚。遇到 `dirty=1` 或中途失败，先核对已执行的 DDL 与备份，恢复到一致状态，再由人工确认后重试。**不要**直接删除 `config_schema_migrations` 或手工执行新库 `schema.sql` 覆盖已有库。
+
+## SDK Core 的同库连接与权限
+
+SDK Core 两个 DSN 都必须连接**同一个 MySQL 实例的同一个 `config_center` 数据库**：
+`database.dsn` 使用只读配置账号，`orderDatabase.dsn` 使用只读写订单表的账号。SDK Core 启动时会检查 `@@server_uuid` 与 `DATABASE()`，拒绝跨库连接。
+
+```sql
+GRANT SELECT ON config_center.config_node TO 'sdk_reader'@'%';
+GRANT SELECT ON config_center.config_channel_app TO 'sdk_reader'@'%';
+GRANT SELECT, INSERT, UPDATE ON config_center.game_order TO 'sdk_order'@'%';
+```
+
+以上为权限示意；账号应先由管理员创建，生产环境应将 `'%'` 替换为实际来源地址范围。为了访问健康检查和订单表结构，订单账号无需获得 `config_node` 写权限。
+`orderDatabase.dsn` 留空时 SDK Core 只提供配置查询，充值路由不会注册。
 
 ## 接入端副本：config_access
 
@@ -70,4 +86,4 @@ MySQL DDL 不保证事务回滚。遇到 `dirty=1` 或中途失败，先核对�
 
 历史 V4/V6 归档表可能仍在旧库中，不属于 V11 新库基线。缺失这些归档表不应影响现行服务，但其数据可能具有审计价值。是否删除需先单独备份、验证可恢复与行数，再由管理员人工清理；迁移器不得自动清除历史归档。
 
-生产建议：权威库定期备份并演练恢复，SDK Core 使用最小只读权限账号；数据库结构迁移与可执行程序回滚必须分别设计。
+生产建议：权威库定期备份并演练恢复，SDK Core 对配置表只读、对订单表最小读写；数据库结构迁移与可执行程序回滚必须分别设计。
