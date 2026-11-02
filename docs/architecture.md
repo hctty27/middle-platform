@@ -5,7 +5,7 @@
 - `config-center`：Go 配置中心，提供统一配置管理、订阅者、版本与变更日志。
 - `config-center-access`：独立 Go 接入服务，通过 Webhook 触发主动同步，并维护独立 MySQL 副本。
 - `config-center-admin`：Vue 3 管理端。
-- `config-center/internal/migration`：Go 版本化数据库迁移，保留 V1–V4 原始 SQL 升级历史。
+- `config-center/internal/migration`：V11 基线初始化、增量升级与启动前只读结构校验。
 
 部署只需要 Go、MySQL 和前端构建工具。
 
@@ -44,13 +44,11 @@ Webhook 仅发送 `epoch`、`revision`，由接入侧校验 HMAC-SHA256 和请�
 
 ## 数据库迁移
 
-Go 主程序在启动前校验 schema，通过 MySQL 命名锁避免多个配置中心同时执行 DDL。内置 V1–V4 SQL 保留历史迁移逻辑，包括旧 `channel`、`sdk_app` 到四级 `channel_app` 的迁移和归档。
-
-- 新数据库执行 V1→V11，记录 `config_schema_migrations` 版本。
-- 已迁到 V4 的旧数据库先验证结构，再建立 Go 迁移状态，不重复清理配置。
-- 历史 V1–V3 数据库需要人工备份、停写，再显式开启旧版升级。
-- MySQL DDL 隐式提交；失败后标记 dirty，禁止自动重跑半成功的迁移。
-- `config-center-access` 新库只建立三级节点与游标副本表，历史旧库保留 SQL 供必要的手动结构升级。
+- 首次空库由独立 cmd/migrate 初始化 V11 基线，不再回放旧 V1～V11 DDL。
+- 已有 V11 库保留原有版本记录和业务数据；已有 V1～V10 库需要用旧版代码先完成升级。
+- 新版本服务启动只做只读结构校验，多个实例不在启动时执行 DDL。
+- MySQL DDL 失败可能留下部分表与 dirty=1 状态；先备份再升级，严禁绕过校验。
+- 接入端使用独立的副本 schema.sql，旧副本需要预先升级至 V6。
 
 ## Go 包结构
 

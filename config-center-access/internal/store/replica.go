@@ -6,11 +6,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	_ "embed"
+	"strings"
 	"fmt"
 	"time"
 
 	"github.com/hctty27/middle-platform/config-center-access/internal/remote"
 )
+
+//go:embed sql/schema.sql
+var replicaSchema string
 
 // State 与节点副本在同一事务内提交，防止部分同步。
 type State struct {
@@ -36,71 +41,84 @@ type Replica struct{ DB *sql.DB }
 // New 绑定本地副本数据库，不与配置中心的权威库共享写连接。
 func New(db *sql.DB) *Replica { return &Replica{DB: db} }
 
-// EnsureSchema 新库仅建立三级节点和游标；历史渠道副本表保留但不再读写。
+// EnsureSchema 只初始化全新空库；已有副本仅验证，不自动修改历史业务数据。
 func (s *Replica) EnsureSchema(ctx context.Context) error {
-	const nodes = `CREATE TABLE IF NOT EXISTS config_node (
-		id BIGINT NOT NULL PRIMARY KEY,
-		game_id BIGINT NULL,
-		region_id BIGINT NULL,
-		node_type VARCHAR(20) NOT NULL,
-		env_type VARCHAR(16) COLLATE utf8mb4_bin NULL,
-		code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
-		name VARCHAR(128) NOT NULL,
-		status TINYINT NOT NULL,
-		config JSON NOT NULL,
-		remark VARCHAR(500) NULL,
-		created_at DATETIME(6) NOT NULL,
-		updated_at DATETIME(6) NOT NULL,
-		KEY idx_replica_game_type (game_id,node_type),
-		KEY idx_replica_region_type (region_id,node_type),
-		CONSTRAINT chk_replica_node_env_type CHECK (
-            (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','prod')))
-            OR (node_type<>'region' AND env_type IS NULL)
-        ),
-        CONSTRAINT chk_replica_node_ancestry CHECK (
-			(node_type='game' AND game_id IS NULL AND region_id IS NULL)
-			OR (node_type='region' AND COALESCE(game_id,0)>0 AND region_id IS NULL)
-			OR (node_type='server_group' AND COALESCE(game_id,0)>0 AND COALESCE(region_id,0)>0)
-		)
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
-	const state = `CREATE TABLE IF NOT EXISTS config_sync_state (
-		id TINYINT NOT NULL PRIMARY KEY,
-		epoch CHAR(36) NULL,
-		revision BIGINT NOT NULL,
-		updated_at DATETIME(6) NOT NULL
-	) ENGINE=InnoDB`
-	for _, ddl := range []string{nodes, state} {
-		if _, err := s.DB.ExecContext(ctx, ddl); err != nil {
-			return fmt.Errorf("initialize replica schema: %w", err)
+	var count int
+	if err := s.DB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()").Scan(&count); err != nil {
+		return err
+	}
+	var hasNode, hasState int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema=DATABASE() AND table_name='config_node'`).Scan(&hasNode); err != nil {
+		return err
+	}
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema=DATABASE() AND table_name='config_sync_state'`).Scan(&hasState); err != nil {
+		return err
+	}
+	if count == 0 {
+		// 对应 schema.sql 中的三条 SQL；失败留下部分表时下次启动会拒绝重建。
+		for _, statement := range strings.Split(replicaSchema, ";") {
+			statement = strings.TrimSpace(statement)
+			if statement == "" {
+				continue
+			}
+			if _, err := s.DB.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("initialize replica schema: %w", err)
+			}
 		}
+	} else if hasNode != 1 || hasState != 1 {
+		return errors.New("replica schema is incomplete or unknown; back up and repair before startup")
 	}
-	// 不对已有表做破坏性 ALTER；历史 V1/V2 数据库应先完成 Flyway V3。
-	rows, err := s.DB.QueryContext(ctx, `SELECT game_id,region_id,env_type,node_type FROM config_node LIMIT 0`)
+
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,env_type,node_type,
+		code,name,status,config,remark,created_at,updated_at FROM config_node LIMIT 0`)
 	if err != nil {
-		return fmt.Errorf("obsolete replica schema: apply migrations through V5 first: %w", err)
+		return fmt.Errorf("obsolete replica schema: use the pre-baseline code to upgrade before startup: %w", err)
 	}
-	if err := rows.Close(); err != nil { return err }
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	rows, err = s.DB.QueryContext(ctx, "SELECT epoch,revision,updated_at FROM config_sync_state LIMIT 0")
+	if err != nil {
+		return fmt.Errorf("invalid replica sync state: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
 	var obsoleteColumns int
 	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
-        WHERE table_schema=DATABASE() AND table_name='config_node' AND column_name='server_group_id'`).Scan(&obsoleteColumns); err != nil {
-		return fmt.Errorf("inspect replica node schema: %w", err)
+		WHERE table_schema=DATABASE() AND table_name='config_node'
+		AND column_name IN ('parent_id','channel_id','server_group_id')`).Scan(&obsoleteColumns); err != nil {
+		return err
 	}
 	if obsoleteColumns != 0 {
-		return fmt.Errorf("obsolete replica schema: apply db/migration/V5__trim_node_group_id_replica.sql before startup")
+		return errors.New("obsolete replica columns; upgrade the database with pre-baseline scripts first")
 	}
-	// 旧副本的 CHECK 约束包含 production，新协议同步前必须先迁移。
-	var legacyEnvConstraint int
-	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.check_constraints
-        WHERE constraint_schema=DATABASE() AND constraint_name='chk_replica_node_env_type'
-          AND check_clause LIKE '%production%'`).Scan(&legacyEnvConstraint); err != nil {
-		return fmt.Errorf("inspect replica region environment: %w", err)
-	}
-	if legacyEnvConstraint != 0 {
-		return fmt.Errorf("obsolete replica environment schema: apply db/migration/V6__rename_region_env_prod_replica.sql before startup")
-	}
-	if _, err := s.DB.ExecContext(ctx, `INSERT IGNORE INTO config_sync_state(id,epoch,revision,updated_at)
-		VALUES(1,NULL,0,UTC_TIMESTAMP(6))`); err != nil {
+	var constraints int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.table_constraints
+		WHERE constraint_schema=DATABASE() AND table_name='config_node'
+		AND constraint_name IN ('chk_replica_node_env_type','chk_replica_node_ancestry')`).Scan(&constraints); err != nil {
 		return err
+	}
+	if constraints != 2 {
+		return errors.New("replica CHECK constraints missing; upgrade to V6 before startup")
+	}
+	var clause string
+	if err := s.DB.QueryRowContext(ctx, `SELECT check_clause FROM information_schema.check_constraints
+		WHERE constraint_schema=DATABASE() AND constraint_name='chk_replica_node_env_type'`).Scan(&clause); err != nil {
+		return err
+	}
+	if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
+		return errors.New("obsolete replica environment CHECK constraint; upgrade to V6 before startup")
+	}
+	var stateRows int
+	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_sync_state WHERE id=1").Scan(&stateRows); err != nil {
+		return err
+	}
+	if stateRows != 1 {
+		return errors.New("replica sync cursor missing; restore it or rebuild a new empty replica")
 	}
 	return nil
 }

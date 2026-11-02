@@ -34,6 +34,8 @@ type configFile struct {
   AllowedHosts []string `yaml:"allowedHosts"`
  } `yaml:"webhook"`
  Migration struct { AllowLegacyUpgrade *bool `yaml:"allowLegacyUpgrade"` } `yaml:"migration"`
+ // 兼容本地旧配置文件中的字段；基线版本已不再支持旧库自动升级。
+ Migration struct { AllowLegacyUpgrade *bool `yaml:"allowLegacyUpgrade"` } `yaml:"migration"`
  Log logging.Config `yaml:"log"`
 }
 

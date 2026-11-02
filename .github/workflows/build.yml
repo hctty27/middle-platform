@@ -119,8 +119,12 @@ jobs:
           (cd config-center && go build -o /tmp/config-center-ci ./cmd/config-center)
           (cd config-center && go build -o /tmp/config-center-migrate-ci ./cmd/migrate)
           (cd config-center-access && go build -o /tmp/config-center-access-ci ./cmd/config-center-access)
-      - name: Test real V1-V4 schema upgrades
+      - name: Test V11 baseline and database safety
         run: python3 scripts/ci_migration_smoke.py
+      - name: Initialize config center schema
+        env:
+          CONFIG_DB_DSN: root:integration-test@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC
+        run: /tmp/config-center-migrate-ci
       - name: Test Go cluster and signed callbacks
         run: python3 scripts/ci_smoke.py
 

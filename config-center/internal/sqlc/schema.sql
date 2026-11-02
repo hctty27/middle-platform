@@ -1,4 +1,4 @@
--- sqlc analysis snapshot of Go migration V9 (sqlc only; channel tables are accessed via database/sql). Do not use this file for migrations.
+-- sqlc 仅用于静态 SQL 分析；与 V11 基线运行态兼容。不能用于实际建表（渠道应用由 database/sql 查询）。
 -- Source migrations live in config-center/internal/migration/sql.
 CREATE TABLE config_node (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,

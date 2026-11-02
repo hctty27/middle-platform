@@ -25,13 +25,9 @@ export WEBHOOK_ALLOWED_HOSTS='localhost,127.0.0.1'
 go run ./cmd/config-center
 ```
 
-新库启动时自动执行 Go 内置的 V1–V4 迁移。也支持独立命令 `go run ./cmd/migrate`。
+全新空库应先执行独立命令 `go run ./cmd/migrate -config configs/config-dev.yaml` 初始化 V11，然后启动业务服务。
 
-**已存在的历史数据库：** V4 会自动校验并接入；V1–V3 必须先停写、备份，人工确认后执行：
-
-```bash
-go run ./cmd/migrate -allow-legacy-upgrade
-```
+**已有历史数据库：** V11 库可直接校验；V1～V10 库必须先用基线重构前的版本升级至 V11。新迁移器拒绝直接处理旧库。
 
 不要直接删除 `config_schema_migrations` 或篡改 `dirty` 标记。MySQL DDL 非事务性，发生失败时应先确认部分完成的 DDL 并从备份恢复。
 
@@ -46,7 +42,7 @@ export CONFIG_WEBHOOK_SECRET='replace-with-a-strong-secret'
 go run ./cmd/config-center-access
 ```
 
-新建副本库自动初始化四级表；旧副本库需要确认已完成历史 V3 结构升级。若未升级，参照 `config-center-access/db/migration/` 的 SQL 先备份并手工执行缺少的迁移，不会再启动其它语言的服务。
+新建空副本库由接入端自动创建三级节点与游标两张表；旧副本库必须先由历史脚本升级到 V6，或在确认不需要保留本地缓存后换用全新空库。
 
 注册订阅者：
 

@@ -38,12 +38,10 @@ func Run(configPath string) error {
 	parsed.ReadTimeout = 10 * time.Second
 	parsed.WriteTimeout = 10 * time.Second
 
-	// 启动前使用 MySQL 命名锁执行 Go 迁移，避免集群实例并行修改表结构。
+	// 启动前只校验 V11 数据库结构；建库和升级由独立 cmd/migrate 执行，避免集群实例并行 DDL。
 	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer migrationCancel()
-	if err := migration.Run(migrationCtx, parsed.FormatDSN(), migration.Options{
-		AllowLegacyUpgrade: cfg.AllowLegacyUpgrade,
-	}); err != nil { return err }
+	if err := migration.Validate(migrationCtx, parsed.FormatDSN()); err != nil { return err }
 
 	db, err := sql.Open("mysql", parsed.FormatDSN())
 	if err != nil {
