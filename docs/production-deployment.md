@@ -15,7 +15,7 @@ Go 进程、MySQL 数据和管理控制台均应部署在可信内网；只有 S
 - `deploy/deploy.sh`：给**已从网关摘流量**的单个节点部署固定 SHA 标签镜像。
 - `.github/workflows/publish-images.yml`：在 main 的 Build 工作流通过之后，构建并推送四个 GHCR 镜像。
 
-建议将 config-center 与 sdk-core 部署在两个应用节点，每个节点运行相同 Compose；数据库使用独立 MySQL 8.x，统一处于低延迟内网。每台应用机默认运行 `sdk-core-1`（宿主机 8082 → 容器 8082）和 `sdk-core-2`（宿主机 8084 → 容器 8082），**共用同一份只读挂载的 `sdk-core.yaml`**。管理端占用宿主机 8083，避免端口冲突。单机起步可将 `BIND_IP=127.0.0.1`，本机 Nginx 转发到 8080、8082、8084、8083。双节点示例中 Nginx 对四个 SDK 实例负载均衡（两台机器各两个），固定 IP 必须按实际环境调整。
+建议将 config-center 与 sdk-core 部署在两个应用节点，每个节点运行相同 Compose；数据库使用独立 MySQL 8.x，统一处于低延迟内网。每台应用机默认运行 `sdk-core-1`（宿主机 8100 → 容器 8082）和 `sdk-core-2`（宿主机 8101 → 容器 8082），**共用同一份只读挂载的 `sdk-core.yaml`**。管理端占用宿主机 8090，避免端口冲突。单机起步可将 `BIND_IP=127.0.0.1`，本机 Nginx 转发到 8080、8100、8101、8090。双节点示例中 Nginx 对四个 SDK 实例负载均衡（两台机器各两个），固定 IP 必须按实际环境调整。
 
 `config-center-access` 是接入侧副本，不是配置中心集群的必选组件；需要它时可部署到独立接入节点，使用自己的 `config_access` 数据库和订阅回调配置。不同接入节点若使用不同副本库，必须各自收到通知或执行周期校对，不能只依赖负载均衡向其中一台发送回调。
 
@@ -32,6 +32,18 @@ CREATE DATABASE IF NOT EXISTS config_center
 按实际数据库版本、迁移所需 DDL 权限以及来源主机创建账号与授权，不要使用 root DSN。
 SDK 只需 `config_center` 业务查询所需的 SELECT 权限。多台 sdk-core 不会修改这个库。
 生产数据库不应通过公网开放 3306；配置中心和 SDK Core 应处于同地域、低延迟网络。
+
+## 端口规划（宿主机）
+
+| 服务 | 宿主机端口 | 容器端口 |
+| --- | --- | --- |
+| config-center | 8080 | 8080 |
+| config-center-access（可选） | 8081 | 8081 |
+| config-center-admin | 8090 | 80 |
+| sdk-core-1 | 8100 | 8082 |
+| sdk-core-2 | 8101 | 8082 |
+
+其中 `8090` 是管理界面端口，`8100/8101` 是当前 Core 实例的内网映射端口。Go Core 程序配置仍然监听 `:8082`，**不需要更改** `sdk-core.yaml` 中的端口设置。后续可为登录服务预留 `8200+`、其他 SDK 服务预留 `8300+`。端口是项目约定，部署前仍需确保宿主机未被占用。公网仅开放经网关认证和路由的 443/80，应用端口需绑定可信内网 IP 并通过防火墙限制。
 
 ## 3. 准备每台应用节点
 
@@ -63,7 +75,7 @@ sudo chmod 0600 /etc/middle-platform/compose.env
 上述权限适用于 rootful Docker 的普通 bind mount；若启用了 rootless Docker 或 user namespace 映射，必须按映射后的 UID/GID 调整权限和目录可遍历性。
 
 > 真实配置和 `compose.env` 仅存生产机或安全凭据管理系统，禁止提交 Git；镜像里不打包任何真实凭据。
-> 同时配置安全组/防火墙：8080、8081、8082、8083、8084 仅允许网关或可信接入节点访问。
+> 同时配置安全组/防火墙：8080、8081、8090、8100、8101 仅允许网关或可信接入节点访问。
 
 ## 4. 镜像发布
 
@@ -119,16 +131,16 @@ docker compose --env-file /etc/middle-platform/compose.env \
 
 ```bash
 curl -fsS http://<应用内网IP>:8080/health/ready
-curl -fsS http://<应用内网IP>:8082/health/ready
-curl -fsS http://<应用内网IP>:8084/health/ready
-curl -fsS http://<应用内网IP>:8083/healthz
+curl -fsS http://<应用内网IP>:8100/health/ready
+curl -fsS http://<应用内网IP>:8101/health/ready
+curl -fsS http://<应用内网IP>:8090/healthz
 docker compose --env-file /etc/middle-platform/compose.env -f deploy/compose.prod.yml ps
 ```
 
 **双节点滚动发布**必须逐台进行：
 
 1. 在 Nginx 或上游负载均衡器摘除节点 A（停止向其发送新请求），确认 B 健康且能承载流量。
-2. 在 A 上执行 `bash deploy/deploy.sh sha-...`，验证 **8082 与 8084 两个**健康接口、SDK 核心查询和 Webhook 行为。
+2. 在 A 上执行 `bash deploy/deploy.sh sha-...`，验证 **8100 与 8101 两个**健康接口、SDK 核心查询和 Webhook 行为。
 3. 将 A 重新加入网关并观察错误率、连接数，再摘除 B，重复操作。
 4. 同一节点内部也可对 `sdk-core-1`、`sdk-core-2` 逐个更新（前提是 Nginx 已摘除对应端口），以减少单节点中断；跨节点仍需保证其他实例健康。
 5. 最后进行业务冒烟测试及配置变更、回调、增量同步校验。
@@ -153,7 +165,7 @@ bash deploy/deploy.sh sha-<上一个可用commit>
 2. TLS 证书必须匹配 `api.example.com` 和 `admin.example.com`（可使用对应 SAN 证书）。
 3. 在 Nginx 机生成 htpasswd 凭据，配置可读权限；`admin.example.com` 同时执行 VPN/IP 白名单与 Basic Auth。
 4. `api.example.com` 仅公开 `/api/core/`；`/api/config/admin/`、同步 API 和内部回调通过可信网络访问，不走公开域名。
-5. Nginx upstream 中包含两台应用机器上各两个 SDK 端口（`8082`、`8084`）；执行 `nginx -t` 通过后再 `systemctl reload nginx`。Nginx 要能访问两台应用节点的内网端口。
+5. Nginx upstream 中包含两台应用机器上各两个 SDK 端口（`8100`、`8101`）；执行 `nginx -t` 通过后再 `systemctl reload nginx`。Nginx 要能访问两台应用节点的内网端口。
 
 目前配置中心管理接口没有自身的账号权限体系，Basic Auth + VPN/IP 限制仅为第一阶段的网关保护措施；未来应补充应用层身份认证、角色和审计。
 
