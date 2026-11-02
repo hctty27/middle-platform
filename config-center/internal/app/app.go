@@ -65,7 +65,6 @@ func Run(configPath string) error {
 	address := cfg.Address
 	repository := &store.Store{DB: db, AllowedHosts: cfg.AllowedHosts}
 	writesEnabled := cfg.WritesEnabled
-	webhookEnabled := cfg.WebhookEnabled
 	// 管理写入能力由开关控制，读 API 不受影响。
 	var writer api.Writer
 	if writesEnabled { writer = repository }
@@ -89,19 +88,16 @@ func Run(configPath string) error {
 	workerCtx, cancelWorker := context.WithCancel(context.Background())
 	defer cancelWorker()
 	workerDone := make(chan struct{})
-	if webhookEnabled {
-		dispatcher := webhook.NewDispatcher(db, repository.AllowedHosts)
-		go func() {
-			defer close(workerDone)
-			dispatcher.Run(workerCtx)
-		}()
-	} else {
-		close(workerDone)
-	}
+	// 无需预先查询订阅者；Dispatcher 每轮从数据库领取最新任务，运行中新增订阅者自动生效。
+	dispatcher := webhook.NewDispatcher(db, repository.AllowedHosts)
+	go func() {
+		defer close(workerDone)
+		dispatcher.Run(workerCtx)
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("Go config center started", "address", address, "revision", revision, "writes_enabled", writesEnabled, "webhook_enabled", webhookEnabled)
+		slog.Info("Go config center started", "address", address, "revision", revision, "writes_enabled", writesEnabled)
 		errCh <- server.ListenAndServe()
 	}()
 	var listenErr error

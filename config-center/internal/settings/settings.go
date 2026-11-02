@@ -20,7 +20,6 @@ type Settings struct {
  Address string
  AllowedHosts string
  WritesEnabled bool
- WebhookEnabled bool
  Log logging.Config
 }
 
@@ -29,11 +28,8 @@ type configFile struct {
  Database struct { DSN string `yaml:"dsn"` } `yaml:"database"`
  Admin struct { WritesEnabled *bool `yaml:"writesEnabled"` } `yaml:"admin"`
  Webhook struct {
-  Enabled *bool `yaml:"enabled"`
   AllowedHosts []string `yaml:"allowedHosts"`
  } `yaml:"webhook"`
- // 兼容本地旧配置文件中的字段；基线版本已不再支持旧库自动升级。
- Migration struct { AllowLegacyUpgrade *bool `yaml:"allowLegacyUpgrade"` } `yaml:"migration"`
  Log logging.Config `yaml:"log"`
 }
 
@@ -55,20 +51,13 @@ func LoadFile(path string) (Settings,error) {
  cfg:=Settings{Address:":8081",DSN:data.Database.DSN,AllowedHosts:strings.Join(data.Webhook.AllowedHosts,","),Log:data.Log}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
  if data.Admin.WritesEnabled!=nil {cfg.WritesEnabled=*data.Admin.WritesEnabled}
- if data.Webhook.Enabled!=nil {cfg.WebhookEnabled=*data.Webhook.Enabled}
- // 环境变量优先级最高，管理写入和回调均由显式开关控制。
+ // 环境变量优先级最高；管理写接口仍由独立安全开关控制。
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_GO_ADDR",&cfg.Address)
  overrideString("WEBHOOK_ALLOWED_HOSTS",&cfg.AllowedHosts)
- for _,b:=range []struct{name string; target *bool}{
-  {"CONFIG_GO_ENABLE_WRITES",&cfg.WritesEnabled},
-  {"CONFIG_GO_ENABLE_WEBHOOK",&cfg.WebhookEnabled},
- } {
-  if err:=overrideBool(b.name,b.target);err!=nil{return Settings{},err}
- }
+ if err:=overrideBool("CONFIG_GO_ENABLE_WRITES",&cfg.WritesEnabled);err!=nil{return Settings{},err}
  if err:=cfg.Log.ApplyEnv();err!=nil{return Settings{},err}
  if strings.TrimSpace(cfg.DSN)=="" {return Settings{},errors.New("database.dsn or CONFIG_DB_DSN is required")}
- if cfg.WebhookEnabled && !cfg.WritesEnabled {return Settings{},errors.New("webhook requires admin.writesEnabled=true")}
  return cfg,nil
 }
 
