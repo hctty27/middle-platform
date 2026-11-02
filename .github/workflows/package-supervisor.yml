@@ -18,6 +18,7 @@ permissions:
   contents: read
 
 jobs:
+  # 本地和 CI 共用同一份 PowerShell 打包逻辑，避免产物结构不一致。
   package-linux-amd64:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -35,6 +36,7 @@ jobs:
       - name: Build binary and frontend release package
         shell: pwsh
         run: ./scripts/package-supervisor.ps1 -Arch amd64 -Version ${{ github.sha }}
+      # 上传前校验文件清单、Linux 架构及 SHA256 完整性。
       - name: Verify Linux package contents
         shell: bash
         run: |

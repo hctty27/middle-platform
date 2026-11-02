@@ -16,24 +16,17 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: sdk-core-test
-          MYSQL_DATABASE: sdk_core_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -psdk-core-test"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=25
+    runs-on: ubuntu-24.04
     env:
       TEST_SDK_CORE_DB_DSN: root:sdk-core-test@tcp(127.0.0.1:3306)/sdk_core_test?parseTime=true&loc=UTC
     steps:
       - uses: actions/checkout@v4
+      # SDK 集成测试直接使用 Runner 预装 MySQL。
+      - name: 初始化本机 MySQL
+        run: |
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'sdk-core-test';"
+          mysql -uroot -psdk-core-test -e "CREATE DATABASE sdk_core_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
       - uses: actions/setup-go@v5
         with:
           go-version-file: sdk-core/go.mod

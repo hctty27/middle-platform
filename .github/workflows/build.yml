@@ -15,30 +15,24 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Go 静态检查、MySQL 迁移和集群端到端回归均在非容器环境执行。
   go:
     name: Go config center
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
         working-directory: config-center
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: integration-test-only
-          MYSQL_DATABASE: config_center_go_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pintegration-test-only"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=25
     env:
       TEST_CONFIG_DB_DSN: root:integration-test-only@tcp(127.0.0.1:3306)/config_center_go_test?parseTime=true&loc=UTC
     steps:
       - uses: actions/checkout@v4
+      # 在 Runner 原生 MySQL 上执行数据访问回归，避免依赖容器服务。
+      - name: 初始化本机 MySQL
+        run: |
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'integration-test-only';"
+          mysql -uroot -pintegration-test-only -e "CREATE DATABASE config_center_go_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
@@ -96,34 +90,30 @@ jobs:
 
   integration:
     name: Go MySQL migration + two instances + Webhook E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 18
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: integration-test
-          MYSQL_DATABASE: config_center
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pintegration-test"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=25
     env:
       ACCESS_DB_DSN: root:integration-test@tcp(127.0.0.1:3306)/config_access?parseTime=true&loc=UTC
       CONFIG_CENTER_URL: http://127.0.0.1:8080
       CONFIG_WEBHOOK_SECRET: ci-signed-webhook-secret
     steps:
       - uses: actions/checkout@v4
+      # 迁移用例会开启 GTID；确保运行实例启用了二进制日志。
+      - name: 初始化本机 MySQL 与二进制日志
+        run: |
+          sudo tee /etc/mysql/mysql.conf.d/99-middle-platform-ci.cnf >/dev/null <<'EOF'
+          [mysqld]
+          server-id=1
+          log_bin=mysql-bin
+          binlog_format=ROW
+          EOF
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'integration-test';"
+          mysql -uroot -pintegration-test -e "CREATE DATABASE config_center CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE config_access CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
           cache-dependency-path: config-center/go.mod
-      - name: Prepare access database
-        run: |
-          docker exec "$(docker ps --filter 'ancestor=mysql:8.4' --format '{{.ID}}' | head -n 1)" mysql -uroot -pintegration-test -e "CREATE DATABASE config_access CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
       - name: Build Go services and migration CLI
         run: |
           (cd config-center && go build -o /tmp/config-center-ci ./cmd/config-center)
