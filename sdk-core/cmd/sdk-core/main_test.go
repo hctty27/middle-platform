@@ -35,15 +35,3 @@ func TestWithDrainReadiness(t *testing.T) {
 	}
 }
 
-func TestDatabaseIdentityRequiresSameServerAndSchema(t *testing.T) {
-    same := databaseIdentity{serverUUID:"server-1",schema:"config_center"}
-    if same != (databaseIdentity{serverUUID:"server-1",schema:"config_center"}) {
-        t.Fatal("identical database identities must match")
-    }
-    for _,candidate := range []databaseIdentity{
-        {serverUUID:"server-1",schema:"order_database"},
-        {serverUUID:"server-2",schema:"config_center"},
-    } {
-        if same==candidate {t.Fatal("different database identity accepted")}
-    }
-}

@@ -44,7 +44,7 @@ GET /api/core/{env}/{appid}
 
 ## 本地启动
 
-在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已完成 V12 迁移的 `config_center` **只读账号**：
+在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已完成 V12 迁移的 `config_center`：若 `order.enabled=false` 可使用只读账号；启用订单时，需要同一账号拥有订单表限定读写权限：
 
 ```powershell
 Copy-Item configs/config.yaml configs/config-dev.yaml
@@ -68,9 +68,9 @@ go build ./cmd/sdk-core
 订单表 `game_order` 与所有配置中心表**共用一个 `config_center` 数据库**。
 数据库建表只由 `config-center/cmd/migrate` 统一执行 V12（从 V11 升级），
 不再提供 SDK Core 独立的 V1 建表脚本。
-`database.dsn` 读取配置，`orderDatabase.dsn` 读写订单，两者必须连接相同 MySQL 实例和同一库；
-可以使用不同数据库账号和连接池以隔离权限。SDK Core 启动时验证连接目标。
-`orderDatabase.dsn` 留空时，不注册订单/支付回调接口，现有配置查询继续可用。
+只保留 **`database.dsn` 一个配置项** 和一个 `*sql.DB` 连接池，`configStore`、`orderStore` 共享连接。
+`order.enabled=false`（默认）不注册订单/支付回调路由，不启动补偿 Worker，也不需要订单表 DML 权限。
+显式设置 `order.enabled=true` 后，启动时要求 V12 `game_order` 表存在并具备订单表查询及写入权限；配置表依旧只读。
 
 接口：
 - POST /api/core/{env}/{appid}/orders：游戏服签名登记订单
@@ -107,7 +107,7 @@ Header：X-SDK-AppID、X-SDK-Timestamp、X-SDK-Nonce、X-SDK-Signature。
 仅允许 gameNotify.allowedHosts 明确批准的 HTTPS 公网域名，生产限制 443 端口且不跟随重定向。
 
 配置示例参考 sdk-core/configs/config.yaml：平台 `appSecret` 配置在渠道包 JSON，游戏通信 `gameSecret` 配置在游戏 JSON；YAML 中不再维护 `payment.secrets`、`gameAuth.keys` 或 `gameNotify.secrets`。已有私有 YAML 的上述三个字段必须删掉，否则严格校验会拒绝启动。保留 `gameNotify.allowedHosts`。
-可使用 SDK_CORE_ORDER_DB_DSN 覆盖订单库 DSN。
+不再使用 `SDK_CORE_ORDER_DB_DSN`；唯一 DSN 可由 `SDK_CORE_DB_DSN` 覆盖。旧的 `orderDatabase` YAML 块必须从私有配置中删除（严格配置校验会拒绝该未知字段）。
 验证：在 sdk-core 目录执行 go test -race ./...、go vet ./...、go build ./cmd/sdk-core。
 
 ## 游戏主密钥与双向 HKDF 派生
@@ -157,15 +157,21 @@ SDK Core 通过 AppID/环境查找已绑定且启用的游戏，从 `game.config
 已完成的派生逻辑仅在 PR 分支；**真正平台 v1 不签金额，prod 支付确认仍然禁用**。
 
 
-## 共用 config_center 数据库的本地启动示例
+## 单库单连接池配置（默认关闭订单）
 
 ```yaml
 database:
-  dsn: "sdk_reader:密码@tcp(127.0.0.1:3306)/config_center?parseTime=true"
-orderDatabase:
-  dsn: "sdk_order:密码@tcp(127.0.0.1:3306)/config_center?parseTime=true"
+  dsn: "sdk_core:密码@tcp(127.0.0.1:3306)/config_center?parseTime=true"
+  maxOpenConns: 20
+  maxIdleConns: 10
+  connMaxLifetime: "30m"
+order:
+  enabled: false
 ```
 
-只有同一 MySQL 实例与同一数据库名的连接才会被接受；不要使用独立的 `sdk_order` 库。
-升级前备份数据；从 V11 执行 `config-center/cmd/migrate` 将 schema 升到 V12；运行时账号不需要 DDL。
+`order.enabled=true` 仅用于明确开启功能，不解除平台 v1 未签金额的正式环境安全门禁。
+**升级旧版 YAML**：删除 `orderDatabase`，不要保留 `SDK_CORE_ORDER_DB_DSN`。
+启用订单前先备份数据库，由 `config-center/cmd/migrate` 将 V11 升至 V12；
+运行时账号仅需配置表 SELECT、订单表 SELECT/INSERT/UPDATE，不需要 DDL。
+如果原来两个账号分离，需新建或授权合并后的 `sdk_core` 账号；不能单纯沿用只有配置 SELECT 权限的账号。
 已有人工创建的 `game_order` 需先核对迁移，切勿直接删除旧订单数据。
