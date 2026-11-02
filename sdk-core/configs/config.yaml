@@ -2,14 +2,15 @@
 server:
   address: ":8082"
 
-# config_center 权威库，只读
+# config_center 权威库：读取游戏与渠道包配置，使用只读账号
 database:
   dsn: ""
   maxOpenConns: 20
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 订单独立库；留空时不启用订单和回调接口
+# 与 database.dsn 指向同一 MySQL 实例、同一 config_center 库，但建议使用仅可读写 game_order 的独立账号。
+# 留空时订单和支付回调接口不注册；建表仅由 config-center/cmd/migrate 的 V12 执行。
 orderDatabase:
   dsn: ""
   maxOpenConns: 20

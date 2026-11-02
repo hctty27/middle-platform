@@ -50,6 +50,33 @@ func openDB(cfg settings.Database)(*sql.DB,error){
     return db,nil
 }
 
+// databaseIdentity 标识同一 MySQL 实例上的权威库，允许两个连接使用不同数据库账号。
+type databaseIdentity struct{ serverUUID, schema string }
+
+func readDatabaseIdentity(ctx context.Context, db *sql.DB) (databaseIdentity, error) {
+    var identity databaseIdentity
+    err := db.QueryRowContext(ctx, "SELECT @@server_uuid, DATABASE()").
+        Scan(&identity.serverUUID, &identity.schema)
+    if err != nil { return identity, fmt.Errorf("read MySQL database identity: %w", err) }
+    if identity.serverUUID == "" || identity.schema == "" {
+        return identity, errors.New("MySQL server UUID or database name is missing")
+    }
+    return identity, nil
+}
+
+// verifySharedDatabase 确保配置读取与订单写入使用同一物理权威库，避免误写其他库。
+func verifySharedDatabase(ctx context.Context, configDB, orderDB *sql.DB) error {
+    configIdentity, err := readDatabaseIdentity(ctx, configDB)
+    if err != nil { return err }
+    orderIdentity, err := readDatabaseIdentity(ctx, orderDB)
+    if err != nil { return err }
+    if configIdentity != orderIdentity {
+        return fmt.Errorf("orderDatabase.dsn must point to the same MySQL server and schema as database.dsn (config=%s, order=%s)",
+            configIdentity.schema, orderIdentity.schema)
+    }
+    return nil
+}
+
 type readyDB struct {config *sql.DB;orders *sql.DB}
 func(r readyDB)PingContext(ctx context.Context)error{
     if err:=r.config.PingContext(ctx);err!=nil{return err}
@@ -82,6 +109,7 @@ func run(configPath string)error{
         if err!=nil{return err}
         defer ordersDB.Close()
         if err=ordersDB.PingContext(initCtx);err!=nil{return fmt.Errorf("connect order database: %w",err)}
+        if err=verifySharedDatabase(initCtx, db, ordersDB);err!=nil{return err}
         var check int
         if err=ordersDB.QueryRowContext(initCtx,"SELECT COUNT(*) FROM game_order WHERE 1=0").Scan(&check);err!=nil{
             return fmt.Errorf("verify order schema: %w",err)
