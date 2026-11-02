@@ -25,7 +25,9 @@ type OrderService struct {
     ConfigReader Reader
     Orders *store.OrderStore
     GameAuth *auth.GameAuth
-    PlatformSecrets map[string]map[string]string
+    PlatformSecretReader interface {
+        LookupPlatformSecret(context.Context, string) (string, error)
+    }
     Notifier *notify.Client
     AllowUnverifiedNonProd bool
 }
@@ -68,7 +70,8 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
     })
 }
 
-// Receive 先读取候选订单确定环境，再按该环境使用平台密钥验签。
+// Receive 根据已登记订单定位 AppID，直接读取渠道包共享 appSecret 验签。
+// env 保留在订单内用于环境归属及安全限制，但不参与支付密钥选择。
 // v1 未签 amount：仅允许明确启用的非正式环境联调。
 func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     callback model.PaymentCallback)(string,error){
@@ -78,7 +81,8 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     }
     o,err:=s.Orders.Find(ctx,appid,callback.GameOrderID)
     if err!=nil{return "",err}
-    secret:=s.PlatformSecrets[o.Env][appid]
+    secret, err := s.PlatformSecretReader.LookupPlatformSecret(ctx, appid)
+    if err != nil { return "", err }
     if err=payment.VerifyV1(h,callback,secret);err!=nil{return "",err}
     if callback.Amount!=o.Amount||callback.Attach!=o.Attach {return "",model.ErrOrderConflict}
     paidAt,err:=time.Parse(time.RFC3339,callback.PaidAt)
@@ -129,10 +133,10 @@ func(s *OrderService) RunWorker(ctx context.Context) {
 }
 
 func(s *OrderService) Validate()error {
-    if s.Orders==nil||s.ConfigReader==nil||s.Notifier==nil||s.GameAuth==nil {
+    if s.Orders==nil||s.ConfigReader==nil||s.PlatformSecretReader==nil||s.Notifier==nil||s.GameAuth==nil {
         return errors.New("order service dependency missing")
     }
-    if len(s.GameAuth.Keys)==0||len(s.PlatformSecrets)==0{return errors.New("order auth secrets missing")}
+    if len(s.GameAuth.Keys)==0{return errors.New("game auth credentials missing")}
     for id,c:=range s.GameAuth.Keys {
         if strings.TrimSpace(id)==""||len(c.Secret)<32||len(c.AppIDs)==0||len(c.Envs)==0 {
             return fmt.Errorf("invalid game auth credential: %s",id)
