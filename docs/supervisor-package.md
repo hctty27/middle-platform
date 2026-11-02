@@ -1,6 +1,6 @@
 # Supervisor Linux 打包说明
 
-项目提供 `scripts/package-supervisor.ps1`，可在 Windows PowerShell 或 GitHub Actions 上生成 Linux 发布压缩包。**正式服务器不需要安装 Go、Node.js 或 Docker**。
+项目提供 `scripts/package-supervisor.ps1`，可在 Windows PowerShell 或 GitHub Actions 上生成 Linux 发布压缩包。**正式服务器不需要安装 Go 或 Node.js**。
 
 ## 一、本地打包
 
@@ -80,7 +80,7 @@ ZIP 不能可靠保留 Windows → Linux 的文件可执行位，解压后要运
 | sdk-core-2 | `SDK_CORE_ADDR="127.0.0.1:8212"` |
 | config-center-access | `CONFIG_ACCESS_ADDR="127.0.0.1:8291"` |
 
-管理台的 `admin/` 交由 Nginx 托管（内部端口 8281），不需要 Supervisor。原有 Docker 版静态 Nginx 配置的 `root /usr/share/nginx/html;` 要改成 Linux 服务器上的实际目录。
+管理台的 `admin/` 交由 Nginx 托管（内部端口 8281），不需要 Supervisor。仓库内的 `deploy/nginx/admin-static.conf` 默认从 `/opt/middle-platform/admin` 提供静态文件；上传时需将发布包内的 `admin/` 同步到该目录。
 
 发布时先备份数据库并完成兼容性迁移；滚动发布前摘除目标 Nginx upstream，更新后验证 `/health/ready` 再恢复流量。不要直接把旧、新二进制覆盖在相同目录；保留版本目录以便回滚。共享 `current` 软链接不是严格的逐实例原子切换：应给需要分别滚动的服务设置独立版本路径或软链接，避免其他进程意外重启时加载新版本。
 

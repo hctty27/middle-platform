@@ -13,7 +13,5 @@
 **/configs/config-prod.yaml
 **/configs/*.local.yaml
 
-# 生产配置和本地 Compose 环境变量
+# 本地环境变量文件和实际生产凭据不提交到仓库
 .env.*
-!**/.env.prod.example
-**/compose.env

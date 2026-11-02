@@ -10,8 +10,8 @@
 | `config-center-access` | Go | 独立接入示例、本地 MySQL 副本、增量同步与 HMAC 回调 |
 | `sdk-core` | Go | SDK 登录充值核心服务（首期提供按环境、AppID 查询绑定区服组和公共配置） |
 | `config-center-admin` | Vue 3 | 配置管理界面 |
-| `deploy` | MySQL | 本地测试数据库 |
-| `scripts` | Python | MySQL 迁移与 Go 双实例端到端测试 |
+| `deploy` | Nginx / systemd | 原生 Linux 服务部署及网关配置 |
+| `scripts` | PowerShell / Python | Linux 发布包构建、MySQL 迁移及双实例端到端测试 |
 
 ## 推荐：使用 YAML 本地启动
 
@@ -70,7 +70,7 @@ npm run dev
 
 **安全注意：** 管理接口没有账号权限系统，必须部署在可信内网或受保护网关。数据库迁移包含非事务性 MySQL DDL；升级旧库时必须先备份，失败后按照日志检查并恢复，不可盲目重试。
 
-更多信息：[本地部署](docs/deployment.md) · [生产容器部署](docs/production-deployment.md) · [Supervisor 打包](docs/supervisor-package.md) · [系统架构](docs/architecture.md) · [CI 回归](docs/ci.md)。
+更多信息：[本地部署](docs/deployment.md) · [生产原生部署](docs/production-deployment.md) · [Supervisor 打包](docs/supervisor-package.md) · [系统架构](docs/architecture.md) · [CI 回归](docs/ci.md)。
 
 三个 Go 服务的结构化日志、Request ID 和部署说明参见 [统一日志规范](docs/logging.md)。
 

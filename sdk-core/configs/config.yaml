@@ -12,7 +12,7 @@ database:
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 统一日志配置；默认交给 Docker / systemd 负责轮转。
+# 统一日志配置：输出到 stdout/stderr，由 systemd（journald）或 Supervisor 负责采集和轮转。
 log:
   level: info              # debug / info / warn / error；LOG_LEVEL
   format: json             # json / text；LOG_FORMAT
