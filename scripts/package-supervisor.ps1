@@ -161,7 +161,7 @@ try {
     # 不删除用户自己放在 dist 下的其他文件。
     Get-ChildItem -LiteralPath $outputRoot -File |
         Where-Object {
-            $_.Name -match '^middle-platform-.*-linux-(amd64|arm64)\.(zip|tar\.gz) -and
+            $_.Name -match '^middle-platform-.*-linux-(amd64|arm64)\.(zip|tar\.gz)$' -and
             $_.FullName -ne $archivePath
         } |
         Remove-Item -Force
