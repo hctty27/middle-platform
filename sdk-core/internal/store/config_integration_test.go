@@ -72,6 +72,18 @@ func TestLookupMySQL(t *testing.T) {
 
     store := NewStore(db)
     if err := store.VerifySchema(ctx);err!=nil { t.Fatal(err) }
+    const demoSecret="AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+    _,err=db.ExecContext(ctx,"UPDATE config_node SET config=JSON_SET(config,'$.gameSecret',?) WHERE id=1",demoSecret)
+    if err!=nil{t.Fatal(err)}
+    rawGame,err:=store.LookupGameConfig(ctx,1)
+    if err!=nil{t.Fatal(err)}
+    var gameWithSecret map[string]any
+    if err=json.Unmarshal(rawGame,&gameWithSecret);err!=nil||gameWithSecret["gameSecret"]!=demoSecret {
+        t.Fatalf("game secret lookup: %v",err)
+    }
+    if _,err=store.LookupGameConfig(ctx,999999);!errors.Is(err,model.ErrNotFound) {
+        t.Fatalf("unexpected missing game: %v",err)
+    }
 
     for _,tc := range []struct{env,regionCode,groupCode,regionKey string}{
         {"prod","region-prod","group-prod","prod"},
@@ -105,7 +117,19 @@ func TestLookupMySQL(t *testing.T) {
     assertLookupNotFound(t,store,"test")
     if _,err := db.ExecContext(ctx,"UPDATE config_node SET status=0 WHERE id=1");err!=nil { t.Fatal(err) }
     assertLookupNotFound(t,store,"prod")
+    // 支付密钥位于渠道包顶层，独立于大区绑定和当前启用状态。
+    _,err = db.ExecContext(ctx,
+        `UPDATE config_channel_app SET config='{"tsKey":"abc","appSecret":"integration-secret"}' WHERE id=10`)
+    if err!=nil {t.Fatal(err)}
+    secret,err := store.LookupPlatformSecret(ctx,"app1001")
+    if err!=nil || secret!="integration-secret" {t.Fatalf("load app secret: got %q err %v",secret,err)}
+    if _,err=store.LookupPlatformSecret(ctx,"missing-app");!errors.Is(err,model.ErrNotFound){t.Fatalf("missing app: %v",err)}
     if _,err := db.ExecContext(ctx,"UPDATE config_channel_app SET status=0 WHERE id=10");err!=nil { t.Fatal(err) }
+    secret,err = store.LookupPlatformSecret(ctx,"app1001")
+    if err!=nil || secret!="integration-secret" {t.Fatalf("inactive app historical callback: got %q err %v",secret,err)}
+    if _,err=db.ExecContext(ctx,
+        `UPDATE config_channel_app SET config='{"tsKey":"abc"}' WHERE id=10`);err!=nil {t.Fatal(err)}
+    if _,err=store.LookupPlatformSecret(ctx,"app1001");!errors.Is(err,model.ErrInvalidConfig){t.Fatalf("missing appSecret: %v",err)}
     assertLookupNotFound(t,store,"prod")
 }
 

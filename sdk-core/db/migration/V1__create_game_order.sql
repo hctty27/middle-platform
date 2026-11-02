@@ -1,0 +1,32 @@
+-- 订单业务库独立迁移；不要在 config_center 权威配置库执行。
+-- MySQL 8.0.16+，服务连接会话需采用 UTC。
+CREATE TABLE game_order (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '内部主键',
+    appid VARCHAR(128) COLLATE utf8mb4_bin NOT NULL COMMENT '应用 Code',
+    game_id BIGINT NOT NULL COMMENT '登记时所属游戏 ID，通知补偿固定读取该游戏的主密钥',
+    env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL COMMENT 'prod/test/review',
+    game_order_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL COMMENT '游戏订单号',
+    amount BIGINT UNSIGNED NOT NULL COMMENT '预期实付，人民币分',
+    attach TEXT NOT NULL COMMENT '原始透传字符串',
+    game_notify_url VARCHAR(2048) NOT NULL COMMENT '大区 payNotifyUrl 快照',
+    platform_order_no VARCHAR(128) COLLATE utf8mb4_bin DEFAULT NULL COMMENT '平台订单号',
+    paid_at DATETIME(3) DEFAULT NULL COMMENT '支付完成 UTC 时间',
+    payment_status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0未支付 1已支付',
+    notify_status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0待通知 1成功 2失败',
+    notify_attempts INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通知次数',
+    last_notify_at DATETIME(3) DEFAULT NULL COMMENT '最近通知开始 UTC 时间',
+    last_notify_error VARCHAR(512) NOT NULL DEFAULT '' COMMENT '脱敏错误',
+    notify_success_at DATETIME(3) DEFAULT NULL COMMENT '首次成功 UTC 时间',
+    next_notify_at DATETIME(3) DEFAULT NULL COMMENT '下次自动补偿 UTC 时间',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_app_game_order (appid,game_order_id),
+    UNIQUE KEY uk_platform_order (platform_order_no),
+    KEY idx_due_notify (payment_status,notify_status,next_notify_at),
+    KEY idx_env_created (env,created_at),
+    CONSTRAINT chk_order_env CHECK (env IN ('prod','test','review')),
+    CONSTRAINT chk_order_amount CHECK (amount>0),
+    CONSTRAINT chk_order_payment CHECK (payment_status IN (0,1)),
+    CONSTRAINT chk_order_notify CHECK (notify_status IN (0,1,2))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='游戏充值订单登记';

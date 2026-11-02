@@ -101,3 +101,37 @@ func (s *Store) VerifySchema(ctx context.Context) error {
     defer rows.Close()
     return rows.Err()
 }
+
+// LookupPlatformSecret 按全局唯一 AppID 读取渠道包顶层 appSecret，不依赖环境和当前绑定状态。
+// 已登记订单的回调可能发生在渠道包停用或环境绑定变更之后，因此这里不检查 status。
+// AppID 不得删除后复用；旧密钥轮换需要额外的密钥版本机制。
+func (s *Store) LookupPlatformSecret(ctx context.Context, appID string) (string, error) {
+    var raw []byte
+    err := s.db.QueryRowContext(ctx,
+        "SELECT config FROM config_channel_app WHERE code = ? LIMIT 1", appID).Scan(&raw)
+    if errors.Is(err, sql.ErrNoRows) {
+        return "", model.ErrNotFound
+    }
+    if err != nil {
+        return "", fmt.Errorf("query platform secret config: %w", err)
+    }
+    var value struct {
+        AppSecret string `json:"appSecret"`
+    }
+    if err := json.Unmarshal(raw, &value); err != nil || value.AppSecret == "" {
+        return "", model.ErrInvalidConfig
+    }
+    return value.AppSecret, nil
+}
+
+// LookupGameConfig 通过订单登记时保存的游戏 ID 获取当前游戏主密钥配置。
+// 不依赖当前环境绑定或 status，避免关服后无法补偿已支付订单。
+func(s *Store) LookupGameConfig(ctx context.Context,gameID int64)(json.RawMessage,error){
+    if gameID<=0{return nil,model.ErrNotFound}
+    var raw []byte
+    err:=s.db.QueryRowContext(ctx,
+        "SELECT config FROM config_node WHERE id=? AND node_type='game' LIMIT 1",gameID).Scan(&raw)
+    if errors.Is(err,sql.ErrNoRows){return nil,model.ErrNotFound}
+    if err!=nil{return nil,fmt.Errorf("query order game secret: %w",err)}
+    return json.RawMessage(raw),nil
+}

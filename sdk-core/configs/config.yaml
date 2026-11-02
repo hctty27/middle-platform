@@ -1,21 +1,36 @@
-# SDK 核心服务公共模板；复制为 config-dev.yaml 后填写数据库连接信息。
-# 本服务只读取 config-center 权威库，不建立本地副本，也不执行数据库迁移。
+# SDK Core 公共配置模板，密钥只写入服务器本地配置，不能提交仓库。
 server:
-  # SDK_CORE_ADDR；生产建议通过 Nginx 代理 /api/core/
   address: ":8082"
 
+# config_center 权威库，只读
 database:
-  # SDK_CORE_DB_DSN；与 config-center 指向同一个 config_center 数据库，使用只读账号。
-  # 示例：sdk_reader:password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC
   dsn: ""
   maxOpenConns: 20
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 统一日志配置：输出到 stdout/stderr，由 systemd（journald）或 Supervisor 负责采集和轮转。
+# 订单独立库；留空时不启用订单和回调接口
+orderDatabase:
+  dsn: ""
+  maxOpenConns: 20
+  maxIdleConns: 10
+  connMaxLifetime: "30m"
+
+# 游戏通信主密钥只保存在配置中心 game.config.gameSecret 中（Base64 编码的 32 随机字节）。
+# SDK Core 与游戏服对两个用途分别派生 HKDF 密钥；这里不再配置 gameAuth.keys。
+
+# 平台密钥从 config_channel_app.config.appSecret（渠道包 JSON 顶层）读取，跨环境共享。
+# 不在此处重复配置 payment.secrets；平台 v1 未签金额，正式环境拒绝确认支付。
+payment:
+  allowUnverifiedNonProd: false
+
+# SDK Core 向游戏发货：使用 gameSecret 派生的通知密钥；只配置允许的 HTTPS 域名。
+gameNotify:
+  allowedHosts: []
+
 log:
-  level: info              # debug / info / warn / error；LOG_LEVEL
-  format: json             # json / text；LOG_FORMAT
-  output: stdout           # stdout / stderr；LOG_OUTPUT
-  accessEnabled: true      # 正常访问日志开关；LOG_ACCESS_ENABLED
-  slowThreshold: 500ms     # 慢请求阈值；LOG_SLOW_THRESHOLD
+  level: info
+  format: json
+  output: stdout
+  accessEnabled: true
+  slowThreshold: 500ms
