@@ -55,11 +55,12 @@ sudo cp deploy/.env.prod.example /etc/middle-platform/compose.env
 ```bash
 sudo chown root:65532 /etc/middle-platform/config-center.yaml /etc/middle-platform/sdk-core.yaml
 sudo chmod 0640 /etc/middle-platform/config-center.yaml /etc/middle-platform/sdk-core.yaml
+sudo chgrp 65532 /etc/middle-platform
 sudo chmod 0750 /etc/middle-platform
 sudo chmod 0600 /etc/middle-platform/compose.env
 ```
 
-注意：如果目录拥有者是 root 且组为 root，目录模式 0750 会导致 UID 65532 无法遍历。**还需要**为目录授予组 65532 的执行权限（例如 `sudo chgrp 65532 /etc/middle-platform`），否则容器无法读取挂载配置文件。其他采用 rootless/userns 映射的 Docker 环境要按映射后 UID/GID 调整权限。
+上述权限适用于 rootful Docker 的普通 bind mount；若启用了 rootless Docker 或 user namespace 映射，必须按映射后的 UID/GID 调整权限和目录可遍历性。
 
 > 真实配置和 `compose.env` 仅存生产机或安全凭据管理系统，禁止提交 Git；镜像里不打包任何真实凭据。
 > 同时配置安全组/防火墙：8080、8081、8082、8083 仅允许网关或可信接入节点访问。
