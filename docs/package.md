@@ -1,15 +1,33 @@
-# Supervisor Linux 打包和部署
+# Linux 发布包构建
 
-## 产物约定
+唯一需要手动运行的打包入口为 `scripts/package.ps1`；Windows PowerShell 和 GitHub Actions 共用该脚本。脚本交叉编译四个 Linux ELF，并可同时构建 Vue 静态资源。**打包与进程管理方式无关**，不要求安装 Supervisor 才能打包。
 
-Windows PowerShell 与 GitHub Actions 均使用 `scripts/package.ps1`，在仓库根目录的 **`dist/` 直接生成一个 `.tar.gz`**，不生成 `dist/supervisor/`、解压目录、ZIP 或中间文件。
+## 构建依赖与命令
+
+开发机要求 Go 1.27.3；包含 Vue 前端时还需 Node.js 22 / npm。仓库根目录执行：
+
+```powershell
+.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
+
+# 可选：Linux ARM64
+.\scripts\package.ps1 -Arch arm64 -Version v1.0.0
+
+# 可选：仅服务端
+.\scripts\package.ps1 -SkipFrontend -Version v1.0.0
+```
+
+省略 `-Version` 时自动生成带 Git 提交号或本地时间的版本标识。Go 编译使用 `-buildvcs=false`，避免开发机 VCS 状态异常影响编译。
+
+## 产物目录
+
+成功后 `dist/` 直接生成**唯一一个** `middle-platform-v1.0.0-linux-amd64.tar.gz`，不保留中间解压目录或其他脚本生成的历史包。
 
 ```text
 dist/
 └── middle-platform-v1.0.0-linux-amd64.tar.gz
 ```
 
-tar.gz 内只包含运行需要的文件（`-SkipFrontend` 时不含 `admin/`）：
+归档内只包含：
 
 ```text
 bin/
@@ -17,87 +35,23 @@ bin/
 ├── config-center-access
 ├── sdk-core
 └── migrate
-admin/
+admin/                      # -SkipFrontend 时不存在
 ├── index.html
 └── assets/...
 ```
 
-不包含 `BUILD_INFO.txt`、`SHA256SUMS.txt`、生产 YAML、数据库密码、Supervisor/Nginx 配置或源码；临时构建目录会自动清理。打包仍可在 CI 中校验归档、ELF 架构和权限，但不会把校验信息塞进交付包。
+归档**不包含**生产 YAML、真实密码、Supervisor/systemd/Nginx 配置、源码、`BUILD_INFO.txt` 或 `SHA256SUMS.txt`。`scripts/package-archive.go` 只是内部 tar.gz 辅助工具，保证从 Windows 打包时 Linux ELF 仍保存 `0755` 可执行权限；不需要也不应该单独运行。
 
-所有 `bin/` 可执行文件由 Go 的 tar 归档工具显式设置为 **Unix 0755**（即使在 Windows 上生成也是如此），Linux 解压后无需再 `chmod`。归档采用 Go 标准库 `archive/tar`，不依赖额外的 tar 命令或 WSL。
-
-## 脚本职责
-
-`package.ps1` 是唯一需要手动执行的打包入口；`package-archive.go` 是内部辅助工具，负责写入 tar.gz 文件并在 Windows 上明确保存 Linux ELF 的 `0755` 执行权限。它不涉及 Supervisor，也不需要单独运行。使用 Go 标准库打包是为了避免 Windows 原生 ZIP 或普通 tar 在 Unix 权限上的不一致。
-
-## Windows 本地打包
-
-要求 Go 1.27.3；包含前端时还需要 Node.js 22 和 npm。
-
-在仓库根目录执行：
-
-```powershell
-cd E:\Works\ai\sdk\middle-platform
-git pull origin main
-.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
-```
-
-生成 `dist/middle-platform-v1.0.0-linux-amd64.tar.gz`。
-
-其他选项：
-
-```powershell
-# Linux ARM64
-.\scripts\package.ps1 -Arch arm64 -Version v1.0.0
-
-# 不包含 Vue 管理端
-.\scripts\package.ps1 -SkipFrontend -Version v1.0.0
-```
-
-打包成功后清理脚本创建的旧版归档及历史 `dist/supervisor/` 目录，但不会删除 `dist` 下用户自己放入的其他文件。每次重新打包无需手工清理临时目录。
-
-## GitHub Actions
-
-打开 **Actions → Package Linux → Run workflow**。Ubuntu Runner 调用同一份 PowerShell 脚本、验证 `dist/*.tar.gz` 中只含 `bin/` 和 `admin/`、四个 ELF 的架构及可执行位，再使用 `actions/upload-artifact@v7` 的 `archive: false` 上传 **原始 tar.gz**，不额外套 ZIP。Artifact 保留 14 天。
-
-## Linux 服务器首次部署
-
-将归档上传服务器 `/tmp/` 后，创建生产根目录：
+发布前可检查（Linux）：
 
 ```bash
-sudo mkdir -p /data/middle-platform/{bin,config,admin,supervisor,nginx,logs}
-sudo tar --no-same-owner -xzpf /tmp/middle-platform-v1.0.0-linux-amd64.tar.gz -C /data/middle-platform
-
-ls -l /data/middle-platform/bin/
-file /data/middle-platform/bin/*
+tar -tzf dist/middle-platform-v1.0.0-linux-amd64.tar.gz
 ```
 
-`bin/` 下四个程序应为 Linux ELF，权限为 `-rwxr-xr-x`。配置文件不随包发布，应单独放在：
+## CI 打包
 
-```text
-/data/middle-platform/config/config-center.yaml
-/data/middle-platform/config/config-center-access.yaml
-/data/middle-platform/config/sdk-core.yaml
-```
+GitHub Actions → **Package Linux** → **Run workflow**。`.github/workflows/package.yml` 验证归档条目、ELF 架构及权限，并上传原始 tar.gz，不额外包一层 ZIP。CI 可以验证校验和，但**不会把校验文本写进交付包**。
 
-首次启动前，仅在**确认空库或已按要求完成历史迁移**后执行独立迁移工具：
+## 发布边界
 
-```bash
-/data/middle-platform/bin/migrate -config /data/middle-platform/config/config-center.yaml
-sudo supervisorctl reread
-sudo supervisorctl update
-sudo supervisorctl status
-```
-
-旧库先备份，不能删除迁移状态表后强制初始化。
-
-## 正式环境更新
-
-不要在 Go 服务运行时直接用 `tar -xzf ... -C /data/middle-platform` 覆盖二进制文件。应先解压到临时目录，检查权限和程序架构，再备份旧程序、同文件系统原子替换、经 Nginx 摘流量后逐实例重启 Supervisor。两个 SDK 进程共享同一个 `sdk-core` 可执行文件，但应分别健康检查与恢复流量。
-
-程序回滚不等于数据库结构回滚；数据库迁移需先确认版本兼容性。
-
-## 参考
-
-- [Go archive/tar](https://pkg.go.dev/archive/tar)
-- [GitHub Actions 单文件不压缩上传](https://github.blog/changelog/2026-02-26-github-actions-now-supports-uploading-and-downloading-non-zipped-artifacts/)
+打包脚本不安装 Supervisor、不修改 Nginx、不部署数据库、不执行迁移，也不代替备份与回滚。生产更新必须先解压到临时目录、验证 ELF 与权限，再逐实例摘流量与更新；切勿覆盖正在执行的二进制。详见 [生产部署与运维](production.md)。

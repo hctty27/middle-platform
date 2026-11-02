@@ -1,95 +1,52 @@
-# 配置中心架构决策
+# 研发中台架构（当前实现）
 
-## 项目组成
+本文描述当前系统，不按历史 V1～V11 变更过程组织；具体表结构见 [数据库文档](database.md)，接口见 [API 文档](api.md)。
 
-- `config-center`：Go 配置中心，提供统一配置管理、订阅者、版本与变更日志。
-- `config-center-access`：独立 Go 接入服务，通过 Webhook 触发主动同步，并维护独立 MySQL 副本。
-- `config-center-admin`：Vue 3 管理端。
-- `config-center/internal/migration`：V11 基线初始化、增量升级与启动前只读结构校验。
-
-部署只需要 Go、MySQL 和前端构建工具。
-
-## 三级配置树与独立渠道应用
-
-节点固定为 `game → region → server_group`，均保存在 `config_node`。渠道应用统一存储在 `config_channel_app`，三个环境的区服组 ID 分别保存在 `prod_server_group_id`、`test_server_group_id`、`review_server_group_id`，公共 JSON 只有一份。节点只保留 `game_id`、`region_id` 两个祖先字段，不存储 `parent_id`。API 的 `parentId` 由当前节点类型推导。
-
-同层级 `code` 通过 MySQL 唯一索引保障；创建节点校验合法父类型。配置的 JSON 不进行向上继承。
-
-## HTTP 接口
-
-保持不带版本号的统一路径：
-
-- `GET/POST /api/config/admin/nodes`，`GET/PUT/DELETE /api/config/admin/nodes/{id}`
-- `GET /api/config/admin/nodes/tree?parentId=...`
-- `GET /api/config/admin/nodes/{id}/children?page=...&size=...&keyword=...`
-- `GET /api/config/admin/nodes/search?keyword=...`
-- `GET /api/config/admin/nodes/{id}/path`
-- `GET/POST /api/config/admin/subscribers`
-- `GET /api/config/nodes/{id}`、`POST /api/config/nodes/batch-get`
-- `GET /api/config/sync/revision`、`GET /api/config/sync/changes`、`GET /api/config/sync/snapshot`
-- 接入内部回调：`POST /internal/config/callback`
-- 接入本地查询：`GET /api/access/nodes`、`GET /api/access/revision`
-
-生产 Nginx 对 `/api/config/**` 路由到 Go 配置中心。管理 API 必须限制到可信网络；当前无登录/角色功能。
-
-## 数据一致性
-
-权威配置中心多实例共享同一个 MySQL。写事务先锁全局版本行，然后更新节点与 `config_node_change_log`，保证提交顺序和递增 revision 一致；重复无变化更新不增加版本。
-
-Webhook 仅发送 `epoch`、`revision`，由接入侧校验 HMAC-SHA256 和请求时间窗口，异步触发同步。接入端按 revision 连续拉取变更节点 ID，批量查询最新状态，并在短事务内一起更新本地节点副本和同步游标。删除事件会删除本地节点。渠道应用 CRUD 不影响节点版本、日志和回调。
-
-接入端首次连接、epoch 变化、游标缺口时使用一致性快照重建；后台合并重复通知，每五分钟校对一次，补偿丢失 Webhook。回调返回 202 仅表示接受任务，不保证任务已经持久化或完成。接入本地事务通过版本比较和游标行锁协调多进程。
-
-配置中心 Webhook 投递使用数据库租约、签名、重试、重定向限制与目标 IP 校验。单 MySQL 仍然是数据库级别的单点故障，需要备份、监控和恢复演练。
-
-## 数据库迁移
-
-- 首次空库由独立 cmd/migrate 初始化 V11 基线，不再回放旧 V1～V11 DDL。
-- 已有 V11 库保留原有版本记录和业务数据；已有 V1～V10 库需要用旧版代码先完成升级。
-- 新版本服务启动只做只读结构校验，多个实例不在启动时执行 DDL。
-- MySQL DDL 失败可能留下部分表与 dirty=1 状态；先备份再升级，严禁绕过校验。
-- 接入端使用独立的副本 schema.sql，旧副本需要预先升级至 V6。
-
-## Go 包结构
+## 服务与数据流
 
 ```text
-config-center/
-├── cmd/
-│   ├── config-center/
-│   └── migrate/
-├── internal/
-│   ├── api/
-│   ├── app/
-│   ├── migration/sql/
-│   ├── model/
-│   ├── service/
-│   ├── settings/
-│   ├── sqlc/
-│   ├── sqlcgen/
-│   ├── store/
-│   └── webhook/
-└── go.mod
+Vue 3 管理端 ──HTTP──> config-center ────────> 权威 MySQL（config_center）
+                             │                         ↑
+                    节点变更写入 revision              │ 只读 JOIN
+                             │                         │
+                             └──签名 Webhook──> config-center-access
+                                                   │          │
+                                            HTTP 拉取节点     本地 MySQL
+                                            快照/增量日志     （config_access）
+
+SDK 客户端 ──GET /api/core/{env}/{appid}──> sdk-core ───> 权威 MySQL
 ```
 
-接入工程包含 `cmd/config-center-access` 和 `internal/api`、`settings`、`remote`、`store`、`syncer`。所有对外 HTTP 接口继续保持现有契约，无需修改 Vue 路径。
+- `config-center`：管理节点、渠道应用与订阅者，并提供同步版本、变更记录、快照查询。
+- `config-center-access`：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。
+- `sdk-core`：直接查询权威库，根据环境绑定和接口级映射生成响应；不使用接入端副本。
+- `config-center-admin`：Vue 3 管理界面，后端管理 API 当前没有内建用户认证。
 
-## V8 节点同步边界
+## 配置数据模型
 
-- 同步快照仅返回 `epoch`、`revision`、`nodes`；只有三级节点的增删改会推进 revision。
-- 渠道应用及其环境绑定不参与节点同步。
-- V8 升级仅切换一次 epoch，不删除现有渠道业务数据；旧接入副本中的渠道表不会自动删除。
+`config_node` 只有三种节点：
 
-## V9 同步表命名规范
+1. `game`：根节点，`game_id` 与 `region_id` 均为空。
+2. `region`：归属于游戏，`env_type` 仅支持 `test`、`prod`、`review`（旧数据可能为空）。
+3. `server_group`：归属于游戏与大区。
 
-- 节点事件日志改为 `config_node_change_log`，按 `revision` 记录三级节点增量。
-- Webhook 投递进度改为 `config_subscriber_delivery_state`，保持原有订阅者外键、租约和失败重试语义。
-- 仅调整表名和中文表注释；`config_revision` 的 epoch/revision 不变，接入副本协议无需改动。
-- V6/V4 历史归档不再是 V9 运行时依赖；迁移不自动删除归档，人工确认外部备份后方可清理。
+表不再使用 `parent_id`；接口的 `parentId` 由 `game_id` / `region_id` 推导。`config_channel_app` 是独立表，`code` 全局唯一，每个 AppID 的 `prod_server_group_id`、`test_server_group_id`、`review_server_group_id` 各指向至多一个区服组。三个环境共享同一份应用 `config` JSON，不存在独立绑定配置表，也不自动向上继承 JSON。
 
-## V11 三环境绑定收敛
+## 节点变更与同步一致性
 
-- AppID 的正式服、测试服、提审服各绑定最多一个区服组，并共用一份 `config`。
-- 渠道应用 `code` 在所有游戏间全局唯一，V11 中把联合唯一索引改为单列唯一索引，迁移前检查历史重复 code。
-- 删除 `config_channel_app_binding`；移除绑定专属 CRUD，区服组页只读显示关联应用。
-- 在执行 DDL 前校验旧绑定的环境唯一性、游戏归属、状态和最终 JSON 一致性，有冲突则拒绝迁移。
-- `sdk-core` 直接按环境选择一个区服组，必须与配置中心同时升级。
+1. 配置中心写入三级节点时，在同一 MySQL 事务中更新节点、全局 `revision` 和 `config_node_change_log`，确保版本提交次序一致；无变化写入不增加 revision。
+2. Webhook 仅携带 `epoch`、`revision`，使用 HMAC-SHA256 与时间窗口验证，不在通知内传输完整配置。接入端收到有效通知后异步拉取。
+3. 接入端按 `revision` 获取变更节点 ID，再批量查询最新节点；节点内容与游标在本地同一事务提交。初始化、epoch 变化或变更日志断档时使用一致性快照。
+4. 接入端定时校对版本（默认 5 分钟）补偿丢失的 Webhook；HTTP 202 表示通知已受理，**不等于节点已完成同步**。
+5. `config_channel_app` 的增删改及三环境绑定不推进三级节点的 `revision`，SDK Core 直接从权威库读取，不依赖接入副本同步。
+
+配置中心多实例可共享权威 MySQL；投递进度由数据库租约与重试协调。单个 MySQL 仍是单点，生产需要独立的备份与故障恢复机制。
+
+## 边界与演进原则
+
+- 权威库初始基线为 V11，迁移命令由发布流程单独执行，应用启动仅执行只读结构校验。
+- 对外路径不包含 `/v1`；Nginx 可按 `/api/config/` 和 `/api/core/` 分流。
+- 接口级字段映射编译进 `sdk-core`，新增映射字段不必修改 SQL，但需要重新构建并滚动部署。
+- 管理接口、同步接口、回调地址只允许可信内网或受保护的网关访问。生产环境不能将管理 API 与公开 SDK API 无差别暴露。
+
+部署方案见 [生产运维](production.md)。
