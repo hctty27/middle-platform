@@ -9,4 +9,4 @@ RUN npm run build
 FROM nginx:stable-alpine
 COPY deploy/nginx/admin-static.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/config-center-admin/dist /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8281
