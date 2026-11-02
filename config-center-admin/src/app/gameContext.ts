@@ -20,6 +20,7 @@ export async function loadGames() {
   }
 }
 
+// currentGameName 返回当前选中的游戏名称，供导航和页面标题复用。
 export function currentGameName() {
   return games.value.find(game => game.id === currentGameId.value)?.name ?? '请选择游戏'
 }

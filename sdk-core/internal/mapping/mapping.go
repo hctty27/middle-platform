@@ -29,11 +29,13 @@ type Resolver struct {
     configUsage map[string]map[string]bool
 }
 
+// LoadDefault 加载代码内嵌的接口字段映射，并在启动阶段完成规则编译。
 func LoadDefault() (*Resolver, error) {
     return Load(defaultMapping)
 }
 
 // Load 校验接口名、响应字段和来源路径，不支持执行 SQL 或表达式。
+// Load 校验并预编译各接口字段来源，避免在请求期间重复解析映射定义。
 func Load(raw []byte) (*Resolver, error) {
     decoder := json.NewDecoder(bytes.NewReader(raw))
     var definitions map[string]map[string]string
@@ -142,6 +144,7 @@ func (r *Resolver) Resolve(route string, source map[string]any) (map[string]any,
 }
 
 // DecodeObject 读取数据库 JSON 时保留数字精度；不接受非对象类型。
+// DecodeObject 只在映射规则需要 JSON 字段时解析配置对象。
 func DecodeObject(raw []byte) (map[string]any,error) {
     decoder:=json.NewDecoder(bytes.NewReader(raw))
     decoder.UseNumber()

@@ -1,9 +1,9 @@
-# Nginx reverse-proxy example for a dedicated gateway host.
-# Replace upstream IPs, domains, TLS certificate paths, admin CIDR, and htpasswd path.
-# Both nodes must bind to private IPs; firewall must only allow this gateway to reach them.
-# The admin container listens on :8281; gateway may listen on :80 on the same host if IP bindings permit.
+# 独立 Nginx 网关示例，负责将公网 API 与内网管理入口转发到对应服务。
+# 部署前替换节点内网 IP、域名、TLS 证书路径、管理网段和 Basic Auth 密码文件。
+# 后端进程仅监听可信网络地址，并使用防火墙限制仅允许网关访问。
+# 管理端静态 Nginx 使用 8281；网关可在端口不冲突时与其同机部署。
 
-# On each application host: sdk-core-1 = :8211, sdk-core-2 = :8212.
+# 每台应用机分别运行两个 SDK Core 进程：sdk-core-1=:8211，sdk-core-2=:8212。
 upstream mp_core {
     least_conn;
     server 10.0.0.11:8211 max_fails=3 fail_timeout=10s;
@@ -44,12 +44,12 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # Only expose the SDK-facing API publicly.
+    # 公网仅开放 SDK 客户端需要的接口，不开放配置管理和同步接口。
     location ^~ /api/core/ {
         proxy_pass http://mp_core;
     }
 
-    # Configuration sync and all admin functions remain private.
+    # 未匹配的公网请求直接拒绝，避免暴露内部管理能力。
     location / {
         return 404;
     }
@@ -61,12 +61,12 @@ server {
     ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
 
-    # Replace with your actual VPN/private CIDR. Both IP ACL and Basic Auth apply.
+    # 管理入口同时使用可信网段白名单和 Basic Auth；部署时必须替换实际网段。
     allow 10.0.0.0/24;
     deny all;
     auth_basic "Middle Platform Admin";
     auth_basic_user_file /etc/nginx/middle-platform.htpasswd;
-    # Do not forward the admin Basic Auth credential to either Go or static upstream.
+    # 不向 Go 服务或静态管理端传递 Basic Auth 的 Authorization 头。
     proxy_set_header Authorization "";
 
     proxy_connect_timeout 3s;

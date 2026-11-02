@@ -15,8 +15,10 @@ import (
 	"time"
 )
 
+// RequestIDHeader 约定服务间 HTTP 请求追踪所使用的请求头。
 const RequestIDHeader = "X-Request-ID"
 
+// Config 定义日志级别、输出格式、访问日志及慢请求阈值。
 type Config struct {
 	Level         string `yaml:"level"`
 	Format        string `yaml:"format"`
@@ -25,6 +27,7 @@ type Config struct {
 	SlowThreshold string `yaml:"slowThreshold"`
 }
 
+// Default 返回统一日志的安全默认值。
 func Default() Config {
 	return Config{
 		Level: "info", Format: "json", Output: "stdout",
@@ -54,6 +57,7 @@ func (c *Config) ApplyEnv() error {
 	return c.Validate()
 }
 
+// Validate 校验日志选项和慢请求阈值，拒绝无法识别的配置。
 func (c Config) Validate() error {
 	switch strings.ToLower(c.Level) {
 	case "debug", "info", "warn", "error":
@@ -107,6 +111,7 @@ func Init(service string, c Config) error {
 
 type requestIDKey struct{}
 
+// RequestID 从请求上下文提取关联 ID；没有值时返回空字符串。
 func RequestID(ctx context.Context) string {
 	id, _ := ctx.Value(requestIDKey{}).(string)
 	return id
@@ -149,6 +154,7 @@ type statusWriter struct {
 	status int
 }
 
+// WriteHeader 同步记录响应状态码，供访问日志统计。
 func (w *statusWriter) WriteHeader(code int) {
 	if w.status != 0 {
 		return
@@ -157,6 +163,7 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+// Write 在首次写入正文时补全默认的 HTTP 200 状态。
 func (w *statusWriter) Write(body []byte) (int, error) {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)

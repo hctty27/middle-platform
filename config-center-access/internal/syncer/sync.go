@@ -12,6 +12,7 @@ import (
 )
 
 // Client 只依赖远程同步协议，便于使用 httptest 测试。
+// Client 定义接入端读取权威版本、变更列表和快照的远端能力。
 type Client interface {
 	Head(context.Context) (remote.Revision, error)
 	Changes(context.Context, int64) ([]remote.Event, error)
@@ -122,6 +123,7 @@ func contiguous(after int64, events []remote.Event) bool {
 }
 
 // Trigger 合并高频回调；执行失败由下一次通知或周期校对补偿。
+// Trigger 将多次回调合并为同步信号，并保留周期性校对能力。
 type Trigger struct {
 	sync *Synchronizer
 	period time.Duration
@@ -142,6 +144,7 @@ func (t *Trigger) Request() {
 }
 
 // Run 在启动 3 秒后首次校对，以后每隔 period 校对一次。
+// Run 等待通知或周期计时触发同步，直到进程请求退出。
 func (t *Trigger) Run(ctx context.Context) {
 	timer := time.NewTimer(3 * time.Second)
 	defer timer.Stop()

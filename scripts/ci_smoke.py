@@ -17,6 +17,7 @@ LOGS = []
 
 
 def request(port, path, method="GET", data=None, expected=200, extra_headers=None):
+    """发送 HTTP 请求并校验响应状态与 JSON 数据。"""
     payload = None if data is None else json.dumps(data).encode("utf-8")
     headers = {"Content-Type": "application/json"} if payload is not None else {}
     headers.update(extra_headers or {})
@@ -41,6 +42,7 @@ def request(port, path, method="GET", data=None, expected=200, extra_headers=Non
 
 
 def wait_until(label, predicate, seconds=75):
+    """轮询异步条件，超时后报告最后一次失败原因。"""
     end = time.monotonic() + seconds
     last = None
     while time.monotonic() < end:
@@ -56,6 +58,7 @@ def wait_until(label, predicate, seconds=75):
 
 
 def start(name, module, port, extra=None):
+    """启动测试用 Go 服务进程，设置对应环境变量并保存日志。"""
     env = os.environ.copy()
     env.update(extra or {})
     if name.startswith("access"):
@@ -77,6 +80,7 @@ def start(name, module, port, extra=None):
 
 
 def stop(proc):
+    """停止测试进程并等待退出。"""
     if proc.poll() is None:
         proc.terminate()
         try:
@@ -87,6 +91,7 @@ def stop(proc):
 
 
 def create_node(node_type, parent, code):
+    """通过管理接口创建节点并返回 ID。"""
     return request(8080, "/api/config/admin/nodes", "POST", {
         "parentId": parent,
         "nodeType": node_type,
@@ -100,20 +105,24 @@ def create_node(node_type, parent, code):
 
 
 def subscriber():
+    """读取当前订阅者同步状态。"""
     rows = request(8080, "/api/config/admin/subscribers")
     return next(row for row in rows if row["code"] == "ci-access")
 
 
 def replica():
+    """读取接入端维护的本地节点副本。"""
     return request(8081, "/api/access/nodes")
 
 
 def synchronized_nodes(count, revision):
+    """核对同步版本与节点数量。"""
     rows = replica()
     return len(rows) == count and subscriber()["acknowledgedRevision"] >= revision
 
 
 def main():
+    """覆盖双实例写入、回调签名、增量同步和故障恢复。"""
     center1 = start("center-1", "config-center-java", 8080)
     wait_until("primary config-center ready", lambda: request(8080, "/health/ready")["status"] == "UP")
     center2 = start("center-2", "config-center-java", 8082)
@@ -296,14 +305,15 @@ def main():
 
 
     # 数据集 epoch 单独变更，即使 revision 未变也必须重新通知接入方。
-    container = subprocess.check_output(
-        ["docker", "ps", "--filter", "ancestor=mysql:8.4", "--format", "{{.ID}}"],
-        text=True).strip().splitlines()[0]
-
     def mysql(sql):
+        """直接查询本机 MySQL，确认仅改变 epoch 也能触发接入方重建快照。"""
+        env = os.environ.copy()
+        env["MYSQL_PWD"] = "integration-test"
         return subprocess.check_output(
-            ["docker", "exec", container, "mysql", "-uroot", "-pintegration-test",
-             "-N", "-B", "-e", sql], text=True, stderr=subprocess.DEVNULL).strip()
+            ["mysql", "--protocol=tcp", "--host=127.0.0.1",
+             "--user=root", "--batch", "--skip-column-names", "-e", sql],
+            text=True, stderr=subprocess.DEVNULL, env=env,
+        ).strip()
 
     old_head = request(8080, "/api/config/sync/revision")
     mysql("UPDATE config_center.config_revision SET epoch=UUID() WHERE id=1")

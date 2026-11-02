@@ -9,6 +9,7 @@ type GroupField = 'prodServerGroupId' | 'testServerGroupId' | 'reviewServerGroup
 type AppForm = { code: string; name: string; status: number; config: string; remark: string } & Record<GroupField, number | null>
 interface ChannelApp extends AppForm { id: number; gameId: number }
 interface GroupOption { id: number; name: string; code: string; regionName: string }
+// 三种环境绑定使用固定字段映射，每个 AppID 在每种环境最多选择一个区服组。
 const environments: { key: RegionEnvType; field: GroupField; label: string }[] = [
   { key: 'prod', field: 'prodServerGroupId', label: '正式服' },
   { key: 'test', field: 'testServerGroupId', label: '测试服' },
@@ -25,6 +26,7 @@ const visible = ref(false)
 const editing = ref<number | null>(null)
 const groupOptions = reactive<Record<RegionEnvType, GroupOption[]>>({ prod: [], test: [], review: [] })
 const groupLoading = reactive<Record<RegionEnvType, boolean>>({ prod: false, test: false, review: false })
+// 各环境独立维护请求序号，避免旧搜索结果覆盖用户最新选择。
 const groupSequences: Record<RegionEnvType, number> = { prod: 0, test: 0, review: 0 }
 const form = ref<AppForm>(emptyForm())
 let sequence = 0
@@ -57,6 +59,7 @@ async function loadApps() {
 function groupLabel(group: GroupOption): string {
   return `${group.regionName} / ${group.name} (${group.code})`
 }
+// 按环境异步查询可绑定区服组，输入变化时仅保留最后一次请求结果。
 async function loadOptions(env: RegionEnvType, keyword = '') {
   if (!props.gameId) return
   const request = ++groupSequences[env]

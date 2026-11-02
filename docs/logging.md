@@ -33,7 +33,7 @@ log:
 
 ## 生产部署
 
-- Docker 使用日志驱动管理 stdout/stderr 的轮转和保留；systemd 使用 journald。
+- systemd 通过 journald 收集 stdout/stderr，可通过 `journalctl` 检索，并按 journald 配置轮转保留。
 - 随后如需多实例检索，可选择 Loki + Grafana，按 `service`、`instance` 过滤，搜索 `request_id` 定位请求。
 - 不要把高基数的 `request_id` 当作 Loki 标签。
 

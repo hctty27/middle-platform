@@ -4,12 +4,9 @@
 
 安装 Go 1.27.3、Node.js 22、MySQL 8.0+。
 
-```bash
-cd deploy
-docker compose up -d
-```
+启动本机或独立部署的 MySQL 8.0+ 服务，确认可以使用 TCP 连接。不需要安装容器运行环境。
 
-创建两个独立数据库：
+使用具有建库权限的账号创建两个独立数据库：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS config_center CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
