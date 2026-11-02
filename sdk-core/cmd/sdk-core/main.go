@@ -90,7 +90,7 @@ func run(configPath string)error{
         orders:=&service.OrderService{
             ConfigReader:repository,Orders:store.NewOrderStore(ordersDB),
             GameAuth:&auth.GameAuth{Keys:cfg.GameAuth.Keys},
-            PlatformSecrets:cfg.Payment.Secrets,
+            PlatformSecretReader:repository,
             Notifier:notify.NewClient(cfg.GameNotify.AllowedHosts,cfg.GameNotify.Secrets),
             AllowUnverifiedNonProd:cfg.Payment.AllowUnverifiedNonProd,
         }
