@@ -108,9 +108,10 @@ func parsePath(source string) ([]string,error) {
         return segments,nil
     }
     // 对外响应不允许映射平台支付密钥；渠道包的其他字段依旧可映射。
-    if len(segments)>=3 && segments[0]=="channel_app" && segments[1]=="config" &&
-        strings.EqualFold(segments[2],"appSecret") {
-        return nil,fmt.Errorf("payment secret cannot be exposed by response mapping")
+    if len(segments)>=3 && segments[1]=="config" &&
+        ((segments[0]=="channel_app" && strings.EqualFold(segments[2],"appSecret")) ||
+        (segments[0]=="game" && strings.EqualFold(segments[2],"gameSecret"))) {
+        return nil,fmt.Errorf("server secret cannot be exposed by response mapping")
     }
     if len(segments)>=2 && (segments[0]=="channel_app" || segments[0]=="server_group" ||
         segments[0]=="region" || segments[0]=="game") && segments[1]=="config" {

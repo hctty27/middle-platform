@@ -319,3 +319,17 @@ func TestGetDoesNotExposePaymentSecretThroughWholeConfig(t *testing.T) {
     if got["tsKey"]!="visible" {t.Fatalf("regular config field disappeared: %+v",got)}
     if _,ok:=config["appSecret"];ok {t.Fatal("payment secret leaked via whole config")}
 }
+
+func TestWholeGameConfigStripsGameSecret(t *testing.T) {
+    resolver,err:=mapping.Load([]byte("{\"GET /api/core/{env}/{appid}\":{\"wholeGame\":\"game.config\",\"title\":\"game.config.title\"}}"))
+    if err!=nil{t.Fatal(err)}
+    reader:=&fakeReader{
+        app:model.ChannelApp{GameConfig:json.RawMessage("{\"title\":\"shown\",\"gameSecret\":\"PRIVATE_BASE64\"}")},
+        group:&model.BoundGroup{},
+    }
+    got,err:=NewConfigService(reader,resolver).Get(context.Background(),"prod","app1")
+    if err!=nil{t.Fatal(err)}
+    object:=got["wholeGame"].(map[string]any)
+    if _,leaks:=object["gameSecret"];leaks{t.Fatal("gameSecret exposed")}
+    if object["title"]!="shown" {t.Fatal("ordinary game config altered")}
+}

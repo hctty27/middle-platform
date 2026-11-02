@@ -298,3 +298,14 @@ func TestRejectPaymentSecretResponseMapping(t *testing.T) {
         if _,err=Load(raw);err==nil {t.Errorf("payment secret mapping accepted: %s",path)}
     }
 }
+
+func TestRejectGameSecretResponseMapping(t *testing.T) {
+    for _,path:=range []string{"game.config.gameSecret","game.config.GAMESECRET",
+        "game.config.gameSecret.nested"} {
+        raw,err:=json.Marshal(map[string]map[string]string{
+            "GET /api/core/{env}/{appid}":{"secret":path},
+        })
+        if err!=nil{t.Fatal(err)}
+        if _,err=Load(raw);err==nil{t.Errorf("accepted game secret mapping: %s",path)}
+    }
+}

@@ -1,8 +1,10 @@
 package auth
 
 import (
+    "bytes"
     "crypto/hmac"
     "crypto/sha256"
+    "encoding/base64"
     "encoding/hex"
     "fmt"
     "net/http/httptest"
@@ -10,19 +12,49 @@ import (
     "time"
 )
 
-func TestVerifyGameSignature(t *testing.T){
-    secret:="01234567890123456789012345678901"
-    g:=&GameAuth{Keys:map[string]Credential{"k1":{Secret:secret,AppIDs:[]string{"app1"},Envs:[]string{"test"}}}}
-    raw:=[]byte(`{"game_order_id":"o1","amount":100,"attach":""}`)
-    r:=httptest.NewRequest("POST","https://sdk.example.com/api/core/test/app1/orders",nil)
-    ts:=fmt.Sprint(time.Now().Unix())
-    digest:=sha256.Sum256(raw)
-    canonical:=fmt.Sprintf("k1\nPOST\n/api/core/test/app1/orders\n%s\n%x",ts,digest)
-    mac:=hmac.New(sha256.New,[]byte(secret));mac.Write([]byte(canonical))
-    r.Header.Set("X-Game-Key-Id","k1")
-    r.Header.Set("X-Game-Timestamp",ts)
-    r.Header.Set("X-Game-Signature",hex.EncodeToString(mac.Sum(nil)))
-    if err:=g.Verify(r,raw,"test","app1");err!=nil{t.Fatal(err)}
-    if err:=g.Verify(r,[]byte("changed"),"test","app1");err==nil{t.Fatal("modified body accepted")}
-    if err:=g.Verify(r,raw,"prod","app1");err==nil{t.Fatal("wrong environment accepted")}
+func testSecret()([]byte,string){
+    secret:=make([]byte,32)
+    for i:=range secret {secret[i]=byte(i)}
+    return secret,base64.StdEncoding.EncodeToString(secret)
+}
+
+func TestHKDFPurposesAndGameConfig(t *testing.T){
+    secret,encoded:=testSecret()
+    parsed,err:=ParseGameSecret([]byte(fmt.Sprintf("{%q:%q}","gameSecret",encoded)))
+    if err!=nil||!bytes.Equal(parsed,secret){t.Fatalf("parse: %v",err)}
+    register,err:=Derive(parsed,PurposeOrderRegister)
+    if err!=nil{t.Fatal(err)}
+    notify,err:=Derive(parsed,PurposePaymentNotify)
+    if err!=nil{t.Fatal(err)}
+    repeat,err:=Derive(parsed,PurposeOrderRegister)
+    if err!=nil{t.Fatal(err)}
+    if len(register)!=32||len(notify)!=32||bytes.Equal(register,notify)||
+        !bytes.Equal(register,repeat){t.Fatal("invalid HKDF key separation")}
+    for _,raw:=range []string{"{}","{\"gameSecret\":\"short\"}",
+        "{\"gameSecret\":\"////\"}","{\"gameSecret\":null}","[\"wrong\"]"} {
+        if _,err:=ParseGameSecret([]byte(raw));err==nil{t.Errorf("accepted %s",raw)}
+    }
+    if _,err:=Derive(parsed,"unknown");err==nil{t.Fatal("unsupported purpose accepted")}
+}
+
+func TestVerifyRegistration(t *testing.T){
+    master,_:=testSecret()
+    key,err:=Derive(master,PurposeOrderRegister)
+    if err!=nil{t.Fatal(err)}
+    body:=[]byte("{\"game_order_id\":\"g100\",\"amount\":100,\"attach\":\"\"}")
+    req:=httptest.NewRequest("POST","https://sdk.example.com/api/core/test/app1001/orders",nil)
+    stamp:=fmt.Sprint(time.Now().Unix())
+    bodyHash:=sha256.Sum256(body)
+    canonical:=fmt.Sprintf("%s\n%s\n%s\n%x","POST",req.URL.EscapedPath(),stamp,bodyHash)
+    mac:=hmac.New(sha256.New,key)
+    mac.Write([]byte(canonical))
+    req.Header.Set("X-Game-Timestamp",stamp)
+    req.Header.Set("X-Game-Signature",hex.EncodeToString(mac.Sum(nil)))
+    if err:=VerifyRegistration(req,body,master);err!=nil{t.Fatal(err)}
+    if err:=VerifyRegistration(req,[]byte("modified"),master);err==nil{t.Fatal("tampered body accepted")}
+    other:=httptest.NewRequest("POST","https://sdk.example.com/api/core/prod/app1001/orders",nil)
+    other.Header=req.Header.Clone()
+    if err:=VerifyRegistration(other,body,master);err==nil{t.Fatal("cross-env replay accepted")}
+    req.Header.Set("X-Game-Timestamp",fmt.Sprint(time.Now().Add(-10*time.Minute).Unix()))
+    if err:=VerifyRegistration(req,body,master);err==nil{t.Fatal("expired request accepted")}
 }

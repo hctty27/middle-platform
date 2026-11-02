@@ -72,6 +72,18 @@ func TestLookupMySQL(t *testing.T) {
 
     store := NewStore(db)
     if err := store.VerifySchema(ctx);err!=nil { t.Fatal(err) }
+    const demoSecret="AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+    _,err=db.ExecContext(ctx,"UPDATE config_node SET config=JSON_SET(config,'$.gameSecret',?) WHERE id=1",demoSecret)
+    if err!=nil{t.Fatal(err)}
+    rawGame,err:=store.LookupGameConfig(ctx,1)
+    if err!=nil{t.Fatal(err)}
+    var gameWithSecret map[string]any
+    if err=json.Unmarshal(rawGame,&gameWithSecret);err!=nil||gameWithSecret["gameSecret"]!=demoSecret {
+        t.Fatalf("game secret lookup: %v",err)
+    }
+    if _,err=store.LookupGameConfig(ctx,999999);!errors.Is(err,model.ErrNotFound) {
+        t.Fatalf("unexpected missing game: %v",err)
+    }
 
     for _,tc := range []struct{env,regionCode,groupCode,regionKey string}{
         {"prod","region-prod","group-prod","prod"},
