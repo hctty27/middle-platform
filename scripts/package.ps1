@@ -1,6 +1,6 @@
 # 将 Go 服务和 Vue 前端交叉编译、校验，并打包为 Linux 发布归档。
 # Windows / Linux 统一生成 tar.gz，显式设置 bin/ 下 Linux ELF 的 0755 执行权限。
-# 用法：.\scripts\package-supervisor.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
+# 用法：.\scripts\package.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
 # 依赖：Go；启用前端构建时还需要 npm。真实凭据和生产 YAML 不打包。
 [CmdletBinding()]
 param(
@@ -149,7 +149,7 @@ try {
     $env:GOARCH = ([string]$goHost[1]).Trim()
     $env:CGO_ENABLED = '0'
 
-    $archiveTool = Join-Path $PSScriptRoot 'package-supervisor-archive.go'
+    $archiveTool = Join-Path $PSScriptRoot 'package-archive.go'
     Write-Host "Creating $archivePath..."
     & go run -buildvcs=false $archiveTool -source $stageDir -output $archivePath
     Assert-ExitCode 'create Linux tar.gz'

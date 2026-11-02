@@ -21,7 +21,7 @@ func main() {
 	flag.Parse()
 
 	if *source == "" || *output == "" {
-		fmt.Fprintln(os.Stderr, "usage: package-supervisor-archive -source <dir> -output <file.tar.gz>")
+		fmt.Fprintln(os.Stderr, "usage: package-archive -source <dir> -output <file.tar.gz>")
 		os.Exit(2)
 	}
 	if err := writeArchive(*source, *output); err != nil {

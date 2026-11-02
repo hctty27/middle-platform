@@ -2,7 +2,7 @@
 
 ## 产物约定
 
-Windows PowerShell 与 GitHub Actions 均使用 `scripts/package-supervisor.ps1`，在仓库根目录的 **`dist/` 直接生成一个 `.tar.gz`**，不生成 `dist/supervisor/`、解压目录、ZIP 或中间文件。
+Windows PowerShell 与 GitHub Actions 均使用 `scripts/package.ps1`，在仓库根目录的 **`dist/` 直接生成一个 `.tar.gz`**，不生成 `dist/supervisor/`、解压目录、ZIP 或中间文件。
 
 ```text
 dist/
@@ -26,6 +26,10 @@ admin/
 
 所有 `bin/` 可执行文件由 Go 的 tar 归档工具显式设置为 **Unix 0755**（即使在 Windows 上生成也是如此），Linux 解压后无需再 `chmod`。归档采用 Go 标准库 `archive/tar`，不依赖额外的 tar 命令或 WSL。
 
+## 脚本职责
+
+`package.ps1` 是唯一需要手动执行的打包入口；`package-archive.go` 是内部辅助工具，负责写入 tar.gz 文件并在 Windows 上明确保存 Linux ELF 的 `0755` 执行权限。它不涉及 Supervisor，也不需要单独运行。使用 Go 标准库打包是为了避免 Windows 原生 ZIP 或普通 tar 在 Unix 权限上的不一致。
+
 ## Windows 本地打包
 
 要求 Go 1.27.3；包含前端时还需要 Node.js 22 和 npm。
@@ -35,7 +39,7 @@ admin/
 ```powershell
 cd E:\Works\ai\sdk\middle-platform
 git pull origin main
-.\scripts\package-supervisor.ps1 -Arch amd64 -Version v1.0.0
+.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
 ```
 
 生成 `dist/middle-platform-v1.0.0-linux-amd64.tar.gz`。
@@ -44,17 +48,17 @@ git pull origin main
 
 ```powershell
 # Linux ARM64
-.\scripts\package-supervisor.ps1 -Arch arm64 -Version v1.0.0
+.\scripts\package.ps1 -Arch arm64 -Version v1.0.0
 
 # 不包含 Vue 管理端
-.\scripts\package-supervisor.ps1 -SkipFrontend -Version v1.0.0
+.\scripts\package.ps1 -SkipFrontend -Version v1.0.0
 ```
 
 打包成功后清理脚本创建的旧版归档及历史 `dist/supervisor/` 目录，但不会删除 `dist` 下用户自己放入的其他文件。每次重新打包无需手工清理临时目录。
 
 ## GitHub Actions
 
-打开 **Actions → Package Supervisor Linux → Run workflow**。Ubuntu Runner 调用同一份 PowerShell 脚本、验证 `dist/*.tar.gz` 中只含 `bin/` 和 `admin/`、四个 ELF 的架构及可执行位，再使用 `actions/upload-artifact@v7` 的 `archive: false` 上传 **原始 tar.gz**，不额外套 ZIP。Artifact 保留 14 天。
+打开 **Actions → Package Linux → Run workflow**。Ubuntu Runner 调用同一份 PowerShell 脚本、验证 `dist/*.tar.gz` 中只含 `bin/` 和 `admin/`、四个 ELF 的架构及可执行位，再使用 `actions/upload-artifact@v7` 的 `archive: false` 上传 **原始 tar.gz**，不额外套 ZIP。Artifact 保留 14 天。
 
 ## Linux 服务器首次部署
 

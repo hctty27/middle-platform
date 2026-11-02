@@ -1,20 +1,20 @@
-name: Package Supervisor Linux
+name: Package Linux
 
 on:
   workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
-      - 'scripts/package-supervisor.ps1'
-      - 'scripts/package-supervisor-archive.go'
-      - 'docs/supervisor-package.md'
-      - '.github/workflows/package-supervisor.yml'
+      - 'scripts/package.ps1'
+      - 'scripts/package-archive.go'
+      - 'docs/package.md'
+      - '.github/workflows/package.yml'
   push:
     branches: [main]
     paths:
-      - 'scripts/package-supervisor.ps1'
-      - 'scripts/package-supervisor-archive.go'
-      - '.github/workflows/package-supervisor.yml'
+      - 'scripts/package.ps1'
+      - 'scripts/package-archive.go'
+      - '.github/workflows/package.yml'
 
 permissions:
   contents: read
@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: config-center-admin/package-lock.json
       - name: Build binary and frontend release package
         shell: pwsh
-        run: ./scripts/package-supervisor.ps1 -Arch amd64 -Version ${{ github.sha }}
+        run: ./scripts/package.ps1 -Arch amd64 -Version ${{ github.sha }}
       # 归档目录只允许 bin/ 与 admin/，并校验 ELF 架构和 Linux 执行位。
       - name: Verify Linux executable archive
         shell: bash
@@ -69,7 +69,7 @@ jobs:
       # 单文件直接下载 tar.gz，不再套一层 ZIP。
       - uses: actions/upload-artifact@v7
         with:
-          name: middle-platform-supervisor-linux-amd64
+          name: middle-platform-linux-amd64
           path: dist/*.tar.gz
           archive: false
           if-no-files-found: error
@@ -87,7 +87,7 @@ jobs:
           cache-dependency-path: config-center/go.sum
       - name: Build from Windows PowerShell
         shell: pwsh
-        run: .\scripts\package-supervisor.ps1 -Arch amd64 -Version windows-test -SkipFrontend
+        run: .\scripts\package.ps1 -Arch amd64 -Version windows-test -SkipFrontend
       - name: Verify tar.gz on Windows
         shell: pwsh
         run: |
