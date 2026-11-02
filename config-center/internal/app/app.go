@@ -64,12 +64,8 @@ func Run(configPath string) error {
 
 	address := cfg.Address
 	repository := &store.Store{DB: db, AllowedHosts: cfg.AllowedHosts}
-	writesEnabled := cfg.WritesEnabled
-	// 管理写入能力由开关控制，读 API 不受影响。
-	var writer api.Writer
-	if writesEnabled { writer = repository }
-	var handler http.Handler = api.Router(repository)
-	if writer != nil { handler = api.RouterWithWrites(repository, writer) }
+	// 管理读写接口始终注册；必须通过私有网络/网关鉴权保护所有管理接口。
+	var handler http.Handler = api.RouterWithWrites(repository, repository)
 	var ready atomic.Bool
 	ready.Store(true)
 	handler = withDrainReadiness(handler, &ready)
@@ -97,7 +93,7 @@ func Run(configPath string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("Go config center started", "address", address, "revision", revision, "writes_enabled", writesEnabled)
+		slog.Info("Go config center started", "address", address, "revision", revision)
 		errCh <- server.ListenAndServe()
 	}()
 	var listenErr error

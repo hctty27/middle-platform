@@ -17,7 +17,7 @@
 建议：`config-center:8201`、`sdk-core-1:8211`、`sdk-core-2:8212`、`config-center-access:8291`（可选），管理端由内部 Nginx 提供。具体端口按现有主机资源调整；不同实例不得占用同一监听地址。
 
 - `config-center` 多实例共享 `config_center` 权威库。
-- `sdk-core` 使用单一 `database.dsn` 和单连接池，配置表只读；只有 `order.enabled=true` 时才需要该账号对 `config_center.game_order` 的限定读写权限。多实例可共用一份 YAML，并通过 `SDK_CORE_ADDR` 覆盖监听端口。
+- `sdk-core` 使用单一 `database.dsn` 和单连接池，配置表只读、`config_center.game_order` 限定读写；订单接口及补偿 Worker 随服务启动。多实例可共用一份 YAML，并通过 `SDK_CORE_ADDR` 覆盖监听端口。平台 v1 付款确认在所有环境仍然不可用。
 - `config-center-access` 只有需要本地三级节点副本时才部署，使用独立 `config_access` 库。
 
 ## 2. 打包上传与首次安装
@@ -181,3 +181,10 @@ log:
 服务接到 `SIGINT` 或 `SIGTERM` 时先将 `/health/ready` 置为不可用，`http.Server.Shutdown` 等待存量 HTTP 请求（最多 30 秒），再等待 Webhook 或同步 Worker 并关闭数据库连接；超时可能被强制关闭，依靠游标/租约重试恢复。Supervisor 应设置 `stopsignal=TERM` 和至少 40 秒停机宽限时间。不要使用强制 Kill 作为正常停机方式。
 
 **提醒：** Go 的 Shutdown 不会自动排空 WebSocket/hijacked 连接；未来 SDK 新增此类连接需单独处理退出。
+
+## 三项开关移除后的发布检查
+
+- 配置中心管理写接口**始终注册**：升级部署前必须由防火墙、私有网络或具备身份验证的网关限制整个 `/api/config/` 前缀，特别是 `/api/config/admin/`、节点原始 JSON 和同步快照，避免任意用户写入或读取服务端密钥。不要仅隐藏管理网页。
+- SDK Core 订单接口与补偿 Worker 始终加载，数据库必须完成 V12 `game_order` 迁移，账号仅需配置表 SELECT 与订单表 SELECT/INSERT/UPDATE；启动会验证关键字段。
+- 平台 v1 缺少实付金额完整性认证，所有环境的 v1 付款确认都会拒绝；删除 `payment.allowUnverifiedNonProd` 不代表支付已具备上线条件。
+- 部署前从旧私有配置删除 `admin.writesEnabled`、`order.enabled`、`payment.allowUnverifiedNonProd`；停用的 `CONFIG_GO_ENABLE_WRITES` 环境变量也应清除。代码合并不代表已经更新 Nginx ACL、线上配置或数据库。

@@ -10,7 +10,6 @@ import (
     "net/http"
     "os"
     "os/signal"
-    "sync"
     "sync/atomic"
     "syscall"
     "time"
@@ -66,12 +65,8 @@ func run(configPath string)error{
     if err!=nil{return fmt.Errorf("load response mapping: %w",err)}
     if err=resolver.Require(mapping.RouteCoreConfig);err!=nil{return err}
 
-    // 配置查询与订单读写共用一个 sql.DB，order.enabled 仅控制业务路由和补偿 Worker。
-    var extra []api.OrderAPI
-    var workerCancel context.CancelFunc
-    var workerWG sync.WaitGroup
-    if cfg.Order.Enabled {
-        // 不自动建表：必须先通过 config-center/cmd/migrate 执行 V12。
+    // 配置查询与订单读写共用一个 sql.DB，订单路由和补偿 Worker 随进程启动。
+    // 不自动建表：必须先通过 config-center/cmd/migrate 执行 V12。
         rows, checkErr := db.QueryContext(initCtx, `SELECT id,appid,game_id,env,game_order_id,
             amount,attach,game_notify_url,platform_order_no,paid_at,payment_status,
             notify_status,notify_attempts,last_notify_at,last_notify_error,
@@ -87,22 +82,19 @@ func run(configPath string)error{
             PlatformSecretReader:repository,
             GameSecretReader:repository,
             Notifier:notify.NewClient(cfg.GameNotify.AllowedHosts),
-            AllowUnverifiedNonProd:cfg.Payment.AllowUnverifiedNonProd,
         }
         if err=orders.Validate();err!=nil{return err}
-        extra=append(extra,orders)
         workerCtx,stopWorker:=context.WithCancel(context.Background())
-        workerCancel=stopWorker
-        workerWG.Add(1)
-        go func(){defer workerWG.Done();orders.RunWorker(workerCtx)}()
-    }
-    if workerCancel!=nil{defer func(){workerCancel();workerWG.Wait()}()}
+        workerDone:=make(chan struct{})
+        go func(){defer close(workerDone);orders.RunWorker(workerCtx)}()
+        defer func(){stopWorker();<-workerDone}()
+
     var ready atomic.Bool
     ready.Store(true)
     server:=&http.Server{
         Addr:cfg.Server.Address,
         Handler:logging.HTTP(cfg.Log,withDrainReadiness(api.Router(
-            service.NewConfigService(repository,resolver),db,extra...),&ready)),
+            service.NewConfigService(repository,resolver),db,orders),&ready)),
         ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,
         WriteTimeout:15*time.Second,IdleTimeout:60*time.Second,
     }
@@ -118,7 +110,7 @@ func run(configPath string)error{
     }
     ready.Store(false)
     stop()
-    if workerCancel!=nil{workerCancel()}
+    stopWorker()
     slog.Info("sdk-core shutting down")
     shutdownCtx,done:=context.WithTimeout(context.Background(),30*time.Second)
     defer done()

@@ -26,7 +26,7 @@ cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml
 ```
 
-修改 `configs/config-dev.yaml` 中的 `database.dsn`，例如 `root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC`。本地需要在管理后台修改节点时配置 `admin.writesEnabled: true`；Webhook 投递 Worker 会在启动时自动运行，后续新增订阅者无需重启。联调仅需确保 `webhook.allowedHosts` 包含回调实际主机名/IP。
+修改 `configs/config-dev.yaml` 中的 `database.dsn`，例如 `root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC`。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口没有内建鉴权，必须仅通过可信内网或受保护网关访问，后续新增订阅者无需重启。联调仅需确保 `webhook.allowedHosts` 包含回调实际主机名/IP。
 
 对**空库先迁移，再启动**：
 
@@ -70,9 +70,9 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/config/admin/subs
 ```powershell
 cd sdk-core
 Copy-Item configs/config.yaml configs/config-dev.yaml
-# 只需要 database.dsn，连接 config_center。默认 order.enabled=false，不注册订单接口。
-# 若要启用订单，先运行 config-center/cmd/migrate 升级至 V12，
-# 给相同数据库账号配置 game_order 表读写权限，再将 order.enabled=true。
+# 只需要 database.dsn，连接 config_center；订单路由随服务启动。
+# 先运行 config-center/cmd/migrate 升级至 V12，
+# 同一数据库账号应具备 game_order 表读写权限。
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
 
@@ -103,8 +103,10 @@ npm run dev
 | `obsolete replica schema` | 副本版本过旧；迁移到 V6 或备份后使用新空库 |
 | SDK Core 返回 404 | AppID、`env`、三个绑定字段、节点启用状态 |
 | Webhook 不生效 | 订阅者密钥、回调 URL、`allowedHosts`、反向代理访问和同步游标 |
-| 前端接口失败 | Vite 代理、配置中心端口以及是否启用管理写入 |
+| 前端接口失败 | Vite 代理、配置中心端口及网关允许访问管理接口的规则 |
 
 公共配置优先级以各工程的 `configs/config.yaml` 与 `internal/settings` 实现为准，通常由默认值、配置文件和环境变量叠加。线上发布请转到 [生产运维](production.md)。
 
 配置中心不再识别 `webhook.enabled` 与 `migration.allowLegacyUpgrade`，旧环境 YAML 需删除这两个字段（严格校验会报错）。`CONFIG_GO_ENABLE_WEBHOOK` 也已废弃。
+
+三个已删开关 `admin.writesEnabled`、`order.enabled`、`payment.allowUnverifiedNonProd` 不再可用，旧 YAML 必须删除；若需测试付款，需先实现可信查单或完整金额签名，不能通过开关绕过。

@@ -30,7 +30,6 @@ type OrderService struct {
         LookupPlatformSecret(context.Context, string) (string, error)
     }
     Notifier *notify.Client
-    AllowUnverifiedNonProd bool
 }
 
 func(s *OrderService) VerifyRegistration(r *http.Request,body []byte,env,appid string)error {
@@ -78,7 +77,7 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
 
 // Receive 根据已登记订单定位 AppID，直接读取渠道包共享 appSecret 验签。
 // env 保留在订单内用于环境归属及安全限制，但不参与支付密钥选择。
-// v1 未签 amount：仅允许明确启用的非正式环境联调。
+// v1 未覆盖实付金额：保留协议解析，但支付确认必须先通过可信查单/完整签名认证。
 func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     callback model.PaymentCallback)(string,error){
     if !orderIDPattern.MatchString(appid)||!orderIDPattern.MatchString(callback.GameOrderID)||
@@ -93,7 +92,7 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     if callback.Amount!=o.Amount||callback.Attach!=o.Attach {return "",model.ErrOrderConflict}
     paidAt,err:=time.Parse(time.RFC3339,callback.PaidAt)
     if err!=nil{return "",ErrInvalidOrder}
-    if o.Env=="prod"||!s.AllowUnverifiedNonProd {return "",ErrUnsafePlatformProtocol}
+    if err=verifyTrustedPayment(ctx,o,callback);err!=nil {return "",err}
     if err=s.Orders.ConfirmPayment(ctx,o.ID,callback.OrderNo,paidAt);err!=nil{return "",err}
     updated,err:=s.Orders.ByID(ctx,o.ID)
     if err!=nil{return "",err}
@@ -150,4 +149,11 @@ func(s *OrderService) Validate()error {
         return errors.New("order service dependency missing")
     }
      return nil
+}
+
+
+// verifyTrustedPayment 是支付可信金额验证的预留边界。
+// 平台 v1 签名不包含实付金额，也没有接入查单 API；在有可信验证前所有环境均不能确认支付。
+func verifyTrustedPayment(_ context.Context, _ model.Order, _ model.PaymentCallback) error {
+    return ErrUnsafePlatformProtocol
 }

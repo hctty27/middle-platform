@@ -25,10 +25,6 @@ type Config struct {
     Log logging.Config `yaml:"log"`
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
     Database Database `yaml:"database"`
-    Order struct { Enabled bool `yaml:"enabled"` } `yaml:"order"`
-    Payment struct {
-        AllowUnverifiedNonProd bool `yaml:"allowUnverifiedNonProd"`
-    } `yaml:"payment"`
     GameNotify struct {
         AllowedHosts []string `yaml:"allowedHosts"`
     } `yaml:"gameNotify"`
