@@ -40,7 +40,7 @@ jobs:
         run: |
           docker compose -f deploy/compose.prod.yml config --quiet
           bash -n deploy/deploy.sh
-      - name: Verify dual SDK Core instances and port mapping
+      - name: Verify production service port map
         run: |
           docker compose -f deploy/compose.prod.yml config --format json > /tmp/compose.json
           python3 - <<'PY'
@@ -49,21 +49,31 @@ jobs:
 
           data = json.loads(Path("/tmp/compose.json").read_text())
           services = data["services"]
-          for name, host_port in (("sdk-core-1", 8100), ("sdk-core-2", 8101)):
+          expected_ports = {
+              "config-center": (8101, 8080),
+              "config-center-access": (8090, 8081),
+              "sdk-core-1": (8201, 8082),
+              "sdk-core-2": (8202, 8082),
+              "admin": (80, 80),
+          }
+          for name, (host_port, container_port) in expected_ports.items():
               service = services[name]
-              assert any(int(port["published"]) == host_port and int(port["target"]) == 8082
-                         for port in service["ports"]), name
+              assert len(service["ports"]) == 1, name
+              assert int(service["ports"][0]["published"]) == host_port, name
+              assert int(service["ports"][0]["target"]) == container_port, name
+          assert len(set(p[0] for p in expected_ports.values())) == len(expected_ports)
+
+          for name in ("sdk-core-1", "sdk-core-2"):
+              service = services[name]
               assert service["image"] == services["sdk-core-1"]["image"], name
               assert service["volumes"] == services["sdk-core-1"]["volumes"], name
-          admin = services["admin"]
-          assert any(int(port["published"]) == 8090 and int(port["target"]) == 80
-                     for port in admin["ports"])
+
           gateway = Path("deploy/nginx/gateway.conf.example").read_text()
           for host in ("10.0.0.11", "10.0.0.12"):
-              for port in (8100, 8101):
+              for port in (8201, 8202):
                   assert f"server {host}:{port} " in gateway
-          for host in ("10.0.0.11", "10.0.0.12"):
-              assert f"server {host}:8090 " in gateway
+              assert f"server {host}:8101 " in gateway
+              assert f"server {host}:80 " in gateway
           PY
       - name: Validate Nginx configuration
         run: |
