@@ -22,7 +22,9 @@ const (
     keyLength = 32
 )
 
+// ErrUnauthorized 表示游戏服登记请求签名或时间戳无效。
 var ErrUnauthorized = errors.New("invalid game signature")
+// ErrGameSecret 表示游戏主密钥不满足 Base64 与长度要求。
 var ErrGameSecret = errors.New("gameSecret must be base64 of 32 random bytes")
 
 // ParseGameSecret 只接受 game.config 顶层 gameSecret，避免配置格式歧义。

@@ -14,6 +14,7 @@ import (
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// Database 保存 config_center 单连接池参数。
 type Database struct {
     DSN string `yaml:"dsn"`
     MaxOpenConns int `yaml:"maxOpenConns"`
@@ -21,6 +22,7 @@ type Database struct {
     ConnMaxLifetime string `yaml:"connMaxLifetime"`
 }
 
+// Config 保存 SDK Core 的监听、数据库、通知白名单与日志配置。
 type Config struct {
     Log logging.Config `yaml:"log"`
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
@@ -42,6 +44,7 @@ func validateDB(d Database)error {
     }
     return nil
 }
+// Load 严格解析单份 YAML，并允许环境变量覆盖连接和监听地址。
 func Load(path string)(Config,error){
     cfg:=Config{}
     cfg.Log=logging.Default()

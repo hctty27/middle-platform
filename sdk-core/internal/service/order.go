@@ -14,9 +14,11 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/payment"
 )
 
+// ErrInvalidOrder 表示登记或回调的订单参数不符合约束。
 var ErrInvalidOrder = errors.New("invalid order request")
 var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
+// OrderService 负责订单登记、平台回调确认及游戏发货补偿。
 type OrderService struct {
     ConfigReader Reader
     Orders interface {

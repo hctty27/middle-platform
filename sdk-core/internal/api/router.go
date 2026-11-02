@@ -13,7 +13,9 @@ import (
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// Fetcher 提供公开 SDK 配置查询，不暴露原始密钥。
 type Fetcher interface { Get(context.Context,string,string)(map[string]any,error) }
+// Pinger 提供依赖数据库的就绪探测。
 type Pinger interface { PingContext(context.Context)error }
 
 // Router 兼容已有配置查询；订单功能以可选参数注册。
