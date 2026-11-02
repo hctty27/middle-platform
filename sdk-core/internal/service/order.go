@@ -43,6 +43,15 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
         req.Amount>9007199254740991||len(req.Attach)>4096 {
         return ErrInvalidOrder
     }
+    // 已存在订单的重试不依赖当前大区通知地址，避免配置变更破坏幂等。
+    previous, lookupErr := s.Orders.Find(ctx, appid, req.GameOrderID)
+    if lookupErr == nil {
+        if previous.Env != env || previous.Amount != req.Amount || previous.Attach != req.Attach {
+            return model.ErrOrderConflict
+        }
+        return nil
+    }
+    if !errors.Is(lookupErr, model.ErrOrderNotFound) { return lookupErr }
     _,group,err:=s.ConfigReader.Lookup(ctx,appid,env)
     if err!=nil{return err}
     if group==nil {return model.ErrNotFound}
