@@ -50,11 +50,11 @@ jobs:
           data = json.loads(Path("/tmp/compose.json").read_text())
           services = data["services"]
           expected_ports = {
-              "config-center": (8101, 8101),
-              "config-center-access": (8090, 8090),
-              "sdk-core-1": (8201, 8201),
-              "sdk-core-2": (8202, 8202),
-              "admin": (80, 80),
+              "config-center": (8201, 8201),
+              "config-center-access": (8291, 8291),
+              "sdk-core-1": (8211, 8211),
+              "sdk-core-2": (8212, 8212),
+              "admin": (8281, 8281),
           }
           for name, (host_port, container_port) in expected_ports.items():
               service = services[name]
@@ -64,10 +64,10 @@ jobs:
           assert len(set(p[0] for p in expected_ports.values())) == len(expected_ports)
 
           listen_variables = {
-              "config-center": ("CONFIG_GO_ADDR", ":8101"),
-              "config-center-access": ("CONFIG_ACCESS_ADDR", ":8090"),
-              "sdk-core-1": ("SDK_CORE_ADDR", ":8201"),
-              "sdk-core-2": ("SDK_CORE_ADDR", ":8202"),
+              "config-center": ("CONFIG_GO_ADDR", ":8201"),
+              "config-center-access": ("CONFIG_ACCESS_ADDR", ":8291"),
+              "sdk-core-1": ("SDK_CORE_ADDR", ":8211"),
+              "sdk-core-2": ("SDK_CORE_ADDR", ":8212"),
           }
           for name, (key, address) in listen_variables.items():
               service = services[name]
@@ -81,12 +81,21 @@ jobs:
               assert service["image"] == services["sdk-core-1"]["image"], name
               assert service["volumes"] == services["sdk-core-1"]["volumes"], name
 
+          admin = services["admin"]
+          assert "http://127.0.0.1:8281/healthz" in " ".join(
+              admin["healthcheck"]["test"]
+          )
+          static_nginx = Path("deploy/nginx/admin-static.conf").read_text()
+          assert "listen 8281;" in static_nginx
+          assert "EXPOSE 8281" in Path("deploy/docker/admin.Dockerfile").read_text()
+          assert "8221" not in {str(p["published"]) for service in services.values() for p in service.get("ports", [])}
+
           gateway = Path("deploy/nginx/gateway.conf.example").read_text()
           for host in ("10.0.0.11", "10.0.0.12"):
-              for port in (8201, 8202):
+              for port in (8211, 8212):
                   assert f"server {host}:{port} " in gateway
-              assert f"server {host}:8101 " in gateway
-              assert f"server {host}:80 " in gateway
+              assert f"server {host}:8201 " in gateway
+              assert f"server {host}:8281 " in gateway
           PY
       - name: Validate Nginx configuration
         run: |

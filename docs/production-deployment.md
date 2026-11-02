@@ -15,7 +15,7 @@ Go 进程、MySQL 数据和管理控制台均应部署在可信内网；只有 S
 - `deploy/deploy.sh`：给**已从网关摘流量**的单个节点部署固定 SHA 标签镜像。
 - `.github/workflows/publish-images.yml`：在 main 的 Build 工作流通过之后，构建并推送四个 GHCR 镜像。
 
-建议将 config-center 与 sdk-core 部署在两个应用节点，每个节点运行相同 Compose；数据库使用独立 MySQL 8.x，统一处于低延迟内网。每台应用机默认运行 `sdk-core-1`（宿主机 8201 → 容器 8201）和 `sdk-core-2`（宿主机 8202 → 容器 8202），**共用同一份只读挂载的 `sdk-core.yaml`**。两个进程分别通过 `SDK_CORE_ADDR` 覆盖监听地址。配置中心映射至宿主机 8101，Access（按需开启）映射 8090，管理端映射 80。**管理端与 Nginx 网关必须使用不同机器或不同 IP**，避免同一监听地址的 80 端口冲突。单机开发可使用 `BIND_IP=127.0.0.1`，但同一 IP 上不能再启动监听 80 的网关 Nginx。双节点示例中 Nginx 对四个 SDK 实例负载均衡（两台机器各两个），固定 IP 必须按实际环境调整。
+建议将 config-center 与 sdk-core 部署在两个应用节点，每个节点运行相同 Compose；数据库使用独立 MySQL 8.x，统一处于低延迟内网。每台应用机默认运行 `sdk-core-1`（宿主机/容器 8211）和 `sdk-core-2`（宿主机/容器 8212），**共用同一份只读挂载的 `sdk-core.yaml`**。两个进程分别通过 `SDK_CORE_ADDR` 覆盖监听地址。配置中心使用 8201，Access（按需开启）使用 8291，管理端 Nginx 使用 8281。网关 Nginx 仍可使用 80/443；只要端口或 IP 绑定不冲突，网关与管理端可以部署在同一台机器。单机开发可使用 `BIND_IP=127.0.0.1`，双节点示例中 Nginx 对四个 SDK 实例负载均衡，固定 IP 必须按实际环境调整。
 
 `config-center-access` 是接入侧副本，不是配置中心集群的必选组件；需要它时可部署到独立接入节点，使用自己的 `config_access` 数据库和订阅回调配置。不同接入节点若使用不同副本库，必须各自收到通知或执行周期校对，不能只依赖负载均衡向其中一台发送回调。
 
@@ -37,18 +37,18 @@ SDK 只需 `config_center` 业务查询所需的 SELECT 权限。多台 sdk-core
 
 | 服务 | 宿主机端口 | 容器端口 |
 | --- | --- | --- |
-| config-center | 8101 | 8101 |
-| config-center-access（可选） | 8090 | 8090 |
-| config-center-admin | 80 | 80 |
-| sdk-core-1 | 8201 | 8201 |
-| sdk-core-2 | 8202 | 8202 |
+| config-center | 8201 | 8201 |
+| config-center-access（可选） | 8291 | 8291 |
+| config-center-admin | 8281 | 8281 |
+| sdk-core-1 | 8211 | 8211 |
+| sdk-core-2 | 8212 | 8212 |
 
-约定：**配置中心从 8101 开始、Core 从 8201 开始、Service 从 8301 开始**；Access 为 8090，前端管理为 80。预留 `8102+` 给后续配置中心实例、`8203+` 给 Core 扩容，`8301+` 为未来 Service（尚无对应 Compose 服务，不应预先占用端口）。容器内 Go 进程的**实际监听端口与宿主机映射保持一致**。生产 Compose 使用 `CONFIG_GO_ADDR=:8101`、`CONFIG_ACCESS_ADDR=:8090`、`SDK_CORE_ADDR=:8201/:8202` 覆盖各自 YAML 的 `server.address`，不必把开发环境默认端口改掉。修改 YAML 中的 `server.address` 不会覆盖 Compose 明确指定的环境变量。管理后台容器映射至宿主机 `80`，只能与单独部署的网关 Nginx 共存，不能绑定同一宿主机 IP 的 `80`。端口是项目约定，部署前仍需确保宿主机未被占用。公网仅开放经网关认证和路由的 443/80，应用端口需绑定可信内网 IP 并通过防火墙限制。
+约定：**配置中心从 8201 开始、Core 从 8211 开始、Service 从 8221 开始**；管理端使用 8281、Access 使用 8291。端口段规划为：配置中心 `8201～8210`、Core `8211～8220`、未来 Service 从 `8221` 开始（建议预留到 `8280`），管理端 `8281`、Access `8291`。目前预留 `8202～8210` 给配置中心新增实例、`8213～8220` 给 Core 扩容，Service 尚无对应 Compose 服务，不提前占用 `8221`。容器内 Go 进程实际监听端口与宿主机映射一致：生产 Compose 使用 `CONFIG_GO_ADDR=:8201`、`CONFIG_ACCESS_ADDR=:8291`、`SDK_CORE_ADDR=:8211/:8212` 覆盖各自 YAML 的 `server.address`。管理端容器内 Nginx 也监听 8281，不再占用容器 80。开发环境的默认 YAML 端口可以保持不变，生产 Compose 环境变量优先。对外的网关 Nginx 仍监听 80/443，应用端口必须绑定可信内网 IP 并通过防火墙限制。
 
 
-### 端口 80 的部署限制
+### 网关和后台端口
 
-管理端现要求宿主机端口 `80`，但 `deploy/nginx/gateway.conf.example` 也监听网关机的 `80`（用于 HTTP 重定向），因此**两者应部署在不同主机**。如果必须放同一宿主机，应当让应用容器 `BIND_IP` 绑定到另一张私有网卡的 IP，并将网关 Nginx 的 `listen 80` 改为只绑定网关使用的特定 IP；它们不能监听相同 IP:80。不要为了绕过端口冲突而把管理端直接暴露到公网。
+管理端使用 `8281`，网关 Nginx 使用 `80/443`，因此端口不同。两者可以共机，但生产环境管理端只应对可信内网开放，并通过网关的管理域名、IP 白名单和认证访问。不要直接把管理端的 `8281` 暴露到公网。
 
 ## 3. 准备每台应用节点
 
@@ -63,8 +63,8 @@ sudo cp deploy/.env.prod.example /etc/middle-platform/compose.env
 
 分别编辑三个文件：
 
-- `config-center.yaml`：配置 `database.dsn`；生产容器通过 `CONFIG_GO_ADDR=:8101` 监听 8101（优先级高于 YAML 的 `server.address`）。若使用管理台写入，启用 `admin.writesEnabled`；如需要接入 Webhook，启用 `webhook.enabled` 并配置可信的 `allowedHosts`。
-- `sdk-core.yaml`：两个 SDK Core 容器共用此文件，使用同一个权威 `config_center` 库、只读账号；生产环境分别用 `SDK_CORE_ADDR=:8201` 和 `SDK_CORE_ADDR=:8202` 启动，**不需要复制 YAML**。两容器的 **MySQL 连接池上限相加**，部署前确认数据库连接容量。
+- `config-center.yaml`：配置 `database.dsn`；生产容器通过 `CONFIG_GO_ADDR=:8201` 监听 8201（优先级高于 YAML 的 `server.address`）。若使用管理台写入，启用 `admin.writesEnabled`；如需要接入 Webhook，启用 `webhook.enabled` 并配置可信的 `allowedHosts`。
+- `sdk-core.yaml`：两个 SDK Core 容器共用此文件，使用同一个权威 `config_center` 库、只读账号；生产环境分别用 `SDK_CORE_ADDR=:8211` 和 `SDK_CORE_ADDR=:8212` 启动，**不需要复制 YAML**。两容器的 **MySQL 连接池上限相加**，部署前确认数据库连接容量。
 - `compose.env`：填写发布后的 `IMAGE_TAG=sha-<完整40位commit SHA>`、本机 `BIND_IP`、`CONFIG_DIR`。
 
 服务容器以 UID/GID `65532` 运行，需要有权读取 YAML。若使用 rootful Docker 和本机 bind mount，可将两份文件设为 root 所有、GID 65532、模式 0640，并确保目录可遍历：
@@ -80,7 +80,7 @@ sudo chmod 0600 /etc/middle-platform/compose.env
 上述权限适用于 rootful Docker 的普通 bind mount；若启用了 rootless Docker 或 user namespace 映射，必须按映射后的 UID/GID 调整权限和目录可遍历性。
 
 > 真实配置和 `compose.env` 仅存生产机或安全凭据管理系统，禁止提交 Git；镜像里不打包任何真实凭据。
-> 同时配置安全组/防火墙：80、8090、8101、8201、8202 仅允许网关或可信接入节点访问。
+> 同时配置安全组/防火墙：8201、8211、8212、8281、8291 仅允许网关或可信接入节点访问。
 
 ## 4. 镜像发布
 
@@ -124,7 +124,7 @@ bash deploy/deploy.sh sha-<完整40位commit>
 脚本会校验 Compose 配置、拉取并部署四个运行服务（`config-center`、`sdk-core-1`、`sdk-core-2`、`admin`），执行 `up -d --wait` 并显示状态。两个 SDK 容器使用同一镜像标签。仅更新双 SDK 实例时可以使用 `bash deploy/deploy.sh sha-<完整40位commit> sdk-core`，或者单独指定 `sdk-core-1` / `sdk-core-2`。
 
 只有需要接入端时，先准备独立 `config-center-access.yaml` 和接入副本数据库，
-然后使用 `--profile access` 单独启动。生产 Compose 设置 `CONFIG_ACCESS_ADDR=:8090`，宿主机与容器内都使用 8090，**不要对公网暴露该端口**。另外，`configCenter.url` 必须填写可达的真实配置中心内网地址（如 `http://10.0.0.11:8101` 或可信的内网负载均衡地址），不能直接使用模板的 `127.0.0.1:8080`：
+然后使用 `--profile access` 单独启动。生产 Compose 设置 `CONFIG_ACCESS_ADDR=:8291`，宿主机与容器内都使用 8291，**不要对公网暴露该端口**。另外，`configCenter.url` 必须填写可达的真实配置中心内网地址（如 `http://10.0.0.11:8201` 或可信的内网负载均衡地址），不能直接使用模板的 `127.0.0.1:8080`：
 
 ```bash
 export IMAGE_TAG=sha-<完整40位commit>
@@ -135,19 +135,19 @@ docker compose --env-file /etc/middle-platform/compose.env \
 验证：
 
 ```bash
-curl -fsS http://<应用内网IP>:8101/health/ready
 curl -fsS http://<应用内网IP>:8201/health/ready
-curl -fsS http://<应用内网IP>:8202/health/ready
-curl -fsS http://<应用内网IP>:80/healthz
+curl -fsS http://<应用内网IP>:8211/health/ready
+curl -fsS http://<应用内网IP>:8212/health/ready
+curl -fsS http://<应用内网IP>:8281/healthz
 # 若启动了 config-center-access：
-curl -fsS http://<接入端内网IP>:8090/health/ready
+curl -fsS http://<接入端内网IP>:8291/health/ready
 docker compose --env-file /etc/middle-platform/compose.env -f deploy/compose.prod.yml ps
 ```
 
 **双节点滚动发布**必须逐台进行：
 
 1. 在 Nginx 或上游负载均衡器摘除节点 A（停止向其发送新请求），确认 B 健康且能承载流量。
-2. 在 A 上执行 `bash deploy/deploy.sh sha-...`，验证 **8201 与 8202 两个**健康接口、SDK 核心查询和 Webhook 行为。
+2. 在 A 上执行 `bash deploy/deploy.sh sha-...`，验证 **8211 与 8212 两个**健康接口、SDK 核心查询和 Webhook 行为。
 3. 将 A 重新加入网关并观察错误率、连接数，再摘除 B，重复操作。
 4. 同一节点内部也可对 `sdk-core-1`、`sdk-core-2` 逐个更新（前提是 Nginx 已摘除对应端口），以减少单节点中断；跨节点仍需保证其他实例健康。
 5. 最后进行业务冒烟测试及配置变更、回调、增量同步校验。
@@ -172,7 +172,7 @@ bash deploy/deploy.sh sha-<上一个可用commit>
 2. TLS 证书必须匹配 `api.example.com` 和 `admin.example.com`（可使用对应 SAN 证书）。
 3. 在 Nginx 机生成 htpasswd 凭据，配置可读权限；`admin.example.com` 同时执行 VPN/IP 白名单与 Basic Auth。
 4. `api.example.com` 仅公开 `/api/core/`；`/api/config/admin/`、同步 API 和内部回调通过可信网络访问，不走公开域名。
-5. Nginx upstream 中包含两台应用机器上各两个 SDK 端口（`8201`、`8202`），配置中心 `8101`、管理端 `80`；执行 `nginx -t` 通过后再 `systemctl reload nginx`。Nginx 要能访问两台应用节点的内网端口。
+5. Nginx upstream 中包含两台应用机器上各两个 SDK 端口（`8211`、`8212`），配置中心 `8201`、管理端 `8281`；执行 `nginx -t` 通过后再 `systemctl reload nginx`。Nginx 要能访问两台应用节点的内网端口。
 
 目前配置中心管理接口没有自身的账号权限体系，Basic Auth + VPN/IP 限制仅为第一阶段的网关保护措施；未来应补充应用层身份认证、角色和审计。
 
