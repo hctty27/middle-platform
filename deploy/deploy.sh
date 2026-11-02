@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 sha-<40-character-git-commit> [config-center|sdk-core|admin]" >&2
+  echo "Usage: $0 sha-<40-character-git-commit> [config-center|sdk-core-1|sdk-core-2|sdk-core|admin]" >&2
   exit 2
 }
 
@@ -16,10 +16,11 @@ ENV_FILE="${ENV_FILE:-/etc/middle-platform/compose.env}"
 [[ -r "$ENV_FILE" ]] || { echo "Missing environment file: $ENV_FILE" >&2; exit 1; }
 command -v docker >/dev/null || { echo "Docker is not installed" >&2; exit 1; }
 
-services=(config-center sdk-core admin)
+services=(config-center sdk-core-1 sdk-core-2 admin)
 if [[ $# -eq 2 ]]; then
   case "$2" in
-    config-center|sdk-core|admin) services=("$2");;
+    sdk-core) services=(sdk-core-1 sdk-core-2);;
+    config-center|sdk-core-1|sdk-core-2|admin) services=("$2");;
     *) usage;;
   esac
 fi
