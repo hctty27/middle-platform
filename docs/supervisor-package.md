@@ -83,3 +83,18 @@ ZIP 不能可靠保留 Windows → Linux 的文件可执行位，解压后要运
 管理台的 `admin/` 交由 Nginx 托管（内部端口 8281），不需要 Supervisor。原有 Docker 版静态 Nginx 配置的 `root /usr/share/nginx/html;` 要改成 Linux 服务器上的实际目录。
 
 发布时先备份数据库并完成兼容性迁移；滚动发布前摘除目标 Nginx upstream，更新后验证 `/health/ready` 再恢复流量。不要直接把旧、新二进制覆盖在相同目录；保留版本目录以便回滚。共享 `current` 软链接不是严格的逐实例原子切换：应给需要分别滚动的服务设置独立版本路径或软链接，避免其他进程意外重启时加载新版本。
+
+## 常见错误：error obtaining VCS status (exit status 128)
+
+Go 编译默认尝试从 Git 仓库写入版本控制信息；Windows 工作树的 Git 状态不可读取时可能导致编译失败。
+本项目打包脚本在 `go build` 中显式启用 `-buildvcs=false`，仅关闭二进制内部的自动 Git 元数据，不影响程序运行或模块依赖解析。
+发布包仍会在 `BUILD_INFO.txt` 中记录版本号与可用的 Git commit；如果 Git 读取失败，则记录 `unknown`，打包继续。
+
+更新代码后重新运行：
+
+```powershell
+git pull
+.\scripts\package-supervisor.ps1
+```
+
+如果还想调查本机 Git 错误根因，可以在仓库根目录执行 `git status` 和 `git rev-parse --show-toplevel`；这不影响使用新脚本打包。

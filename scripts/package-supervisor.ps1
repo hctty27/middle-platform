@@ -37,13 +37,21 @@ if (-not $SkipFrontend) {
     Require-Command $npmCommand
 }
 
+# Git metadata is optional: an invalid or untrusted worktree must not block packaging.
 if (Get-Command 'git' -ErrorAction SilentlyContinue) {
-    $gitCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0) {
+    try {
+        $gitOutput = @(& git -C $repoRoot rev-parse --verify HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $gitOutput.Count -gt 0) {
+            $candidate = ([string]$gitOutput[0]).Trim()
+            if ($candidate -match '^[0-9a-fA-F]{40}$') {
+                $gitCommit = $candidate
+            }
+        }
+    }
+    catch {
         $gitCommit = 'unknown'
     }
 }
-
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     if ($gitCommit -ne 'unknown') {
@@ -90,7 +98,7 @@ try {
         $outputFile = Join-Path $binDir $target.Output
         Push-Location $moduleDir
         try {
-            & go build -mod=readonly -trimpath '-ldflags=-s -w' -o $outputFile "./cmd/$($target.Command)"
+            & go build -mod=readonly -buildvcs=false -trimpath '-ldflags=-s -w' -o $outputFile "./cmd/$($target.Command)"
             Assert-ExitCode "go build $($target.Output)"
         }
         finally {
