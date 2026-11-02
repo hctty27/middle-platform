@@ -53,7 +53,11 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
     }
 }
 
-if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}
+if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') {
+    throw "Invalid release version: $Version"
+}
+
+$releaseName = "middle-platform-$Version-linux-$Arch"
 $stageDir = Join-Path $outputRoot $releaseName
 $binDir = Join-Path $stageDir 'bin'
 $archivePath = Join-Path $outputRoot "$releaseName.zip"
