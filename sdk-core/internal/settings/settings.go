@@ -14,6 +14,7 @@ import (
 	"github.com/hctty27/middle-platform/shared/logging"
 )
 
+// Config 聚合 SDK Core 的 HTTP、只读数据库连接池及日志配置。
 type Config struct {
 	Log logging.Config `yaml:"log"`
 	Server struct {
@@ -27,6 +28,7 @@ type Config struct {
 	} `yaml:"database"`
 }
 
+// Load 读取配置文件与环境变量，并在返回前完成参数合法性校验。
 func Load(path string) (Config, error) {
 	cfg := Config{}
 	cfg.Log = logging.Default()

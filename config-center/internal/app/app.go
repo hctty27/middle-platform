@@ -87,6 +87,7 @@ func Run(configPath string) error {
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// 后台 Webhook 投递使用独立生命周期，退出时先取消再等待任务结束。
 	workerCtx, cancelWorker := context.WithCancel(context.Background())
 	defer cancelWorker()
 	workerDone := make(chan struct{})
@@ -113,6 +114,7 @@ func Run(configPath string) error {
 			listenErr = err
 		}
 	}
+	// 收到终止信号后立即撤销就绪状态，使网关停止分发新请求。
 	ready.Store(false)
 	stop()
 	started := time.Now()

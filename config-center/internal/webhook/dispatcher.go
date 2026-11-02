@@ -19,6 +19,7 @@ import (
 )
 
 // Delivery 描述一次待发送的签名回调及其数据库租约。
+// Delivery 保存一次待投递的订阅通知及其版本和租约信息。
 type Delivery struct {
 	SubscriberID int64
 	URL          string
@@ -38,6 +39,7 @@ type Dispatcher struct {
 }
 
 // NewDispatcher 创建禁用重定向并检查目标地址的回调客户端。
+// NewDispatcher 创建带白名单限制的回调发送器，不立即启动后台任务。
 func NewDispatcher(db *sql.DB, allowedHosts string) *Dispatcher {
 	if allowedHosts == "" { allowedHosts = "localhost,127.0.0.1" }
 	transport := &http.Transport{
@@ -94,6 +96,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 }
 
 // send 计算 HMAC 签名并发出回调通知。
+// send 校验回调目标并发送签名通知，不把配置内容直接传给接入端。
 func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err := ValidateCallback(job.URL, d.AllowedHosts); err != nil {
 		return fmt.Errorf("unsafe webhook destination: %w", err)
@@ -151,6 +154,7 @@ func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) err
 }
 
 // dispatch 控制单轮任务数量及并发上限。
+// dispatch 并发领取和投递一批到期任务，避免单个回调阻塞其他订阅者。
 func (d *Dispatcher) dispatch(ctx context.Context) error {
 	batchSize := d.BatchSize
 	if batchSize <= 0 || batchSize > 64 { batchSize = 16 }
@@ -192,6 +196,7 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 }
 
 // Run 定时领取并发送回调，响应优雅停机。
+// Run 循环处理待投递任务，并在上下文取消后停止。
 func (d *Dispatcher) Run(ctx context.Context) {
 	if d.Client == nil { d.Client = NewDispatcher(d.DB, d.AllowedHosts).Client }
 	ticker := time.NewTicker(3 * time.Second)

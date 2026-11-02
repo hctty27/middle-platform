@@ -34,6 +34,7 @@ type ServerGroupBinding struct {
     Config string `json:"config"`
 }
 
+// CreateChannelAppRequest 表示创建渠道应用时提交的公共配置与三环境绑定。
 type CreateChannelAppRequest struct {
     GameID int64 `json:"gameId"`
     Code string `json:"code"`
@@ -46,6 +47,7 @@ type CreateChannelAppRequest struct {
     ReviewServerGroupID *int64 `json:"reviewServerGroupId"`
 }
 
+// UpdateChannelAppRequest 表示更新渠道应用元数据及区服组绑定。
 type UpdateChannelAppRequest struct {
     Name string `json:"name"`
     Status *int `json:"status"`

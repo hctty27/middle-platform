@@ -11,15 +11,18 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
+// Reader 抽象查询绑定区服组和各级配置所需的数据源。
 type Reader interface {
     Lookup(context.Context,string,string) (model.ChannelApp,*model.BoundGroup,error)
 }
 
+// ConfigService 使用只读数据源和预编译映射组装 SDK 返回数据。
 type ConfigService struct {
     reader Reader
     resolver *mapping.Resolver
 }
 
+// NewConfigService 注入查询接口与字段映射解析器，不在构造时请求数据库。
 func NewConfigService(reader Reader,resolver *mapping.Resolver) *ConfigService {
     return &ConfigService{reader:reader,resolver:resolver}
 }
