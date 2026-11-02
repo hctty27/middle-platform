@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
-"""Go SQL 迁移真实 MySQL V1→V10 与旧版配置结构回归。"""
+"""直接连接 MySQL，验证历史迁移、GTID 限制与结构升级安全性。"""
 
 import os
 import subprocess
 import re
 from pathlib import Path
 
-CONTAINER = subprocess.check_output(
-    ["docker", "ps", "--filter", "ancestor=mysql:8.4", "--format", "{{.ID}}"],
-    text=True,
-).strip().splitlines()[0]
+# GitHub Runner 启动宿主机 MySQL；不依赖运行中的容器或容器 ID。
+MYSQL_COMMAND = [
+    "mysql", "--protocol=tcp", "--host=127.0.0.1",
+    "--user=root", "--batch", "--skip-column-names",
+]
 
 
 def mysql(statement):
+    """经标准输入执行 SQL；用环境变量传密码，避免在命令行泄露。"""
+    env = os.environ.copy()
+    env["MYSQL_PWD"] = "integration-test"
     proc = subprocess.run(
-        ["docker", "exec", "-i", CONTAINER, "mysql", "-uroot", "-pintegration-test", "-N", "-B"],
-        input=statement, capture_output=True, text=True, check=True,
+        MYSQL_COMMAND, input=statement, capture_output=True,
+        text=True, check=True, env=env,
     )
     return proc.stdout.strip()
 
 
 def migrate(version, repair=False, expected_success=True):
+    """执行指定版本的迁移 CLI，并断言预期返回状态。"""
     env = os.environ.copy()
     env["CONFIG_DB_DSN"] = (
         "root:integration-test@tcp(127.0.0.1:3306)/config_migration?parseTime=true&loc=UTC"
@@ -34,11 +39,13 @@ def migrate(version, repair=False, expected_success=True):
 
 
 def assert_rows(sql, expected):
+    """执行 SQL 并核对查询结果的行顺序和内容。"""
     actual = mysql(sql).splitlines()
     assert actual == expected, (actual, expected)
 
 
 def main():
+    """串行验证真实数据库的历史升级与幂等迁移。"""
     mysql("CREATE DATABASE config_migration CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci")
     # 在 GTID 强制一致性环境中验证迁移；不用关闭 binlog 或 GTID 绕过限制。
     mysql("""SET GLOBAL enforce_gtid_consistency=ON;
