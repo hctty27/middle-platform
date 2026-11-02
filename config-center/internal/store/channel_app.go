@@ -50,6 +50,7 @@ func apps(ctx context.Context, db queryer, gameID int64) ([]model.ChannelApp,err
     return out,rows.Err()
 }
 
+// ChannelApps 查询指定游戏的渠道应用；gameID 为 0 时查询全部应用。
 func (s *Store) ChannelApps(ctx context.Context, gameID int64) ([]model.ChannelApp,error) {
 	if gameID < 0 { return nil,ErrInvalid }
 	return apps(ctx,s.DB,gameID)
@@ -77,6 +78,7 @@ func (s *Store) CreateChannelApp(ctx context.Context, input model.CreateChannelA
 	return a,tx.Commit()
 }
 
+// UpdateChannelApp 以事务更新渠道应用，并验证跨环境区服组绑定。
 func (s *Store) UpdateChannelApp(ctx context.Context,id int64,input model.UpdateChannelAppRequest) (model.ChannelApp,error) {
 	if id<=0 || validApp(input.Name,input.Status,input.Config,input.Remark)!=nil { return model.ChannelApp{},ErrInvalid }
 	tx,err:=s.DB.BeginTx(ctx,nil); if err!=nil { return model.ChannelApp{},err }; defer tx.Rollback()
@@ -91,6 +93,7 @@ func (s *Store) UpdateChannelApp(ctx context.Context,id int64,input model.Update
 	return a,tx.Commit()
 }
 
+// DeleteChannelApp 仅允许删除没有任何环境区服组绑定的应用。
 func (s *Store) DeleteChannelApp(ctx context.Context,id int64) error {
 	if id<=0 { return ErrInvalid }
 	tx,err:=s.DB.BeginTx(ctx,nil); if err!=nil { return err }; defer tx.Rollback()

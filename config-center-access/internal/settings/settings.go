@@ -1,3 +1,4 @@
+// Package settings 负责接入端配置文件解析、环境变量覆盖和参数校验。
 package settings
 
 import (
