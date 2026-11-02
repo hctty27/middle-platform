@@ -1,60 +1,39 @@
-# Go 配置中心
+# config-center · 权威配置中心
 
-Go + MySQL 8.0+ 权威配置服务。配置树为 game → region → server_group；渠道应用由 config_channel_app 独立管理，code 全局唯一，每个应用最多绑定一个 prod、test、review 区服组。
+本工程提供三级配置节点（`game → region → server_group`）、独立 `channel_app`、订阅者管理、增量同步与 Webhook 投递。权威 MySQL 数据库为 `config_center`；运行时不依赖接入端副本。
 
-## 数据库初始化和升级
+## 本地启动
 
-- **新建空库**：独立执行迁移 CLI，一次性初始化 V11 基线。
-- **已有 V11 库**：保留所有业务数据及 version=11、dirty=0 的迁移记录，CLI 幂等校验。
-- **已有 V1～V10 库**：必须先用基线重构前的代码升级到 V11 并备份。新版本会拒绝旧库，不自动删除或覆盖数据。
-- **已有表但缺少迁移记录的库**：拒绝认领为新库，必须人工核查。
-- **未来升级**：在 `internal/migration/sql` 中新增 V12 等增量文件，并在 `migration.go` 维护 `Latest` 和 `upgrades`。
-- **服务启动**：只执行结构检查，不做 DDL。集群仅在发布阶段执行一次迁移命令。
-
-先创建 MySQL 数据库：
-
-```sql
-CREATE DATABASE config_center CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-```
-
-复制 `configs/config.yaml` 为本地配置，填写 `database.dsn` 后，在 `config-center` 目录下执行：
+1. 创建空 `config_center` 库，复制 `configs/config.yaml` 为 `configs/config-dev.yaml`。
+2. 填写 `database.dsn`，按需启用 `admin.writesEnabled` 和 `webhook.enabled`。
+3. 在本目录执行（必须先迁移、后启动）：
 
 ```powershell
 go run ./cmd/migrate -config configs/config-dev.yaml
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
-验证迁移状态：
+启动后检查 `GET /health/ready`；`/api/config/admin/**` 管理写路由仅在启用写开关时注册。当前管理 API 无内建认证，仅可在受保护网络访问。
 
-```sql
-SELECT version, dirty FROM config_schema_migrations WHERE id=1;
-```
+## 关键约束
 
-预期为 11 / 0。上线前备份所有权威库，数据库结构变更前停止旧版写入进程。MySQL DDL 不是完整事务：失败后 dirty=1，必须核对实际表结构并从备份恢复，禁止直接修改版本表。
+- `config_node` 只有三级节点，不保存 `parent_id`；`region.env_type` 为 `test`、`review`、`prod`。
+- `config_channel_app.code` 全局唯一；每个 AppID 各环境最多绑定一个区服组，共用一份 `config` JSON。
+- 仅三级节点增删改会推进 `epoch/revision`；渠道应用变更不参与节点同步。
+- `cmd/migrate` 在新空库建立 V11 基线；已有 V11 库校验复用，V1～V10 必须先通过旧版迁移工具升级，启动程序不会自动 DDL。
+- 数据库迁移中途失败时不允许删除版本表或伪造 `dirty` 状态。
 
-## 配置文件
+## 常用配置
 
-通用配置在 `configs/config.yaml`；开发和正式配置可复制成 `configs/config-dev.yaml` / `config-prod.yaml`。配置优先级：默认值、通用 YAML、指定 YAML、环境变量。
+| YAML | 对应环境变量 | 说明 |
+| --- | --- | --- |
+| `database.dsn` | `CONFIG_DB_DSN` | 权威库连接 |
+| `server.address` | `CONFIG_GO_ADDR` | HTTP 监听地址 |
+| `admin.writesEnabled` | `CONFIG_GO_ENABLE_WRITES` | 管理写接口 |
+| `webhook.enabled` | `CONFIG_GO_ENABLE_WEBHOOK` | Webhook 投递 |
+| `webhook.allowedHosts` | `WEBHOOK_ALLOWED_HOSTS` | 回调目标主机白名单 |
 
-主要配置：
-- `database.dsn` / `CONFIG_DB_DSN`：权威 MySQL 连接。
-- `server.address` / `CONFIG_GO_ADDR`：监听地址。
-- `admin.writesEnabled` / `CONFIG_GO_ENABLE_WRITES`：写入开关。
-- `webhook.enabled` / `CONFIG_GO_ENABLE_WEBHOOK`：变更通知开关。
-- `webhook.allowedHosts` / `WEBHOOK_ALLOWED_HOSTS`：回调白名单。
-
-管理接口无账号权限系统，只应开放在可信内网或受保护网关中。
-
-## 服务能力
-
-- `/api/config/admin/**`：三级节点、渠道应用、订阅者管理。
-- `/api/config/sync/**`：epoch + revision 增量同步和快照。
-- `/health/live`、`/health/ready`：健康与就绪检查。
-- Webhook：签名回调通知接入端自行拉取配置；只有三级节点变更推进 revision。
-
-三个环境映射到 `config_channel_app` 的 `prod_server_group_id`、`test_server_group_id`、`review_server_group_id`，公共 JSON 不分环境。
-
-## 检查
+## 测试与详细文档
 
 ```bash
 go test -race ./...
@@ -62,4 +41,4 @@ go vet ./...
 go build ./cmd/config-center ./cmd/migrate
 ```
 
-更多说明参见 ../docs/database-cleanup.md 和 ../docs/production-deployment.md。
+[接口文档](../docs/api.md) · [数据库与迁移](../docs/database.md) · [本地开发](../docs/development.md) · [生产部署](../docs/production.md)

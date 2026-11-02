@@ -1,78 +1,70 @@
 # Middle Platform · 研发中台
 
-本仓库已统一使用 **Go + MySQL** 实现配置中心和接入服务，管理界面使用 Vue 3。不再需要 JDK、Spring Boot、Gradle 或 Flyway。
+基于 **Go + MySQL 8.0+ + Vue 3** 的游戏研发配置中台。代码仓库包含三个独立 Go 服务、一个 Vue 管理端以及发布与 CI 脚本；不依赖 Java、Flyway 或 Docker。
 
-## 工程结构
+## 工程组成
 
-| 目录 | 技术栈 | 用途 |
-| --- | --- | --- |
-| `config-center` | Go | 权威配置中心、三级配置树、版本日志、Webhooks、数据库迁移 |
-| `config-center-access` | Go | 独立接入示例、本地 MySQL 副本、增量同步与 HMAC 回调 |
-| `sdk-core` | Go | SDK 登录充值核心服务（首期提供按环境、AppID 查询绑定区服组和公共配置） |
-| `config-center-admin` | Vue 3 | 配置管理界面 |
-| `scripts` | PowerShell / Python | Linux 发布包构建、MySQL 迁移及双实例端到端测试 |
+| 目录 | 职责 |
+| --- | --- |
+| `config-center/` | 权威配置中心：三级配置节点、渠道应用、订阅者、同步日志与数据库迁移 |
+| `config-center-access/` | 可选接入端：独立 MySQL 节点副本、Webhook 验签、快照与增量同步 |
+| `sdk-core/` | SDK 核心服务：目前提供按环境与 AppID 查询配置，登录/充值能力尚未在此文档宣称实现 |
+| `config-center-admin/` | Vue 3 配置管理后台 |
+| `shared/logging/` | 三个 Go 服务共用的结构化日志 |
+| `scripts/` | 统一 Linux 打包脚本及 CI 测试脚本 |
 
-## 推荐：使用 YAML 本地启动
+配置层级为 `game → region → server_group`，渠道应用 `channel_app` 独立维护。每个渠道应用的 AppID 全局唯一，最多分别绑定一个 `prod`（正式）、`test`（测试）、`review`（提审）区服组；渠道应用的 `config` 不按环境拆分。
 
-两个 Go 工程都支持指定 YAML 配置文件，公共默认配置在各自的 `configs/config.yaml`，实际的开发/生产配置不提交到 Git。
+## 快速开始（Windows PowerShell）
 
-在对应工程目录下，将 `configs/config.yaml` 复制为 `configs/config-dev.yaml`，填写数据库连接等配置后启动（`config.yaml` 保留为空凭证模板）：
+依赖：**Go 1.27.3、MySQL 8.0+**；启动 Vue 管理端额外需要 Node.js 22 / npm。
+
+1. 创建空的 `config_center` 数据库。
+2. 在 `config-center/` 下复制 `configs/config.yaml` 为 `configs/config-dev.yaml`，填写 `database.dsn`，按需启用 `admin.writesEnabled` / `webhook.enabled`。
+3. **先独立迁移，后启动服务**（下面两条命令都在 `config-center/` 目录执行）：
 
 ```powershell
+Copy-Item configs/config.yaml configs/config-dev.yaml
+# 修改 configs/config-dev.yaml 后执行
+go run ./cmd/migrate -config configs/config-dev.yaml
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
-接入工程使用：
+4. 接入端和 SDK Core 分别在**各自目录、各自终端**复制 YAML 后启动。接入端使用独立的 `config_access` 数据库；SDK Core 使用权威库的只读账号。
 
 ```powershell
+# 在 config-center-access 目录；需先创建空的 config_access 数据库
+Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/config-center-access -config configs/config-dev.yaml
+
+# 在 sdk-core 目录；另开终端
+Copy-Item configs/config.yaml configs/config-dev.yaml
+go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
 
-配置优先级：程序默认值 → `config.yaml` → 指定 YAML → 环境变量。省略 `-config` 则兼容旧版仅环境变量启动模式。详见两个工程各自的 README。
+5. 在 `config-center-admin/` 下运行 `npm ci`、`npm run dev`。
 
-## 启动 Go 配置中心
+默认监听端口：配置中心 `8080`、接入端 `8081`、SDK Core `8082`。完整建库、配置项及联调步骤见 [本地开发指南](docs/development.md)。
 
-新环境需要 Go 1.27.3 和 MySQL 8.0+。先创建空的 `config_center` 数据库，**执行独立迁移命令初始化 V11 基线，然后再启动配置中心服务**。
+## 生产发布
 
-```bash
-cd config-center
-export CONFIG_DB_DSN='root:password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC'
-export CONFIG_GO_ADDR=':8080'
-export CONFIG_GO_ENABLE_WRITES=true
-export CONFIG_GO_ENABLE_WEBHOOK=true
-go run ./cmd/config-center
+开发机在仓库根目录执行：
+
+```powershell
+.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
 ```
 
-首次启动必须先执行 `go run ./cmd/migrate -config configs/config-dev.yaml`。已有低于 V11 的历史数据库，应先使用旧版本迁移工具升至 V11；新迁移器拒绝直接处理旧库。
+发布脚本仅在 `dist/` 下生成一个 `middle-platform-v1.0.0-linux-amd64.tar.gz`；归档内只有 `bin/` 和可选 `admin/`，不包含生产密钥或服务管理配置。参见 [打包说明](docs/package.md) 与 [生产部署与运维](docs/production.md)。
 
-## 启动接入工程
+## 文档导航
 
-```bash
-cd config-center-access
-export ACCESS_DB_DSN='root:password@tcp(127.0.0.1:3306)/config_access?parseTime=true&loc=UTC'
-export CONFIG_CENTER_URL='http://127.0.0.1:8080'
-export CONFIG_WEBHOOK_SECRET='replace-with-a-secure-secret'
-go run ./cmd/config-center-access
-```
+- [架构与配置同步](docs/architecture.md)
+- [HTTP API 契约](docs/api.md)
+- [数据库结构与迁移](docs/database.md)
+- [本地开发与联调](docs/development.md)
+- [Linux 打包](docs/package.md)
+- [生产部署、滚动更新、日志与优雅停机](docs/production.md)
+- [CI 与测试](docs/ci.md)
+- 模块说明：[配置中心](config-center/README.md) · [接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md)
 
-接入服务默认监听 `:8081`，需要在配置中心为它注册订阅者并设置相同的 Webhook 密钥。详见 [接入端说明](config-center-access/README.md)。
-
-## 管理页面
-
-```bash
-cd config-center-admin
-npm ci
-npm run dev
-```
-
-业务配置层级为 `game → region → server_group → channel_app`。同步协议采用 `epoch + revision` 和增量变更日志，Webhook 不直接传输配置，只触发接入端主动拉取。
-
-**安全注意：** 管理接口没有账号权限系统，必须部署在可信内网或受保护网关。数据库迁移包含非事务性 MySQL DDL；升级旧库时必须先备份，失败后按照日志检查并恢复，不可盲目重试。
-
-更多信息：[本地部署](docs/deployment.md) · [生产原生部署](docs/production-deployment.md) · [Linux 打包](docs/package.md) · [系统架构](docs/architecture.md) · [CI 回归](docs/ci.md)。
-
-三个 Go 服务的结构化日志、Request ID 和部署说明参见 [统一日志规范](docs/logging.md)。
-
-## 优雅停服与服务管理
-
-三个 Go 服务统一响应 Ctrl+C 和 SIGTERM，接到停机信号后会切换就绪状态，等待已有 HTTP 请求完成，并等待配置同步 / Webhook 后台任务退出。Linux 生产环境推荐使用 systemd 管理服务，集群采用先摘流量再滚动更新的流程。详见 [优雅停机与启停管理](docs/graceful-shutdown.md)。
+**安全边界：** 当前管理 API 没有账号权限系统。`/api/config/admin/**`、配置同步接口、内部 Webhook 均不得直接暴露到公网。数据库迁移不是应用启动时自动执行的操作；已有数据库不可删除迁移记录后强行初始化。
