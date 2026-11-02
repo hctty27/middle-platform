@@ -23,6 +23,7 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
+// ErrTarget 表示游戏回调 URL 不符合 HTTPS 和目标白名单要求。
 var ErrTarget = errors.New("game notification target not approved")
 var denyNetworks = func() []netip.Prefix {
     candidates:=[]string{"100.64.0.0/10","192.0.0.0/24","198.18.0.0/15",
@@ -33,6 +34,7 @@ var denyNetworks = func() []netip.Prefix {
     return result
 }()
 
+// Client 向已批准的游戏域名投递独立签名的发货通知。
 type Client struct {
     http *http.Client
     allowed map[string]bool
@@ -68,6 +70,7 @@ func publicIP(ip netip.Addr)bool {
     return true
 }
 
+// ValidateTarget 校验回调地址的协议、域名、端口及 URL 结构。
 func (c *Client) ValidateTarget(raw string)error {
     u,err:=url.Parse(raw)
     if err!=nil||u.Scheme!="https"||u.User!=nil||u.Hostname()==""||

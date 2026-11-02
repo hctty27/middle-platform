@@ -14,6 +14,7 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
+// ErrSignature 表示支付平台 v1 签名或回调时间戳不合法。
 var ErrSignature = errors.New("invalid platform callback signature")
 
 // VerifyV1 严格匹配既有平台 v1：按五个值排序，以 _ 拼接，再做 SHA-1。

@@ -14,9 +14,11 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/payment"
 )
 
+// ErrInvalidOrder 表示登记或回调的订单参数不符合约束。
 var ErrInvalidOrder = errors.New("invalid order request")
 var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
+// OrderService 负责订单登记、平台回调确认及游戏发货补偿。
 type OrderService struct {
     ConfigReader Reader
     Orders interface {
@@ -40,6 +42,7 @@ type OrderService struct {
     }
 }
 
+// VerifyRegistration 从 AppID 所属游戏读取主密钥，验证登记请求签名及环境绑定。
 func(s *OrderService) VerifyRegistration(r *http.Request,body []byte,env,appid string)error {
     if !validEnv(env)||!orderIDPattern.MatchString(appid){return ErrInvalidOrder}
     app,group,err:=s.ConfigReader.Lookup(r.Context(),appid,env)
@@ -52,6 +55,7 @@ func(s *OrderService) VerifyRegistration(r *http.Request,body []byte,env,appid s
 
 func validEnv(env string)bool {return env=="prod"||env=="test"||env=="review"}
 
+// Register 将游戏订单和大区通知地址存为快照，重复请求必须保持业务参数一致。
 func(s *OrderService) Register(ctx context.Context,env,appid string,req model.RegisterOrder)error {
     if !validEnv(env)||!orderIDPattern.MatchString(appid)||
         !orderIDPattern.MatchString(req.GameOrderID)||req.Amount<=0||
@@ -116,6 +120,7 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     return h.Get("x-nonce"),nil
 }
 
+// deliver 使用游戏派生密钥发送发货通知，并独立持久化通知结果。
 func(s *OrderService) deliver(ctx context.Context,o model.Order)error {
     sendCtx,cancel:=context.WithTimeout(ctx,5*time.Second)
     defer cancel()
@@ -152,6 +157,7 @@ func(s *OrderService) RunWorker(ctx context.Context) {
     }
 }
 
+// Validate 在启动前检查订单服务依赖是否完整。
 func(s *OrderService) Validate()error {
     if s.Orders==nil||s.ConfigReader==nil||s.GameSecretReader==nil||s.PlatformSecretReader==nil||s.Notifier==nil {
         return errors.New("order service dependency missing")

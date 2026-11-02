@@ -63,7 +63,7 @@ type api struct {
 // Router 注册默认的只读路由。
 func Router(reader Reader) http.Handler { return router(reader, nil) }
 
-// RouterWithWrites 额外启用管理写接口。
+// RouterWithWrites 注册管理读写与同步接口；管理端入口必须由网关鉴权保护。
 func RouterWithWrites(reader Reader, writer Writer) http.Handler { return router(reader, writer) }
 
 // router 集中注册所有配置中心 HTTP 接口。

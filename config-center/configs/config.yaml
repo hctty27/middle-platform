@@ -1,55 +1,21 @@
-# ============================================================
-# 配置中心（config-center）通用配置模板
-# ============================================================
-# 用法：
-# 1. 本地开发：复制为 configs/config-dev.yaml，再修改数据库和部署参数。
-# 2. 生产部署：复制为 configs/config-prod.yaml，按实际环境调整。
-# 3. 启动示例：go run ./cmd/config-center -config configs/config-dev.yaml
-# 4. 独立迁移：go run ./cmd/migrate -config configs/config-dev.yaml
-#
-# 配置优先级：程序默认值 < 同目录 config.yaml < 指定的环境 YAML < 环境变量。
-# 真实的 config-dev.yaml / config-prod.yaml 已加入 .gitignore。
-# 请勿把数据库密码、访问密钥等真实凭据直接写入本模板并提交 Git。
-# 本项目只识别下方定义的配置项，拼错字段会导致启动时解析失败。
-
-# HTTP 服务配置
+# 配置中心：复制为 config-dev.yaml 或 config-prod.yaml 后填写实际配置。
 server:
-  # 监听地址（Go net/http 格式）。
-  # 默认只监听本机 127.0.0.1:8080；生产通过带管理认证的 Nginx 访问。
-  # 如果跨机器部署，必须仅绑定受防火墙保护的内网 IP。
-  # 对应环境变量：CONFIG_GO_ADDR
   address: "127.0.0.1:8080"
 
-# MySQL 权威配置数据库
+# 权威 MySQL 库；首次部署先运行 cmd/migrate（当前 V12）。
 database:
-  # Go MySQL DSN，非 Java JDBC URL。
-  # 格式示例：root:你的密码@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC
-  # 空字符串仅用于模板；启动前必须在环境配置中填写，或设置 CONFIG_DB_DSN。
-  # 首次使用空库时，请先独立运行 cmd/migrate 初始化 V11 数据库。
-  # 对应环境变量：CONFIG_DB_DSN
   dsn: ""
 
-# 管理读写接口始终注册，服务没有内建认证。
-# 请使用受保护的 Nginx / VPN / 内网 ACL 阻止未授权管理访问。
-# 特别注意：不能把 /api/config/admin/** 直接暴露给公网。
-
-# Webhook 投递 Worker 随配置中心启动，定时检查数据库中的已启用订阅者。
-# 启动后新增订阅者也会在下一轮被发现，无需配置 webhook.enabled 或重启。
+# 管理与同步接口无内建鉴权，公网入口须通过网关或内网 ACL 保护。
+# 仅允许向白名单中的主机发送 Webhook，新增订阅者无需重启服务。
 webhook:
-  # 允许配置的回调目标主机白名单，避免将通知发送到任意地址。
-  # 填主机名或 IP，不填写协议、端口和 URL 路径。
-  # 以下只允许回调 localhost 和 127.0.0.1，适合单机联调。
-  # 接入服务部署到其他主机时，需要额外加入其主机名或地址；
-  # 生产环境建议使用 HTTPS 并限制到可信目标。
-  # 对应环境变量：WEBHOOK_ALLOWED_HOSTS（逗号分隔的字符串）
   allowedHosts:
     - localhost
     - 127.0.0.1
 
-# 统一日志配置：输出到 stdout/stderr，由 systemd（journald）或 Supervisor 负责采集和轮转。
 log:
-  level: info              # debug / info / warn / error；LOG_LEVEL
-  format: json             # json / text；LOG_FORMAT
-  output: stdout           # stdout / stderr；LOG_OUTPUT
-  accessEnabled: true      # 正常访问日志开关；LOG_ACCESS_ENABLED
-  slowThreshold: 500ms     # 慢请求阈值；LOG_SLOW_THRESHOLD
+  level: info
+  format: json
+  output: stdout
+  accessEnabled: true
+  slowThreshold: 500ms

@@ -12,9 +12,10 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
-// OrderStore 仅访问独立订单库，配置中心的只读连接不参与订单事务。
+// OrderStore 在共享的 config_center 连接池中读写 game_order，不修改配置表。
 type OrderStore struct { db *sql.DB }
 
+// NewOrderStore 使用 SDK Core 已有的 sql.DB 连接池。
 func NewOrderStore(db *sql.DB) *OrderStore { return &OrderStore{db: db} }
 
 const orderColumns = `id, appid, game_id, env, game_order_id, amount, attach, game_notify_url,
@@ -31,6 +32,7 @@ func scanOrder(row interface{ Scan(...any) error }) (model.Order, error) {
     return o, err
 }
 
+// Find 按 AppID 和游戏订单号查询已登记的唯一订单。
 func (s *OrderStore) Find(ctx context.Context, appid, gameOrderID string) (model.Order, error) {
     o, err := scanOrder(s.db.QueryRowContext(ctx,
         "SELECT "+orderColumns+" FROM game_order WHERE appid=? AND game_order_id=?",
@@ -39,6 +41,7 @@ func (s *OrderStore) Find(ctx context.Context, appid, gameOrderID string) (model
     return o, err
 }
 
+// ByID 按数据库主键获取当前支付及通知状态。
 func (s *OrderStore) ByID(ctx context.Context, id int64) (model.Order, error) {
     o, err := scanOrder(s.db.QueryRowContext(ctx,
         "SELECT "+orderColumns+" FROM game_order WHERE id=?", id))
@@ -150,4 +153,5 @@ func (s *OrderStore) ClaimDue(ctx context.Context) (*model.Order,error) {
     return &o,err
 }
 
+// PingContext 检查共享连接池的 MySQL 可用性。
 func (s *OrderStore) PingContext(ctx context.Context) error { return s.db.PingContext(ctx) }

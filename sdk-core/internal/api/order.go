@@ -14,6 +14,7 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/service"
 )
 
+// OrderAPI 定义订单登记鉴权、入库和平台回调处理所需的业务能力。
 type OrderAPI interface {
     VerifyRegistration(*http.Request,[]byte,string,string)error
     Register(context.Context,string,string,model.RegisterOrder)error

@@ -11,10 +11,12 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
+// Store 通过共享的数据库连接池读取配置中心的权威数据。
 type Store struct {
     db *sql.DB
 }
 
+// NewStore 复用已创建的连接池，不另建数据库连接。
 func NewStore(db *sql.DB) *Store {
     return &Store{db: db}
 }
