@@ -10,19 +10,14 @@ database:
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 默认关闭订单功能，不注册订单/支付回调路由，也不启动通知补偿 Worker。
-# 启用前必须先由 config-center/cmd/migrate 执行 V12，完成联调与支付安全评审。
-order:
-  enabled: false
+# 订单登记、支付回调路由和发货补偿 Worker 默认随服务启动。
+# 依赖 config-center 统一 V12 schema，不需要额外的 order.enabled 开关。
 
 # 游戏通信主密钥只保存在配置中心 game.config.gameSecret 中（Base64 编码的 32 随机字节）。
 # SDK Core 与游戏服对两个用途分别派生 HKDF 密钥；这里不再配置 gameAuth.keys。
 
-# 平台密钥从 config_channel_app.config.appSecret（渠道包 JSON 顶层）读取，跨环境共享。
-# 不在此处重复配置 payment.secrets；平台 v1 未签金额，正式环境拒绝确认支付。
-payment:
-  allowUnverifiedNonProd: false
-
+# 平台 appSecret 从 config_channel_app.config 读取。
+# 平台 v1 不签金额，所有环境均不会凭该回调确认支付或发货；需接入可信查单。
 # SDK Core 向游戏发货：使用 gameSecret 派生的通知密钥；只配置允许的 HTTPS 域名。
 gameNotify:
   allowedHosts: []

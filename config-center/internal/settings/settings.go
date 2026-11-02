@@ -7,7 +7,6 @@ import (
  "io"
  "os"
  "path/filepath"
- "strconv"
  "strings"
 
  "gopkg.in/yaml.v3"
@@ -19,14 +18,12 @@ type Settings struct {
  DSN string
  Address string
  AllowedHosts string
- WritesEnabled bool
  Log logging.Config
 }
 
 type configFile struct {
  Server struct { Address string `yaml:"address"` } `yaml:"server"`
  Database struct { DSN string `yaml:"dsn"` } `yaml:"database"`
- Admin struct { WritesEnabled *bool `yaml:"writesEnabled"` } `yaml:"admin"`
  Webhook struct {
   AllowedHosts []string `yaml:"allowedHosts"`
  } `yaml:"webhook"`
@@ -50,12 +47,10 @@ func LoadFile(path string) (Settings,error) {
  }
  cfg:=Settings{Address:":8081",DSN:data.Database.DSN,AllowedHosts:strings.Join(data.Webhook.AllowedHosts,","),Log:data.Log}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
- if data.Admin.WritesEnabled!=nil {cfg.WritesEnabled=*data.Admin.WritesEnabled}
- // 环境变量优先级最高；管理写接口仍由独立安全开关控制。
+ // 环境变量优先级最高；管理接口的安全边界由受保护的网关负责。
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_GO_ADDR",&cfg.Address)
  overrideString("WEBHOOK_ALLOWED_HOSTS",&cfg.AllowedHosts)
- if err:=overrideBool("CONFIG_GO_ENABLE_WRITES",&cfg.WritesEnabled);err!=nil{return Settings{},err}
  if err:=cfg.Log.ApplyEnv();err!=nil{return Settings{},err}
  if strings.TrimSpace(cfg.DSN)=="" {return Settings{},errors.New("database.dsn or CONFIG_DB_DSN is required")}
  return cfg,nil
@@ -76,11 +71,3 @@ func overrideString(key string,target *string) {
  if value,ok:=os.LookupEnv(key);ok {*target=value}
 }
 
-func overrideBool(key string,target *bool) error {
- if value,ok:=os.LookupEnv(key);ok {
-  parsed,err:=strconv.ParseBool(value)
-  if err!=nil{return fmt.Errorf("invalid %s: %w",key,err)}
-  *target=parsed
- }
- return nil
-}
