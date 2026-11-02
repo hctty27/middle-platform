@@ -12,3 +12,8 @@
 **/configs/config-dev.yaml
 **/configs/config-prod.yaml
 **/configs/*.local.yaml
+
+# 生产配置和本地 Compose 环境变量
+.env.*
+!**/.env.prod.example
+**/compose.env
