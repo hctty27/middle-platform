@@ -8,6 +8,7 @@ import (
     "net/http"
     "regexp"
     "time"
+    "sync"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/auth"
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
@@ -25,9 +26,7 @@ type OrderService struct {
         Find(context.Context, string, string) (model.Order, error)
         Register(context.Context, model.Order) error
         ConfirmPayment(context.Context, int64, string, time.Time) error
-        ByID(context.Context, int64) (model.Order, error)
-        BeginNotify(context.Context, int64) (bool, error)
-        CompleteNotify(context.Context, int64, error) error
+        CompleteNotify(context.Context, int64, int, error) error
         ClaimDue(context.Context) (*model.Order, error)
     }
     GameSecretReader interface {
@@ -87,7 +86,7 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
     })
 }
 
-// Receive 根据已登记订单定位 AppID，直接读取渠道包共享 appSecret 验签。
+// Receive 根据已登记订单定位 AppID，验签后仅确认支付并唤醒持久化通知队列。
 // env 仅标识登记订单所属环境，不参与平台验签密钥选择。
 // 平台负责核对实际收款；SDK Core 按既有 v1 协议验签并核对登记金额，不发起二次查单。
 // 注意：v1 签名不覆盖 amount/attach/paid_at，金额比较无法证明这些回调字段的完整性。
@@ -106,17 +105,8 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     paidAt,err:=time.Parse(time.RFC3339,callback.PaidAt)
     if err!=nil{return "",ErrInvalidOrder}
     if err=s.Orders.ConfirmPayment(ctx,o.ID,callback.OrderNo,paidAt);err!=nil{return "",err}
-    updated,err:=s.Orders.ByID(ctx,o.ID)
-    if err!=nil{return "",err}
-    if updated.NotifyStatus==1 {return h.Get("x-nonce"),nil}
-    claimed,err:=s.Orders.BeginNotify(ctx,o.ID)
-    if err!=nil{return "",err}
-    if !claimed {
-        state,stateErr:=s.Orders.ByID(ctx,o.ID)
-        if stateErr==nil&&state.NotifyStatus==1 {return h.Get("x-nonce"),nil}
-        return "",model.ErrOrderNotPaid
-    }
-    if err=s.deliver(ctx,updated);err!=nil{return "",err}
+    // 支付状态已持久化，立即向平台确认；游戏发货由持久化 Worker 异步处理。
+    // 并发重复回调只会重复确认同一平台订单，不会触发额外网络通知。
     return h.Get("x-nonce"),nil
 }
 
@@ -134,27 +124,38 @@ func(s *OrderService) deliver(ctx context.Context,o model.Order)error {
     if err==nil{err=s.Notifier.Send(sendCtx,o,key)}
     commitCtx,commitCancel:=context.WithTimeout(context.Background(),2*time.Second)
     defer commitCancel()
-    if saveErr:=s.Orders.CompleteNotify(commitCtx,o.ID,err);saveErr!=nil {
+    if saveErr:=s.Orders.CompleteNotify(commitCtx,o.ID,o.NotifyAttempts,err);saveErr!=nil {
         return fmt.Errorf("persist notification result: %w",saveErr)
     }
     return err
 }
 
-// RunWorker 使用持久化任务时间戳补偿已支付未通知的订单。
+// RunWorker 使用固定数量的消费者并发处理到期通知。
+// 不在 HTTP 回调请求中发送网络通知；多进程由 MySQL SKIP LOCKED 分配订单。
+// 通知租约为 60 秒，长于单次 5 秒网络超时；进程崩溃后租约到期可重新领取。
 func(s *OrderService) RunWorker(ctx context.Context) {
-    ticker:=time.NewTicker(2*time.Second)
-    defer ticker.Stop()
-    for {
-        select {
-        case <-ctx.Done():return
-        case <-ticker.C:
-            jobCtx,cancel:=context.WithTimeout(ctx,3*time.Second)
-            order,err:=s.Orders.ClaimDue(jobCtx)
-            cancel()
-            if err!=nil||order==nil{continue}
-            _=s.deliver(ctx,*order)
-        }
+    const workers = 4
+    var wg sync.WaitGroup
+    wg.Add(workers)
+    for i:=0;i<workers;i++ {
+        go func(){
+            defer wg.Done()
+            ticker:=time.NewTicker(500*time.Millisecond)
+            defer ticker.Stop()
+            for {
+                select {
+                case <-ctx.Done():return
+                case <-ticker.C:
+                    jobCtx,cancel:=context.WithTimeout(ctx,3*time.Second)
+                    order,err:=s.Orders.ClaimDue(jobCtx)
+                    cancel()
+                    if err!=nil||order==nil{continue}
+                    _=s.deliver(ctx,*order)
+                }
+            }
+        }()
     }
+    wg.Wait()
 }
 
 // Validate 在启动前检查订单服务依赖是否完整。
