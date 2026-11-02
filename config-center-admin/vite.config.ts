@@ -3,6 +3,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  // 使用相对资源路径，同一份构建产物可部署在任意子路径。
+  base: './',
   plugins: [vue()],
   server: {
     host: '127.0.0.1',

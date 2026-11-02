@@ -1,7 +1,18 @@
-// 所有后台请求统一通过该客户端访问配置中心，避免页面中散落接口前缀和超时配置。
+// 配置中心的 API 基址从运行时配置读取，不需要为不同部署路径重新构建前端。
 import axios from 'axios'
 
+declare global {
+  interface Window {
+    __MIDDLE_PLATFORM_CONFIG__?: {
+      apiBaseUrl?: string
+    }
+  }
+}
+
+const configuredApiBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.apiBaseUrl?.trim()
+const apiBaseUrl = configuredApiBaseUrl || '/api/config'
+
 export const api = axios.create({
-  baseURL: '/api/config',
+  baseURL: apiBaseUrl.replace(/\/+$/, ''),
   timeout: 10000
 })

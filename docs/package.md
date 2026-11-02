@@ -37,8 +37,11 @@ bin/
 └── migrate
 admin/                      # -SkipFrontend 时不存在
 ├── index.html
+├── config.js               # 可修改的公开 API 地址配置
 └── assets/...
 ```
+
+生产部署时，可将 `admin/config.js` 复制到 `/data/middle-platform/config/admin.js`，再通过 Nginx 精确匹配提供给前端，避免更新静态文件覆盖配置。详见 [生产部署与运维](production.md)。
 
 归档**不包含**生产 YAML、真实密码、Supervisor/systemd/Nginx 配置、源码、`BUILD_INFO.txt` 或 `SHA256SUMS.txt`。`scripts/package-archive.go` 只是内部 tar.gz 辅助工具，保证从 Windows 打包时 Linux ELF 仍保存 `0755` 可执行权限；不需要也不应该单独运行。
 

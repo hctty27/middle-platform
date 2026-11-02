@@ -46,7 +46,7 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/migrate admin/ admin/index.html; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/migrate admin/ admin/index.html admin/config.js; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do
@@ -63,6 +63,10 @@ jobs:
             test "$(stat -c %a "$tmpdir/bin/$binary")" = "755"
             file "$tmpdir/bin/$binary" | grep -E 'ELF 64-bit .*x86-64'
           done
+          # 验证相对静态路径与运行时配置被真正写入发布包。
+          grep -F 'config.js' "$tmpdir/admin/index.html"
+          grep -F './assets/' "$tmpdir/admin/index.html"
+          grep -F '__MIDDLE_PLATFORM_CONFIG__' "$tmpdir/admin/config.js"
           sha256sum "$tarball"
           test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 1
           test "$(find dist -mindepth 1 -type d | wc -l)" -eq 0
