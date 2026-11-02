@@ -27,7 +27,8 @@ services:
       start_period: 30s
       retries: 3
 
-  sdk-core:
+  # Two separate Go processes share the same read-only config and database pool settings.
+  sdk-core-1: &sdk-core-service
     <<: *go-common
     image: ghcr.io/hctty27/middle-platform-sdk-core:${IMAGE_TAG:?Set IMAGE_TAG to sha-<commit>}
     ports:
@@ -41,6 +42,11 @@ services:
       timeout: 3s
       start_period: 30s
       retries: 3
+
+  sdk-core-2:
+    <<: *sdk-core-service
+    ports:
+      - "${BIND_IP:?Set BIND_IP to the private host IP}:8084:8082"
 
   admin:
     restart: unless-stopped
