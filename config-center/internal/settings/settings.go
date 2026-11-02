@@ -21,7 +21,6 @@ type Settings struct {
  AllowedHosts string
  WritesEnabled bool
  WebhookEnabled bool
- AllowLegacyUpgrade bool
  Log logging.Config
 }
 
@@ -33,7 +32,6 @@ type configFile struct {
   Enabled *bool `yaml:"enabled"`
   AllowedHosts []string `yaml:"allowedHosts"`
  } `yaml:"webhook"`
- Migration struct { AllowLegacyUpgrade *bool `yaml:"allowLegacyUpgrade"` } `yaml:"migration"`
  // 兼容本地旧配置文件中的字段；基线版本已不再支持旧库自动升级。
  Migration struct { AllowLegacyUpgrade *bool `yaml:"allowLegacyUpgrade"` } `yaml:"migration"`
  Log logging.Config `yaml:"log"`
@@ -58,7 +56,6 @@ func LoadFile(path string) (Settings,error) {
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
  if data.Admin.WritesEnabled!=nil {cfg.WritesEnabled=*data.Admin.WritesEnabled}
  if data.Webhook.Enabled!=nil {cfg.WebhookEnabled=*data.Webhook.Enabled}
- if data.Migration.AllowLegacyUpgrade!=nil {cfg.AllowLegacyUpgrade=*data.Migration.AllowLegacyUpgrade}
  // 环境变量优先级最高，管理写入和回调均由显式开关控制。
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_GO_ADDR",&cfg.Address)
@@ -66,7 +63,6 @@ func LoadFile(path string) (Settings,error) {
  for _,b:=range []struct{name string; target *bool}{
   {"CONFIG_GO_ENABLE_WRITES",&cfg.WritesEnabled},
   {"CONFIG_GO_ENABLE_WEBHOOK",&cfg.WebhookEnabled},
-  {"CONFIG_ALLOW_LEGACY_UPGRADE",&cfg.AllowLegacyUpgrade},
  } {
   if err:=overrideBool(b.name,b.target);err!=nil{return Settings{},err}
  }
