@@ -15,7 +15,7 @@ Go 进程、MySQL 数据和管理控制台均应部署在可信内网；只有 S
 - `deploy/deploy.sh`：给**已从网关摘流量**的单个节点部署固定 SHA 标签镜像。
 - `.github/workflows/publish-images.yml`：在 main 的 Build 工作流通过之后，构建并推送四个 GHCR 镜像。
 
-建议将 config-center 与 sdk-core 部署在两个应用节点，每个节点运行相同 Compose；数据库使用独立 MySQL 8.x，统一处于低延迟内网。每台应用机默认运行 `sdk-core-1`（宿主机 8201 → 容器 8082）和 `sdk-core-2`（宿主机 8202 → 容器 8082），**共用同一份只读挂载的 `sdk-core.yaml`**。配置中心映射至宿主机 8101，Access（按需开启）映射 8090，管理端映射 80。**管理端与 Nginx 网关必须使用不同机器或不同 IP**，避免同一监听地址的 80 端口冲突。单机开发可使用 `BIND_IP=127.0.0.1`，但同一 IP 上不能再启动监听 80 的网关 Nginx。双节点示例中 Nginx 对四个 SDK 实例负载均衡（两台机器各两个），固定 IP 必须按实际环境调整。
+建议将 config-center 与 sdk-core 部署在两个应用节点，每个节点运行相同 Compose；数据库使用独立 MySQL 8.x，统一处于低延迟内网。每台应用机默认运行 `sdk-core-1`（宿主机 8201 → 容器 8201）和 `sdk-core-2`（宿主机 8202 → 容器 8202），**共用同一份只读挂载的 `sdk-core.yaml`**。两个进程分别通过 `SDK_CORE_ADDR` 覆盖监听地址。配置中心映射至宿主机 8101，Access（按需开启）映射 8090，管理端映射 80。**管理端与 Nginx 网关必须使用不同机器或不同 IP**，避免同一监听地址的 80 端口冲突。单机开发可使用 `BIND_IP=127.0.0.1`，但同一 IP 上不能再启动监听 80 的网关 Nginx。双节点示例中 Nginx 对四个 SDK 实例负载均衡（两台机器各两个），固定 IP 必须按实际环境调整。
 
 `config-center-access` 是接入侧副本，不是配置中心集群的必选组件；需要它时可部署到独立接入节点，使用自己的 `config_access` 数据库和订阅回调配置。不同接入节点若使用不同副本库，必须各自收到通知或执行周期校对，不能只依赖负载均衡向其中一台发送回调。
 
@@ -33,17 +33,17 @@ CREATE DATABASE IF NOT EXISTS config_center
 SDK 只需 `config_center` 业务查询所需的 SELECT 权限。多台 sdk-core 不会修改这个库。
 生产数据库不应通过公网开放 3306；配置中心和 SDK Core 应处于同地域、低延迟网络。
 
-## 端口规划（宿主机）
+## 端口规划（宿主机与容器相同）
 
 | 服务 | 宿主机端口 | 容器端口 |
 | --- | --- | --- |
-| config-center | 8101 | 8080 |
-| config-center-access（可选） | 8090 | 8081 |
+| config-center | 8101 | 8101 |
+| config-center-access（可选） | 8090 | 8090 |
 | config-center-admin | 80 | 80 |
-| sdk-core-1 | 8201 | 8082 |
-| sdk-core-2 | 8202 | 8082 |
+| sdk-core-1 | 8201 | 8201 |
+| sdk-core-2 | 8202 | 8202 |
 
-约定：**配置中心从 8101 开始、Core 从 8201 开始、Service 从 8301 开始**；Access 为 8090，前端管理为 80。预留 `8102+` 给后续配置中心实例、`8203+` 给 Core 扩容，`8301+` 为未来 Service（尚无对应 Compose 服务，不应预先占用端口）。容器内 Go 监听端口保持原样，**无需修改** `config-center.yaml`、`sdk-core.yaml` 或 `config-center-access.yaml` 的 `server.address`。管理后台容器映射至宿主机 `80`，只能与单独部署的网关 Nginx 共存，不能绑定同一宿主机 IP 的 `80`。端口是项目约定，部署前仍需确保宿主机未被占用。公网仅开放经网关认证和路由的 443/80，应用端口需绑定可信内网 IP 并通过防火墙限制。
+约定：**配置中心从 8101 开始、Core 从 8201 开始、Service 从 8301 开始**；Access 为 8090，前端管理为 80。预留 `8102+` 给后续配置中心实例、`8203+` 给 Core 扩容，`8301+` 为未来 Service（尚无对应 Compose 服务，不应预先占用端口）。容器内 Go 进程的**实际监听端口与宿主机映射保持一致**。生产 Compose 使用 `CONFIG_GO_ADDR=:8101`、`CONFIG_ACCESS_ADDR=:8090`、`SDK_CORE_ADDR=:8201/:8202` 覆盖各自 YAML 的 `server.address`，不必把开发环境默认端口改掉。修改 YAML 中的 `server.address` 不会覆盖 Compose 明确指定的环境变量。管理后台容器映射至宿主机 `80`，只能与单独部署的网关 Nginx 共存，不能绑定同一宿主机 IP 的 `80`。端口是项目约定，部署前仍需确保宿主机未被占用。公网仅开放经网关认证和路由的 443/80，应用端口需绑定可信内网 IP 并通过防火墙限制。
 
 
 ### 端口 80 的部署限制
@@ -63,8 +63,8 @@ sudo cp deploy/.env.prod.example /etc/middle-platform/compose.env
 
 分别编辑三个文件：
 
-- `config-center.yaml`：配置 `database.dsn`、`server.address: ":8080"`；若使用管理台写入，启用 `admin.writesEnabled`；如需要接入 Webhook，启用 `webhook.enabled` 并配置可信的 `allowedHosts`。
-- `sdk-core.yaml`：两个 SDK Core 容器共用此文件，使用同一个权威 `config_center` 库、只读账号；`server.address: ":8082"`。两容器的 **MySQL 连接池上限相加**，部署前确认数据库连接容量。
+- `config-center.yaml`：配置 `database.dsn`；生产容器通过 `CONFIG_GO_ADDR=:8101` 监听 8101（优先级高于 YAML 的 `server.address`）。若使用管理台写入，启用 `admin.writesEnabled`；如需要接入 Webhook，启用 `webhook.enabled` 并配置可信的 `allowedHosts`。
+- `sdk-core.yaml`：两个 SDK Core 容器共用此文件，使用同一个权威 `config_center` 库、只读账号；生产环境分别用 `SDK_CORE_ADDR=:8201` 和 `SDK_CORE_ADDR=:8202` 启动，**不需要复制 YAML**。两容器的 **MySQL 连接池上限相加**，部署前确认数据库连接容量。
 - `compose.env`：填写发布后的 `IMAGE_TAG=sha-<完整40位commit SHA>`、本机 `BIND_IP`、`CONFIG_DIR`。
 
 服务容器以 UID/GID `65532` 运行，需要有权读取 YAML。若使用 rootful Docker 和本机 bind mount，可将两份文件设为 root 所有、GID 65532、模式 0640，并确保目录可遍历：
@@ -124,7 +124,7 @@ bash deploy/deploy.sh sha-<完整40位commit>
 脚本会校验 Compose 配置、拉取并部署四个运行服务（`config-center`、`sdk-core-1`、`sdk-core-2`、`admin`），执行 `up -d --wait` 并显示状态。两个 SDK 容器使用同一镜像标签。仅更新双 SDK 实例时可以使用 `bash deploy/deploy.sh sha-<完整40位commit> sdk-core`，或者单独指定 `sdk-core-1` / `sdk-core-2`。
 
 只有需要接入端时，先准备独立 `config-center-access.yaml` 和接入副本数据库，
-然后使用 `--profile access` 单独启动，且不要对公网暴露宿主机 8090（容器内为 8081）：
+然后使用 `--profile access` 单独启动。生产 Compose 设置 `CONFIG_ACCESS_ADDR=:8090`，宿主机与容器内都使用 8090，**不要对公网暴露该端口**。另外，`configCenter.url` 必须填写可达的真实配置中心内网地址（如 `http://10.0.0.11:8101` 或可信的内网负载均衡地址），不能直接使用模板的 `127.0.0.1:8080`：
 
 ```bash
 export IMAGE_TAG=sha-<完整40位commit>
