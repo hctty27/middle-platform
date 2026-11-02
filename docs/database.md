@@ -60,19 +60,24 @@ WHERE id = 1;
 
 MySQL DDL 不保证事务回滚。遇到 `dirty=1` 或中途失败，先核对已执行的 DDL 与备份，恢复到一致状态，再由人工确认后重试。**不要**直接删除 `config_schema_migrations` 或手工执行新库 `schema.sql` 覆盖已有库。
 
-## SDK Core 的同库连接与权限
+## SDK Core 的单连接池与权限
 
-SDK Core 两个 DSN 都必须连接**同一个 MySQL 实例的同一个 `config_center` 数据库**：
-`database.dsn` 使用只读配置账号，`orderDatabase.dsn` 使用只读写订单表的账号。SDK Core 启动时会检查 `@@server_uuid` 与 `DATABASE()`，拒绝跨库连接。
+SDK Core **只使用 `database.dsn`**，配置查询和订单操作共享一个 `*sql.DB` 连接池，
+目标为同一个 `config_center` 数据库。订单由 `order.enabled` 控制，默认 `false`，
+关闭时不会注册订单/支付回调路由，也不会启动发货补偿 Worker。
+
+如需启用订单，建议使用 `sdk_core` 专用 MySQL 账号，仅授予下列表级权限（账号须先创建）：
 
 ```sql
-GRANT SELECT ON config_center.config_node TO 'sdk_reader'@'%';
-GRANT SELECT ON config_center.config_channel_app TO 'sdk_reader'@'%';
-GRANT SELECT, INSERT, UPDATE ON config_center.game_order TO 'sdk_order'@'%';
+GRANT SELECT ON config_center.config_node TO 'sdk_core'@'%';
+GRANT SELECT ON config_center.config_channel_app TO 'sdk_core'@'%';
+GRANT SELECT, INSERT, UPDATE ON config_center.game_order TO 'sdk_core'@'%';
 ```
 
-以上为权限示意；账号应先由管理员创建，生产环境应将 `'%'` 替换为实际来源地址范围。为了访问健康检查和订单表结构，订单账号无需获得 `config_node` 写权限。
-`orderDatabase.dsn` 留空时 SDK Core 只提供配置查询，充值路由不会注册。
+生产需把 `'%'` 收紧为实际源地址范围。不可授予 `config_node`、`config_channel_app` 的写权限，
+也不应授予 `CREATE` / `ALTER` / `DROP` 等 DDL 权限。
+关闭订单功能时，账号可以只拥有配置表 SELECT；开启前需要完成 V12 迁移、权限配置和平台支付安全评审。
+旧的 `orderDatabase` 配置与 `SDK_CORE_ORDER_DB_DSN` 不再使用。
 
 ## 接入端副本：config_access
 
