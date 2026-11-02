@@ -2,10 +2,13 @@
 # Replace upstream IPs, domains, TLS certificate paths, admin CIDR, and htpasswd path.
 # Both nodes must bind to private IPs; firewall must only allow this gateway to reach them.
 
+# On each application host: sdk-core-1 = :8082, sdk-core-2 = :8084.
 upstream mp_core {
     least_conn;
     server 10.0.0.11:8082 max_fails=3 fail_timeout=10s;
+    server 10.0.0.11:8084 max_fails=3 fail_timeout=10s;
     server 10.0.0.12:8082 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8084 max_fails=3 fail_timeout=10s;
     keepalive 16;
 }
 
