@@ -1,0 +1,14 @@
+# Only ship build inputs into Docker; do not copy credentials or local state.
+.git
+**/.git
+**/.env
+**/.env.*
+**/configs/config-dev.yaml
+**/configs/config-prod.yaml
+**/configs/*.local.yaml
+**/node_modules
+**/dist
+**/build
+**/.idea
+**/*.log
+**/*.test
