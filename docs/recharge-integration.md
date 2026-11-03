@@ -1,40 +1,22 @@
 # 游戏充值第三方接入说明
 
-> 适用对象：接入研发中台充值功能的游戏服务端开发者。  
-> 对应版本：以本文件所在分支的 SDK Core 实际部署版本为准。  
-> 仅介绍游戏方需要实现的订单登记、发货通知与签名，不涉及支付平台内部回调、数据库和任务调度。
+本说明面向游戏服务端，仅涉及订单登记及游戏发货通知。平台回调由 SDK Core 自行适配。
 
-## 1. 接入流程
+## 1. 接入信息
 
-1. **配置接入信息**：向中台管理员获取 `appid`、`env`、`sdkCoreBaseUrl` 和游戏密钥，并提供发货通知地址。
-2. **登记订单**：玩家下单后，由游戏服务端向 SDK Core 登记订单，再继续业务支付流程。
-3. **接收发货通知**：支付成功后，中台通知游戏服务端；游戏服验签、核对订单、幂等发货并确认。
+从中台管理员取得 `appid`、`env`（test/prod/review）、SDK Core 基础 URL 和 `gameSecret`，并将游戏通知 URL 配置到对应 `region.config.payNotifyUrl`。游戏密钥仅在服务端保存，建议使用高强度随机值。
 
-> 登记成功不代表支付成功。不要在登记成功时发货。
+## 2. 登记订单
 
-## 2. 接入参数
-
-| 参数 | 说明 |
-| --- | --- |
-| `appid` | 渠道应用 Code，例如 `110006` |
-| `env` | `test` 测试、`prod` 正式、`review` 提审 |
-| `sdkCoreBaseUrl` | SDK Core 服务地址，由中台管理员提供 |
-| `gameSecret` | 共享游戏主密钥，**任意非空字符串**（无需 Base64 或固定长度）；仅保存在服务端，建议使用足够长的随机密钥 |
-| `payNotifyUrl` | 游戏服接收发货通知的 HTTP/HTTPS 地址；由管理员配置到对应 `region.config` |
-
-双方使用同一份 `gameSecret`，但会通过 HKDF-SHA256 分别派生订单登记密钥和发货通知密钥；不可直接用主密钥签名。普通字符串按 UTF-8 原始字节处理；**为兼容旧配置**，如果字符串恰好是标准 Base64 且解码后为 32 字节，仍按解码后的二进制密钥处理。请确保游戏方采用相同规则。
-
-## 3. 登记订单
-
-**接口：** `POST /api/core/{env}/{appid}/orders`
-
-请求头：
-
-| Header | 内容 |
-| --- | --- |
-| `Content-Type` | `application/json` |
-| `X-Game-Timestamp` | Unix 秒时间戳 |
-| `X-Game-Signature` | 64 位小写十六进制 HMAC-SHA256 签名 |
+```http
+POST /api/core/{env}/{appid}/orders
+Content-Type: application/json
+x-app-id: 110006
+x-env: test
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: <HMAC-SHA256 hex>
+```
 
 请求 Body：
 
@@ -46,61 +28,32 @@
 }
 ```
 
-| 字段 | 说明 |
-| --- | --- |
-| `game_order_id` | 游戏订单号；同一 `appid` 下跨环境唯一 |
-| `amount` | 金额单位：人民币**分**，`600` 表示 6 元 |
-| `attach` | 自定义透传字符串，必填，可传空字符串 |
-
-成功返回 HTTP 200：
+金额单位为分，`attach` 是必填字符串但允许为空；相同 AppID 的订单号跨环境唯一。成功返回 HTTP 200：
 
 ```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "game_order_id": "G202611030001",
-    "registration_status": "REGISTERED"
-  }
-}
+{"code":0,"message":"success","data":{"game_order_id":"G202611030001","registration_status":"REGISTERED"}}
 ```
 
-相同订单号、环境、金额和 `attach` 可重复登记；参数冲突返回 HTTP 409。
+相同订单的完全一致参数重复登记为幂等成功；修改金额或 attach 则返回 409。**登记成功不代表支付成功。**
 
-### 订单登记签名
-
-首先派生登记密钥：
+登记签名操作标识为 `order.register`，选取以下八个值：
 
 ```text
-IKM    = gameSecret 的 UTF-8 字节；旧版标准 Base64 的 32 字节密钥仍按 Base64 解码后的字节
-salt   = nil
-info   = middle-platform:sdk-core:order-register:v2
-长度   = 32 字节
+appid = 110006
+env = test
+method = POST
+operation = order.register
+timestamp = 1793700000
+nonce = 0123456789abcdef
+body.sha256 = hex_lower(SHA256(原始 HTTP Body))
+body.game_order_id = G202611030001
 ```
 
-对**实际发送的原始 JSON 字节**计算 `bodyHash = hex_lower(SHA256(rawBody))`，拼接五行字符串，行间为换行符（LF），末尾无换行：
+按照**值**做字典序升序排序，用 `_` 连接后用游戏请求密钥计算 HMAC-SHA256，输出 64 位小写十六进制值写入 `x-signature`。不要对重新序列化后的 JSON 计算 Body Hash。
 
-```text
-POST
-test
-110006
-<Unix 秒时间戳>
-<bodyHash>
-```
+## 3. 接收发货通知
 
-其中第二行是环境 `env`，第三行是渠道应用 `appid`，必须与请求路由值一致，防止跨环境、跨应用重放。
-
-```text
-X-Game-Signature = hex_lower(HMAC_SHA256(登记密钥, 五行字符串))
-```
-
-时间戳允许前后 5 分钟偏差。**签名不包含 URL、域名、端口或请求路径**，无需关心 Nginx / API 网关的路径前缀。
-
-## 4. 接收支付成功通知
-
-游戏方只需提供 `payNotifyUrl` 接口，不需要实现支付平台的 V1 回调。
-
-中台会向该地址发起 POST，Body 示例：
+SDK Core 向 `payNotifyUrl` 发起 POST，同样使用 `x-app-id`、`x-env`、`x-timestamp`、`x-nonce`、`x-signature` 五个请求头。
 
 ```json
 {
@@ -112,66 +65,27 @@ X-Game-Signature = hex_lower(HMAC_SHA256(登记密钥, 五行字符串))
 }
 ```
 
-请求头：
+签名操作标识为 `payment.notify`，和订单登记采用相同规则，但最后一项选 `body.order_no`，而不是 `body.game_order_id`；密钥方向不同。
 
-| Header | 含义 |
+游戏服依次验证时间戳、nonce 格式、AppID/环境、V3 签名，并查询本地订单核对金额及 attach。确认成功后在事务中按 `game_order_id` 幂等发货，回复 **HTTP 200，Body 精确等于本次 `x-nonce` 字符串**（无 JSON 包装、空格或换行）。重复通知不能再次发货。
+
+SDK Core 收不到正确确认时会重试；不能假设通知只发生一次。
+
+## 4. 主密钥与派生
+
+`gameSecret` 默认使用 UTF-8 字节；如果恰好为严格标准 Base64 且能解出 32 字节，则使用解码后的字节（保持现有密钥格式习惯）。HKDF-SHA256 的 salt 为空，输出 32 字节：
+
+| 方向 | HKDF info |
 | --- | --- |
-| `X-SDK-AppID` | 渠道应用 Code |
-| `X-SDK-Timestamp` | Unix 秒时间戳 |
-| `X-SDK-Nonce` | 16 位小写十六进制随机值 |
-| `X-SDK-Signature` | 64 位小写十六进制签名 |
+| 游戏 → SDK Core | `middle-platform:sdk-core:game-request:v3` |
+| SDK Core → 游戏 | `middle-platform:sdk-core:game-notify:v3` |
 
-游戏服需要：
+两边分别按这些 info 派生不同的 HMAC 密钥。签名字段按接口规则控制，完整算法见 [签名协议](sdk-signature.md)。
 
-1. 校验签名与时间戳。
-2. 按 `game_order_id` 查本地原始订单，核对 `appid`、金额、`attach`。
-3. **事务内幂等发货**：同一订单无论收到几次通知，最多发货一次。
-4. 业务处理成功后回复 **HTTP 200，Body 必须精确等于本次 `X-SDK-Nonce`**，不可附加 JSON 或换行。
+## 5. 注意事项
 
-### 发货通知验签
-
-使用同一个 `gameSecret` 派生另一把密钥：
-
-```text
-IKM    = gameSecret 的 UTF-8 字节；旧版标准 Base64 的 32 字节密钥仍按 Base64 解码后的字节
-salt   = nil
-info   = middle-platform:sdk-core:payment-notify:v2
-长度   = 32 字节
-```
-
-拼接五行签名串（LF 分隔，末尾无换行）：
-
-```text
-<appid>
-POST
-<X-SDK-Timestamp>
-<X-SDK-Nonce>
-<hex_lower(SHA256(原始通知 Body))>
-```
-
-```text
-X-SDK-Signature = hex_lower(HMAC_SHA256(发货通知密钥, 五行字符串))
-```
-
-**发货通知签名不包含通知 URL 路径**。游戏服仍必须校验 AppID、签名、时间戳、订单和金额，并确保幂等发货。
-
-若通知超时、响应不是 HTTP 200，或 Body 不等于随机 nonce，中台会自动重试。因此游戏端必须保证订单幂等，不应把“通知只调用一次”作为前提。
-
-## 5. 联调检查
-
-- [ ] 已确认 `appid`、`env`、`sdkCoreBaseUrl`、`gameSecret` 和 `payNotifyUrl`。
-- [ ] 订单登记返回 `REGISTERED`；重复请求不会创建重复订单。
-- [ ] 同一订单号改变金额后返回 HTTP 409。
-- [ ] 支付通知能通过验签并匹配原始游戏订单。
-- [ ] 成功发货时返回 HTTP 200，Body 与 `X-SDK-Nonce` 完全一致。
-- [ ] 重复通知不会重复加道具或货币。
-
-## 6. 注意事项
-
-- **V2 协议变更**：登记签名和发货通知签名均不再包含请求路径，HKDF `info` 从 `:v1` 升级为 `:v2`。已接入的游戏服必须同步修改签名和验签代码；旧版签名不会被新版 SDK Core 接受，旧版游戏服也不会接受新版发货通知。
-- `gameSecret` 不得放在客户端或日志中；正式环境推荐使用 HTTPS。虽然取消了长度限制，但过短或容易猜测的密钥仍存在风险，生产建议使用高强度随机密钥。
-- 若 `gameSecret` 恰好符合旧版 32 字节标准 Base64 格式，将优先按旧格式解码；接入方应保持相同的兼容策略。
-- `payNotifyUrl` 在订单登记时保存快照，后续修改不会改变已登记订单的目标地址。
-- 目前没有独立的游戏方订单状态查询 API；请自行保存订单和发货记录。
-
-**参考源码：** [订单登记](https://github.com/hctty27/middle-platform/blob/main/sdk-core/internal/api/order.go) · [验签/HKDF](https://github.com/hctty27/middle-platform/blob/main/sdk-core/internal/auth/game.go) · [通知签名](https://github.com/hctty27/middle-platform/blob/main/sdk-core/internal/notify/client.go)
+- V3 不兼容旧 V2：服务端上线前必须同步修改 Java/Go 接入端以及游戏通知验签。
+- 时间戳允许前后 5 分钟，仅校验 nonce 格式不等于去重。充值务必采用订单幂等处理。
+- 不得在客户端或日志中暴露 gameSecret；建议全程使用 HTTPS。
+- 生产环境不应使用不验签的 `tools/mock-notify` 模拟服务。
+- 平台向 SDK Core 的 SHA-1 回调**不属于本协议**，无需游戏端实现。
