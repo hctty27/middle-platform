@@ -130,9 +130,9 @@ CREATE TABLE game_order (
 -- 统一安装脚本：SDK 功能目录和渠道按环境开关。
 CREATE TABLE sdk_service (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL COMMENT '全局唯一功能编码',
-    name VARCHAR(100) NOT NULL COMMENT '功能名称',
-    description VARCHAR(500) NOT NULL DEFAULT '' COMMENT '功能说明',
+    code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL COMMENT '全局唯一服务编码',
+    name VARCHAR(100) NOT NULL COMMENT '服务名称',
+    description VARCHAR(500) NOT NULL DEFAULT '' COMMENT '服务说明',
     enabled TINYINT NOT NULL DEFAULT 1 COMMENT '全局开关 0关闭 1开启',
     sort_order INT NOT NULL DEFAULT 0 COMMENT '显示顺序',
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -147,12 +147,12 @@ CREATE TABLE sdk_service_channel (
     channel_app_id BIGINT NOT NULL COMMENT '关联 config_channel_app.id',
     service_id BIGINT NOT NULL COMMENT '关联 sdk_service.id',
     env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL COMMENT 'prod/test/review',
-    enabled TINYINT NOT NULL DEFAULT 0 COMMENT '渠道包功能开关 0关闭 1开启',
-    config JSON NOT NULL COMMENT '功能独立扩展参数',
+    enabled TINYINT NOT NULL DEFAULT 0 COMMENT '渠道包服务开关 0关闭 1开启',
+    config JSON NOT NULL COMMENT '服务独立扩展参数',
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     UNIQUE KEY uk_sdk_service_channel (channel_app_id, service_id, env),
-    KEY idx_sdk_service_channel_feature (service_id),
+    KEY idx_sdk_service_channel_service (service_id),
     CONSTRAINT fk_sdk_service_channel_app FOREIGN KEY (channel_app_id)
         REFERENCES config_channel_app(id) ON DELETE CASCADE,
     CONSTRAINT fk_sdk_service_channel_service FOREIGN KEY (service_id)
@@ -163,8 +163,8 @@ CREATE TABLE sdk_service_channel (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='渠道包按环境配置 SDK 功能';
 
--- 功能目录预置项。是否开放接口仍由对应 Go 业务模块决定。
--- 不包含充值：关闭功能不能中断已确认支付订单的发货补偿。
+-- 服务目录预置项。是否开放接口仍由对应 Go 业务模块决定。
+-- 不包含充值：关闭服务不能中断已确认支付订单的发货补偿。
 INSERT INTO sdk_service (code, name, description, enabled, sort_order) VALUES
 ('event_report', '事件上报', '游戏事件向发行平台上报', 1, 10),
 ('role_query', '角色查询', '平台查询游戏角色信息', 1, 20),
