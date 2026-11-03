@@ -57,7 +57,7 @@ export async function signRegistration(gameSecret: string, rawBody: string, env:
     if (key === 'sign' || key in data) throw new Error('请求体包含签名保留字段')
     data[key] = value
   }
-  const javaTrim = (text: string) => text.replace(/^[\\u0000-\\u0020]+|[\\u0000-\\u0020]+$/g, '')
+  const javaTrim = (text: string) => text.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '')
   const parts: string[] = []
   for (const key of Object.keys(data).sort()) {
     const value = data[key]

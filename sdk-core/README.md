@@ -65,106 +65,61 @@ go build ./cmd/sdk-core
 
 ## 订单登记与支付通知
 
-订单表 `game_order` 与所有配置中心表**共用一个 `config_center` 数据库**。
-数据库建表由管理员手工执行 `config-center/db/sql/initialize.sql`（仅新库）或 `add_game_order.sql`（已有库）。
-SDK Core 不自动执行 SQL，也不提供独立建表脚本。
-只保留 **`database.dsn` 一个配置项** 和一个 `*sql.DB` 连接池，`configStore`、`orderStore` 共享连接。
-订单登记与平台回调路由始终注册，通知补偿 Worker 始终启动；SDK Core 在启动时必须验证 `game_order` 表结构。若表不存在或读取权限不足，则启动失败。配置表依旧只读。
+SDK Core 与配置中心共用 `config_center` 数据库，订单表由管理员手动执行 SQL 建立，服务运行时不执行 DDL。
 
-接口：
-- POST /api/core/{env}/{appid}/orders：游戏服签名登记订单
-- POST /api/core/{appid}/pay/notify：接收真正平台 v1 回调
-- GET /api/core/{env}/{appid}：保持现有配置查询兼容
+| 方向 | 接口 | 签名 |
+| --- | --- | --- |
+| 游戏 → SDK Core | `POST /api/core/{env}/{appid}/orders` | Java 风格参数排序 + MD5 大写 |
+| 平台 → SDK Core | `POST /api/core/{appid}/pay/notify` | 平台原生 V1 SHA-1，保持不变 |
+| SDK Core → 游戏 | `POST {region.config.payNotifyUrl}` | 与游戏登记相同的 MD5 算法 |
+| 客户端 → SDK Core | `GET /api/core/{env}/{appid}` | 当前公开查询不变 |
 
-登记 Body：game_order_id（同 AppID 跨环境唯一）、amount（人民币分）、attach（原样字符串）。
-服务从绑定大区的 region.config 顶层读取 payNotifyUrl，首次登记后快照存储。
-游戏登记不再使用 `X-Game-Key-Id`。仅需 `X-Game-Timestamp` 与 `X-Game-Signature`：先从 AppID 所属游戏读取 `game.config.gameSecret`，经 HKDF 派生登记密钥，签名串为 `POST`、`env`、`appid`、Unix 秒时间戳、原始 Body 的 SHA256 小写十六进制五段，LF 连接且无末尾换行，不包含 URL 路径。具体见下文。
+订单首次登记时会将 `payNotifyUrl` 存为快照。支付平台回调成功后先保存状态并回显平台 `x-nonce`，游戏发货使用异步 Worker 补偿重试，至少一次投递，游戏侧必须保证同一订单只发货一次。
 
-平台回调使用文档指定的 v1 SHA-1 协议，并校验已登记订单及绑定的平台订单号。平台密钥不是按环境配置在本服务 YAML 中，而是通过全局唯一 AppID 从 `config_channel_app.config` 的顶层 `appSecret` 读取；渠道包 JSON 跨 `prod/test/review` 环境共享同一份支付密钥，不要求当前环境仍处于绑定/启用状态，避免历史回调受影响。
+平台 v1 不对 `amount`、`attach`、`paid_at` 签名；SDK Core 只会与订单登记值比对，不新增二次查单逻辑。平台原生签名使用 `channel_app.config.appSecret`，与游戏通信使用的 `game.config.gameSecret` 分离。
 
-渠道包示例（仅后台服务端配置，真实密钥不要提交仓库）：
+### 游戏侧统一签名
 
-```json
-{"tsKey":"public-client-key","appSecret":"platform-server-secret"}
+只需要在 `game.config` 中配置 `gameSecret` 字符串；不使用 HKDF，不做 Base64 解码，直接按原始 UTF-8 字节签名。
+
+```http
+x-app-id: 110006
+x-env: test
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: <32 位大写 MD5 hex>
 ```
 
-`env` 只用于记录原订单归属与登记时选择大区的 `payNotifyUrl`，不参与平台密钥查找。修改渠道包密钥前应保留历史回调所需密钥版本，目前尚未实现旧密钥轮换兼容。
-**现有平台 v1 回调的信任边界**：平台内部负责核对真实收款及其订单金额，SDK Core 不再额外调用查单接口；SDK Core 会按 v1 验证签名与时间戳，校验已登记的 AppID、游戏订单号、金额和 attach，以及平台订单号唯一性，再将支付状态持久化，通知游戏服。
-平台 v1 签名**没有覆盖** `amount`、`attach`、`paid_at`。因此 SDK Core 仅比较登记值与回调值，**不能通过签名证明回调金额未遭修改**。这是沿用现有平台协议所接受的残余风险，不应在文档中表述为“可信验证实付金额”。
-
-不新增二次查单逻辑，也不新增功能开关。上线前仍须确认平台下单金额由可信服务端确定，回调只能在支付成功后发出，且同步完善网关和密钥访问控制。
-
-SDK Core -> 游戏的发货通知不采用平台签名透明转发，而是独立签名。
-请求 Body 包含 order_no、game_order_id、amount、attach、paid_at。
-Header：X-SDK-AppID、X-SDK-Timestamp、X-SDK-Nonce、X-SDK-Signature。
-签名串依次为 appid、POST、timestamp、nonce、原始 Body 的 SHA256 小写十六进制，LF 连接，HMAC-SHA256，不包含通知 URL 路径。
-游戏服须验证签名并按 game_order_id 数据库事务幂等发货，返回 HTTP 200，Body 精确等于 X-SDK-Nonce。
-SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确等于本次 x-nonce；
-**不等待游戏服通知完成**。游戏服异常不会阻塞平台回调，发货交给持久化任务队列。
-
-通知 Worker 每实例启动 4 个消费者，每个消费者每 500ms 检查到期任务。
-多实例通过 `SELECT ... FOR UPDATE SKIP LOCKED` 在短事务中独占领取，提交 60 秒租约后才发出 HTTP/HTTPS 请求；
-通知结果按 `notify_attempts` 尝试序号条件更新，过期 Worker 的结果不会覆盖新租约。
-失败使用指数退避，崩溃后租约到期自动恢复。重试独立生成签名，不复用平台 Header；
-**任务投递语义仍为至少一次（at-least-once）**，游戏服必须按订单号幂等发货。
-支持公网 IP、内网 IP、域名和 localhost 的 HTTP/HTTPS 回调以及任意合法业务端口；不跟随重定向，拒绝元数据及特殊网络目标。公网环境建议使用 HTTPS。
-
-配置示例参考 sdk-core/configs/config.yaml：平台 `appSecret` 配置在渠道包 JSON，游戏通信 `gameSecret` 配置在游戏 JSON；YAML 中不再维护 `payment.secrets`、`gameAuth.keys` 或 `gameNotify.secrets`。已有私有 YAML 的上述三个字段以及 `gameNotify.allowedHosts` 必须删掉，否则严格校验会拒绝启动。
-不再使用 `SDK_CORE_ORDER_DB_DSN`；唯一 DSN 可由 `SDK_CORE_DB_DSN` 覆盖。旧的 `orderDatabase` YAML 块必须从私有配置中删除（严格配置校验会拒绝该未知字段）。
-验证：在 sdk-core 目录执行 go test -race ./...、go vet ./...、go build ./cmd/sdk-core。
-
-## 游戏主密钥与双向 HKDF 派生
-
-只在每个游戏节点的 `game.config` 顶层配置一个 **非空字符串** `gameSecret`；不限制长度，不要求 Base64，允许中文和特殊字符。游戏服与 SDK Core 持有同一主密钥。生产环境仍建议使用高强度随机密钥（如 `openssl rand -base64 32`），不要使用可猜测的短密码，也不要把真实密钥写进仓库。
-
-```json
-{"gameSecret": "my-custom-game-secret-123!@#"}
-```
-
-解析规则（游戏服也必须保持一致）：**仅对严格标准 Base64 且解码后恰好 32 字节的旧版密钥执行 Base64 解码**，以确保现有签名和发货通知不受影响；其余字符串使用原始 UTF-8 字节作为 HKDF 输入，首尾空格也属于密钥内容。若新密钥恰好与旧版 Base64 格式相同，也会按旧版格式解析。密钥不能为空或只有空白字符。
-
-使用 Go 标准库 `crypto/hkdf.Key(sha256.New, masterSecret, nil, info, 32)`：
-- 登记：`info=middle-platform:sdk-core:order-register:v2`
-- 通知：`info=middle-platform:sdk-core:payment-notify:v2`
-
-两个子密钥由相同主密钥自动生成，无需分别配置，且不可混用于另一种请求。
-
-游戏侧签名逻辑统一放在 `internal/auth`：`Derive` 负责 HKDF，`SignRegistration` / `SignNotification` 负责 V2 HMAC-SHA256 与原始 Body 哈希，`VerifyRegistration` 复用同一签名计算。发货服务向 `notify.Client` 传入已按通知用途派生的密钥，不会将平台 `appSecret` 用于游戏侧签名。`internal/payment` 中的支付平台 V1 SHA-1 验签保持独立，协议不变。
-`gameSecret` 在三个环境中共享；环境隔离要求较高时应改为不同环境的主密钥。
-
-### 游戏服 → SDK Core（订单登记）
-
-请求仍是 `POST /api/core/{env}/{appid}/orders`，请求头为 `X-Game-Timestamp` (Unix 秒) 和 `X-Game-Signature` (64 位小写十六进制)。
-
-签名内容由以下五行以 LF 连接，无末尾换行，使用上述登记子密钥计算 HMAC-SHA256（不包含 URL 路径）：
+参与签名的数据是请求 Body 的所有**顶层标量字段**，再加上：
 
 ```text
-POST
-test
-app1001
-<timestamp>
-<sha256-hex-of-raw-body>
+action=order.register   # 登记；游戏发货通知为 payment.notify
+appid=110006
+env=test
+timestamp=1793700000
+nonce=0123456789abcdef
 ```
 
-SDK Core 通过 AppID/环境查找已绑定且启用的游戏，从 `game.config.gameSecret` 读取并验证签名。业务参数中的游戏和 AppID 不允许任意指定密钥来源。
+将参数名称按字典序排序，跳过 null、空字符串和键名为 `sign` 的字段，对每个值执行与 Java `String.trim()` 一致的首尾字符去除，拼接为 `key=value&key=value`。末尾**直接追加 gameSecret，不加分隔符**，计算 UTF-8 的 MD5，并输出 32 位大写 hex。
 
-### SDK Core → 游戏服（发货通知）
+```text
+signature = UPPER_HEX(MD5(UTF8(sortJoinSign(data) + gameSecret)))
+```
 
-保留 `X-SDK-AppID`、`X-SDK-Timestamp`、`X-SDK-Nonce`、`X-SDK-Signature`，
-发货通知使用 V2 五行签名串：`appid`、`POST`、`timestamp`、`nonce`、`sha256-hex(rawBody)`，以 LF 连接且末尾无换行，**不包含通知 URL 路径**。
-`game_order.game_id` 是登记时的游戏 ID 快照，后台失败补偿通过原始游戏 ID 取密钥。
-游戏服仍须验证时间戳、签名，并保证同一订单仅发货一次。
+- 游戏登记与发货通知共用同一算法和密钥，但 `action` 不同，避免签名被跨业务直接复用。
+- `x-env` 在登记时必须与 URL `env` 一致；发货通知取登记订单环境。
+- 服务校验时间戳 ±5 分钟、nonce 为 16 位小写十六进制、签名恒定时间比较，但**不存储 nonce 去重**，仍需订单事务幂等。
+- 不支持直接对 Map/数组嵌套值调用 Java `toString()` 参与跨语言签名。未来事件上报要先把嵌套参数按约定序列化为字符串，确保 Go 与 Java 字节一致。
+- `attach` 等字段若包含 `&` 或 `=`，拼接串可能存在歧义；此方案是按游戏现有算法兼容的折中，不能代替 HTTPS、服务端校验和业务权限控制。
+- 游戏侧旧的 V2 签名、请求头和 HKDF 派生密钥不再兼容。支付平台原生回调仍使用平台 V1。
 
-### 上线限制
+详见 [游戏侧签名接入说明](../docs/game-signature.md) 与 [充值接入文档](../docs/recharge-integration.md)。
 
-**当前 config-center 的完整节点/批量/快照/管理 API 尚有输出原始 game.config 的路径**。SDK Core 的响应字段过滤不能防护这些接口。
-在配置真实 `gameSecret` 之前，必须为配置中心和相关同步接口完成服务端访问控制或安全分发；
-不能仅依赖前端隐藏字段。游戏服应使用受信任的服务端渠道取得主密钥。
+## 生产注意事项
 
-目前使用 V2 签名协议（HKDF `info` 以 `:v2` 结尾），旧版 V1 签名不再兼容。部署 SDK Core 前必须同步升级游戏服的订单登记签名和发货通知验签；如果仍有运行中的旧游戏服，先完成游戏服升级再切换服务端，避免登记失败和发货补偿失败。
-当前没有密钥版本与双密钥轮换；直接更换 gameSecret 可能让存量未发货订单的补偿失败。
-游戏服必须按订单号进行事务内幂等发货；平台 v1 不签金额的风险仍存在，应通过平台可信下单和支付回调来源控制降低风险。
+SDK Core 公开响应映射过滤 `gameSecret`，但配置中心完整节点/同步/管理接口仍可能返回游戏原始配置。必须对配置中心访问进行服务端鉴权和网络隔离，不能仅依赖管理页面隐藏密钥。
 
+MD5 密钥追加签名属于传统兼容方案，并不是现代推荐的消息认证算法。不要把游戏密钥放到客户端；生产请求优先使用 HTTPS，针对高风险操作应额外进行身份与权限校验。更改 `gameSecret` 可能让已有待补偿通知无法验签。
 
 ## 单库单连接池配置（订单与通知模块常驻）
 
