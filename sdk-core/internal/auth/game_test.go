@@ -30,10 +30,25 @@ func TestHKDFPurposesAndGameConfig(t *testing.T){
     if err!=nil{t.Fatal(err)}
     if len(register)!=32||len(notify)!=32||bytes.Equal(register,notify)||
         !bytes.Equal(register,repeat){t.Fatal("invalid HKDF key separation")}
-    for _,raw:=range []string{"{}","{\"gameSecret\":\"short\"}",
-        "{\"gameSecret\":\"////\"}","{\"gameSecret\":null}","[\"wrong\"]"} {
+    for _,raw:=range []string{"{}","{\"gameSecret\":\"\"}",
+        "{\"gameSecret\":\"  \"}","{\"gameSecret\":null}","[\"wrong\"]",
+        "{\"gameSecret\":42}"} {
         if _,err:=ParseGameSecret([]byte(raw));err==nil{t.Errorf("accepted %s",raw)}
     }
+    // 不限编码与长度，短字符串、非 Base64 字符串及中文都能派生固定 32 字节密钥。
+    for _,value:=range []string{"a","short","////","自定义密钥-123!@#",
+        "very-long-game-secret-that-does-not-need-to-be-base64-encoded"} {
+        raw:=[]byte(fmt.Sprintf("{%q:%q}","gameSecret",value))
+        parsed,err:=ParseGameSecret(raw)
+        if err!=nil||!bytes.Equal(parsed,[]byte(value)){t.Fatalf("plain secret %q: %v",value,err)}
+        key,err:=Derive(parsed,PurposeOrderRegister)
+        if err!=nil||len(key)!=32{t.Fatalf("derive %q: %v",value,err)}
+    }
+    // 保留首尾空格，不改变实际配置的密钥字节。
+    spaced,err:=ParseGameSecret([]byte(`{"gameSecret":"  secret  "}`))
+    if err!=nil||string(spaced)!="  secret  "{t.Fatalf("spaced secret changed: %v",err)}
+    if _,err:=Derive(nil,PurposeOrderRegister);err==nil{t.Fatal("empty key must be rejected")}
+    // 合法的旧版 32 字节 Base64 密钥在本测试开头已验证兼容。
     if _,err:=Derive(parsed,"unknown");err==nil{t.Fatal("unsupported purpose accepted")}
 }
 
