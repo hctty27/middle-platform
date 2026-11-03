@@ -31,7 +31,7 @@ func main() {
 }
 
 func writeArchive(source, output string) (err error) {
-	for _, name := range []string{"config-center", "config-center-access", "sdk-core", "migrate"} {
+	for _, name := range []string{"config-center", "config-center-access", "sdk-core"} {
 		info, statErr := os.Stat(filepath.Join(source, "bin", name))
 		if statErr != nil || !info.Mode().IsRegular() {
 			return fmt.Errorf("required binary %s is missing or invalid", name)
@@ -60,7 +60,7 @@ func writeArchive(source, output string) (err error) {
 }
 
 func writeContents(writer *tar.Writer, source string) error {
-	for _, root := range []string{"bin", "admin"} {
+	for _, root := range []string{"bin", "sql", "admin"} {
 		dir := filepath.Join(source, root)
 		if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) && root == "admin" {
 			continue
