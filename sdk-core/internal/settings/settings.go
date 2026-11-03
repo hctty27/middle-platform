@@ -27,6 +27,7 @@ type Config struct {
     Log logging.Config `yaml:"log"`
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
     Database Database `yaml:"database"`
+    Platform struct { EventReportURL string `yaml:"eventReportURL"` } `yaml:"platform"`
 }
 
 func defaultDB() Database{
