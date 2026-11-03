@@ -80,16 +80,16 @@ func SignGame(secret []byte, appID, timestamp, nonce string, rawBody []byte) (st
     return SignValues(values), nil
 }
 
-// VerifyRegistration 校验订单登记签名及其路由业务归属。
-func VerifyRegistration(r *http.Request, rawBody, secret []byte) error {
+// VerifyGameRequest 复用游戏侧签名协议，并校验 Header AppID 与业务环境。
+func VerifyGameRequest(r *http.Request, rawBody, secret []byte, env, appID string) error {
     if r.Method != http.MethodPost {
         return ErrUnauthorized
     }
-    env, appID := r.PathValue("env"), r.PathValue("appid")
     ts := r.Header.Get("x-timestamp")
     nonce := r.Header.Get("x-nonce")
     signature := r.Header.Get("x-signature")
-    if env == "" || appID == "" || r.Header.Get("x-app-id") != appID ||
+    if env == "" || r.PathValue("env") != env || appID == "" ||
+        r.Header.Get("x-app-id") != appID ||
         len(nonce) != 16 || strings.ToLower(nonce) != nonce ||
         len(signature) != 40 || strings.ToLower(signature) != signature {
         return ErrUnauthorized
@@ -116,4 +116,9 @@ func VerifyRegistration(r *http.Request, rawBody, secret []byte) error {
         return ErrUnauthorized
     }
     return nil
+}
+
+// VerifyRegistration 保留订单路径中的 AppID 约束，委托统一游戏验签。
+func VerifyRegistration(r *http.Request, rawBody, secret []byte) error {
+    return VerifyGameRequest(r, rawBody, secret, r.PathValue("env"), r.PathValue("appid"))
 }
