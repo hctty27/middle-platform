@@ -27,7 +27,7 @@ func (s *Store) Subscribers(ctx context.Context) ([]Subscriber, error) {
 func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequest) error {
 	if strings.TrimSpace(input.Code) == "" || len([]rune(input.Code)) > 128 ||
 		strings.TrimSpace(input.Secret) == "" || len(input.Secret) > 255 ||
-		webhook.ValidateCallback(input.CallbackURL, s.webhookAllowedHosts()) != nil {
+		webhook.ValidateCallback(input.CallbackURL) != nil {
 		return ErrInvalid
 	}
 	// 订阅者及投递游标必须同时写入，防止回调任务出现无状态的订阅者。
@@ -45,8 +45,3 @@ func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequ
 	return tx.Commit()
 }
 
-// webhookAllowedHosts 返回注册回调时采用的目标主机白名单。
-func (s *Store) webhookAllowedHosts() string {
-	if s.AllowedHosts != "" { return s.AllowedHosts }
-	return "localhost,127.0.0.1"
-}
