@@ -25,9 +25,9 @@ x-signature: <40 位小写 SHA-1>
 
 `game_order_id` 是游戏订单号，`amount` 单位分、必须大于 0，`attach` 为必填字符串但可以为空。
 
-登记使用固定操作标识 `order.register`，签名参与值为：`gameSecret`、appid、timestamp、nonce、URL 路由中的 env、`order.register`、Body 所有顶层非空值。
+登记签名只使用 `gameSecret`、appid、timestamp、nonce 和 Body 所有顶层非空值。**env 与 operation 不参与签名**；SDK Core 仍检查 URL 环境是否合法，以及 AppID 是否绑定该环境。
 
-过滤空字符串，按**值**排序，用 `_` 拼接后计算 SHA-1 小写 hex。游戏只能发这四个请求头，不需要 `x-env` 或操作标识 Header；env/操作标识由签名双方按约定确定。
+过滤空字符串，按**值**排序，用 `_` 拼接后计算 SHA-1 小写 hex。游戏只需要这四个请求头，不需要 `x-env` 或操作标识 Header。
 
 ```json
 {"code":0,"message":"success","data":{"game_order_id":"G100","registration_status":"REGISTERED"}}
@@ -43,7 +43,7 @@ x-signature: <40 位小写 SHA-1>
 {"order_no":"P100","game_order_id":"G100","amount":600,"attach":"roleId=1","paid_at":"2026-11-03T00:00:00Z"}
 ```
 
-请求头仍为 `x-app-id`、`x-timestamp`、`x-nonce`、`x-signature`，使用同一份 `gameSecret`。发货签名的操作标识固定为 `payment.notify`，环境为**订单登记时保存的 env**，其余全部 Body 顶层非空字段参与签名。
+请求头仍为 `x-app-id`、`x-timestamp`、`x-nonce`、`x-signature`，使用同一份 `gameSecret`。签名不需要环境或操作标识，只加入全部 Body 顶层非空值；游戏服仍须根据本地业务环境和订单归属校验通知。
 
 游戏服务端必须验证签名、时间戳、AppID、订单 ID、金额和订单支付/发货状态，在事务内幂等发货。成功后返回 **HTTP 200，响应 Body 必须精确等于本次 x-nonce**（纯文本，不要加引号、换行、空格或 JSON）。
 
@@ -51,11 +51,11 @@ x-signature: <40 位小写 SHA-1>
 
 ## 4. 签名规则
 
-完整字段选择、Java 示例与注意事项见 [游戏侧统一签名](game-signature.md)。不要把平台向游戏发货的原生签名规则直接照搬：内部协议增加了 env、operation 和完整 Body 字段签名；而平台支付回调继续走独立的平台 V1 SHA-1 规则。
+完整字段选择、Java 示例与注意事项见 [游戏侧统一签名](game-signature.md)。游戏侧内部协议的两种方向均签全部 Body 顶层非空值（不签 env、operation）；而平台原生回调继续走独立的 V1 SHA-1 字段规则。
 
 ## 5. 注意事项
 
 - 不兼容 V2；上线前必须同步升级游戏签名和发货通知验签。
-- 仅校验 nonce 格式而未记录已使用 nonce，不能把时间戳窗口当成完全防重放机制；订单依靠事务幂等。
+- 仅校验 nonce 格式而未记录已使用 nonce，不能把时间戳窗口当成完全防重放机制；env、operation 也不参与签名，游戏端要自行检查环境、接口归属，订单依靠事务幂等。
 - 传统 SHA-1 值拼接方案不具备现代 HMAC 的安全保证，生产使用 HTTPS 和高强度密钥。
 - 平台 V1 的金额、attach 与 paid_at 并不被平台签名覆盖；中台只核对登记数据，不做二次查单。

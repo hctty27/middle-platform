@@ -151,7 +151,7 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     }
     nonce := hex.EncodeToString(nonceBytes[:])
     timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-    signature, err := auth.SignGame(key, auth.OperationPaymentNotify, o.Env, o.AppID, timestamp, nonce, body)
+    signature, err := auth.SignGame(key, o.AppID, timestamp, nonce, body)
     if err != nil {
         return err
     }

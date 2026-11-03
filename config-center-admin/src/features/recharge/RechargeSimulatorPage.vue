@@ -80,7 +80,7 @@ async function register() {
     const rawBody = JSON.stringify(body)
     const timestamp = String(Math.floor(Date.now() / 1000))
     const nonce = generateNonce()
-    const signature = await signRegistration(gameSecret.value, rawBody, endpoint.env ?? '', endpoint.appid, timestamp, nonce)
+    const signature = await signRegistration(gameSecret.value, rawBody, endpoint.appid, timestamp, nonce)
     const headers = { 'x-app-id': endpoint.appid, 'x-timestamp': timestamp, 'x-nonce': nonce, 'x-signature': signature }
     const result = await request(endpoint.url, headers, rawBody)
     registerResult.value = result

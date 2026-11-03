@@ -43,9 +43,9 @@ async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<str
   return hex(await crypto.subtle.digest(algorithm, encoder.encode(text)))
 }
 
-// 游戏侧使用平台的“按值排序 + 下划线拼接 + SHA-1 小写”算法，额外签环境和接口操作。
+// 游戏侧签名与平台一致：仅签密钥、AppID、时间戳、Nonce 和全部 Body 非空值。
 export async function signRegistration(
-  gameSecret: string, rawBody: string, env: string, appid: string, timestamp: string, nonce: string
+  gameSecret: string, rawBody: string, appid: string, timestamp: string, nonce: string
 ): Promise<string> {
   if (!crypto?.subtle) throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost 访问管理后台')
   if (!gameSecret.trim()) throw new Error('gameSecret 不能为空')
@@ -53,7 +53,7 @@ export async function signRegistration(
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new Error('请求体必须为 JSON 对象')
   }
-  const values: string[] = [gameSecret, appid, timestamp, nonce, env, 'order.register']
+  const values: string[] = [gameSecret, appid, timestamp, nonce]
   for (const value of Object.values(body)) {
     if (value === null || value === undefined || value === '') continue
     values.push(typeof value === 'object' ? JSON.stringify(value) : String(value))

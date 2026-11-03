@@ -102,7 +102,7 @@ func TestNotifySignatureUsesPlatformStyleSHA1(t *testing.T) {
         if message.Amount != 600 || message.GameOrderID != "G100" {t.Error("bad body")}
         values := []string{
             string(secret),"110006",r.Header.Get("x-timestamp"),r.Header.Get("x-nonce"),
-            "test","payment.notify",message.OrderNo,message.GameOrderID,
+            message.OrderNo,message.GameOrderID,
             "600",message.Attach,message.PaidAt,
         }
         filtered := make([]string,0,len(values))
