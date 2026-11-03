@@ -46,19 +46,19 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/migrate admin/ admin/index.html admin/config.js; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core sql/ sql/config-center/ sql/config-center/initialize.sql sql/config-center/add_game_order.sql sql/config-center-access/ sql/config-center-access/initialize.sql admin/ admin/index.html admin/config.js; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do
             case "$item" in
-              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|bin/migrate|admin/|admin/*) ;;
+              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|sql/|sql/config-center/|sql/config-center/*|sql/config-center-access/|sql/config-center-access/*|admin/|admin/*) ;;
               *) echo "Unexpected archive entry: $item" >&2; exit 1 ;;
             esac
           done <<< "$entries"
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
           tar -xzf "$tarball" -C "$tmpdir"
-          for binary in config-center config-center-access sdk-core migrate; do
+          for binary in config-center config-center-access sdk-core; do
             test -x "$tmpdir/bin/$binary"
             test "$(stat -c %a "$tmpdir/bin/$binary")" = "755"
             file "$tmpdir/bin/$binary" | grep -E 'ELF 64-bit .*x86-64'
@@ -99,14 +99,14 @@ jobs:
           if (-not (Test-Path $archive)) { throw "Missing archive: $archive" }
           $names = @(& tar -tzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
-          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/migrate')) {
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'sql/config-center/initialize.sql', 'sql/config-center/add_game_order.sql', 'sql/config-center-access/initialize.sql')) {
             if ($name -notin $names) { throw "Missing binary: $name" }
           }
           if (@(Get-ChildItem dist -File).Count -ne 1) { throw 'Unexpected dist files' }
           if (@(Get-ChildItem dist -Directory).Count -ne 0) { throw 'Unexpected dist directories' }
           $details = @(& tar -tvzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to inspect tar permissions' }
-          foreach ($name in @('config-center', 'config-center-access', 'sdk-core', 'migrate')) {
+          foreach ($name in @('config-center', 'config-center-access', 'sdk-core')) {
             if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\s' -and $_.Trim().EndsWith("bin/$name") })) {
               throw "Missing executable permission in tar header: $name"
             }
