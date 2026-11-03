@@ -96,27 +96,16 @@ func (s *OrderStore) ConfirmPayment(ctx context.Context, id int64, platformOrder
     return tx.Commit()
 }
 
-// BeginNotify 在网络发送前提交计数和下次执行时间，不持有数据库锁。
-func (s *OrderStore) BeginNotify(ctx context.Context, id int64) (bool,error) {
-    result,err:=s.db.ExecContext(ctx,`
-        UPDATE game_order
-        SET notify_attempts=notify_attempts+1,
-            last_notify_at=UTC_TIMESTAMP(3),
-            next_notify_at=DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 60 SECOND)
-        WHERE id=? AND payment_status=1 AND notify_status<>1`,id)
-    if err!=nil { return false,err }
-    n,err:=result.RowsAffected()
-    return n==1,err
-}
-
-// CompleteNotify 单向提交 SUCCESS；后到的失败永远不能覆盖成功。
-func (s *OrderStore) CompleteNotify(ctx context.Context,id int64, notifyErr error) error {
+// CompleteNotify 使用领取时的尝试序号作为 fencing token，过期任务不得覆盖新结果。
+// 成功为终态；失败只为当前持有租约的尝试安排下一次补偿。
+func (s *OrderStore) CompleteNotify(ctx context.Context,id int64, attempt int, notifyErr error) error {
     if notifyErr==nil {
         _,err:=s.db.ExecContext(ctx,`
             UPDATE game_order SET notify_status=1,
                 notify_success_at=COALESCE(notify_success_at,UTC_TIMESTAMP(3)),
                 last_notify_error='',next_notify_at=NULL
-            WHERE id=? AND notify_status<>1`,id)
+            WHERE id=? AND payment_status=1 AND notify_status<>1
+              AND notify_attempts=?`,id,attempt)
         return err
     }
     summary:=strings.ReplaceAll(notifyErr.Error(),"\n"," ")
@@ -125,13 +114,33 @@ func (s *OrderStore) CompleteNotify(ctx context.Context,id int64, notifyErr erro
         UPDATE game_order SET notify_status=2,last_notify_error=?,
         next_notify_at=DATE_ADD(UTC_TIMESTAMP(3),
             INTERVAL LEAST(3600,30*POW(2,LEAST(7,notify_attempts))) SECOND)
-        WHERE id=? AND notify_status<>1`,summary,id)
+        WHERE id=? AND payment_status=1 AND notify_status<>1
+          AND notify_attempts=?`,summary,id,attempt)
     return err
 }
 
-// ClaimDue 利用 InnoDB 行锁领取到期任务，适合多实例任务队列。
+// ClaimDue 使用 READ COMMITTED + SKIP LOCKED 领取到期任务，减少高并发扫描的间隙锁冲突。
+// InnoDB 仍可能返回 1213 死锁或 1205 锁等待超时；短暂重试，不允许重复提交任务。
 func (s *OrderStore) ClaimDue(ctx context.Context) (*model.Order,error) {
-    tx,err:=s.db.BeginTx(ctx,nil)
+    for retry:=0;retry<3;retry++ {
+        order,err:=s.claimDueOnce(ctx)
+        if err==nil||ctx.Err()!=nil{return order,err}
+        var myErr *mysql.MySQLError
+        if !errors.As(err,&myErr)||(myErr.Number!=1213&&myErr.Number!=1205){
+            return nil,err
+        }
+        select {
+        case <-ctx.Done():return nil,ctx.Err()
+        case <-time.After(time.Duration(retry+1)*10*time.Millisecond):
+        }
+    }
+    return s.claimDueOnce(ctx)
+}
+
+// claimDueOnce 在事务内写入 60 秒租约，并取得稳定的尝试序号。
+// 只在提交事务后将订单交给网络通知，不在事务中调用游戏服务器。
+func (s *OrderStore) claimDueOnce(ctx context.Context) (*model.Order,error) {
+    tx,err:=s.db.BeginTx(ctx,&sql.TxOptions{Isolation:sql.LevelReadCommitted})
     if err!=nil {return nil,err}
     defer tx.Rollback()
     var id int64
@@ -148,9 +157,11 @@ func (s *OrderStore) ClaimDue(ctx context.Context) (*model.Order,error) {
         next_notify_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND)
         WHERE id=?`,id)
     if err!=nil {return nil,err}
-    if err=tx.Commit();err!=nil {return nil,err}
-    o,err:=s.ByID(ctx,id)
-    return &o,err
+    // 在释放行锁前读取订单和尝试序号；防止租约过期后读取到其他 Worker 的新序号。
+    o,err:=scanOrder(tx.QueryRowContext(ctx,"SELECT "+orderColumns+" FROM game_order WHERE id=?",id))
+    if err!=nil{return nil,err}
+    if err=tx.Commit();err!=nil{return nil,err}
+    return &o,nil
 }
 
 // PingContext 检查共享连接池的 MySQL 可用性。

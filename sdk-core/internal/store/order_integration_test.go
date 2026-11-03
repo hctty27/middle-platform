@@ -61,12 +61,13 @@ func TestOrderStoreLifecycle(t *testing.T) {
     again,err:=repo.ClaimDue(ctx)
     if err!=nil{t.Fatal(err)}
     if again!=nil {t.Fatal("job claimed twice")}
-    if err=repo.CompleteNotify(ctx,found.ID,nil);err!=nil{t.Fatal(err)}
-    if err=repo.CompleteNotify(ctx,found.ID,errors.New("late failure"));err!=nil{t.Fatal(err)}
+    if claimed.NotifyAttempts!=1 {t.Fatalf("expected lease token=1, got %d",claimed.NotifyAttempts)}
+    if err=repo.CompleteNotify(ctx,found.ID,claimed.NotifyAttempts,nil);err!=nil{t.Fatal(err)}
+    if err=repo.CompleteNotify(ctx,found.ID,claimed.NotifyAttempts,errors.New("late failure"));err!=nil{t.Fatal(err)}
     current,err:=repo.ByID(ctx,found.ID)
     if err!=nil{t.Fatal(err)}
     if current.PaymentStatus!=1||current.NotifyStatus!=1 {t.Fatal("terminal success overwritten")}
-    allowed,err:=repo.BeginNotify(ctx,found.ID)
+    noMore,err:=repo.ClaimDue(ctx)
     if err!=nil{t.Fatal(err)}
-    if allowed {t.Fatal("successful notification retried")}
+    if noMore!=nil {t.Fatal("successful notification retried")}
 }

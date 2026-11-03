@@ -99,10 +99,14 @@ SDK Core -> 游戏的发货通知不采用平台签名透明转发，而是独�
 Header：X-SDK-AppID、X-SDK-Timestamp、X-SDK-Nonce、X-SDK-Signature。
 签名串依次为 appid、POST、通知 URL 路径、timestamp、nonce、原始 Body 的 SHA256 小写十六进制，LF 连接，HMAC-SHA256。
 游戏服须验证签名并按 game_order_id 数据库事务幂等发货，返回 HTTP 200，Body 精确等于 X-SDK-Nonce。
-真实平台通知成功应答为 HTTP 200，Body 精确等于平台本次 x-nonce。
+SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确等于本次 x-nonce；
+**不等待游戏服通知完成**。游戏服异常不会阻塞平台回调，发货交给持久化任务队列。
 
-补偿 Worker 每两秒检查已支付未通知订单，领取任务并更新持久化下次重试时间。
-重试签名独立生成，不复用过期平台 Header；通知发送不持有数据库事务。
+通知 Worker 每实例启动 4 个消费者，每个消费者每 500ms 检查到期任务。
+多实例通过 `SELECT ... FOR UPDATE SKIP LOCKED` 在短事务中独占领取，提交 60 秒租约后才发出 HTTPS 请求；
+通知结果按 `notify_attempts` 尝试序号条件更新，过期 Worker 的结果不会覆盖新租约。
+失败使用指数退避，崩溃后租约到期自动恢复。重试独立生成签名，不复用平台 Header；
+**任务投递语义仍为至少一次（at-least-once）**，游戏服必须按订单号幂等发货。
 仅允许 gameNotify.allowedHosts 明确批准的 HTTPS 公网域名，生产限制 443 端口且不跟随重定向。
 
 配置示例参考 sdk-core/configs/config.yaml：平台 `appSecret` 配置在渠道包 JSON，游戏通信 `gameSecret` 配置在游戏 JSON；YAML 中不再维护 `payment.secrets`、`gameAuth.keys` 或 `gameNotify.secrets`。已有私有 YAML 的上述三个字段必须删掉，否则严格校验会拒绝启动。保留 `gameNotify.allowedHosts`。
