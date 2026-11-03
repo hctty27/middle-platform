@@ -49,12 +49,12 @@ def wait_until(label, predicate, seconds=75):
         try:
             result = predicate()
             if result:
-                print(f"PASS {label}", flush=True)
+                print(f"通过：{label}", flush=True)
                 return result
         except Exception as ex:
             last = str(ex)
         time.sleep(0.8)
-    raise AssertionError(f"Timed out: {label}. Last failure: {last}")
+    raise AssertionError(f"等待超时：{label}。最后一次错误：{last}")
 
 
 def start(name, module, port, extra=None):
@@ -74,7 +74,7 @@ def start(name, module, port, extra=None):
     command = ["/tmp/config-center-access-ci"] if name.startswith("access") else ["/tmp/config-center-ci"]
     proc = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
     PROCESSES.append(proc)
-    print(f"Starting {name} (pid={proc.pid})", flush=True)
+    print(f"正在启动 {name}（进程号={proc.pid}）", flush=True)
     return proc
 
 
@@ -148,7 +148,7 @@ def main():
     request(8081, "/internal/config/callback", "POST", notification, 202,
             extra_headers={"X-Config-Timestamp": timestamp,
                            "X-Config-Signature": "sha256=" + signature})
-    print("PASS invalid callback rejected and valid callback acknowledged asynchronously", flush=True)
+    print("通过：拒绝无效回调并异步确认有效回调", flush=True)
 
     # 三层配置树 + 同一个游戏级渠道应用绑定到区服组。
     parent = 0
@@ -196,7 +196,7 @@ def main():
     assert json.loads(updated_app["config"]) == {"appId": "10001", "enabled": True}
     assert len(request(8082, f'/api/config/admin/server-groups/{ids[2]}/channel-apps')) == 1
     assert request(8080, "/api/config/sync/revision") == head
-    print("PASS channel CRUD does not affect node sync", flush=True)
+    print("通过：渠道增删改查不影响节点同步", flush=True)
     # 旧版版本化路由应彻底失效（404），统一无版本路径仍正常工作。
     legacy_prefix = "/api/" + "v1"
     request(8080, legacy_prefix + "/sync/revision", expected=404)
@@ -206,9 +206,9 @@ def main():
     request(8080, legacy_prefix + "/admin/subscribers", expected=404)
     request(8080, legacy_prefix + f"/config/nodes/{ids[0]}", expected=404)
     request(8080, legacy_prefix + "/config/nodes/batch-get", "POST", {"ids": ids}, 404)
-    print("PASS unversioned API routes and removal of legacy aliases", flush=True)
+    print("通过：无版本 API 路由及旧别名清理", flush=True)
 
-    print("PASS three-level tree, shared channel app and cluster-wide revisions", flush=True)
+    print("通过：三级目录、共享渠道包与集群版本", flush=True)
     # Navigation endpoints must return small summaries without any JSON configuration.
     roots = request(8080, "/api/config/admin/nodes/tree?parentId=0")
     assert len(roots) == 1 and roots[0]["id"] == ids[0], roots
@@ -226,7 +226,7 @@ def main():
     page = request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=1&size=1")
     assert page["total"] == 0 and page["items"] == [], page
     request(8080, f"/api/config/admin/nodes/{ids[2]}/children?page=0", expected=400)
-    print("PASS three-level lazy tree and paginated child management APIs", flush=True)
+    print("通过：三级懒加载目录及子项分页接口", flush=True)
     # Global search must find unloaded descendants and return their complete ancestor path.
     matches = request(8080, "/api/config/admin/nodes/search?keyword=ci-server_group")
     assert len(matches) == 1 and matches[0]["node"]["id"] == ids[-1], matches
@@ -236,7 +236,7 @@ def main():
     assert [node["id"] for node in path["path"]] == ids, path
     assert request(8080, "/api/config/admin/nodes/search?keyword=") == []
     assert request(8080, "/api/config/admin/nodes/search?keyword=x&limit=51", expected=400)
-    print("PASS global search, deep navigation paths and input validation", flush=True)
+    print("通过：全局搜索、节点路径及输入校验", flush=True)
 
     wait_until("Webhook pull copied all three nodes", lambda: synchronized_nodes(3, 3))
     local = {row["id"]: row for row in replica()}
@@ -245,7 +245,7 @@ def main():
                      ("game_id", "region_id")) == expected[index], local
         assert "server_group_id" not in local[node_id], local
     assert local[ids[1]]["env_type"] == "test", local
-    print("PASS complete ancestor paths and region environment in synchronized local replica", flush=True)
+    print("通过：同步副本的完整父节点路径与大区环境", flush=True)
 
     # Write through a different config-center instance, verify client upsert.
     request(8082, f"/api/config/admin/nodes/{ids[-1]}", "PUT", {
@@ -265,7 +265,7 @@ def main():
     })
     assert unchanged["name"] == "updated-by-second-instance", unchanged
     assert request(8080, "/api/config/sync/revision")["revision"] == before_noop
-    print("PASS semantic no-op update does not increment revision", flush=True)
+    print("通过：语义无变化的更新不增加版本号", flush=True)
     before_bad = request(8080, "/api/config/sync/revision")["revision"]
     request(8080, "/api/config/admin/nodes", "POST", {
         "parentId": ids[0], "nodeType": "channel_app",
@@ -273,21 +273,21 @@ def main():
         "status": 1, "config": "{}"
     }, 400)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
-    print("PASS invalid parent rejects write without version increment", flush=True)
+    print("通过：非法上级节点被拒绝且不增加版本号", flush=True)
     for removed_type in ("channel", "sdk_app"):
         request(8080, "/api/config/admin/nodes", "POST", {
             "parentId": ids[2], "nodeType": removed_type,
             "code": "old-type", "name": "old", "status": 1, "config": "{}"
         }, 400)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
-    print("PASS legacy node types rejected", flush=True)
+    print("通过：拒绝旧版节点类型", flush=True)
     # 渠道应用编码全局唯一，同游戏重复同样会被拒绝。
     request(8080, "/api/config/admin/channel-apps", "POST", {
         "gameId": ids[0], "code": "ci-huawei", "name": "Duplicated",
         "status": 1, "config": "{}"
     }, 409)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
-    print("PASS sibling code uniqueness under derived parent scope", flush=True)
+    print("通过：同级节点编码唯一性", flush=True)
 
     # Offline client must be retried and must recover without losing changes.
     stop(access)
@@ -325,7 +325,7 @@ def main():
                              "WHERE code='ci-access')") == changed_head["epoch"], seconds=75)
     wait_until("client rebuilt snapshot for new epoch",
                lambda: request(8081, "/api/access/revision")["epoch"] == changed_head["epoch"], seconds=75)
-    print("PASS epoch-only change triggers notification and full snapshot", flush=True)
+    print("通过：仅 epoch 变更触发通知与全量快照", flush=True)
 
     # 删除时必须先解除绑定，避免区服组和应用出现孤儿引用。
     request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=409)
@@ -349,9 +349,9 @@ def main():
         "gameId": second_game["id"], "code": "ci-globally-unique", "name": "Duplicate",
         "status": 1, "config": "{}"
     }, 409)
-    print("PASS global channel code uniqueness across different games", flush=True)
+    print("通过：跨游戏渠道编码全局唯一", flush=True)
 
-    print("ALL END-TO-END SMOKE TESTS PASSED", flush=True)
+    print("所有端到端冒烟测试通过", flush=True)
 
 
 if __name__ == "__main__":
@@ -363,7 +363,7 @@ if __name__ == "__main__":
         for name, path, log in LOGS:
             log.flush()
             if pathlib.Path(path).exists():
-                print(f"--- {name} last 100 log lines ---", flush=True)
+                print(f"--- {name} 最近 100 行日志 ---", flush=True)
                 print("\n".join(pathlib.Path(path).read_text(errors="replace").splitlines()[-100:]))
         sys.exit(1)
     finally:

@@ -22,7 +22,7 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
-var ErrTarget = errors.New("invalid game notification target")
+var ErrTarget = errors.New("游戏发货通知目标地址不合法")
 
 var blockedCallbackNetworks = []netip.Prefix{
     netip.MustParsePrefix("0.0.0.0/8"),
@@ -88,7 +88,7 @@ func NewClient() *Client {
                 }
                 dialErr = err
             }
-            return nil, fmt.Errorf("notification connection failed: %w", dialErr)
+            return nil, fmt.Errorf("发货通知连接失败: %w", dialErr)
         },
     }
     return &Client{
@@ -136,7 +136,7 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
         return err
     }
     if len(key) != 32 {
-        return errors.New("invalid notification signing key")
+        return errors.New("发货通知签名密钥不合法")
     }
     body, err := json.Marshal(model.PaymentCallback{
         OrderNo:o.PlatformOrderNo, GameOrderID:o.GameOrderID,
@@ -166,15 +166,15 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     req.Header.Set("X-SDK-Signature", signature)
     resp, err := c.http.Do(req)
     if err != nil {
-        return fmt.Errorf("notification transport error: %w", err)
+        return fmt.Errorf("发货通知请求失败: %w", err)
     }
     defer resp.Body.Close()
     ack, err := io.ReadAll(io.LimitReader(resp.Body, 65))
     if err != nil {
-        return errors.New("invalid notification response")
+        return fmt.Errorf("读取发货通知响应失败: %w", err)
     }
     if resp.StatusCode != http.StatusOK || string(ack) != nonce {
-        return fmt.Errorf("notification not acknowledged: status=%d", resp.StatusCode)
+        return fmt.Errorf("游戏服未确认发货通知，HTTP 状态码=%d", resp.StatusCode)
     }
     return nil
 }

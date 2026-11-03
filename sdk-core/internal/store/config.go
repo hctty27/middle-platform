@@ -84,7 +84,7 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
         return model.ChannelApp{}, nil, model.ErrNotFound
     }
     if err != nil {
-        return model.ChannelApp{}, nil, fmt.Errorf("query sdk configuration: %w", err)
+        return model.ChannelApp{}, nil, fmt.Errorf("查询 SDK 配置失败: %w", err)
     }
 
     app.Config = append(json.RawMessage(nil), appJSON...)
@@ -98,7 +98,7 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
 func (s *Store) VerifySchema(ctx context.Context) error {
     rows, err := s.db.QueryContext(ctx, configQuery, "prod", "prod", "__sdk_core_schema_probe__")
     if err != nil {
-        return fmt.Errorf("verify sdk-core database schema: %w", err)
+        return fmt.Errorf("检查 SDK Core 数据库表结构失败: %w", err)
     }
     defer rows.Close()
     return rows.Err()
@@ -115,7 +115,7 @@ func (s *Store) LookupPlatformSecret(ctx context.Context, appID string) (string,
         return "", model.ErrNotFound
     }
     if err != nil {
-        return "", fmt.Errorf("query platform secret config: %w", err)
+        return "", fmt.Errorf("查询平台签名密钥配置失败: %w", err)
     }
     var value struct {
         AppSecret string `json:"appSecret"`
@@ -134,6 +134,6 @@ func(s *Store) LookupGameConfig(ctx context.Context,gameID int64)(json.RawMessag
     err:=s.db.QueryRowContext(ctx,
         "SELECT config FROM config_node WHERE id=? AND node_type='game' LIMIT 1",gameID).Scan(&raw)
     if errors.Is(err,sql.ErrNoRows){return nil,model.ErrNotFound}
-    if err!=nil{return nil,fmt.Errorf("query order game secret: %w",err)}
+    if err!=nil{return nil,fmt.Errorf("查询游戏订单签名密钥失败: %w",err)}
     return json.RawMessage(raw),nil
 }
