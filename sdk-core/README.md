@@ -124,8 +124,8 @@ SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确
 解析规则（游戏服也必须保持一致）：**仅对严格标准 Base64 且解码后恰好 32 字节的旧版密钥执行 Base64 解码**，以确保现有签名和发货通知不受影响；其余字符串使用原始 UTF-8 字节作为 HKDF 输入，首尾空格也属于密钥内容。若新密钥恰好与旧版 Base64 格式相同，也会按旧版格式解析。密钥不能为空或只有空白字符。
 
 使用 Go 标准库 `crypto/hkdf.Key(sha256.New, masterSecret, nil, info, 32)`：
-- 登记：`info=middle-platform:sdk-core:order-register:v1`
-- 通知：`info=middle-platform:sdk-core:payment-notify:v1`
+- 登记：`info=middle-platform:sdk-core:order-register:v2`
+- 通知：`info=middle-platform:sdk-core:payment-notify:v2`
 
 两个子密钥由相同主密钥自动生成，无需分别配置，且不可混用于另一种请求。
 `gameSecret` 在三个环境中共享；环境隔离要求较高时应改为不同环境的主密钥。
@@ -134,11 +134,12 @@ SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确
 
 请求仍是 `POST /api/core/{env}/{appid}/orders`，请求头为 `X-Game-Timestamp` (Unix 秒) 和 `X-Game-Signature` (64 位小写十六进制)。
 
-签名内容由以下四行以 LF 连接，无末尾换行，使用上述登记子密钥计算 HMAC-SHA256：
+签名内容由以下五行以 LF 连接，无末尾换行，使用上述登记子密钥计算 HMAC-SHA256（不包含 URL 路径）：
 
 ```text
 POST
-/api/core/test/app1001/orders
+test
+app1001
 <timestamp>
 <sha256-hex-of-raw-body>
 ```
@@ -148,7 +149,7 @@ SDK Core 通过 AppID/环境查找已绑定且启用的游戏，从 `game.config
 ### SDK Core → 游戏服（发货通知）
 
 保留 `X-SDK-AppID`、`X-SDK-Timestamp`、`X-SDK-Nonce`、`X-SDK-Signature`，
-继续使用原有六段签名串，只把 HMAC key 替换为上述通知子密钥。
+发货通知使用 V2 五行签名串：`appid`、`POST`、`timestamp`、`nonce`、`sha256-hex(rawBody)`，以 LF 连接且末尾无换行，**不包含通知 URL 路径**。
 `game_order.game_id` 是登记时的游戏 ID 快照，后台失败补偿通过原始游戏 ID 取密钥。
 游戏服仍须验证时间戳、签名，并保证同一订单仅发货一次。
 
@@ -158,6 +159,7 @@ SDK Core 通过 AppID/环境查找已绑定且启用的游戏，从 `game.config
 在配置真实 `gameSecret` 之前，必须为配置中心和相关同步接口完成服务端访问控制或安全分发；
 不能仅依赖前端隐藏字段。游戏服应使用受信任的服务端渠道取得主密钥。
 
+目前使用 V2 签名协议（HKDF `info` 以 `:v2` 结尾），旧版 V1 签名不再兼容。部署 SDK Core 前必须同步升级游戏服的订单登记签名和发货通知验签；如果仍有运行中的旧游戏服，先完成游戏服升级再切换服务端，避免登记失败和发货补偿失败。
 当前没有密钥版本与双密钥轮换；直接更换 gameSecret 可能让存量未发货订单的补偿失败。
 游戏服必须按订单号进行事务内幂等发货；平台 v1 不签金额的风险仍存在，应通过平台可信下单和支付回调来源控制降低风险。
 
