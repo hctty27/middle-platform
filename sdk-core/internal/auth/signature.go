@@ -1,79 +1,124 @@
-// Package auth 中的签名工具统一游戏侧 V2 协议；支付平台 V1 由 payment 包独立处理。
 package auth
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
+    "bytes"
+    "crypto/sha1"
+    "crypto/subtle"
+    "encoding/hex"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "net/http"
+    "sort"
+    "strconv"
+    "strings"
+    "time"
 )
 
-// signV2 统一对原始请求体求 SHA256，并用已派生密钥计算 HMAC-SHA256。
-// fields 保持业务协议中的顺序；每项以 LF 分隔，最后追加 body hash，不带结尾换行。
-func signV2(derivedKey []byte, fields []string, rawBody []byte) ([]byte, error) {
-	if len(derivedKey) != keyLength {
-		return nil, ErrGameSecret
-	}
-	sum := sha256.Sum256(rawBody)
-	payload := strings.Join(append(fields, hex.EncodeToString(sum[:])), "\n")
-	mac := hmac.New(sha256.New, derivedKey)
-	_, _ = mac.Write([]byte(payload))
-	return mac.Sum(nil), nil
+const (
+    OperationOrderRegister = "order.register"
+    OperationPaymentNotify = "payment.notify"
+)
+
+// SignValues 与平台算法一致：过滤空值、按值排序、用下划线拼接、求 SHA-1 小写十六进制。
+func SignValues(values []string) string {
+    filtered := make([]string, 0, len(values))
+    for _, value := range values {
+        if value != "" {
+            filtered = append(filtered, value)
+        }
+    }
+    sort.Strings(filtered)
+    sum := sha1.Sum([]byte(strings.Join(filtered, "_")))
+    return hex.EncodeToString(sum[:])
 }
 
-func registrationMAC(masterSecret []byte, env, appID, timestamp string, rawBody []byte) ([]byte, error) {
-	key, err := Derive(masterSecret, PurposeOrderRegister)
-	if err != nil {
-		return nil, err
-	}
-	return signV2(key, []string{http.MethodPost, env, appID, timestamp}, rawBody)
+// bodyValues 读取所有顶层非空业务值；不排序字段名，排序的是最终的字符串值。
+// 嵌套 JSON 压缩后作为一个值，保证与平台文档的 JSON.stringify 口径一致。
+func bodyValues(rawBody []byte) ([]string, error) {
+    var body map[string]json.RawMessage
+    if err := json.Unmarshal(rawBody, &body); err != nil || body == nil {
+        return nil, errors.New("签名请求体必须是 JSON 对象")
+    }
+    values := make([]string, 0, len(body))
+    for _, raw := range body {
+        trimmed := bytes.TrimSpace(raw)
+        if bytes.Equal(trimmed, []byte("null")) {
+            continue
+        }
+        if len(trimmed) == 0 {
+            return nil, errors.New("签名请求字段不合法")
+        }
+        if trimmed[0] == '"' {
+            var str string
+            if err := json.Unmarshal(trimmed, &str); err != nil {
+                return nil, err
+            }
+            if str != "" {
+                values = append(values, str)
+            }
+            continue
+        }
+        var compact bytes.Buffer
+        if err := json.Compact(&compact, trimmed); err != nil {
+            return nil, err
+        }
+        values = append(values, compact.String())
+    }
+    return values, nil
 }
 
-// SignRegistration 使用订单登记 V2 协议签名；签名包含 env/appid，不包含 URL 路径。
-func SignRegistration(masterSecret []byte, env, appID, timestamp string, rawBody []byte) (string, error) {
-	sum, err := registrationMAC(masterSecret, env, appID, timestamp, rawBody)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(sum), nil
+// SignGame 对内部游戏接口添加环境和固定操作标识，防止跨环境、跨业务复用。
+// 平台接口仍使用其原有独立的协议，不调用此函数。
+func SignGame(secret []byte, operation, env, appID, timestamp, nonce string, rawBody []byte) (string, error) {
+    if len(secret) == 0 {
+        return "", ErrGameSecret
+    }
+    if operation == "" || env == "" || appID == "" || timestamp == "" || nonce == "" {
+        return "", ErrUnauthorized
+    }
+    values, err := bodyValues(rawBody)
+    if err != nil {
+        return "", fmt.Errorf("读取签名业务字段失败: %w", err)
+    }
+    values = append(values, string(secret), appID, timestamp, nonce, env, operation)
+    return SignValues(values), nil
 }
 
-// SignNotification 使用已按 payment-notify:v2 派生的密钥签名发货通知。
-// 不依赖通知 URL；由调用方传入随机 nonce 和秒级时间戳。
-func SignNotification(derivedKey []byte, appID, timestamp, nonce string, rawBody []byte) (string, error) {
-	sum, err := signV2(derivedKey, []string{appID, http.MethodPost, timestamp, nonce}, rawBody)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(sum), nil
-}
-
-// VerifyRegistration 校验订单登记签名、五分钟时间窗口和业务标识。
-func VerifyRegistration(r *http.Request, rawBody, masterSecret []byte) error {
-	timestamp := r.Header.Get("X-Game-Timestamp")
-	signature := r.Header.Get("X-Game-Signature")
-	stamp, err := strconv.ParseInt(timestamp, 10, 64)
-	if err != nil || time.Since(time.Unix(stamp, 0)) > 5*time.Minute ||
-		time.Until(time.Unix(stamp, 0)) > 5*time.Minute {
-		return ErrUnauthorized
-	}
-	if len(signature) != 64 || strings.ToLower(signature) != signature {
-		return ErrUnauthorized
-	}
-	provided, err := hex.DecodeString(signature)
-	if err != nil {
-		return ErrUnauthorized
-	}
-	env, appID := r.PathValue("env"), r.PathValue("appid")
-	if env == "" || appID == "" {
-		return ErrUnauthorized
-	}
-	expected, err := registrationMAC(masterSecret, env, appID, timestamp, rawBody)
-	if err != nil || !hmac.Equal(provided, expected) {
-		return ErrUnauthorized
-	}
-	return nil
+// VerifyRegistration 校验订单登记签名及其路由业务归属。
+func VerifyRegistration(r *http.Request, rawBody, secret []byte) error {
+    if r.Method != http.MethodPost {
+        return ErrUnauthorized
+    }
+    env, appID := r.PathValue("env"), r.PathValue("appid")
+    ts := r.Header.Get("x-timestamp")
+    nonce := r.Header.Get("x-nonce")
+    signature := r.Header.Get("x-signature")
+    if env == "" || appID == "" || r.Header.Get("x-app-id") != appID ||
+        len(nonce) != 16 || strings.ToLower(nonce) != nonce ||
+        len(signature) != 40 || strings.ToLower(signature) != signature {
+        return ErrUnauthorized
+    }
+    random, err := hex.DecodeString(nonce)
+    if err != nil || len(random) != 8 {
+        return ErrUnauthorized
+    }
+    provided, err := hex.DecodeString(signature)
+    if err != nil {
+        return ErrUnauthorized
+    }
+    stamp, err := strconv.ParseInt(ts, 10, 64)
+    if err != nil || time.Since(time.Unix(stamp, 0)) > 5*time.Minute ||
+        time.Until(time.Unix(stamp, 0)) > 5*time.Minute {
+        return ErrUnauthorized
+    }
+    expected, err := SignGame(secret, OperationOrderRegister, env, appID, ts, nonce, rawBody)
+    if err != nil {
+        return ErrUnauthorized
+    }
+    digest, _ := hex.DecodeString(expected)
+    if subtle.ConstantTimeCompare(provided, digest) != 1 {
+        return ErrUnauthorized
+    }
+    return nil
 }
