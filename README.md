@@ -57,6 +57,7 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml
 
 ## 文档导航
 
+- **第三方接入**：[游戏充值接入](docs/recharge-integration.md) · [配置中心接入同步](docs/config-center-access-sync.md)
 - [架构与配置同步](docs/architecture.md)
 - [HTTP API 契约](docs/api.md)
 - [数据库结构与手动 SQL](docs/database.md)
