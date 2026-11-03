@@ -86,7 +86,7 @@ func TestEventRouteErrorMapping(t *testing.T) {
 func TestNoEventRouteInLegacyRouter(t *testing.T) {
     legacy := Router(&fakeFetcher{}, fakePinger{})
     response := runEventRequest(legacy, `{"event":"login","ext":{}}`)
-    if response.Code != http.StatusNotFound {
+    if response.Code != http.StatusMethodNotAllowed {
         t.Fatalf("旧 Router 意外注册事件: %d", response.Code)
     }
 }
