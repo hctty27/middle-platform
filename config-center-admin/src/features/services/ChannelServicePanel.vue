@@ -50,10 +50,11 @@ async function save(item: EditableEntry) {
     return
   }
   savingId.value = item.serviceId
+  const selectedEnv = env.value
   try {
     await api.put(`/admin/channel-apps/${props.appId}/services/${item.serviceId}`, {
       enabled: item.enabled, config
-    }, { params: { env: env.value } })
+    }, { params: { env: selectedEnv } })
     ElMessage.success('渠道服务配置已保存')
     await load()
   } catch (error) {
@@ -74,7 +75,7 @@ watch(() => [props.appId, env.value], () => void load(), { immediate: true })
         <p class="muted">未单独配置的服务默认关闭；全局关闭后渠道无法使用。</p>
       </div>
       <div class="panel-actions">
-        <el-select v-model="env" style="width: 130px">
+        <el-select v-model="env" :disabled="savingId !== null" style="width: 130px">
           <el-option label="测试环境" value="test" />
           <el-option label="正式环境" value="prod" />
           <el-option label="提审环境" value="review" />
