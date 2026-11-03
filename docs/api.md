@@ -88,7 +88,24 @@ GET /api/core/{env}/{appid}
 
 SDK Core 错误外壳同样带 `code` 与 `message`；典型 HTTP 状态：400 参数无效、404 配置不存在、409 AppID 冲突、500 映射引用的配置无效、503 数据库服务不可用。具体契约及安全限制见 [SDK Core 模块说明](../sdk-core/README.md)。
 
-## 4. 健康检查与响应约定
+## 4. 渠道包事件上报（SDK Core）
+
+```http
+POST /api/core/{env}/events
+Content-Type: application/json
+x-app-id: 110006
+x-timestamp: <Unix 秒>
+x-nonce: <16 位小写十六进制>
+x-signature: <40 位小写 SHA-1>
+```
+
+```json
+{"event":"login","ext":{"roleId":"10001"}}
+```
+
+只支持已绑定环境的渠道包。Core 从 Header 读取 AppID，使用所属游戏密钥验签；只有全局和渠道环境的 `event_report` 服务开关同时开启才同步转发至平台。平台请求使用渠道包 `appSecret` 重新签名。当前不保存或自动重试事件。详见 [事件上报接入说明](event-report-integration.md)。
+
+## 5. 健康检查与响应约定
 
 三个服务均有：
 

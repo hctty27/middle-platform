@@ -40,3 +40,16 @@ WHERE sv.code=? AND sv.enabled=1 LIMIT 1`
     }
     return true,append(json.RawMessage(nil),raw...),nil
 }
+
+// VerifySDKServiceSchema 检查事件上报依赖的服务开关表，不执行 DDL。
+func (s *Store) VerifySDKServiceSchema(ctx context.Context) error {
+    rows, err := s.db.QueryContext(ctx, `SELECT sv.id,sv.code,sv.enabled,
+        ch.channel_app_id,ch.service_id,ch.env,ch.enabled,ch.config
+        FROM sdk_service sv
+        LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id LIMIT 0`)
+    if err != nil {
+        return fmt.Errorf("检查 SDK 服务开关表结构失败: %w", err)
+    }
+    defer rows.Close()
+    return rows.Err()
+}

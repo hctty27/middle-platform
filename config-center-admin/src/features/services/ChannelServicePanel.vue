@@ -41,13 +41,17 @@ async function load() {
 async function save(item: EditableEntry) {
   if (savingId.value !== null) return
   let config: Record<string, unknown>
-  try {
-    const parsed: unknown = JSON.parse(item.configText)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error()
-    config = parsed as Record<string, unknown>
-  } catch {
-    ElMessage.warning('扩展配置必须是合法的 JSON 对象')
-    return
+  if (item.code === 'event_report') {
+    config = {}
+  } else {
+    try {
+      const parsed: unknown = JSON.parse(item.configText)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error()
+      config = parsed as Record<string, unknown>
+    } catch {
+      ElMessage.warning('扩展配置必须是合法的 JSON 对象')
+      return
+    }
   }
   savingId.value = item.serviceId
   const selectedEnv = env.value
@@ -98,9 +102,12 @@ watch(() => [props.appId, env.value], () => void load(), { immediate: true })
                        :disabled="savingId !== null || !item.globalEnabled" @click="save(item)">保存</el-button>
           </div>
         </div>
-        <el-input v-model="item.configText" type="textarea" :rows="3" spellcheck="false"
+        <p v-if="item.code === 'event_report'" class="muted">
+          事件上报仅使用当前渠道及环境开关；开启后同步转发平台，不配置事件规则，也不保存事件数据。
+        </p>
+        <el-input v-else v-model="item.configText" type="textarea" :rows="3" spellcheck="false"
                   :disabled="!item.globalEnabled || savingId !== null"
-                  placeholder="扩展配置 JSON，例如事件上报的 direct / durable 规则" />
+                  placeholder="其他服务的扩展配置 JSON" />
       </div>
     </div>
   </div>
