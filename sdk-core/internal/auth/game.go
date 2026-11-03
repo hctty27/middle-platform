@@ -1,4 +1,4 @@
-// Package auth 统一游戏主密钥解析、HKDF 派生以及游戏侧 V2 签名与验签。
+// Package auth 统一游戏主密钥解析、HKDF 派生以及游戏侧 V3 签名与验签。
 package auth
 
 import (
@@ -11,8 +11,8 @@ import (
 )
 
 const (
-    PurposeOrderRegister = "order-register"
-    PurposePaymentNotify = "payment-notify"
+    PurposeGameRequest = "game-request"
+    PurposeGameNotify = "game-notify"
     keyLength = 32
 )
 
@@ -38,9 +38,9 @@ func ParseGameSecret(raw json.RawMessage) ([]byte,error) {
 // Derive 仅为预设的两个方向产生 32 字节派生密钥，版本号属于协议的一部分。
 func Derive(secret []byte,purpose string)([]byte,error) {
     if len(secret)==0{return nil,ErrGameSecret}
-    if purpose!=PurposeOrderRegister&&purpose!=PurposePaymentNotify {
+    if purpose!=PurposeGameRequest&&purpose!=PurposeGameNotify {
         return nil,errors.New("不支持的密钥用途")
     }
-    return hkdf.Key(sha256.New,secret,nil,"middle-platform:sdk-core:"+purpose+":v2",keyLength)
+    return hkdf.Key(sha256.New,secret,nil,"middle-platform:sdk-core:"+purpose+":v3",keyLength)
 }
 

@@ -1,0 +1,28 @@
+{
+  "order.register": {
+    "algorithm": "hmac-sha256",
+    "fields": [
+      "appid",
+      "env",
+      "method",
+      "operation",
+      "timestamp",
+      "nonce",
+      "body.sha256",
+      "body.game_order_id"
+    ]
+  },
+  "payment.notify": {
+    "algorithm": "hmac-sha256",
+    "fields": [
+      "appid",
+      "env",
+      "method",
+      "operation",
+      "timestamp",
+      "nonce",
+      "body.sha256",
+      "body.order_no"
+    ]
+  }
+}
