@@ -7,10 +7,10 @@ import (
 )
 
 var (
-    ErrInvalidRequest = errors.New("invalid configuration request")
-    ErrNotFound = errors.New("channel app or environment binding not found or disabled")
-    ErrAmbiguous = errors.New("channel app code is not globally unique")
-    ErrInvalidConfig = errors.New("required response configuration is invalid or missing")
+    ErrInvalidRequest = errors.New("配置查询请求不合法")
+    ErrNotFound = errors.New("渠道包或环境绑定不存在或已禁用")
+    ErrAmbiguous = errors.New("渠道包编码不是全局唯一")
+    ErrInvalidConfig = errors.New("必需的响应配置不合法或缺失")
 )
 
 // ChannelApp 是已启用的渠道应用及其关联游戏配置快照。

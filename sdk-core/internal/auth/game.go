@@ -17,9 +17,9 @@ const (
 )
 
 // ErrUnauthorized 表示游戏服登记请求签名或时间戳无效。
-var ErrUnauthorized = errors.New("invalid game signature")
+var ErrUnauthorized = errors.New("游戏请求签名验证失败")
 // ErrGameSecret 表示游戏主密钥缺失或为空。
-var ErrGameSecret = errors.New("gameSecret must be a non-empty string")
+var ErrGameSecret = errors.New("gameSecret 必须是非空字符串")
 
 // ParseGameSecret 接受非空 UTF-8 字符串，并兼容旧版标准 Base64 的 32 字节密钥。
 // 仅对严格标准 Base64 且解码后恰好 32 字节的旧格式执行解码；其他内容按原始 UTF-8 字节使用。
@@ -39,7 +39,7 @@ func ParseGameSecret(raw json.RawMessage) ([]byte,error) {
 func Derive(secret []byte,purpose string)([]byte,error) {
     if len(secret)==0{return nil,ErrGameSecret}
     if purpose!=PurposeOrderRegister&&purpose!=PurposePaymentNotify {
-        return nil,errors.New("unsupported key purpose")
+        return nil,errors.New("不支持的密钥用途")
     }
     return hkdf.Key(sha256.New,secret,nil,"middle-platform:sdk-core:"+purpose+":v2",keyLength)
 }

@@ -29,17 +29,17 @@ func Router(fetcher Fetcher,db Pinger,orders ...OrderAPI)http.Handler{
         if err!=nil{
             switch {
             case errors.Is(err,model.ErrInvalidRequest):
-                writeJSON(w,http.StatusBadRequest,response{Code:400,Message:"invalid env or appid"})
+                writeJSON(w,http.StatusBadRequest,response{Code:400,Message:"环境或渠道包 ID 不合法"})
             case errors.Is(err,model.ErrNotFound):
-                writeJSON(w,http.StatusNotFound,response{Code:404,Message:"channel app not found"})
+                writeJSON(w,http.StatusNotFound,response{Code:404,Message:"渠道包不存在或未绑定该环境"})
             case errors.Is(err,model.ErrAmbiguous):
-                writeJSON(w,http.StatusConflict,response{Code:409,Message:"appid is not unique"})
+                writeJSON(w,http.StatusConflict,response{Code:409,Message:"渠道包 ID 不唯一"})
             case errors.Is(err,model.ErrInvalidConfig):
-                logging.FromContext(r.Context()).ErrorContext(r.Context(),"invalid sdk configuration","error",err)
-                writeJSON(w,http.StatusInternalServerError,response{Code:500,Message:"invalid channel app config"})
+                logging.FromContext(r.Context()).ErrorContext(r.Context(),"SDK 配置不合法","error",err)
+                writeJSON(w,http.StatusInternalServerError,response{Code:500,Message:"渠道包配置不合法"})
             default:
-                logging.FromContext(r.Context()).ErrorContext(r.Context(),"sdk configuration lookup failed","error",err)
-                writeJSON(w,http.StatusServiceUnavailable,response{Code:503,Message:"configuration temporarily unavailable"})
+                logging.FromContext(r.Context()).ErrorContext(r.Context(),"查询 SDK 配置失败","error",err)
+                writeJSON(w,http.StatusServiceUnavailable,response{Code:503,Message:"配置服务暂时不可用"})
             }
             return
         }
@@ -67,7 +67,7 @@ type response struct{
 }
 func writeJSON(w http.ResponseWriter,status int,payload any){
     body,err:=json.Marshal(payload)
-    if err!=nil{http.Error(w,"JSON serialization failed",http.StatusInternalServerError);return}
+    if err!=nil{http.Error(w,"JSON 序列化失败",http.StatusInternalServerError);return}
     w.Header().Set("Content-Type","application/json; charset=utf-8")
     w.WriteHeader(status)
     _,_=w.Write(append(body,'\n'))

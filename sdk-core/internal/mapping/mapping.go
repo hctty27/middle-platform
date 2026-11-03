@@ -40,33 +40,33 @@ func Load(raw []byte) (*Resolver, error) {
     decoder := json.NewDecoder(bytes.NewReader(raw))
     var definitions map[string]map[string]string
     if err := decoder.Decode(&definitions); err != nil {
-        return nil, fmt.Errorf("decode response mapping: %w", err)
+        return nil, fmt.Errorf("解析响应字段映射失败: %w", err)
     }
     if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-        return nil, errors.New("response mapping must contain one JSON object")
+        return nil, errors.New("响应字段映射必须是一个 JSON 对象")
     }
     if len(definitions) == 0 {
-        return nil, errors.New("response mapping has no routes")
+        return nil, errors.New("响应字段映射缺少路由配置")
     }
     compiled := make(map[string][]fieldRule, len(definitions))
     configUsage := make(map[string]map[string]bool, len(definitions))
     for route, fields := range definitions {
         parts := strings.Fields(route)
         if len(parts) != 2 || parts[0] == "" || !strings.HasPrefix(parts[1], "/") || strings.Join(parts," ") != route {
-            return nil, fmt.Errorf("invalid route pattern %q", route)
+            return nil, fmt.Errorf("路由规则 %q 不合法", route)
         }
         if len(fields) == 0 {
-            return nil, fmt.Errorf("route %q has no mapping fields", route)
+            return nil, fmt.Errorf("路由 %q 未配置映射字段", route)
         }
         rules := make([]fieldRule, 0, len(fields))
         needed := make(map[string]bool)
         for target, source := range fields {
             if strings.TrimSpace(target) != target || target == "" {
-                return nil, fmt.Errorf("invalid response field %q for %s", target, route)
+                return nil, fmt.Errorf("响应字段 %q 不合法，路由: %s", target, route)
             }
             segments, err := parsePath(source)
             if err != nil {
-                return nil, fmt.Errorf("route %s field %s: %w", route, target, err)
+                return nil, fmt.Errorf("路由 %s 的字段 %s 配置错误: %w", route, target, err)
             }
             rules = append(rules, fieldRule{target:target, source:source, segments:segments})
             if len(segments) >= 2 && segments[1] == "config" {
@@ -82,7 +82,7 @@ func Load(raw []byte) (*Resolver, error) {
 // Require 确保已注册的实际路由在映射文件中有规则，缺失时阻止服务启动。
 func (r *Resolver) Require(route string) error {
     if r == nil || len(r.routes[route]) == 0 {
-        return fmt.Errorf("missing response mapping for route %s", route)
+        return fmt.Errorf("路由 %s 缺少响应字段映射", route)
     }
     return nil
 }
@@ -99,7 +99,7 @@ func parsePath(source string) ([]string,error) {
     segments:=strings.Split(source,".")
     for _,segment:=range segments {
         if segment=="" || strings.TrimSpace(segment)!=segment {
-            return nil,fmt.Errorf("invalid source path %q",source)
+            return nil,fmt.Errorf("来源路径 %q 不合法",source)
         }
     }
     switch source {
@@ -111,13 +111,13 @@ func parsePath(source string) ([]string,error) {
     if len(segments)>=3 && segments[1]=="config" &&
         ((segments[0]=="channel_app" && strings.EqualFold(segments[2],"appSecret")) ||
         (segments[0]=="game" && strings.EqualFold(segments[2],"gameSecret"))) {
-        return nil,fmt.Errorf("server secret cannot be exposed by response mapping")
+        return nil,fmt.Errorf("响应字段映射不能暴露服务端密钥")
     }
     if len(segments)>=2 && (segments[0]=="channel_app" || segments[0]=="server_group" ||
         segments[0]=="region" || segments[0]=="game") && segments[1]=="config" {
         return segments,nil
     }
-    return nil,fmt.Errorf("unsupported source path %q",source)
+    return nil,fmt.Errorf("不支持的来源路径 %q",source)
 }
 
 // Resolve 根据当前接口的映射只返回实际存在且非 null 的字段。
@@ -156,9 +156,9 @@ func DecodeObject(raw []byte) (map[string]any,error) {
     decoder.UseNumber()
     var value map[string]any
     if err:=decoder.Decode(&value);err!=nil { return nil,err }
-    if value==nil { return nil,errors.New("expected JSON object") }
+    if value==nil { return nil,errors.New("应为 JSON 对象") }
     if err:=decoder.Decode(new(any));!errors.Is(err,io.EOF) {
-        return nil,errors.New("invalid trailing JSON content")
+        return nil,errors.New("JSON 内容后存在多余数据")
     }
     return value,nil
 }
