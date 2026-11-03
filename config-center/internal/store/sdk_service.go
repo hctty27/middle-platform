@@ -54,9 +54,10 @@ func validSDKEnv(env string) bool {
 func (s *Store) SDKChannelServices(ctx context.Context, appID int64, env string) ([]model.SDKChannelService, error) {
     if appID <= 0 || !validSDKEnv(env) { return nil, ErrInvalid }
     var appStatus int
-    var groupStatus, regionStatus sql.NullInt64
+    var gameStatus, groupStatus, regionStatus sql.NullInt64
     if err := s.DB.QueryRowContext(ctx, `
-SELECT app.status,sg.status,r.status FROM config_channel_app app
+SELECT app.status,g.status,sg.status,r.status FROM config_channel_app app
+LEFT JOIN config_node g ON g.id=app.game_id AND g.node_type='game'
 LEFT JOIN config_node sg ON sg.id=CASE ?
   WHEN 'prod' THEN app.prod_server_group_id
   WHEN 'test' THEN app.test_server_group_id
@@ -64,11 +65,11 @@ LEFT JOIN config_node sg ON sg.id=CASE ?
 END AND sg.node_type='server_group' AND sg.game_id=app.game_id
 LEFT JOIN config_node r ON r.id=sg.region_id AND r.node_type='region'
  AND r.game_id=app.game_id AND r.env_type=?
-WHERE app.id=?`, env, env, appID).Scan(&appStatus,&groupStatus,&regionStatus); err != nil {
+WHERE app.id=?`, env, env, appID).Scan(&appStatus,&gameStatus,&groupStatus,&regionStatus); err != nil {
         return nil, err
     }
-    bindingEnabled := appStatus == 1 && groupStatus.Valid && regionStatus.Valid &&
-        groupStatus.Int64 == 1 && regionStatus.Int64 == 1
+    bindingEnabled := appStatus == 1 && gameStatus.Valid && groupStatus.Valid && regionStatus.Valid &&
+        gameStatus.Int64 == 1 && groupStatus.Int64 == 1 && regionStatus.Int64 == 1
     rows, err := s.DB.QueryContext(ctx, `
 SELECT service.id,service.code,service.name,service.description,service.enabled,
        COALESCE(channel.enabled,0),COALESCE(channel.config,JSON_OBJECT())
