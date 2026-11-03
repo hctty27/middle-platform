@@ -115,11 +115,13 @@ SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确
 
 ## 游戏主密钥与双向 HKDF 派生
 
-只在每个游戏节点的 `game.config` 顶层配置一个 `gameSecret`（**32 个安全随机字节的标准 Base64 表示**），游戏服与 SDK Core 持有同一主密钥。生成建议：`openssl rand -base64 32`。不要把私钥、示例短密码写进仓库。
+只在每个游戏节点的 `game.config` 顶层配置一个 **非空字符串** `gameSecret`；不限制长度，不要求 Base64，允许中文和特殊字符。游戏服与 SDK Core 持有同一主密钥。生产环境仍建议使用高强度随机密钥（如 `openssl rand -base64 32`），不要使用可猜测的短密码，也不要把真实密钥写进仓库。
 
 ```json
-{"gameSecret": "<base64-encoded-32-random-bytes>"}
+{"gameSecret": "my-custom-game-secret-123!@#"}
 ```
+
+解析规则（游戏服也必须保持一致）：**仅对严格标准 Base64 且解码后恰好 32 字节的旧版密钥执行 Base64 解码**，以确保现有签名和发货通知不受影响；其余字符串使用原始 UTF-8 字节作为 HKDF 输入，首尾空格也属于密钥内容。若新密钥恰好与旧版 Base64 格式相同，也会按旧版格式解析。密钥不能为空或只有空白字符。
 
 使用 Go 标准库 `crypto/hkdf.Key(sha256.New, masterSecret, nil, info, 32)`：
 - 登记：`info=middle-platform:sdk-core:order-register:v1`
