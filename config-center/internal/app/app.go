@@ -16,7 +16,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/hctty27/middle-platform/shared/logging"
 	"github.com/hctty27/middle-platform/config-center/internal/api"
-	"github.com/hctty27/middle-platform/config-center/internal/migration"
+	"github.com/hctty27/middle-platform/config-center/internal/schema"
 	"github.com/hctty27/middle-platform/config-center/internal/settings"
 	"github.com/hctty27/middle-platform/config-center/internal/store"
 	"github.com/hctty27/middle-platform/config-center/internal/webhook"
@@ -38,10 +38,10 @@ func Run(configPath string) error {
 	parsed.ReadTimeout = 10 * time.Second
 	parsed.WriteTimeout = 10 * time.Second
 
-	// 启动前只校验 V11 数据库结构；建库和升级由独立 cmd/migrate 执行，避免集群实例并行 DDL。
+	// 启动只读校验数据库结构；建表与升级 SQL 由管理员手动执行。
 	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer migrationCancel()
-	if err := migration.Validate(migrationCtx, parsed.FormatDSN()); err != nil { return err }
+	if err := schema.Validate(migrationCtx, parsed.FormatDSN()); err != nil { return err }
 
 	db, err := sql.Open("mysql", parsed.FormatDSN())
 	if err != nil {
