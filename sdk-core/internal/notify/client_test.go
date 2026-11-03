@@ -6,7 +6,6 @@ import (
     "crypto/hmac"
     "crypto/sha256"
     "encoding/hex"
-    "fmt"
     "io"
     "net"
     "net/http"
@@ -14,6 +13,8 @@ import (
     "net/netip"
     "testing"
     "time"
+    "sort"
+    "strings"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
@@ -83,20 +84,22 @@ func TestNotificationDialRejectsMetadata(t *testing.T) {
     }
 }
 
-func TestNotifySignatureV2DoesNotDependOnURLPath(t *testing.T) {
+func TestNotifySignatureV3DoesNotDependOnURLPath(t *testing.T) {
     key:=bytes.Repeat([]byte{0x5a},32)
     server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
         if r.URL.Path!="/arbitrary/game/notify" {t.Errorf("unexpected URL %q",r.URL.Path)}
         body,err:=io.ReadAll(r.Body)
         if err!=nil {t.Errorf("read request: %v",err);w.WriteHeader(http.StatusBadRequest);return}
-        timestamp:=r.Header.Get("X-SDK-Timestamp")
-        nonce:=r.Header.Get("X-SDK-Nonce")
-        appid:=r.Header.Get("X-SDK-AppID")
+        timestamp:=r.Header.Get("x-timestamp")
+        nonce:=r.Header.Get("x-nonce")
+        appid:=r.Header.Get("x-app-id")
         sum:=sha256.Sum256(body)
-        canonical:=fmt.Sprintf("%s\nPOST\n%s\n%s\n%x",appid,timestamp,nonce,sum)
+        selected:=[]string{appid,r.Header.Get("x-env"),"POST","payment.notify",timestamp,nonce,hex.EncodeToString(sum[:]),"P100"}
+        sort.Strings(selected)
+        canonical:=strings.Join(selected,"_")
         mac:=hmac.New(sha256.New,key)
         _,_=mac.Write([]byte(canonical))
-        if got:=r.Header.Get("X-SDK-Signature");got!=hex.EncodeToString(mac.Sum(nil)) {
+        if got:=r.Header.Get("x-signature");got!=hex.EncodeToString(mac.Sum(nil)) {
             t.Errorf("notification signature unexpectedly includes URL path")
             w.WriteHeader(http.StatusUnauthorized)
             return
@@ -105,7 +108,7 @@ func TestNotifySignatureV2DoesNotDependOnURLPath(t *testing.T) {
     }))
     defer server.Close()
     order:=model.Order{
-        AppID:"110006",GameOrderID:"G100",PlatformOrderNo:"P100",Amount:600,
+        AppID:"110006",Env:"test",GameOrderID:"G100",PlatformOrderNo:"P100",Amount:600,
         GameNotifyURL:server.URL+"/arbitrary/game/notify",PaidAt:time.Now(),
     }
     if err:=NewClient().Send(context.Background(),order,key);err!=nil {
