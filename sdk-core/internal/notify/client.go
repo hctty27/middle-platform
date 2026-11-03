@@ -131,7 +131,7 @@ func (c *Client) ValidateTarget(raw string) error {
 }
 
 // Send 使用 SDK Core 与游戏间的 HMAC-SHA256，不转发平台密钥。
-// 签名串: appid, POST, path, timestamp, nonce, SHA256(rawBody)，以 LF 连接。
+// V2 签名串: appid, POST, timestamp, nonce, SHA256(rawBody)，以 LF 连接，不依赖通知 URL。
 func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     if err := c.ValidateTarget(o.GameNotifyURL); err != nil {
         return err
@@ -146,7 +146,6 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     if err != nil {
         return err
     }
-    u, _ := url.Parse(o.GameNotifyURL)
     var nonceBytes [8]byte
     if _, err = rand.Read(nonceBytes[:]); err != nil {
         return err
@@ -154,8 +153,8 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     nonce := hex.EncodeToString(nonceBytes[:])
     timestamp := strconv.FormatInt(time.Now().Unix(), 10)
     sum := sha256.Sum256(body)
-    canonical := fmt.Sprintf("%s\nPOST\n%s\n%s\n%s\n%x",
-        o.AppID, u.EscapedPath(), timestamp, nonce, sum)
+    canonical := fmt.Sprintf("%s\nPOST\n%s\n%s\n%x",
+        o.AppID, timestamp, nonce, sum)
     mac := hmac.New(sha256.New, key)
     _, _ = mac.Write([]byte(canonical))
     req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.GameNotifyURL, bytes.NewReader(body))

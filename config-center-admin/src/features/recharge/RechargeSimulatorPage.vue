@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // 本页只负责构造签名并发送真实请求，不把支付回调成功误认为游戏发货成功。
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { generateNonce, parseCallbackEndpoint, parseRegisterEndpoint, resolveSigningPath,
+import { generateNonce, parseCallbackEndpoint, parseRegisterEndpoint,
   signPlatformV1, signRegistration } from './signature'
 
 type Tab = 'register' | 'callback'
@@ -28,7 +28,6 @@ function saveUrl(key: string, value: string) {
 const activeTab = ref<Tab>('register')
 const registerUrl = ref(restoreUrl(registerKey))
 const callbackUrl = ref(restoreUrl(callbackKey))
-const signingPathOverride = ref('')
 const gameOrderID = ref('')
 const amount = ref('600')
 const attach = ref('')
@@ -41,10 +40,7 @@ const registerSubmitting = ref(false)
 const callbackSubmitting = ref(false)
 const registerResult = ref<RequestResult | null>(null)
 const callbackResult = ref<RequestResult | null>(null)
-const inferredSigningPath = computed(() => {
-  try { return parseRegisterEndpoint(registerUrl.value).signingPath ?? '' } catch { return '' }
-})
-watch(registerUrl, url => { saveUrl(registerKey, url); signingPathOverride.value = '' })
+watch(registerUrl, url => saveUrl(registerKey, url))
 watch(callbackUrl, url => saveUrl(callbackKey, url))
 
 function assertOrder(): { game_order_id: string; amount: number; attach: string } {
@@ -83,8 +79,7 @@ async function register() {
     const body = assertOrder()
     const rawBody = JSON.stringify(body)
     const timestamp = String(Math.floor(Date.now() / 1000))
-    const signingPath = resolveSigningPath(endpoint.signingPath ?? '', signingPathOverride.value)
-    const signature = await signRegistration(gameSecret.value, rawBody, signingPath, timestamp)
+    const signature = await signRegistration(gameSecret.value, rawBody, endpoint.env ?? '', endpoint.appid, timestamp)
     const headers = { 'X-Game-Timestamp': timestamp, 'X-Game-Signature': signature }
     const result = await request(endpoint.url, headers, rawBody)
     registerResult.value = result
@@ -160,10 +155,6 @@ async function confirmCallback() {
             <el-form-item label="请求 URL（完整地址）" required>
               <el-input v-model="registerUrl" placeholder="https://example.com/sdk/api/core/test/110006/orders" clearable />
             </el-form-item>
-            <el-form-item label="SDK Core 实际签名路径">
-              <el-input v-model="signingPathOverride" :placeholder="inferredSigningPath || '/api/core/test/110006/orders'" />
-              <span class="recharge-help">默认自动去除 URL 中的代理前缀；如果 Nginx 重写了路径，可在这里手动覆盖。</span>
-            </el-form-item>
             <div class="recharge-fields">
               <el-form-item label="游戏订单号" required>
                 <el-input v-model="gameOrderID" placeholder="G202611030001" />
@@ -175,9 +166,10 @@ async function confirmCallback() {
             <el-form-item label="透传参数 attach">
               <el-input v-model="attach" placeholder="roleId=10001&productId=gem60（可为空）" />
             </el-form-item>
-            <el-form-item label="游戏密钥 gameSecret（Base64）" required>
-              <el-input v-model="gameSecret" type="password" show-password autocomplete="off" placeholder="32 字节游戏主密钥的标准 Base64" />
+            <el-form-item label="游戏密钥 gameSecret" required>
+              <el-input v-model="gameSecret" type="password" show-password autocomplete="off" placeholder="填写与 game.config.gameSecret 相同的密钥（支持任意非空字符串）" />
             </el-form-item>
+            <div class="recharge-help">兼容旧版 32 字节标准 Base64 密钥；其他字符串直接作为 UTF-8 参与签名。</div>
             <div class="recharge-actions">
               <el-button type="primary" native-type="submit" :loading="registerSubmitting">生成签名并发送登记</el-button>
               <span class="recharge-help">自动填写 X-Game-Timestamp / X-Game-Signature</span>
