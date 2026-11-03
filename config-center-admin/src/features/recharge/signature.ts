@@ -57,7 +57,9 @@ export async function signRegistration(gameSecret: string, rawBody: string, sign
   const encoded = gameSecret.trim()
   if (!/^[A-Za-z0-9+/]{43}=$/.test(encoded)) throw new Error('gameSecret 必须为 32 字节密钥的标准 Base64 编码')
   const secret = Uint8Array.from(atob(encoded), char => char.charCodeAt(0))
-  if (secret.byteLength !== 32) throw new Error('gameSecret 解码后必须为 32 字节')
+  if (secret.byteLength !== 32 || btoa(String.fromCharCode(...secret)) !== encoded) {
+    throw new Error('gameSecret 必须是 32 字节密钥的严格标准 Base64 编码')
+  }
   const master = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey'])
   const key = await crypto.subtle.deriveKey({
     name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0),
