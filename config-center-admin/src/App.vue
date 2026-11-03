@@ -7,16 +7,17 @@ import ConfigWorkspace from './ConfigWorkspace.vue'
 import GameOverview from './features/dashboard/GameOverview.vue'
 import ChannelAppPage from './features/nodes/ChannelAppPage.vue'
 import SubscriberPage from './features/subscribers/SubscriberPage.vue'
+import RechargeSimulatorPage from './features/recharge/RechargeSimulatorPage.vue'
 
-type Page = 'overview' | 'nodes' | 'channel_apps' | 'subscribers' | 'about'
-const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'subscribers', 'about']
+type Page = 'overview' | 'nodes' | 'channel_apps' | 'subscribers' | 'recharge' | 'about'
+const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'subscribers', 'recharge', 'about']
 const navigation = ref<Page>('overview')
 const sidebarCollapsed = ref(false)
 const revision = ref(0)
 const epoch = ref('')
 const titles: Record<Page, string> = {
   overview: '工作台', nodes: '配置管理', channel_apps: '渠道应用',
-  subscribers: '接入同步', about: '系统说明'
+  subscribers: '接入同步', recharge: '充值模拟', about: '系统说明'
 }
 const currentTitle = computed(() => titles[navigation.value])
 const activeGame = computed(() => games.value.find(game => game.id === currentGameId.value))
@@ -77,6 +78,9 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
       <button title="接入同步" :class="{ active: navigation === 'subscribers' }" @click="navigate('subscribers')">
         <span class="nav-symbol">↗</span><span v-if="!sidebarCollapsed">接入同步</span>
       </button>
+      <button title="充值模拟" :class="{ active: navigation === 'recharge' }" @click="navigate('recharge')">
+        <span class="nav-symbol">¥</span><span v-if="!sidebarCollapsed">充值模拟</span>
+      </button>
       <button title="系统说明" :class="{ active: navigation === 'about' }" @click="navigate('about')">
         <span class="nav-symbol">ⓘ</span><span v-if="!sidebarCollapsed">系统说明</span>
       </button>
@@ -110,6 +114,7 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
         </div>
         <ChannelAppPage v-if="navigation === 'channel_apps'" :game-id="currentGameId" @changed="refreshAll" />
         <SubscriberPage v-if="navigation === 'subscribers'" />
+        <RechargeSimulatorPage v-if="navigation === 'recharge'" />
         <main v-if="navigation === 'about'" class="content-panel">
           <h2>系统说明</h2>
           <p>当前游戏：{{ activeGame?.name ?? '未选择' }}</p>
