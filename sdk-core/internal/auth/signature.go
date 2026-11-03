@@ -21,6 +21,14 @@ const (
     OperationPaymentNotify = "payment.notify"
 )
 
+// javaTrim 复现 Java String.trim()：只去掉两端不大于 U+0020 的字符。
+func javaTrim(s string) string {
+    start,end:=0,len(s)
+    for start<end&&s[start]<=0x20{start++}
+    for end>start&&s[end-1]<=0x20{end--}
+    return s[start:end]
+}
+
 // Sign 与 Java sortJoinSign + gameSecret + MD5 大写算法严格一致。
 // 仅接收 JSON 可表达的标量参数；对象和数组应由调用方预先转为约定的字符串。
 func Sign(data map[string]any,secret []byte)(string,error){
@@ -37,11 +45,11 @@ func Sign(data map[string]any,secret []byte)(string,error){
         switch v:=value.(type){
         case string:
             if v==""{continue}
-            s=strings.TrimSpace(v)
+            s=javaTrim(v)
         case json.Number:
-            s=strings.TrimSpace(v.String())
+            s=javaTrim(v.String())
         case bool,int,int8,int16,int32,int64,uint,uint8,uint16,uint32,uint64,float32,float64:
-            s=strings.TrimSpace(fmt.Sprint(v))
+            s=javaTrim(fmt.Sprint(v))
         default:
             return "",fmt.Errorf("不支持的签名参数类型: %s",key)
         }

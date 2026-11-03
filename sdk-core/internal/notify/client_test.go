@@ -1,12 +1,7 @@
 package notify
 
 import (
-    "bytes"
     "context"
-    "crypto/hmac"
-    "crypto/sha256"
-    "encoding/hex"
-    "fmt"
     "io"
     "net"
     "net/http"
@@ -14,8 +9,10 @@ import (
     "net/netip"
     "testing"
     "time"
+    "strings"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
 )
 
 func TestNotificationTargets(t *testing.T) {
@@ -83,32 +80,28 @@ func TestNotificationDialRejectsMetadata(t *testing.T) {
     }
 }
 
-func TestNotifySignatureV2DoesNotDependOnURLPath(t *testing.T) {
-    key:=bytes.Repeat([]byte{0x5a},32)
+func TestNotifySignatureMatchesJavaAlgorithm(t *testing.T){
+    secret:=[]byte("secret")
     server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
-        if r.URL.Path!="/arbitrary/game/notify" {t.Errorf("unexpected URL %q",r.URL.Path)}
+        if r.URL.Path!="/arbitrary/game/notify"{t.Errorf("unexpected URL: %s",r.URL.Path)}
         body,err:=io.ReadAll(r.Body)
-        if err!=nil {t.Errorf("read request: %v",err);w.WriteHeader(http.StatusBadRequest);return}
-        timestamp:=r.Header.Get("X-SDK-Timestamp")
-        nonce:=r.Header.Get("X-SDK-Nonce")
-        appid:=r.Header.Get("X-SDK-AppID")
-        sum:=sha256.Sum256(body)
-        canonical:=fmt.Sprintf("%s\nPOST\n%s\n%s\n%x",appid,timestamp,nonce,sum)
-        mac:=hmac.New(sha256.New,key)
-        _,_=mac.Write([]byte(canonical))
-        if got:=r.Header.Get("X-SDK-Signature");got!=hex.EncodeToString(mac.Sum(nil)) {
-            t.Errorf("notification signature unexpectedly includes URL path")
-            w.WriteHeader(http.StatusUnauthorized)
-            return
+        if err!=nil{t.Error(err);w.WriteHeader(http.StatusBadRequest);return}
+        appid,env:=r.Header.Get("x-app-id"),r.Header.Get("x-env")
+        stamp,nonce:=r.Header.Get("x-timestamp"),r.Header.Get("x-nonce")
+        expected,err:=auth.SignRequest(secret,auth.OperationPaymentNotify,env,appid,stamp,nonce,body)
+        if err!=nil{t.Error(err);w.WriteHeader(http.StatusUnauthorized);return}
+        if signature:=r.Header.Get("x-signature");signature!=expected||len(signature)!=32||signature!=strings.ToUpper(signature){
+            t.Errorf("unexpected signature: %q, want %q",signature,expected)
+            w.WriteHeader(http.StatusUnauthorized);return
         }
+        if env!="test"||appid!="110006"{t.Errorf("invalid metadata: %s %s",appid,env)}
         _,_=w.Write([]byte(nonce))
     }))
     defer server.Close()
-    order:=model.Order{
-        AppID:"110006",GameOrderID:"G100",PlatformOrderNo:"P100",Amount:600,
-        GameNotifyURL:server.URL+"/arbitrary/game/notify",PaidAt:time.Now(),
-    }
-    if err:=NewClient().Send(context.Background(),order,key);err!=nil {
+    order:=model.Order{AppID:"110006",Env:"test",GameOrderID:"G100",
+        PlatformOrderNo:"P100",Amount:600,GameNotifyURL:server.URL+"/arbitrary/game/notify",
+        PaidAt:time.Now()}
+    if err:=NewClient().Send(context.Background(),order,secret);err!=nil{
         t.Fatalf("send notification: %v",err)
     }
 }
