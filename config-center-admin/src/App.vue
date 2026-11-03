@@ -6,17 +6,18 @@ import { currentGameId, focusNodeId, games, gamesLoading, loadGames } from './ap
 import ConfigWorkspace from './ConfigWorkspace.vue'
 import GameOverview from './features/dashboard/GameOverview.vue'
 import ChannelAppPage from './features/nodes/ChannelAppPage.vue'
+import SDKServicePage from './features/services/SDKServicePage.vue'
 import SubscriberPage from './features/subscribers/SubscriberPage.vue'
 import RechargeSimulatorPage from './features/recharge/RechargeSimulatorPage.vue'
 
-type Page = 'overview' | 'nodes' | 'channel_apps' | 'subscribers' | 'recharge' | 'about'
-const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'subscribers', 'recharge', 'about']
+type Page = 'overview' | 'nodes' | 'channel_apps' | 'sdk_services' | 'subscribers' | 'recharge' | 'about'
+const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'sdk_services', 'subscribers', 'recharge', 'about']
 const navigation = ref<Page>('overview')
 const sidebarCollapsed = ref(false)
 const revision = ref(0)
 const epoch = ref('')
 const titles: Record<Page, string> = {
-  overview: '工作台', nodes: '配置管理', channel_apps: '渠道应用',
+  overview: '工作台', nodes: '配置管理', channel_apps: '渠道应用', sdk_services: '服务管理',
   subscribers: '接入同步', recharge: '充值模拟', about: '系统说明'
 }
 const currentTitle = computed(() => titles[navigation.value])
@@ -75,6 +76,9 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
       <button title="渠道应用" :class="{ active: navigation === 'channel_apps' }" @click="navigate('channel_apps')">
         <span class="nav-symbol">▣</span><span v-if="!sidebarCollapsed">渠道应用</span>
       </button>
+      <button title="服务管理" :class="{ active: navigation === 'sdk_services' }" @click="navigate('sdk_services')">
+        <span class="nav-symbol">⚙</span><span v-if="!sidebarCollapsed">服务管理</span>
+      </button>
       <button title="接入同步" :class="{ active: navigation === 'subscribers' }" @click="navigate('subscribers')">
         <span class="nav-symbol">↗</span><span v-if="!sidebarCollapsed">接入同步</span>
       </button>
@@ -113,6 +117,7 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
           <ConfigWorkspace :game-id="currentGameId" @changed="refreshAll" />
         </div>
         <ChannelAppPage v-if="navigation === 'channel_apps'" :game-id="currentGameId" @changed="refreshAll" />
+        <SDKServicePage v-if="navigation === 'sdk_services'" />
         <SubscriberPage v-if="navigation === 'subscribers'" />
         <RechargeSimulatorPage v-if="navigation === 'recharge'" />
         <main v-if="navigation === 'about'" class="content-panel">
