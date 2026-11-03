@@ -7,12 +7,6 @@ database:
   dsn: ""
 
 # 管理与同步接口无内建鉴权，公网入口须通过网关或内网 ACL 保护。
-# 仅允许向白名单中的主机发送 Webhook，新增订阅者无需重启服务。
-webhook:
-  allowedHosts:
-    - localhost
-    - 127.0.0.1
-
 log:
   level: info
   format: json
