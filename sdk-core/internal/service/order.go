@@ -111,16 +111,15 @@ func(s *OrderService) Receive(ctx context.Context,appid string,h http.Header,
     return h.Get("x-nonce"),nil
 }
 
-// deliver 使用游戏派生密钥发送发货通知，并独立持久化通知结果。
+// deliver 使用游戏主密钥按平台风格签名通知，并持久化通知结果。
 func(s *OrderService) deliver(ctx context.Context,o model.Order)error {
     sendCtx,cancel:=context.WithTimeout(ctx,5*time.Second)
     defer cancel()
     raw,err:=s.GameSecretReader.LookupGameConfig(sendCtx,o.GameID)
     var key []byte
     if err==nil {
-        var secret []byte
-        secret,err=auth.ParseGameSecret(raw)
-        if err!=nil{err=model.ErrInvalidConfig}else{key,err=auth.Derive(secret,auth.PurposePaymentNotify)}
+        key,err=auth.ParseGameSecret(raw)
+        if err!=nil{err=model.ErrInvalidConfig}
     }
     if err==nil{err=s.Notifier.Send(sendCtx,o,key)}
     commitCtx,commitCancel:=context.WithTimeout(context.Background(),2*time.Second)

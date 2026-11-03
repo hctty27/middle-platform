@@ -43,25 +43,22 @@ async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<str
   return hex(await crypto.subtle.digest(algorithm, encoder.encode(text)))
 }
 
-export async function signRegistration(gameSecret: string, rawBody: string, env: string, appid: string, timestamp: string): Promise<string> {
+// 游戏侧使用平台的“按值排序 + 下划线拼接 + SHA-1 小写”算法，额外签环境和接口操作。
+export async function signRegistration(
+  gameSecret: string, rawBody: string, env: string, appid: string, timestamp: string, nonce: string
+): Promise<string> {
   if (!crypto?.subtle) throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost 访问管理后台')
   if (!gameSecret.trim()) throw new Error('gameSecret 不能为空')
-  // 与 SDK Core 保持一致：仅旧版 32 字节标准 Base64 作为二进制密钥，其余按 UTF-8 使用。
-  let secret = encoder.encode(gameSecret)
-  if (/^[A-Za-z0-9+/]{43}=$/.test(gameSecret)) {
-    const decoded = Uint8Array.from(atob(gameSecret), char => char.charCodeAt(0))
-    if (decoded.length === 32 && btoa(String.fromCharCode(...decoded)) === gameSecret) {
-      secret = decoded
-    }
+  const body: Record<string, unknown> = JSON.parse(rawBody)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error('请求体必须为 JSON 对象')
   }
-  const master = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey'])
-  const key = await crypto.subtle.deriveKey({
-    name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0),
-    info: encoder.encode('middle-platform:sdk-core:order-register:v2')
-  }, master, { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign'])
-  const bodyHash = await digest('SHA-256', rawBody)
-  const canonical = ['POST', env, appid, timestamp, bodyHash].join('\n')
-  return hex(await crypto.subtle.sign('HMAC', key, encoder.encode(canonical)))
+  const values: string[] = [gameSecret, appid, timestamp, nonce, env, 'order.register']
+  for (const value of Object.values(body)) {
+    if (value === null || value === undefined || value === '') continue
+    values.push(typeof value === 'object' ? JSON.stringify(value) : String(value))
+  }
+  return digest('SHA-1', values.filter(value => value !== '').sort().join('_'))
 }
 
 export function generateNonce(): string {
