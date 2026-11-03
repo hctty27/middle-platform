@@ -12,7 +12,7 @@
 go run ./cmd/config-center-access -config configs/config-dev.yaml
 ```
 
-首次连接**空库**时自动创建 `config_node`、`config_sync_state` 并全量拉取快照；已有合法 V6 副本只做校验。旧 V1～V5 副本必须先通过历史脚本升级，或在确认可丢弃缓存、完成备份后另建空库；不要对非空副本直接执行 `schema.sql`。
+首次使用**空库**时请先手工执行 `db/sql/initialize.sql` 创建 `config_node`、`config_sync_state`；接入端启动只校验，再全量拉取快照。已有合法 V6 副本只做校验。旧 V1～V5 副本必须先通过历史脚本升级，或在确认可丢弃缓存、完成备份后另建空库；不要对非空副本执行初始化 SQL。
 
 ## 同步协议
 

@@ -1,93 +1,66 @@
-# 数据库结构与迁移
+# 数据库结构与手动 SQL
 
-**以实际 SQL 为准**：[权威库 V11 基线](../config-center/internal/migration/sql/schema.sql) · [V12 订单表增量](../config-center/internal/migration/sql/V12__create_game_order.sql) · [接入副本基线](../config-center-access/internal/store/sql/schema.sql)。本文描述当前结构和安全操作，不作为历史版本逐条升级指南。
+## 核心约定
 
-## 权威配置库：config_center
+**所有建表和升级都由管理员人工执行 SQL。** 三个 Go 服务不会在启动时执行 DDL；只校验实际表结构。SQL 随 Linux 发布包一起交付，也可从源码中获取：
 
-| 表 | 作用 |
+| 场景 | 手工执行的 SQL |
 | --- | --- |
-| `config_node` | `game / region / server_group` 三级节点；`game_id`、`region_id` 表示祖先，`region.env_type` 区分环境 |
-| `config_channel_app` | 独立渠道应用，`code` 全局唯一，包含 `game_id`、共享 `config` 以及三环境区服组绑定 |
-| `config_revision` | 单行 `epoch` + `revision` 同步游标 |
-| `config_node_change_log` | 按 revision 记录三级节点 UPSERT / DELETE |
-| `config_subscriber` | Webhook 订阅者、回调地址、签名密钥 |
-| `config_subscriber_delivery_state` | 回调确认进度、租约与失败重试 |
-| `config_schema_migrations` | 迁移版本、`dirty` 状态，由迁移器维护 |
-| `game_order` | SDK Core 订单登记、支付状态、发货通知及失败补偿；与配置表同属 `config_center` |
+| 新建空的 `config_center` | [config-center/db/sql/initialize.sql](../config-center/db/sql/initialize.sql) |
+| 已有权威库，只缺 `game_order` | [config-center/db/sql/add_game_order.sql](../config-center/db/sql/add_game_order.sql) |
+| 新建空的 `config_access` | [config-center-access/db/sql/initialize.sql](../config-center-access/db/sql/initialize.sql) |
 
-### 关键约束
+不得对已有配置数据的库再次执行 `initialize.sql`。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。SQL 不包含 `DROP TABLE` 或自动重置历史数据的逻辑。
 
-- `config_node.node_type` 仅支持 `game` / `region` / `server_group`。大区 `env_type` 仅支持 `test` / `review` / `prod`，旧数据可为 null。
-- 节点不保存 `parent_id`；根据节点类型使用 `game_id` 与 `region_id`。`config` 为 MySQL JSON。
-- `config_channel_app.code` **在所有游戏之间全局唯一**。`prod_server_group_id`、`test_server_group_id`、`review_server_group_id` 各为可空外键，一个 AppID 每环境至多一个区服组；绑定的环境与游戏归属还必须通过服务端校验。
-- 渠道应用仅有一份共享 `config`；已经移除历史 `config_channel_app_binding` 运行态表。
-- 只有三级节点变更会推进同步 revision；渠道应用变更不会被接入端的节点增量同步传播。
-
-## 权威库初始化（仅新建空库）
-
-要求 MySQL 8.0+。执行独立命令 `cmd/migrate`，当前**基线版本是 V11，最新版本是 V12**：
+## 本地 MySQL 示例
 
 ```sql
 CREATE DATABASE IF NOT EXISTS config_center
   CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS config_access
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 ```
+
+**只对新建空库执行初始化：**
 
 ```powershell
-cd config-center
-Copy-Item configs/config.yaml configs/config-dev.yaml
-# 在 configs/config-dev.yaml 中填写 database.dsn
-go run ./cmd/migrate -config configs/config-dev.yaml
-go run ./cmd/config-center -config configs/config-dev.yaml
+mysql -u root -p config_center < config-center/db/sql/initialize.sql
+mysql -u root -p config_access < config-center-access/db/sql/initialize.sql
 ```
 
-校验：
+上面两行采用 shell 输入重定向，适用于 CMD/bash；PowerShell 可直接在 Navicat、DataGrip 等数据库工具中执行 SQL，或从 CMD 调用。
+
+**已有 config_center 库且缺少订单表时，只执行：**
 
 ```sql
-SELECT version, dirty
-FROM config_schema_migrations
-WHERE id = 1;
+-- 先核对订单表是否已存在
+SHOW TABLES FROM config_center LIKE 'game_order';
 ```
 
-初始化成功应为 `version=12`、`dirty=0`（新空库按顺序执行 V11→V12）。应用启动只读验证结构，**不执行 DDL**。集群部署期间迁移仅执行一次，不能让各实例在启动时并发迁移。
+检查后在数据库工具中运行 `config-center/db/sql/add_game_order.sql`。该 SQL 只创建 `game_order`，不会改动配置表及历史业务数据。若表已经存在，不要重复运行，应先对比字段、索引和数据。
 
-## 已有库与后续升级
-
-- **已有 V11 库：** 在备份并协调停写后，使用 `config-center/cmd/migrate` 自动升级到 V12，保留配置数据，仅新增 `game_order` 表；升级后的新程序要求 V12。
-- **已有 V1～V10 权威库：** 当前 CLI 不支持直接跨越基线升级。先备份，再使用基线重构前的旧版迁移工具升级至 V11，确认成功后更换新程序。
-- **非空但没有迁移记录：** 新迁移器会拒绝“认领”该库。不得删除表、伪造版本、修改 dirty 值来绕过检查。
-- **未来 V13+：** 在 `config-center/internal/migration/sql/` 增加增量 SQL，并更新 `migration.go` 中的版本定义和升级注册；升级前执行备份、停写与测试。
-- **曾手工执行旧版 sdk-core V1 建表脚本：** V12 会在写入 dirty 前拒绝已有 `game_order` 表。必须先核对真实列/索引、数据与迁移状态，备份并制定人工迁移方案；不要直接删表、重置迁移记录或使用 `CREATE TABLE IF NOT EXISTS` 掩盖结构差异。
-
-MySQL DDL 不保证事务回滚。遇到 `dirty=1` 或中途失败，先核对已执行的 DDL 与备份，恢复到一致状态，再由人工确认后重试。**不要**直接删除 `config_schema_migrations` 或手工执行新库 `schema.sql` 覆盖已有库。
-
-## SDK Core 的单连接池与权限
-
-SDK Core **只使用 `database.dsn`**，配置查询和订单操作共享一个 `*sql.DB` 连接池，
-目标为同一个 `config_center` 数据库。订单登记、支付回调和发货补偿 Worker 默认随 SDK Core 启动，需要 V12 `game_order` 表和相应的表级权限；平台 v1 未完成可信支付认证，仍不可确认支付。
-
-如需启用订单，建议使用 `sdk_core` 专用 MySQL 账号，仅授予下列表级权限（账号须先创建）：
+执行后核对：
 
 ```sql
-GRANT SELECT ON config_center.config_node TO 'sdk_core'@'%';
-GRANT SELECT ON config_center.config_channel_app TO 'sdk_core'@'%';
-GRANT SELECT, INSERT, UPDATE ON config_center.game_order TO 'sdk_core'@'%';
+SHOW TABLES FROM config_center LIKE 'game_order';
+SHOW CREATE TABLE config_center.game_order;
+SELECT COUNT(*) FROM config_center.config_node;
 ```
 
-生产需把 `'%'` 收紧为实际源地址范围。不可授予 `config_node`、`config_channel_app` 的写权限，
-也不应授予 `CREATE` / `ALTER` / `DROP` 等 DDL 权限。
-关闭订单功能时，账号可以只拥有配置表 SELECT；开启前需要完成 V12 迁移、权限配置和平台支付安全评审。
-旧的 `orderDatabase` 配置与 `SDK_CORE_ORDER_DB_DSN` 不再使用。
+## 权威库的业务表
 
-## 接入端副本：config_access
+- `config_node`：游戏、大区、区服组三级节点；`region.env_type` 为 `prod/test/review`
+- `config_channel_app`：全局唯一 AppID、共享 JSON 配置、三环境绑定
+- `config_revision`、`config_node_change_log`：同步游标和变更日志
+- `config_subscriber`、`config_subscriber_delivery_state`：Webhook 订阅者和投递状态
+- `game_order`：SDK Core 充值订单、支付状态、通知租约和补偿
 
-该库和权威库**必须分开**，只有 `config_node` 与 `config_sync_state` 两张运行态表；副本基线为 **V6**，不存储渠道应用或订阅者。
+`config_center` 的配置表与订单表使用同一个数据库。SDK Core 只使用一个 `database.dsn` 连接池；建议配置表只授予 SELECT、订单表授予 SELECT/INSERT/UPDATE，运行账号不授予 DDL。
 
-- 首次启动连接**完全空的** `config_access` 库时，接入端可自动建立副本表并从权威库拉取全量快照。
-- 已存在符合 V6 结构的副本只做结构检查，增量游标保留。
-- 旧 V1～V5 副本必须先用历史迁移脚本升级；如果明确不需要旧缓存，可以在备份并确认影响后**另建空的副本库**重新同步，切勿直接对有数据的库运行基线 SQL。
+## 旧数据库兼容与注意事项
 
-## 历史归档与清理
-
-历史 V4/V6 归档表可能仍在旧库中，不属于 V11 新库基线。缺失这些归档表不应影响现行服务，但其数据可能具有审计价值。是否删除需先单独备份、验证可恢复与行数，再由管理员人工清理；迁移器不得自动清除历史归档。
-
-生产建议：权威库定期备份并演练恢复，SDK Core 对配置表只读、对订单表最小读写；数据库结构迁移与可执行程序回滚必须分别设计。
+- 旧的 `config_schema_migrations` 属于历史版本记录，**新程序不再依赖或维护它**；不要为消除旧版本号手工修改、清空或删除它。
+- 历史 V1～V10 库或旧接入端 V1～V5 副本若结构不兼容，不可直接覆盖全量初始化脚本；先备份并制定升级 SQL。
+- MySQL DDL 会隐式提交，失败时不能假定事务回滚。应检查实际执行到哪一条 SQL，再制定恢复步骤。<Cite ref="turn492931search1"/>
+- 接入端副本 `config_access` 独立于权威库，只保存三级节点及同步游标。首次全量拉取由接入服务在表结构就绪后完成，不再自动建表。
+- 生产环境继续控制 `/api/config/**` 的访问权限，保护 `gameSecret` 和其他原始配置密钥。
