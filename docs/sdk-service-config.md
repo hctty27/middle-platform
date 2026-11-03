@@ -2,7 +2,7 @@
 
 ## 设计范围
 
-仅增加 SDK 服务定义和按渠道包、环境的功能配置，不实现事件上报、角色查询等具体业务接口，不影响已有订单登记、支付回调与发货补偿。
+提供 SDK 全局和渠道环境开关。当前已接入渠道包事件上报；角色查询等其他业务仍按需实现。不影响订单登记、支付回调与发货补偿。
 
 - `sdk_service`：服务目录，唯一编码 `code`，全局总开关 `enabled`。
 - `sdk_service_channel`：通过 `channel_app_id` 关联 `config_channel_app.id`，按 `prod/test/review` 保存 `enabled` 和独立 `config` JSON 对象。
@@ -38,28 +38,21 @@ mysql -u <user> -p config_center < config-center/db/sql/add_sdk_services.sql
 - 左侧导航的「服务管理」：全局目录和总开关。
 - 「渠道应用」详情的「服务配置」：按测试、正式、提审环境维护对应开关与 JSON 扩展配置。
 
-## 事件上报预留配置
+## 渠道包事件上报
 
-只有实现事件上报业务后，下列配置才有运行时效果：
+事件上报入口为 `POST /api/core/{env}/events`，通过请求头 `x-app-id` 识别渠道包。游戏使用所属游戏 `gameSecret` 验签，Core 使用渠道包 `appSecret` 重新生成平台签名，向固定的 `/report/event` 同步转发。
 
-```json
-{
-  "defaultMode": "direct",
-  "rules": {
-    "login": "direct",
-    "role_create": "durable",
-    "chat": "direct"
-  }
-}
-```
+**只有两层开关**：`sdk_service.code=event_report` 全局开启，且 `sdk_service_channel` 对应渠道包及环境的记录 `enabled=1` 时才转发；未设置记录时默认关闭。
 
-`direct` 代表不持久化、直接转发；`durable` 代表持久化后异步转发。当前仅存储 JSON 配置，不建事件表、不启动事件 Worker。
+事件上报目前不读取 `sdk_service_channel.config` 的任何规则；页面不展示事件级配置，保存开关时配置为 `{}`。不保存事件、不启动异步队列或自动补偿，由游戏服根据结果决定是否重试。
+
+详细请求参数与响应见 [渠道事件上报接入](event-report-integration.md)。
 
 ## 上线顺序
 
 1. 备份数据库，手动执行 SQL 并核对新增表、索引。
 2. 更新配置中心，确认启动校验通过，GET 管理接口正常。
 3. 更新管理前端，配置各环境开关。
-4. 未来接入 SDK Core 业务路由时再调用 `LookupSDKService` 执行控制。
+4. 在 SDK Core 的 YAML 中填写平台事件地址并更新 SDK Core；通过测试环境渠道进行联调。
 
 `sdk_service_channel.config` 不应存放客户端可读的密钥。需要审计全局开关变更时，应在后续管理审计模块中增加操作审计。
