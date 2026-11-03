@@ -38,13 +38,13 @@ func TestObsoleteSwitchesRejected(t *testing.T) {
     }
 }
 
-func TestWebhookAllowedHostsWithoutAdminToggle(t *testing.T) {
-    path:=filepath.Join(t.TempDir(),"config.yaml")
-    data:="database:\n  dsn: test-dsn\nwebhook:\n  allowedHosts:\n    - webhook.example.com\n"
-    if err:=os.WriteFile(path,[]byte(data),0600);err!=nil{t.Fatal(err)}
-    cfg,err:=LoadFile(path)
-    if err!=nil{t.Fatal(err)}
-    if cfg.AllowedHosts!="webhook.example.com" {
-        t.Fatalf("webhook worker should run independently of admin writes: %+v",cfg)
+func TestRemovedWebhookWhitelistRejected(t *testing.T) {
+    path := filepath.Join(t.TempDir(), "config.yaml")
+    data := "database:\n  dsn: test-dsn\nwebhook:\n  allowedHosts: [localhost]\n"
+    if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+        t.Fatal(err)
+    }
+    if _, err := LoadFile(path); err == nil {
+        t.Fatal("obsolete webhook.allowedHosts should be rejected")
     }
 }
