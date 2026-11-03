@@ -53,11 +53,22 @@ func validSDKEnv(env string) bool {
 // SDKChannelServices 返回整个服务目录，其中无渠道覆盖记录的服务默认关闭。
 func (s *Store) SDKChannelServices(ctx context.Context, appID int64, env string) ([]model.SDKChannelService, error) {
     if appID <= 0 || !validSDKEnv(env) { return nil, ErrInvalid }
-    var exists int64
-    if err := s.DB.QueryRowContext(ctx,
-        "SELECT id FROM config_channel_app WHERE id=?", appID).Scan(&exists); err != nil {
+    var appStatus int
+    var groupStatus, regionStatus sql.NullInt64
+    if err := s.DB.QueryRowContext(ctx, `
+SELECT app.status,sg.status,r.status FROM config_channel_app app
+LEFT JOIN config_node sg ON sg.id=CASE ?
+  WHEN 'prod' THEN app.prod_server_group_id
+  WHEN 'test' THEN app.test_server_group_id
+  WHEN 'review' THEN app.review_server_group_id
+END AND sg.node_type='server_group' AND sg.game_id=app.game_id
+LEFT JOIN config_node r ON r.id=sg.region_id AND r.node_type='region'
+ AND r.game_id=app.game_id AND r.env_type=?
+WHERE app.id=?`, env, env, appID).Scan(&appStatus,&groupStatus,&regionStatus); err != nil {
         return nil, err
     }
+    bindingEnabled := appStatus == 1 && groupStatus.Valid && regionStatus.Valid &&
+        groupStatus.Int64 == 1 && regionStatus.Int64 == 1
     rows, err := s.DB.QueryContext(ctx, `
 SELECT service.id,service.code,service.name,service.description,service.enabled,
        COALESCE(channel.enabled,0),COALESCE(channel.config,JSON_OBJECT())
@@ -76,7 +87,7 @@ ORDER BY service.sort_order,service.id`, appID, env)
             &globalEnabled, &channelEnabled, &config); err != nil { return nil, err }
         item.GlobalEnabled = globalEnabled == 1
         item.Enabled = channelEnabled == 1
-        item.EffectiveEnabled = item.GlobalEnabled && item.Enabled
+        item.EffectiveEnabled = item.GlobalEnabled && item.Enabled && bindingEnabled
         item.Config = append(json.RawMessage(nil), config...)
         items = append(items, item)
     }
@@ -99,18 +110,4 @@ VALUES (?,?,?,?,?)
 ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),config=VALUES(config),updated_at=UTC_TIMESTAMP(3)`,
         appID, serviceID, env, enabled, string(config))
     return databaseError(err)
-}
-
-// SDKServiceChannelAllowed 供后续 SDK Core 业务使用，管理端不把开关当作权限验证。
-func (s *Store) SDKServiceChannelAllowed(ctx context.Context, appCode, env, serviceCode string) (bool, error) {
-    if appCode == "" || serviceCode == "" || !validSDKEnv(env) { return false, ErrInvalid }
-    var enabled int
-    err := s.DB.QueryRowContext(ctx, `
-SELECT IF(service.enabled=1 AND channel.enabled=1 AND app.status=1,1,0)
-FROM config_channel_app app
-JOIN sdk_service_channel channel ON channel.channel_app_id=app.id AND channel.env=?
-JOIN sdk_service service ON service.id=channel.service_id AND service.code=?
-WHERE app.code=?`,env,serviceCode,appCode).Scan(&enabled)
-    if err == sql.ErrNoRows { return false,nil }
-    return enabled==1,err
 }
