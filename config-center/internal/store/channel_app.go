@@ -57,7 +57,7 @@ func (s *Store) ChannelApps(ctx context.Context, gameID int64) ([]model.ChannelA
 }
 
 func validApp(name string,status *int,config string,remark *string) error {
-	if service.ValidateNode(name,status,config,remark)!=nil || !validObject(config) { return ErrInvalid }
+	if service.ValidateNode(name,status,config,remark)!=nil || !validObject(config) || model.ValidateBusinessConfig("channel_app", config)!=nil { return ErrInvalid }
 	return nil
 }
 
