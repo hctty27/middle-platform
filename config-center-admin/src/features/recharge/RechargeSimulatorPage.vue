@@ -79,8 +79,10 @@ async function register() {
     const body = assertOrder()
     const rawBody = JSON.stringify(body)
     const timestamp = String(Math.floor(Date.now() / 1000))
-    const signature = await signRegistration(gameSecret.value, rawBody, endpoint.env ?? '', endpoint.appid, timestamp)
-    const headers = { 'X-Game-Timestamp': timestamp, 'X-Game-Signature': signature }
+    const nonce = generateNonce()
+    const signature = await signRegistration(gameSecret.value, rawBody, endpoint.env ?? '', endpoint.appid, timestamp, nonce)
+    const headers = { 'x-app-id': endpoint.appid, 'x-env': endpoint.env ?? '', 'x-timestamp': timestamp,
+      'x-nonce': nonce, 'x-signature': signature }
     const result = await request(endpoint.url, headers, rawBody)
     registerResult.value = result
     if (result.status === 200) {
@@ -172,7 +174,7 @@ async function confirmCallback() {
             <div class="recharge-help">兼容旧版 32 字节标准 Base64 密钥；其他字符串直接作为 UTF-8 参与签名。</div>
             <div class="recharge-actions">
               <el-button type="primary" native-type="submit" :loading="registerSubmitting">生成签名并发送登记</el-button>
-              <span class="recharge-help">自动填写 X-Game-Timestamp / X-Game-Signature</span>
+              <span class="recharge-help">自动填写 x-app-id / x-env / x-timestamp / x-nonce / x-signature</span>
             </div>
           </el-form>
         </el-tab-pane>

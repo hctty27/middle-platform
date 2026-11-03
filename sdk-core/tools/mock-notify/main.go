@@ -59,15 +59,15 @@ func newHandler(mode responseMode, logger *log.Logger) http.Handler {
 			return
 		}
 
-		nonce := r.Header.Get("X-SDK-Nonce")
+		nonce := r.Header.Get("x-nonce")
 		rawNonce, err := hex.DecodeString(nonce)
 		if err != nil || len(rawNonce) != 8 || strings.ToLower(nonce) != nonce {
-			http.Error(w, "X-SDK-Nonce 格式不合法", http.StatusBadRequest)
+			http.Error(w, "x-nonce 格式不合法", http.StatusBadRequest)
 			return
 		}
 
-		logger.Printf("收到通知 appid=%s timestamp=%s nonce=%s body=%s",
-			r.Header.Get("X-SDK-AppID"), r.Header.Get("X-SDK-Timestamp"), nonce, body)
+		logger.Printf("收到通知 appid=%s env=%s timestamp=%s nonce=%s body=%s",
+			r.Header.Get("x-app-id"), r.Header.Get("x-env"), r.Header.Get("x-timestamp"), nonce, body)
 
 		if mode == modeFail {
 			logger.Printf("模拟失败：返回 HTTP 500，触发 SDK Core 补偿重试")
@@ -75,7 +75,7 @@ func newHandler(mode responseMode, logger *log.Logger) http.Handler {
 			return
 		}
 
-		// SDK Core 只接受 HTTP 200 且 Body 与 X-SDK-Nonce 完全一致的确认响应。
+		// SDK Core 只接受 HTTP 200 且 Body 与 x-nonce 完全一致的确认响应。
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, nonce)

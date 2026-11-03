@@ -14,8 +14,8 @@ func TestMockNotifySuccess(t *testing.T) {
 	handler := newHandler(modeSuccess, log.New(io.Discard, "", 0))
 	request := httptest.NewRequest(http.MethodPost, "/pay/notify",
 		strings.NewReader("{\"order_no\":\"P100\",\"amount\":600}"))
-	request.Header.Set("X-SDK-Nonce", "0123456789abcdef")
-	request.Header.Set("X-SDK-AppID", "h0200")
+	request.Header.Set("x-nonce", "0123456789abcdef")
+	request.Header.Set("x-app-id", "h0200")
 
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -28,7 +28,7 @@ func TestMockNotifySuccess(t *testing.T) {
 func TestMockNotifyFailMode(t *testing.T) {
 	handler := newHandler(modeFail, log.New(io.Discard, "", 0))
 	request := httptest.NewRequest(http.MethodPost, "/pay/notify", strings.NewReader("{}"))
-	request.Header.Set("X-SDK-Nonce", "0123456789abcdef")
+	request.Header.Set("x-nonce", "0123456789abcdef")
 
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -59,7 +59,7 @@ func TestMockNotifyRejectsBadRequests(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			req.Header.Set("X-SDK-Nonce", tc.nonce)
+			req.Header.Set("x-nonce", tc.nonce)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			if rec.Code != tc.status {
