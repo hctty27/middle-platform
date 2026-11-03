@@ -23,7 +23,7 @@ CREATE DATABASE IF NOT EXISTS config_access
 
 **只对新建空库执行初始化：**
 
-```powershell
+```bat
 mysql -u root -p config_center < config-center/db/sql/initialize.sql
 mysql -u root -p config_access < config-center-access/db/sql/initialize.sql
 ```
@@ -61,6 +61,6 @@ SELECT COUNT(*) FROM config_center.config_node;
 
 - 旧的 `config_schema_migrations` 属于历史版本记录，**新程序不再依赖或维护它**；不要为消除旧版本号手工修改、清空或删除它。
 - 历史 V1～V10 库或旧接入端 V1～V5 副本若结构不兼容，不可直接覆盖全量初始化脚本；先备份并制定升级 SQL。
-- MySQL DDL 会隐式提交，失败时不能假定事务回滚。应检查实际执行到哪一条 SQL，再制定恢复步骤。<Cite ref="turn492931search1"/>
+- MySQL DDL 会隐式提交，失败时不能假定事务回滚。应检查实际执行到哪一条 SQL，再制定恢复步骤。
 - 接入端副本 `config_access` 独立于权威库，只保存三级节点及同步游标。首次全量拉取由接入服务在表结构就绪后完成，不再自动建表。
 - 生产环境继续控制 `/api/config/**` 的访问权限，保护 `gameSecret` 和其他原始配置密钥。
