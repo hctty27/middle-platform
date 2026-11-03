@@ -47,7 +47,7 @@ func Derive(secret []byte,purpose string)([]byte,error) {
     if purpose!=PurposeOrderRegister&&purpose!=PurposePaymentNotify {
         return nil,errors.New("unsupported key purpose")
     }
-    return hkdf.Key(sha256.New,secret,nil,"middle-platform:sdk-core:"+purpose+":v1",keyLength)
+    return hkdf.Key(sha256.New,secret,nil,"middle-platform:sdk-core:"+purpose+":v2",keyLength)
 }
 
 // VerifyRegistration 校验签名、原始请求体和五分钟时钟偏差；权限从渠道包所属游戏绑定确定。
@@ -63,7 +63,10 @@ func VerifyRegistration(r *http.Request,body []byte,secret []byte)error{
     key,err:=Derive(secret,PurposeOrderRegister)
     if err!=nil{return ErrUnauthorized}
     sum:=sha256.Sum256(body)
-    payload:=fmt.Sprintf("%s\n%s\n%s\n%x",r.Method,r.URL.EscapedPath(),ts,sum)
+    // 使用业务标识而非代理路径，避免 Nginx 重写导致签名不一致，同时阻断跨环境和跨 AppID 重放。
+    env,appid:=r.PathValue("env"),r.PathValue("appid")
+    if env==""||appid=="" {return ErrUnauthorized}
+    payload:=fmt.Sprintf("%s\n%s\n%s\n%s\n%x",r.Method,env,appid,ts,sum)
     mac:=hmac.New(sha256.New,key)
     _,_=mac.Write([]byte(payload))
     if !hmac.Equal(supplied,mac.Sum(nil)){return ErrUnauthorized}
