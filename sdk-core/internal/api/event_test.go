@@ -1,7 +1,6 @@
 package api
 
 import (
-    "context"
     "encoding/json"
     "errors"
     "net/http"
@@ -91,4 +90,3 @@ func TestNoEventRouteInLegacyRouter(t *testing.T) {
         t.Fatalf("旧 Router 意外注册事件: %d", response.Code)
     }
 }
-var _ = context.Background
