@@ -36,3 +36,15 @@ func TestLegacyOrderDatabaseConfigurationRejected(t *testing.T) {
     _,err:=Load(path)
     if err==nil||!strings.Contains(err.Error(),"orderDatabase"){t.Fatalf("expected obsolete orderDatabase rejection, got %v",err)}
 }
+
+func TestPlatformEventReportURLConfiguration(t *testing.T) {
+    path := filepath.Join(t.TempDir(), "config.yaml")
+    raw := "database:\n  dsn: 'sdk_core:pass@tcp(127.0.0.1:3306)/config_center'\n" +
+        "platform:\n  eventReportURL: 'https://openapiv3.qk6.top/report/event'\n"
+    if err := os.WriteFile(path, []byte(raw), 0600); err != nil { t.Fatal(err) }
+    cfg, err := Load(path)
+    if err != nil { t.Fatal(err) }
+    if cfg.Platform.EventReportURL != "https://openapiv3.qk6.top/report/event" {
+        t.Fatalf("eventReportURL 未加载: %s", cfg.Platform.EventReportURL)
+    }
+}
