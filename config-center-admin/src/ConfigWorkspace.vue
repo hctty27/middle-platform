@@ -5,6 +5,7 @@ import { ref, watch } from 'vue'
 import type { LoadFunction } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { nodeApi } from './api/nodeApi'
+import { apiErrorMessage } from './api/http'
 import { currentGameId, focusNodeId, focusNodeRequest } from './app/gameContext'
 import type { NodeType, NodeMatch, NodeRecord, RegionEnvType } from './features/nodes/types'
 import { regionEnvLabels } from './features/nodes/types'
@@ -52,7 +53,7 @@ async function saveAndRefresh() {
     try {
       const result = await nodeApi.getNode(id)
       if (sequence === nodeDetailSequence) nodeDetail.value = result.data
-    } catch { ElMessage.warning('已保存，但配置预览刷新失败') }
+    } catch (error) { ElMessage.warning(apiErrorMessage(error, '已保存，但配置预览刷新失败')) }
   }
 }
 
@@ -62,7 +63,7 @@ const loadTreeScoped: LoadFunction = (node, resolve, reject) => {
   if (node.level > 0) return loadTree(node, resolve, reject)
   if (!props.gameId) { resolve([]); return }
   void nodeApi.getTreeChildren(0).then(response => resolve(response.data.filter(game => game.id === props.gameId)))
-    .catch(() => { ElMessage.error('加载游戏目录失败'); reject() })
+    .catch((error) => { ElMessage.error(apiErrorMessage(error, '加载游戏目录失败')); reject() })
 }
 function openSearchMatch(match: NodeMatch) {
   const gameId = match.path[0]?.id

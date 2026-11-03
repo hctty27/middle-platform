@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { api } from '../../api/http'
+import { api, apiErrorMessage } from '../../api/http'
 import BusinessConfigEditor from './components/BusinessConfigEditor.vue'
 import { validateBusinessConfig } from './businessConfig'
 import type { RegionEnvType } from './types'
@@ -54,7 +54,7 @@ async function loadApps() {
     if (request !== sequence) return
     apps.value = data
     active.value = data.find(item => item.id === active.value?.id) ?? data[0] ?? null
-  } catch { if (request === sequence) ElMessage.error('加载渠道应用失败') }
+  } catch (error) { if (request === sequence) ElMessage.error(apiErrorMessage(error, '加载渠道应用失败')) }
   finally { if (request === sequence) loading.value = false }
 }
 function groupLabel(group: GroupOption): string {
@@ -70,7 +70,7 @@ async function loadOptions(env: RegionEnvType, keyword = '') {
       params: { gameId: props.gameId, envType: env, keyword }
     })
     if (request === groupSequences[env]) groupOptions[env] = data
-  } catch { if (request === groupSequences[env]) ElMessage.error('加载区服组选项失败') }
+  } catch (error) { if (request === groupSequences[env]) ElMessage.error(apiErrorMessage(error, '加载区服组选项失败')) }
   finally { if (request === groupSequences[env]) groupLoading[env] = false }
 }
 function openEditor(app?: ChannelApp) {
@@ -97,7 +97,7 @@ async function saveApp() {
     await loadApps()
     emit('changed')
     ElMessage.success('渠道应用已保存')
-  } catch { ElMessage.error('保存失败：渠道 Code 在所有游戏中必须唯一，请检查区服组所属游戏及环境') }
+  } catch (error) { ElMessage.error(apiErrorMessage(error, '保存渠道应用失败')) }
   finally { saving.value = false }
 }
 async function deleteApp(app: ChannelApp) {
@@ -109,7 +109,7 @@ async function deleteApp(app: ChannelApp) {
     await loadApps()
     emit('changed')
     ElMessage.success('渠道应用已删除')
-  } catch { ElMessage.error('删除失败，请先解除区服组绑定') }
+  } catch (error) { ElMessage.error(apiErrorMessage(error, '删除渠道应用失败')) }
 }
 function selectedOption(env: RegionEnvType, id: number | null): GroupOption[] {
   if (id === null || groupOptions[env].some(item => item.id === id)) return []

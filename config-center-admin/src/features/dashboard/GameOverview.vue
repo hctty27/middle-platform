@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { nodeApi } from '../../api/nodeApi'
+import { apiErrorMessage } from '../../api/http'
 import { focusNodeId, focusNodeRequest } from '../../app/gameContext'
 import { regionEnvLabels } from '../nodes/types'
 import type { NodeSummary, RegionEnvType } from '../nodes/types'
@@ -30,8 +31,8 @@ async function load() {
       nodeApi.getChildren({ parentId: props.gameId, page: 1, size: 1, keyword: '' })
     ])
     if (id === requestId) { regions.value = tree.data; total.value = page.data.total }
-  } catch {
-    if (id === requestId) ElMessage.error('加载大区概览失败')
+  } catch (error) {
+    if (id === requestId) ElMessage.error(apiErrorMessage(error, '加载大区概览失败'))
   } finally {
     if (id === requestId) busy.value = false
   }

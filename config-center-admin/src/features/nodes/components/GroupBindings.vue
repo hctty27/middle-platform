@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { api } from '../../../api/http'
+import { api, apiErrorMessage } from '../../../api/http'
 
 interface GroupApp {
   channelAppId: number
@@ -21,7 +21,7 @@ async function reload() {
   try {
     const { data } = await api.get<GroupApp[]>(`/admin/server-groups/${props.groupId}/channel-apps`)
     if (request === sequence) apps.value = data
-  } catch { if (request === sequence) ElMessage.error('查询关联的渠道应用失败') }
+  } catch (error) { if (request === sequence) ElMessage.error(apiErrorMessage(error, '查询关联的渠道应用失败')) }
   finally { if (request === sequence) loading.value = false }
 }
 watch(() => [props.groupId, props.gameId], () => { void reload() }, { immediate: true })
