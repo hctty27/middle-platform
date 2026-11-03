@@ -18,6 +18,7 @@ function envTagType(env: RegionEnvType | null | undefined): 'success' | 'warning
 }
 import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
+import BusinessConfigEditor from './features/nodes/components/BusinessConfigEditor.vue'
 import GroupBindings from './features/nodes/components/GroupBindings.vue'
 
 const props = defineProps<{ gameId: number | null }>()
@@ -29,9 +30,6 @@ const nodeDetail = ref<NodeRecord | null>(null)
 const nodeDetailLoading = ref(false)
 let nodeDetailSequence = 0
 
-function pretty(value: string) {
-  try { return JSON.stringify(JSON.parse(value), null, 2) } catch { return value }
-}
 watch(() => selected.value?.id, async id => {
   const sequence = ++nodeDetailSequence
   nodeDetail.value = null
@@ -45,6 +43,18 @@ watch(() => selected.value?.id, async id => {
     if (sequence === nodeDetailSequence) nodeDetailLoading.value = false
   }
 }, { immediate: true })
+
+async function saveAndRefresh() {
+  await save()
+  if (!drawerVisible.value && selected.value) {
+    const id = selected.value.id
+    const sequence = ++nodeDetailSequence
+    try {
+      const result = await nodeApi.getNode(id)
+      if (sequence === nodeDetailSequence) nodeDetail.value = result.data
+    } catch { ElMessage.warning('已保存，但配置预览刷新失败') }
+  }
+}
 
 // 游戏切换与概览页跳转均直接定位目标节点。
 // 当前工作台仅显示选中游戏的三级目录，跨游戏搜索仍可定位。
@@ -153,7 +163,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
         </div>
         <el-tabs v-model="activeTab" class="node-detail-tabs">
           <el-tab-pane :label="selected.nodeType === 'game' ? '大区列表' : selected.nodeType === 'region' ? '区服组列表' : '渠道绑定'" name="list" />
-          <el-tab-pane label="JSON 配置" name="config" />
+          <el-tab-pane label="业务配置" name="config" />
           <el-tab-pane label="基本信息" name="info" />
         </el-tabs>
         <div v-if="activeTab === 'list'" class="node-child-pane">
@@ -207,10 +217,10 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
 
         </div>
         <div v-else-if="activeTab === 'config'" class="node-detail-content" v-loading="nodeDetailLoading">
-          <div class="section-heading"><div><h3>当前节点 JSON 配置</h3>
-            <p class="muted">此处显示节点自身配置，不包含渠道应用覆盖配置。</p></div>
+          <div class="section-heading"><div><h3>当前节点业务配置</h3>
+            <p class="muted">直接展示本节点的业务字段，原始 JSON 收起在高级区域。</p></div>
             <el-button @click="openEditor(selected)">编辑配置</el-button></div>
-          <pre class="config-preview">{{ nodeDetail ? pretty(nodeDetail.config) : '{}' }}</pre>
+          <BusinessConfigEditor :model-value="nodeDetail?.config ?? '{}'" :node-type="selected.nodeType" readonly />
         </div>
         <div v-else class="node-detail-content" v-loading="nodeDetailLoading">
           <el-descriptions :column="1" border>
@@ -229,6 +239,6 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
     <NodeEditor v-model:visible="drawerVisible" :title="editorTitle"
                 :detail-loading="detailLoading" :saving="saving" :creating="creating" :env-type-locked="envTypeLocked"
                 :form="form" :labels="labels" :before-close="beforeDrawerClose"
-                @cancel="closeEditor" @save="save" />
+                @cancel="closeEditor" @save="saveAndRefresh" />
   </main>
 </template>

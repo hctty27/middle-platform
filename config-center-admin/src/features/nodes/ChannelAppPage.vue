@@ -2,7 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../../api/http'
-import JsonConfigEditor from '../../components/JsonConfigEditor.vue'
+import BusinessConfigEditor from './components/BusinessConfigEditor.vue'
+import { validateBusinessConfig } from './businessConfig'
 import type { RegionEnvType } from './types'
 
 type GroupField = 'prodServerGroupId' | 'testServerGroupId' | 'reviewServerGroupId'
@@ -41,7 +42,7 @@ function pretty(value: string): string {
   try { return JSON.stringify(JSON.parse(value), null, 2) } catch { return value }
 }
 function validJSON(value: string): boolean {
-  try { const obj: unknown = JSON.parse(value); return obj !== null && typeof obj === 'object' && !Array.isArray(obj) }
+  try { validateBusinessConfig('channel_app', value); return true }
   catch { return false }
 }
 async function loadApps() {
@@ -167,11 +168,11 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
                 </el-descriptions-item>
               </el-descriptions>
             </el-tab-pane>
-            <el-tab-pane label="共享配置">
-              <div class="section-heading"><div><h3>共享 JSON 配置</h3>
-                <p class="muted">三个环境读取同一份 JSON，不存在独立覆盖配置。</p></div>
+            <el-tab-pane label="业务配置">
+              <div class="section-heading"><div><h3>共享业务配置</h3>
+                <p class="muted">三个环境使用同一份 JSON 配置，独立字段直接展示在下方。</p></div>
                 <el-button @click="openEditor(active)">修改配置</el-button></div>
-              <pre class="config-preview">{{ pretty(active.config) }}</pre>
+              <BusinessConfigEditor :model-value="active.config" node-type="channel_app" readonly />
             </el-tab-pane>
             <el-tab-pane label="应用信息">
               <el-descriptions :column="1" border>
@@ -199,7 +200,8 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
                        :key="group.id" :value="group.id" :label="groupLabel(group)" />
           </el-select>
         </el-form-item>
-        <el-form-item label="共享配置（JSON 对象）" required><JsonConfigEditor v-model="form.config" :rows="12" /></el-form-item>
+        <div class="section-heading"><h3>共享业务配置</h3></div>
+        <BusinessConfigEditor v-model="form.config" node-type="channel_app" />
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="visible = false">取消</el-button>
