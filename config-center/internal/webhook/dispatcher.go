@@ -33,17 +33,14 @@ type Delivery struct {
 type Dispatcher struct {
 	DB           *sql.DB
 	Client       *http.Client
-	AllowedHosts string
 	BatchSize    int
 	Concurrency  int
 }
 
-// NewDispatcher 创建禁用重定向并检查目标地址的回调客户端。
-// NewDispatcher 创建带白名单限制的回调发送器，不立即启动后台任务。
-func NewDispatcher(db *sql.DB, allowedHosts string) *Dispatcher {
-	if allowedHosts == "" { allowedHosts = "localhost,127.0.0.1" }
+// NewDispatcher 创建不跟随重定向并校验连接目标的回调客户端。
+func NewDispatcher(db *sql.DB) *Dispatcher {
 	transport := &http.Transport{
-		DialContext: secureWebhookDial(allowedHosts, nil),
+		DialContext: secureWebhookDial(nil),
 		MaxIdleConns: 20,
 		MaxIdleConnsPerHost: 4,
 		IdleConnTimeout: 30 * time.Second,
@@ -55,7 +52,6 @@ func NewDispatcher(db *sql.DB, allowedHosts string) *Dispatcher {
 			Transport: transport,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		AllowedHosts: allowedHosts,
 		BatchSize: 16,
 		Concurrency: 4,
 	}
@@ -98,7 +94,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 // send 计算 HMAC 签名并发出回调通知。
 // send 校验回调目标并发送签名通知，不把配置内容直接传给接入端。
 func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
-	if err := ValidateCallback(job.URL, d.AllowedHosts); err != nil {
+	if err := ValidateCallback(job.URL); err != nil {
 		return fmt.Errorf("unsafe webhook destination: %w", err)
 	}
 	timestamp := time.Now().Unix()
@@ -198,7 +194,7 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 // Run 定时领取并发送回调，响应优雅停机。
 // Run 循环处理待投递任务，并在上下文取消后停止。
 func (d *Dispatcher) Run(ctx context.Context) {
-	if d.Client == nil { d.Client = NewDispatcher(d.DB, d.AllowedHosts).Client }
+	if d.Client == nil { d.Client = NewDispatcher(d.DB).Client }
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	for {
