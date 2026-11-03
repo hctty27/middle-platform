@@ -2,7 +2,7 @@
 server:
   address: ":8082"
 
-# 配置表只读，game_order 表按需授予读写权限；要求 V12。
+# 配置表只读、game_order 表读写；订单表须提前手动建好。
 database:
   dsn: ""
   maxOpenConns: 20
