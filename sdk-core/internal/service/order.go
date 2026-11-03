@@ -118,9 +118,8 @@ func(s *OrderService) deliver(ctx context.Context,o model.Order)error {
     raw,err:=s.GameSecretReader.LookupGameConfig(sendCtx,o.GameID)
     var key []byte
     if err==nil {
-        var secret []byte
-        secret,err=auth.ParseGameSecret(raw)
-        if err!=nil{err=model.ErrInvalidConfig}else{key,err=auth.Derive(secret,auth.PurposePaymentNotify)}
+        key,err=auth.ParseGameSecret(raw)
+        if err!=nil{err=model.ErrInvalidConfig}
     }
     if err==nil{err=s.Notifier.Send(sendCtx,o,key)}
     commitCtx,commitCancel:=context.WithTimeout(context.Background(),2*time.Second)

@@ -129,13 +129,13 @@ func (c *Client) ValidateTarget(raw string) error {
     return nil
 }
 
-// Send 使用 SDK Core 与游戏间的 HMAC-SHA256，不转发平台密钥。
-// V2 签名由 auth.SignNotification 统一封装，不依赖通知 URL。
+// Send 使用游戏服约定的 MD5 参数签名，不转发平台密钥。
+// 签名由 auth.SignRequest 统一封装，不依赖通知 URL。
 func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     if err := c.ValidateTarget(o.GameNotifyURL); err != nil {
         return err
     }
-    if len(key) != 32 {
+    if len(key) == 0 {
         return errors.New("发货通知签名密钥不合法")
     }
     body, err := json.Marshal(model.PaymentCallback{
@@ -151,7 +151,7 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     }
     nonce := hex.EncodeToString(nonceBytes[:])
     timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-    signature, err := auth.SignNotification(key, o.AppID, timestamp, nonce, body)
+    signature, err := auth.SignRequest(key, auth.OperationPaymentNotify, o.Env, o.AppID, timestamp, nonce, body)
     if err != nil {
         return err
     }
@@ -160,10 +160,11 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
         return err
     }
     req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("X-SDK-AppID", o.AppID)
-    req.Header.Set("X-SDK-Timestamp", timestamp)
-    req.Header.Set("X-SDK-Nonce", nonce)
-    req.Header.Set("X-SDK-Signature", signature)
+    req.Header.Set("x-app-id", o.AppID)
+    req.Header.Set("x-env", o.Env)
+    req.Header.Set("x-timestamp", timestamp)
+    req.Header.Set("x-nonce", nonce)
+    req.Header.Set("x-signature", signature)
     resp, err := c.http.Do(req)
     if err != nil {
         return fmt.Errorf("发货通知请求失败: %w", err)
