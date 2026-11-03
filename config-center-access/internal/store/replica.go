@@ -6,16 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	_ "embed"
 	"strings"
 	"fmt"
 	"time"
 
 	"github.com/hctty27/middle-platform/config-center-access/internal/remote"
 )
-
-//go:embed sql/schema.sql
-var replicaSchema string
 
 // State 与节点副本在同一事务内提交，防止部分同步。
 type State struct {
@@ -41,37 +37,16 @@ type Replica struct{ DB *sql.DB }
 // New 绑定本地副本数据库，不与配置中心的权威库共享写连接。
 func New(db *sql.DB) *Replica { return &Replica{DB: db} }
 
-// EnsureSchema 只初始化全新空库；已有副本仅验证，不自动修改历史业务数据。
-func (s *Replica) EnsureSchema(ctx context.Context) error {
-	var count int
-	if err := s.DB.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()").Scan(&count); err != nil {
-		return err
-	}
-	var hasNode, hasState int
-	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables
-		WHERE table_schema=DATABASE() AND table_name='config_node'`).Scan(&hasNode); err != nil {
-		return err
-	}
-	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables
-		WHERE table_schema=DATABASE() AND table_name='config_sync_state'`).Scan(&hasState); err != nil {
-		return err
-	}
-	if count == 0 {
-		// 对应 schema.sql 中的三条 SQL；失败留下部分表时下次启动会拒绝重建。
-		for _, statement := range strings.Split(replicaSchema, ";") {
-			statement = strings.TrimSpace(statement)
-			if statement == "" {
-				continue
-			}
-			if _, err := s.DB.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("initialize replica schema: %w", err)
-			}
-		}
-	} else if hasNode != 1 || hasState != 1 {
-		return errors.New("replica schema is incomplete or unknown; back up and repair before startup")
-	}
-
+// VerifySchema 只读检查人工创建的副本库，空库或旧结构均明确拒绝启动。
+func (s *Replica) VerifySchema(ctx context.Context) error {
+    var nodeCount,stateCount int
+    if err:=s.DB.QueryRowContext(ctx,
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='config_node'").Scan(&nodeCount);err!=nil{return err}
+    if err:=s.DB.QueryRowContext(ctx,
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='config_sync_state'").Scan(&stateCount);err!=nil{return err}
+    if nodeCount!=1||stateCount!=1 {
+        return errors.New("replica schema missing; manually execute config-center-access/db/sql/initialize.sql in an empty config_access database")
+    }
 	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,env_type,node_type,
 		code,name,status,config,remark,created_at,updated_at FROM config_node LIMIT 0`)
 	if err != nil {

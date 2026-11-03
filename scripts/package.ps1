@@ -93,10 +93,9 @@ try {
     $env:GOARCH = $Arch
     $env:CGO_ENABLED = '0'
 
-    # 三个 Go 服务加迁移工具使用统一的交叉编译参数。
+    # 三个 Go 服务使用统一的交叉编译参数；数据库由人工执行 SQL。
     $targets = @(
         @{ Module = 'config-center';        Command = 'config-center';        Output = 'config-center' },
-        @{ Module = 'config-center';        Command = 'migrate';              Output = 'migrate' },
         @{ Module = 'config-center-access'; Command = 'config-center-access'; Output = 'config-center-access' },
         @{ Module = 'sdk-core';             Command = 'sdk-core';             Output = 'sdk-core' }
     )
@@ -118,6 +117,15 @@ try {
             throw "Missing compiled binary: $outputFile"
         }
     }
+
+    # 发布包携带人工审核的 SQL，不会在安装或运行服务时执行。
+    $sqlDir = Join-Path $stageDir 'sql'
+    $authorityDir = Join-Path $sqlDir 'config-center'
+    $accessDir = Join-Path $sqlDir 'config-center-access'
+    New-Item -ItemType Directory -Force -Path $authorityDir, $accessDir | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/initialize.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_game_order.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center-access/db/sql/initialize.sql') -Destination $accessDir
 
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。
     if (-not $SkipFrontend) {
@@ -143,7 +151,7 @@ try {
         Copy-Item -Path (Join-Path $distDir '*') -Destination $adminDir -Recurse -Force
     }
 
-    # 发布包只包含 bin/ 和可选的 admin/，不附加校验文件或构建说明。
+    # 发布包只包含 bin/、sql/ 和可选的 admin/，不附加校验文件或构建说明。
     # 在本机运行 Go 打包辅助程序，避免 Windows 交叉编译环境阻止 go run。
     $env:GOOS = ([string]$goHost[0]).Trim()
     $env:GOARCH = ([string]$goHost[1]).Trim()
@@ -173,7 +181,7 @@ try {
 
     Write-Host ''
     Write-Host "Package ready: $archivePath"
-    Write-Host 'Archive layout: bin/, admin/ (unless skipped)'
+    Write-Host 'Archive layout: bin/, sql/, admin/ (unless skipped)'
     Write-Host 'All Linux binaries carry 0755 executable permissions.'
 
 }

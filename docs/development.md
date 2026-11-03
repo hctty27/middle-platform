@@ -28,14 +28,14 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 
 修改 `configs/config-dev.yaml` 中的 `database.dsn`，例如 `root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC`。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口没有内建鉴权，必须仅通过可信内网或受保护网关访问，后续新增订阅者无需重启。联调仅需确保 `webhook.allowedHosts` 包含回调实际主机名/IP。
 
-对**空库先迁移，再启动**：
+对**新空库先手动执行 SQL，再启动**：
 
 ```powershell
-go run ./cmd/migrate -config configs/config-dev.yaml
+# 先在数据库工具中执行 config-center/db/sql/initialize.sql（仅新库）
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
-成功后检查 `http://127.0.0.1:8080/health/ready`。若提示 `database migration state missing`，应先核实 DSN 指向的库是否为空，执行独立迁移；不得让启动程序自动建表或删除迁移状态表。
+成功后检查 `http://127.0.0.1:8080/health/ready`。若提示数据库表或字段缺失，先核实 DSN、表结构以及 SQL 是否已手工执行；启动程序不会建表。
 
 ## 2. 接入端（可选）
 
@@ -48,7 +48,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/config-center-access -config configs/config-dev.yaml
 ```
 
-`database.dsn` 指向 `config_access`，`configCenter.url` 通常是 `http://127.0.0.1:8080`，`webhook.secret` 必须是足够长的随机密钥。首次启动**空副本库**可自动建表和拉取全量节点，随后增量同步；旧副本库参见 [数据库文档](database.md)。
+`database.dsn` 指向 `config_access`，`configCenter.url` 通常是 `http://127.0.0.1:8080`，`webhook.secret` 必须是足够长的随机密钥。首次启动前须对空 `config_access` 执行 `config-center-access/db/sql/initialize.sql`，随后全量拉取节点，随后增量同步；旧副本库参见 [数据库文档](database.md)。
 
 在运行中的配置中心注册订阅者（示例密钥需与接入端一致，且管理写接口必须在受保护的网络上启用）；无需重启 Worker：
 
@@ -71,7 +71,7 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/config/admin/subs
 cd sdk-core
 Copy-Item configs/config.yaml configs/config-dev.yaml
 # 只需要 database.dsn，连接 config_center；订单路由随服务启动。
-# 先运行 config-center/cmd/migrate 升级至 V12，
+# 已有权威库先人工执行 config-center/db/sql/add_game_order.sql，
 # 同一数据库账号应具备 game_order 表读写权限。
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
@@ -99,7 +99,7 @@ npm run dev
 | 现象 | 检查项 |
 | --- | --- |
 | `database.dsn ... is required` | 指定 YAML 中是否填 DSN；也可使用对应环境变量 |
-| `migration state missing` | 连接的是否为空库、是否执行过 `cmd/migrate` |
+| `database structure invalid` | 检查表、关键索引以及手动 SQL 是否执行 |
 | `obsolete replica schema` | 副本版本过旧；迁移到 V6 或备份后使用新空库 |
 | SDK Core 返回 404 | AppID、`env`、三个绑定字段、节点启用状态 |
 | Webhook 不生效 | 订阅者密钥、回调 URL、`allowedHosts`、反向代理访问和同步游标 |

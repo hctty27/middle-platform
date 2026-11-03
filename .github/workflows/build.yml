@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Go 静态检查、MySQL 迁移和集群端到端回归均在非容器环境执行。
+  # Go 静态检查、人工 SQL 及集群端到端回归均在非容器环境执行。
   go:
     name: Go config center
     runs-on: ubuntu-24.04
@@ -52,7 +52,7 @@ jobs:
         run: (cd ../shared/logging && go test -race -count=1 ./... && go vet ./...)
       - run: go test -race -count=1 ./...
       - run: go vet ./...
-      - run: go build ./cmd/config-center ./cmd/migrate
+      - run: go build ./cmd/config-center
 
   access:
     name: Go access
@@ -89,7 +89,7 @@ jobs:
       - run: npm run build
 
   integration:
-    name: Go MySQL migration + two instances + Webhook E2E
+    name: Go MySQL manual SQL + two instances + Webhook E2E
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
@@ -98,7 +98,7 @@ jobs:
       CONFIG_WEBHOOK_SECRET: ci-signed-webhook-secret
     steps:
       - uses: actions/checkout@v4
-      # 迁移用例会开启 GTID；确保运行实例启用了二进制日志。
+      # SQL 回归用例会开启 GTID；确保运行实例启用了二进制日志。
       - name: 初始化本机 MySQL 与二进制日志
         run: |
           sudo tee /etc/mysql/mysql.conf.d/99-middle-platform-ci.cnf >/dev/null <<'EOF'
@@ -114,17 +114,18 @@ jobs:
         with:
           go-version: "1.27.3"
           cache-dependency-path: config-center/go.mod
-      - name: Build Go services and migration CLI
+      - name: Build Go services
         run: |
           (cd config-center && go build -o /tmp/config-center-ci ./cmd/config-center)
-          (cd config-center && go build -o /tmp/config-center-migrate-ci ./cmd/migrate)
           (cd config-center-access && go build -o /tmp/config-center-access-ci ./cmd/config-center-access)
-      - name: Test V11 baseline and database safety
-        run: python3 scripts/ci_migration_smoke.py
-      - name: Initialize config center schema
+      - name: Test manual SQL and database safety
+        run: python3 scripts/ci_schema_sql_smoke.py
+      - name: Initialize authoritative and replica schemas with SQL
         env:
-          CONFIG_DB_DSN: root:integration-test@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC
-        run: /tmp/config-center-migrate-ci
+          MYSQL_PWD: integration-test
+        run: |
+          mysql --protocol=tcp -h 127.0.0.1 -uroot config_center < config-center/db/sql/initialize.sql
+          mysql --protocol=tcp -h 127.0.0.1 -uroot config_access < config-center-access/db/sql/initialize.sql
       - name: Test Go cluster and signed callbacks
         run: python3 scripts/ci_smoke.py
 

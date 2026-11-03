@@ -6,10 +6,9 @@
 
 1. 创建空 `config_center` 库，复制 `configs/config.yaml` 为 `configs/config-dev.yaml`。
 2. 填写 `database.dsn`；管理读写接口与 Webhook Worker 均随服务启动。**管理 API 无内建鉴权，必须限制到可信内网或受认证的管理网关**。
-3. 在本目录执行（必须先迁移、后启动）：
+3. 先通过数据库客户端执行 `db/sql/initialize.sql`（仅新空库）；已有权威库缺订单表时仅执行 `db/sql/add_game_order.sql`。然后在本目录运行：
 
 ```powershell
-go run ./cmd/migrate -config configs/config-dev.yaml
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
@@ -20,8 +19,8 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 - `config_node` 只有三级节点，不保存 `parent_id`；`region.env_type` 为 `test`、`review`、`prod`。
 - `config_channel_app.code` 全局唯一；每个 AppID 各环境最多绑定一个区服组，共用一份 `config` JSON。
 - 仅三级节点增删改会推进 `epoch/revision`；渠道应用变更不参与节点同步。
-- `cmd/migrate` 在新空库建立 V11 基线；已有 V11 库校验复用，V1～V10 必须先通过旧版迁移工具升级，启动程序不会自动 DDL。
-- 数据库迁移中途失败时不允许删除版本表或伪造 `dirty` 状态。
+- SQL 由人工审核和执行；运行时只检查表、字段与必要索引，不根据旧 V11/V12 版本记录判断。
+- 历史 `config_schema_migrations` 表不再使用，也不会更新；保留旧数据，切勿为修复问题直接删表。
 
 ## 常用配置
 
@@ -36,10 +35,10 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 ```bash
 go test -race ./...
 go vet ./...
-go build ./cmd/config-center ./cmd/migrate
+go build ./cmd/config-center
 ```
 
-[接口文档](../docs/api.md) · [数据库与迁移](../docs/database.md) · [本地开发](../docs/development.md) · [生产部署](../docs/production.md)
+[接口文档](../docs/api.md) · [数据库与手动 SQL](../docs/database.md) · [本地开发](../docs/development.md) · [生产部署](../docs/production.md)
 
 已移除废弃配置 `webhook.enabled`、`migration.allowLegacyUpgrade` 和环境变量 `CONFIG_GO_ENABLE_WEBHOOK`。升级旧配置时请删除对应 YAML 字段。
 

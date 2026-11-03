@@ -1,5 +1,5 @@
--- V12：在 config_center 权威库创建订单表，统一由 config-center/cmd/migrate 执行。
--- 基于 V11 增量升级，不得手工执行或重置迁移记录；MySQL 8.0.16+，订单时区 UTC。
+-- 已有 config_center 库缺少 game_order 时，在备份并确认表不存在后人工执行。
+-- 不会修改旧业务表，也不更新已废弃的迁移版本记录。
 CREATE TABLE game_order (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '内部主键',
     appid VARCHAR(128) COLLATE utf8mb4_bin NOT NULL COMMENT '应用 Code',

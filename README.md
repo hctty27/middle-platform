@@ -6,7 +6,7 @@
 
 | 目录 | 职责 |
 | --- | --- |
-| `config-center/` | 权威配置中心：三级配置节点、渠道应用、订阅者、同步日志与数据库迁移 |
+| `config-center/` | 权威配置中心：三级配置节点、渠道应用、订阅者、同步日志与手动 SQL |
 | `config-center-access/` | 可选接入端：独立 MySQL 节点副本、Webhook 验签、快照与增量同步 |
 | `sdk-core/` | SDK 核心服务：目前提供按环境与 AppID 查询配置，登录/充值能力尚未在此文档宣称实现 |
 | `config-center-admin/` | Vue 3 配置管理后台 |
@@ -21,12 +21,11 @@
 
 1. 创建空的 `config_center` 数据库。
 2. 在 `config-center/` 下复制 `configs/config.yaml` 为 `configs/config-dev.yaml`，填写 `database.dsn`，按需启用 `admin.writesEnabled` / `webhook.enabled`。
-3. **先独立迁移，后启动服务**（下面两条命令都在 `config-center/` 目录执行）：
+3. **先手工执行 SQL，后启动服务**（新空库执行 `config-center/db/sql/initialize.sql`，已有库缺订单表执行 `add_game_order.sql`）：
 
 ```powershell
 Copy-Item configs/config.yaml configs/config-dev.yaml
 # 修改 configs/config-dev.yaml 后执行
-go run ./cmd/migrate -config configs/config-dev.yaml
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
@@ -60,11 +59,11 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml
 
 - [架构与配置同步](docs/architecture.md)
 - [HTTP API 契约](docs/api.md)
-- [数据库结构与迁移](docs/database.md)
+- [数据库结构与手动 SQL](docs/database.md)
 - [本地开发与联调](docs/development.md)
 - [Linux 打包](docs/package.md)
 - [生产部署、滚动更新、日志与优雅停机](docs/production.md)
 - [CI 与测试](docs/ci.md)
 - 模块说明：[配置中心](config-center/README.md) · [接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md)
 
-**安全边界：** 当前管理 API 没有账号权限系统。`/api/config/admin/**`、配置同步接口、内部 Webhook 均不得直接暴露到公网。数据库迁移不是应用启动时自动执行的操作；已有数据库不可删除迁移记录后强行初始化。
+**安全边界：** 当前管理 API 没有账号权限系统。`/api/config/admin/**`、配置同步接口、内部 Webhook 均不得直接暴露到公网。所有数据库 DDL 均需人工执行；已有数据库不得重新执行初始化 SQL 或清除历史数据。

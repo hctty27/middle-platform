@@ -59,7 +59,7 @@ func run(configPath string) error {
 		return err
 	}
 	replica := store.New(db)
-	if err := replica.EnsureSchema(startupCtx); err != nil {
+	if err := replica.VerifySchema(startupCtx); err != nil {
 		return err
 	}
 	center := remote.New(cfg.CenterURL, cfg.ConnectTimeout, cfg.RequestTimeout)

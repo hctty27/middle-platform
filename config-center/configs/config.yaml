@@ -2,7 +2,7 @@
 server:
   address: "127.0.0.1:8080"
 
-# 权威 MySQL 库；首次部署先运行 cmd/migrate（当前 V12）。
+# 权威 MySQL 库；首次部署需先手动执行 db/sql/initialize.sql。
 database:
   dsn: ""
 

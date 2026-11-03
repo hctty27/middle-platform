@@ -42,15 +42,23 @@ sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/
 
 使用 `-SkipFrontend` 构建的包没有 `admin/`，不要执行对应 `cp`。创建低权限服务账号 `middle-platform`，按实际用户/组授予 `bin/`、`config/` 和 `logs/` 最小权限；真实 `config-center.yaml`、`config-center-access.yaml`、`sdk-core.yaml` 单独放在 `/data/middle-platform/config/`。
 
-## 3. 迁移先于启动
+## 3. 手动 SQL 先于启动
 
-只在数据库初始化或经过审查的升级发布时单独执行：
+备份并核对目标数据库，**只执行对应场景的 SQL**：
+
+- 全新、空的 `config_center`：`sql/config-center/initialize.sql`。
+- 已有 `config_center` 仅缺少订单表：`sql/config-center/add_game_order.sql`。
+- 全新、空的 `config_access`：`sql/config-center-access/initialize.sql`。
+
+例如在 Linux 发布包解压目录（已有库补建订单表）：
 
 ```bash
-/data/middle-platform/bin/migrate -config /data/middle-platform/config/config-center.yaml
+mysql -u <管理账号> -p config_center < sql/config-center/add_game_order.sql
 ```
 
-新空库先建立 V11 基线再执行 V12 订单表迁移；已有 V11 权威库由当前迁移器升级到 V12，低于 V11 的权威库必须先用旧版工具升级。迁移前要备份并停写；多个 config-center 实例不得各自启动迁移。`dirty=1` 或迁移异常时检查实际表结构，禁止篡改迁移表。参见 [数据库说明](database.md)。
+如果目标表已经存在，不要反复执行初始化 SQL；应检查实际表定义与索引。
+应用启动只校验结构，不创建或修改数据库表。历史 `config_schema_migrations` 仅作遗留记录，新代码不再检查或更新。
+参见 [数据库说明](database.md)。
 
 ## 4. Supervisor 管理服务
 
@@ -157,7 +165,7 @@ curl -i https://zk.skybluek.com/sdk/admin/config.js
 
 ## 6. 安全发布与回滚
 
-1. 备份权威库并确认新旧代码与数据库版本的兼容性。涉及 DDL 时先停写，在单独的迁移窗口执行 `migrate`。
+1. 备份权威库并确认新旧代码与数据库版本的兼容性。涉及 DDL 时先停写，在单独的变更窗口人工执行经过审核的 SQL。
 2. 先把发布包解压到临时目录，校验目标 Linux 架构、权限和归档内容。**绝不直接向正在运行的 `bin/` 覆盖归档。**
 3. 逐节点从 Nginx upstream 摘流量，确认其他节点可服务；停止目标进程，备份旧二进制，用同一文件系统的安全替换方式部署新版本，再启动。
 4. 验证 `/health/live`、`/health/ready`、关键 API、日志和必要的配置同步后恢复流量，再更新下一节点。

@@ -44,7 +44,7 @@ GET /api/core/{env}/{appid}
 
 ## 本地启动
 
-在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已完成 V12 迁移的 `config_center`。订单功能始终加载，数据库账号必须具备配置表 SELECT 和订单表 SELECT/INSERT/UPDATE 权限：
+在本目录操作，配置 `configs/config-dev.yaml` 中的 `database.dsn`，指向已包含 `game_order` 表的 `config_center`。订单功能始终加载，数据库账号必须具备配置表 SELECT 和订单表 SELECT/INSERT/UPDATE 权限：
 
 ```powershell
 Copy-Item configs/config.yaml configs/config-dev.yaml
@@ -66,10 +66,10 @@ go build ./cmd/sdk-core
 ## 订单登记与支付通知
 
 订单表 `game_order` 与所有配置中心表**共用一个 `config_center` 数据库**。
-数据库建表只由 `config-center/cmd/migrate` 统一执行 V12（从 V11 升级），
-不再提供 SDK Core 独立的 V1 建表脚本。
+数据库建表由管理员手工执行 `config-center/db/sql/initialize.sql`（仅新库）或 `add_game_order.sql`（已有库）。
+SDK Core 不自动执行 SQL，也不提供独立建表脚本。
 只保留 **`database.dsn` 一个配置项** 和一个 `*sql.DB` 连接池，`configStore`、`orderStore` 共享连接。
-订单登记与平台回调路由始终注册，通知补偿 Worker 始终启动；SDK Core 在启动时必须验证 V12 `game_order` 表结构。若表不存在或读取权限不足，则启动失败。配置表依旧只读。
+订单登记与平台回调路由始终注册，通知补偿 Worker 始终启动；SDK Core 在启动时必须验证 `game_order` 表结构。若表不存在或读取权限不足，则启动失败。配置表依旧只读。
 
 接口：
 - POST /api/core/{env}/{appid}/orders：游戏服签名登记订单
@@ -172,7 +172,7 @@ database:
 
 原配置中的 `order.enabled`、`payment.allowUnverifiedNonProd` 均需删除（严格 YAML 校验会拒绝旧字段）。支付回调通过 v1 验签、订单与金额一致性核对后进入支付确认和游戏发货，不额外查单。
 **升级旧版 YAML**：删除 `orderDatabase`，不要保留 `SDK_CORE_ORDER_DB_DSN`。
-启用订单前先备份数据库，由 `config-center/cmd/migrate` 将 V11 升至 V12；
+启用订单前先备份数据库，对已有权威库手动执行 `config-center/db/sql/add_game_order.sql`；
 运行时账号仅需配置表 SELECT、订单表 SELECT/INSERT/UPDATE，不需要 DDL。
 如果原来两个账号分离，需新建或授权合并后的 `sdk_core` 账号；不能单纯沿用只有配置 SELECT 权限的账号。
-已有人工创建的 `game_order` 需先核对迁移，切勿直接删除旧订单数据。
+如果 `game_order` 已存在，则无需重复执行 SQL；先核对表结构，切勿删除旧订单数据。

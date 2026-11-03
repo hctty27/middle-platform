@@ -1,4 +1,4 @@
--- 接入端 V6 基线：仅用于全新、空的 config_access 数据库。
+-- 仅用于新建空的 config_access 库；接入端启动不会自动建表。
 -- 接入端只存储 game / region / server_group 与同步游标。
 CREATE TABLE config_node (
     id BIGINT NOT NULL PRIMARY KEY,
