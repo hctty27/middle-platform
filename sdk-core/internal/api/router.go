@@ -18,8 +18,17 @@ type Fetcher interface { Get(context.Context,string,string)(map[string]any,error
 // Pinger 提供依赖数据库的就绪探测。
 type Pinger interface { PingContext(context.Context)error }
 
-// Router 兼容已有配置查询；订单功能以可选参数注册。
-func Router(fetcher Fetcher,db Pinger,orders ...OrderAPI)http.Handler{
+// Router 保留旧的配置与订单接口注册方式。
+func Router(fetcher Fetcher, db Pinger, orders ...OrderAPI) http.Handler {
+    return router(fetcher, db, nil, orders...)
+}
+
+// RouterWithEvents 额外启用渠道事件接口，不改变已有路由。
+func RouterWithEvents(fetcher Fetcher, db Pinger, events EventAPI, orders ...OrderAPI) http.Handler {
+    return router(fetcher, db, events, orders...)
+}
+
+func router(fetcher Fetcher, db Pinger, events EventAPI, orders ...OrderAPI) http.Handler {
     mux:=http.NewServeMux()
     mux.HandleFunc(mapping.RouteCoreConfig,func(w http.ResponseWriter,r *http.Request){
         w.Header().Set("Cache-Control","no-store")
@@ -46,6 +55,7 @@ func Router(fetcher Fetcher,db Pinger,orders ...OrderAPI)http.Handler{
         writeJSON(w,http.StatusOK,response{Code:0,Message:"success",Data:data})
     })
     if len(orders)>0&&orders[0]!=nil {registerOrderRoutes(mux,orders[0])}
+    if events != nil { registerEventRoutes(mux, events) }
     mux.HandleFunc("GET /health/live",func(w http.ResponseWriter,_ *http.Request){
         writeJSON(w,http.StatusOK,map[string]string{"status":"UP"})
     })
