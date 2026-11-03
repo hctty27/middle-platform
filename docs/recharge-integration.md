@@ -74,26 +74,27 @@
 ```text
 IKM    = gameSecret 的 UTF-8 字节；旧版标准 Base64 的 32 字节密钥仍按 Base64 解码后的字节
 salt   = nil
-info   = middle-platform:sdk-core:order-register:v1
+info   = middle-platform:sdk-core:order-register:v2
 长度   = 32 字节
 ```
 
-对**实际发送的原始 JSON 字节**计算 `bodyHash = hex_lower(SHA256(rawBody))`，拼接四行字符串，行间为换行符（LF），末尾无换行：
+对**实际发送的原始 JSON 字节**计算 `bodyHash = hex_lower(SHA256(rawBody))`，拼接五行字符串，行间为换行符（LF），末尾无换行：
 
 ```text
 POST
-/api/core/test/110006/orders
+test
+110006
 <Unix 秒时间戳>
 <bodyHash>
 ```
 
-计算：
+其中第二行是环境 `env`，第三行是渠道应用 `appid`，必须与请求路由值一致，防止跨环境、跨应用重放。
 
 ```text
-X-Game-Signature = hex_lower(HMAC_SHA256(登记密钥, 四行字符串))
+X-Game-Signature = hex_lower(HMAC_SHA256(登记密钥, 五行字符串))
 ```
 
-时间戳允许前后 5 分钟偏差。签名使用 SDK Core 实际收到的路径（例如 `/api/core/test/110006/orders`），而不是网关对外可能带有的 `/sdk` 前缀。
+时间戳允许前后 5 分钟偏差。**签名不包含 URL、域名、端口或请求路径**，无需关心 Nginx / API 网关的路径前缀。
 
 ## 4. 接收支付成功通知
 
@@ -134,24 +135,25 @@ X-Game-Signature = hex_lower(HMAC_SHA256(登记密钥, 四行字符串))
 ```text
 IKM    = gameSecret 的 UTF-8 字节；旧版标准 Base64 的 32 字节密钥仍按 Base64 解码后的字节
 salt   = nil
-info   = middle-platform:sdk-core:payment-notify:v1
+info   = middle-platform:sdk-core:payment-notify:v2
 长度   = 32 字节
 ```
 
-拼接六行签名串（LF 分隔，末尾无换行）：
+拼接五行签名串（LF 分隔，末尾无换行）：
 
 ```text
 <appid>
 POST
-<通知 URL 的转义路径，如 /pay/notify>
 <X-SDK-Timestamp>
 <X-SDK-Nonce>
 <hex_lower(SHA256(原始通知 Body))>
 ```
 
 ```text
-X-SDK-Signature = hex_lower(HMAC_SHA256(发货通知密钥, 六行字符串))
+X-SDK-Signature = hex_lower(HMAC_SHA256(发货通知密钥, 五行字符串))
 ```
+
+**发货通知签名不包含通知 URL 路径**。游戏服仍必须校验 AppID、签名、时间戳、订单和金额，并确保幂等发货。
 
 若通知超时、响应不是 HTTP 200，或 Body 不等于随机 nonce，中台会自动重试。因此游戏端必须保证订单幂等，不应把“通知只调用一次”作为前提。
 
@@ -166,6 +168,7 @@ X-SDK-Signature = hex_lower(HMAC_SHA256(发货通知密钥, 六行字符串))
 
 ## 6. 注意事项
 
+- **V2 协议变更**：登记签名和发货通知签名均不再包含请求路径，HKDF `info` 从 `:v1` 升级为 `:v2`。已接入的游戏服必须同步修改签名和验签代码；旧版签名不会被新版 SDK Core 接受，旧版游戏服也不会接受新版发货通知。
 - `gameSecret` 不得放在客户端或日志中；正式环境推荐使用 HTTPS。虽然取消了长度限制，但过短或容易猜测的密钥仍存在风险，生产建议使用高强度随机密钥。
 - 若 `gameSecret` 恰好符合旧版 32 字节标准 Base64 格式，将优先按旧格式解码；接入方应保持相同的兼容策略。
 - `payNotifyUrl` 在订单登记时保存快照，后续修改不会改变已登记订单的目标地址。
