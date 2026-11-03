@@ -10,7 +10,7 @@
 go run ./tools/mock-notify
 ```
 
-默认监听 `127.0.0.1:9000`，接收 `POST /pay/notify`，并在成功模式返回 HTTP 200、响应 Body 为收到的 `X-SDK-Nonce`（不附带换行）。
+默认监听 `127.0.0.1:9000`，接收 `POST /pay/notify`，并在成功模式返回 HTTP 200、响应 Body 为收到的 `x-nonce`（不附带换行）。
 
 可选参数：
 
