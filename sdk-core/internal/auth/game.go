@@ -1,19 +1,13 @@
-// Package auth 提供游戏主密钥校验、HKDF 派生以及订单登记验签。
+// Package auth 统一游戏主密钥解析、HKDF 派生以及游戏侧 V2 签名与验签。
 package auth
 
 import (
     "crypto/hkdf"
-    "crypto/hmac"
     "crypto/sha256"
     "encoding/base64"
-    "encoding/hex"
     "encoding/json"
     "errors"
-    "fmt"
-    "net/http"
-    "strconv"
     "strings"
-    "time"
 )
 
 const (
@@ -50,25 +44,3 @@ func Derive(secret []byte,purpose string)([]byte,error) {
     return hkdf.Key(sha256.New,secret,nil,"middle-platform:sdk-core:"+purpose+":v2",keyLength)
 }
 
-// VerifyRegistration 校验签名、原始请求体和五分钟时钟偏差；权限从渠道包所属游戏绑定确定。
-func VerifyRegistration(r *http.Request,body []byte,secret []byte)error{
-    ts:=r.Header.Get("X-Game-Timestamp")
-    sig:=r.Header.Get("X-Game-Signature")
-    stamp,err:=strconv.ParseInt(ts,10,64)
-    if err!=nil||time.Since(time.Unix(stamp,0))>5*time.Minute||
-        time.Until(time.Unix(stamp,0))>5*time.Minute{return ErrUnauthorized}
-    if len(sig)!=64||strings.ToLower(sig)!=sig{return ErrUnauthorized}
-    supplied,err:=hex.DecodeString(sig)
-    if err!=nil{return ErrUnauthorized}
-    key,err:=Derive(secret,PurposeOrderRegister)
-    if err!=nil{return ErrUnauthorized}
-    sum:=sha256.Sum256(body)
-    // 使用业务标识而非代理路径，避免 Nginx 重写导致签名不一致，同时阻断跨环境和跨 AppID 重放。
-    env,appid:=r.PathValue("env"),r.PathValue("appid")
-    if env==""||appid=="" {return ErrUnauthorized}
-    payload:=fmt.Sprintf("%s\n%s\n%s\n%s\n%x",r.Method,env,appid,ts,sum)
-    mac:=hmac.New(sha256.New,key)
-    _,_=mac.Write([]byte(payload))
-    if !hmac.Equal(supplied,mac.Sum(nil)){return ErrUnauthorized}
-    return nil
-}
