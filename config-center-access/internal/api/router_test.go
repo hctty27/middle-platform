@@ -53,4 +53,5 @@ func TestCallbackRejectsMalformedJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/internal/config/callback", bytes.NewBufferString("{bad"))
 	Router(nil,trigger,"secret").ServeHTTP(w,req)
 	if w.Code != http.StatusBadRequest || trigger.count.Load()!=0 { t.Fatal(w.Code) }
+	if !bytes.Contains(w.Body.Bytes(), []byte("JSON 格式不合法")) { t.Fatal(w.Body.String()) }
 }

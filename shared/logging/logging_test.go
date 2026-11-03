@@ -73,7 +73,8 @@ func TestHTTPInvalidIDAndPanic(t *testing.T) {
 		t.Fatalf("unexpected response: %d %v", recorder.Code, recorder.Header())
 	}
 	if strings.Contains(out.String(), "do-not-leak") { t.Fatal("panic value leaked") }
-	if !strings.Contains(out.String(), "http handler panic") { t.Fatal("panic not logged") }
+	if !strings.Contains(recorder.Body.String(), "服务器内部错误") { t.Fatal("panic response must be Chinese") }
+	if !strings.Contains(out.String(), "HTTP 处理请求时发生 panic") { t.Fatal("panic not logged") }
 }
 
 func TestHTTPHealthAndAccessDisabled(t *testing.T) {
@@ -86,7 +87,7 @@ func TestHTTPHealthAndAccessDisabled(t *testing.T) {
 	for _, path := range []string{"/health/live", "/ok", "/bad"} {
 		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
 	}
-	if strings.Count(out.String(), "http request") != 1 || !strings.Contains(out.String(), "503") {
+	if strings.Count(out.String(), "HTTP 请求") != 1 || !strings.Contains(out.String(), "503") {
 		t.Fatalf("expected only failed request log: %s", out.String())
 	}
 }
@@ -100,7 +101,7 @@ func TestHTTPLogsSlowRequests(t *testing.T) {
 		time.Sleep(3 * time.Millisecond)
 	}))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/slow", nil))
-	if !strings.Contains(out.String(), "http request") || !strings.Contains(out.String(), "\"level\":\"WARN\"") {
+	if !strings.Contains(out.String(), "HTTP 请求") || !strings.Contains(out.String(), "\"level\":\"WARN\"") {
 		t.Fatalf("slow request should warn: %s", out.String())
 	}
 }

@@ -68,6 +68,7 @@ func TestRejectInvalidPaging(t *testing.T) {
 	rec := httptest.NewRecorder()
 	Router(stubReader{}).ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest { t.Fatalf("status = %d", rec.Code) }
+	if !strings.Contains(rec.Body.String(), "请求参数不合法") { t.Fatalf("错误提示应为中文: %s", rec.Body.String()) }
 }
 
 // TestLocalDateTimeContract 验证节点时间字段的 JSON 序列化兼容性。
