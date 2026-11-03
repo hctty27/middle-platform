@@ -81,7 +81,7 @@ func run(configPath string)error{
             Orders:store.NewOrderStore(db),
             PlatformSecretReader:repository,
             GameSecretReader:repository,
-            Notifier:notify.NewClient(cfg.GameNotify.AllowedHosts),
+            Notifier:notify.NewClient(),
         }
         if err=orders.Validate();err!=nil{return err}
         workerCtx,stopWorker:=context.WithCancel(context.Background())

@@ -68,7 +68,6 @@ def start(name, module, port, extra=None):
         env["CONFIG_DB_DSN"] = "root:integration-test@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC"
         env["CONFIG_GO_ENABLE_WRITES"] = "true"
         env["CONFIG_GO_ENABLE_WEBHOOK"] = "true"
-        env["WEBHOOK_ALLOWED_HOSTS"] = "localhost,127.0.0.1"
     path = f"/tmp/middle-platform-{name}.log"
     log = open(path, "w", encoding="utf-8")
     LOGS.append((name, path, log))

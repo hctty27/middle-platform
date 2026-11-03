@@ -63,7 +63,7 @@ func Run(configPath string) error {
 	}
 
 	address := cfg.Address
-	repository := &store.Store{DB: db, AllowedHosts: cfg.AllowedHosts}
+	repository := &store.Store{DB: db}
 	// 管理读写接口始终注册；必须通过私有网络/网关鉴权保护所有管理接口。
 	var handler http.Handler = api.RouterWithWrites(repository, repository)
 	var ready atomic.Bool
@@ -85,7 +85,7 @@ func Run(configPath string) error {
 	defer cancelWorker()
 	workerDone := make(chan struct{})
 	// 无需预先查询订阅者；Dispatcher 每轮从数据库领取最新任务，运行中新增订阅者自动生效。
-	dispatcher := webhook.NewDispatcher(db, repository.AllowedHosts)
+	dispatcher := webhook.NewDispatcher(db)
 	go func() {
 		defer close(workerDone)
 		dispatcher.Run(workerCtx)

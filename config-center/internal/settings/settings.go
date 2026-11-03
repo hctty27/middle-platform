@@ -17,16 +17,12 @@ import (
 type Settings struct {
  DSN string
  Address string
- AllowedHosts string
  Log logging.Config
 }
 
 type configFile struct {
  Server struct { Address string `yaml:"address"` } `yaml:"server"`
  Database struct { DSN string `yaml:"dsn"` } `yaml:"database"`
- Webhook struct {
-  AllowedHosts []string `yaml:"allowedHosts"`
- } `yaml:"webhook"`
  Log logging.Config `yaml:"log"`
 }
 
@@ -45,12 +41,11 @@ func LoadFile(path string) (Settings,error) {
   }
   if err:=readYAML(path,&data);err!=nil { return Settings{},err }
  }
- cfg:=Settings{Address:"127.0.0.1:8080",DSN:data.Database.DSN,AllowedHosts:strings.Join(data.Webhook.AllowedHosts,","),Log:data.Log}
+ cfg:=Settings{Address:"127.0.0.1:8080",DSN:data.Database.DSN,Log:data.Log}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
  // 环境变量优先级最高；管理接口的安全边界由受保护的网关负责。
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_GO_ADDR",&cfg.Address)
- overrideString("WEBHOOK_ALLOWED_HOSTS",&cfg.AllowedHosts)
  if err:=cfg.Log.ApplyEnv();err!=nil{return Settings{},err}
  if strings.TrimSpace(cfg.DSN)=="" {return Settings{},errors.New("database.dsn or CONFIG_DB_DSN is required")}
  return cfg,nil

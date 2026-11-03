@@ -26,7 +26,7 @@ cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml
 ```
 
-修改 `configs/config-dev.yaml` 中的 `database.dsn`，例如 `root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC`。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口没有内建鉴权，必须仅通过可信内网或受保护网关访问，后续新增订阅者无需重启。联调仅需确保 `webhook.allowedHosts` 包含回调实际主机名/IP。
+修改 `configs/config-dev.yaml` 中的 `database.dsn`，例如 `root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC`。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口没有内建鉴权，必须仅通过可信内网或受保护网关访问，后续新增订阅者无需重启。回调支持公网/内网的域名与 IP（HTTP/HTTPS），无需配置域名白名单。
 
 对**新空库先手动执行 SQL，再启动**：
 
@@ -102,7 +102,7 @@ npm run dev
 | `database structure invalid` | 检查表、关键索引以及手动 SQL 是否执行 |
 | `obsolete replica schema` | 副本版本过旧；迁移到 V6 或备份后使用新空库 |
 | SDK Core 返回 404 | AppID、`env`、三个绑定字段、节点启用状态 |
-| Webhook 不生效 | 订阅者密钥、回调 URL、`allowedHosts`、反向代理访问和同步游标 |
+| Webhook 不生效 | 订阅者密钥、回调 URL 可达性、反向代理访问和同步游标 |
 | 前端接口失败 | Vite 代理、配置中心端口及网关允许访问管理接口的规则 |
 
 公共配置优先级以各工程的 `configs/config.yaml` 与 `internal/settings` 实现为准，通常由默认值、配置文件和环境变量叠加。线上发布请转到 [生产运维](production.md)。

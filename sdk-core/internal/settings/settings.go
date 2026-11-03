@@ -22,14 +22,11 @@ type Database struct {
     ConnMaxLifetime string `yaml:"connMaxLifetime"`
 }
 
-// Config 保存 SDK Core 的监听、数据库、通知白名单与日志配置。
+// Config 保存 SDK Core 的监听、数据库和日志配置。
 type Config struct {
     Log logging.Config `yaml:"log"`
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
     Database Database `yaml:"database"`
-    GameNotify struct {
-        AllowedHosts []string `yaml:"allowedHosts"`
-    } `yaml:"gameNotify"`
 }
 
 func defaultDB() Database{

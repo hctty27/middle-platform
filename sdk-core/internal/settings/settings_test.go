@@ -20,6 +20,7 @@ func TestRemovedFeatureSwitchesRejected(t *testing.T) {
     for _,extra := range []string{
         "order:\n  enabled: true\n",
         "payment:\n  allowUnverifiedNonProd: true\n",
+        "gameNotify:\n  allowedHosts: []\n",
     } {
         path:=filepath.Join(t.TempDir(),"config.yaml")
         data:="database:\n  dsn: 'sdk_core:pass@tcp(127.0.0.1:3306)/config_center?parseTime=true'\n"+extra

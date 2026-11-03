@@ -35,12 +35,12 @@ func TestWriteValidation(t *testing.T) {
 		if service.ValidateCreate(n) == nil { t.Fatalf("should reject %+v", n) }
 	}
 	for _, raw := range []string{
-		"http://example.com/callback",
-		"https://not-allowed.example/callback",
 		"http://user:pass@localhost/callback",
+        "http://169.254.169.254/metadata",
+        "https://metadata.google.internal/metadata",
 		"file:///etc/passwd",
 	} {
-		if webhook.ValidateCallback(raw, "localhost") == nil { t.Fatalf("should reject callback %q", raw) }
+		if webhook.ValidateCallback(raw) == nil { t.Fatalf("should reject callback %q", raw) }
 	}
 }
 
@@ -65,7 +65,7 @@ func TestWebhookSignature(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	defer server.Close()
-	d := webhook.NewDispatcher(nil, "127.0.0.1")
+	d := webhook.NewDispatcher(nil)
 	err := d.Send(context.Background(), webhook.Delivery{
 		URL: server.URL + "/internal/config/callback", Secret: secret, Epoch: "test-epoch", Revision: 17,
 	})
@@ -96,7 +96,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 			if _, err := db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+name); err != nil { t.Log(err) }
 		}
 	}()
-	store := &Store{DB: db, AllowedHosts: "127.0.0.1"}
+	store := &Store{DB: db}
 	enabled := 1
 	game, err := store.Create(ctx, CreateNodeRequest{NodeType: "game", Code: "g1", Name: "Game", Status: &enabled, Config: `{"x":1}`})
 	if err != nil { t.Fatal(err) }
@@ -153,7 +153,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusAccepted) }))
 	defer server.Close()
 	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL+"/internal/config/callback", Secret: "test-secret"}); err != nil { t.Fatal(err) }
-	dispatcher := webhook.NewDispatcher(db, "127.0.0.1")
+	dispatcher := webhook.NewDispatcher(db)
 	job, err := dispatcher.Claim(ctx)
 	if err != nil || job == nil { t.Fatalf("claim: %+v %v", job, err) }
 	duplicate, err := dispatcher.Claim(ctx)
@@ -173,7 +173,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)
-		webhook.NewDispatcher(db, "127.0.0.1").Run(workerCtx)
+		webhook.NewDispatcher(db).Run(workerCtx)
 	}()
 	time.Sleep(150 * time.Millisecond) // 让常驻 Worker 先完成一次空队列检查。
 	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{
@@ -232,7 +232,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	}
 
 	// Two Go instances must never claim the same pending subscriber concurrently.
-	first, second := webhook.NewDispatcher(db, "127.0.0.1"), webhook.NewDispatcher(db, "127.0.0.1")
+	first, second := webhook.NewDispatcher(db), webhook.NewDispatcher(db)
 	type claimResult struct { job *webhook.Delivery; err error }
 	claims := make(chan claimResult, 2)
 	var claimWG sync.WaitGroup

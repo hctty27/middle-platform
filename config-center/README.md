@@ -12,7 +12,7 @@
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
-启动后检查 `GET /health/ready`；Webhook 每 3 秒查询待投递订阅者，运行中新增无需重启。管理写路由始终注册，部署时必须先完成网关访问控制。
+启动后检查 `GET /health/ready`；Webhook 每 3 秒查询待投递订阅者，运行中新增无需重启。回调支持公网 IP、内网 IP、域名和 localhost 的 HTTP/HTTPS 地址，无需维护白名单；元数据及特殊网络地址仍被禁止。管理写路由始终注册，部署时必须先完成网关访问控制。
 
 ## 关键约束
 
@@ -28,7 +28,6 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 | --- | --- | --- |
 | `database.dsn` | `CONFIG_DB_DSN` | 权威库连接 |
 | `server.address` | `CONFIG_GO_ADDR` | HTTP 监听地址 |
-| `webhook.allowedHosts` | `WEBHOOK_ALLOWED_HOSTS` | 回调目标主机白名单 |
 
 ## 测试与详细文档
 

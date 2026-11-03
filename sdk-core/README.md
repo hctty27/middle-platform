@@ -103,13 +103,13 @@ SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确
 **不等待游戏服通知完成**。游戏服异常不会阻塞平台回调，发货交给持久化任务队列。
 
 通知 Worker 每实例启动 4 个消费者，每个消费者每 500ms 检查到期任务。
-多实例通过 `SELECT ... FOR UPDATE SKIP LOCKED` 在短事务中独占领取，提交 60 秒租约后才发出 HTTPS 请求；
+多实例通过 `SELECT ... FOR UPDATE SKIP LOCKED` 在短事务中独占领取，提交 60 秒租约后才发出 HTTP/HTTPS 请求；
 通知结果按 `notify_attempts` 尝试序号条件更新，过期 Worker 的结果不会覆盖新租约。
 失败使用指数退避，崩溃后租约到期自动恢复。重试独立生成签名，不复用平台 Header；
 **任务投递语义仍为至少一次（at-least-once）**，游戏服必须按订单号幂等发货。
-仅允许 gameNotify.allowedHosts 明确批准的 HTTPS 公网域名，生产限制 443 端口且不跟随重定向。
+支持公网 IP、内网 IP、域名和 localhost 的 HTTP/HTTPS 回调以及任意合法业务端口；不跟随重定向，拒绝元数据及特殊网络目标。公网环境建议使用 HTTPS。
 
-配置示例参考 sdk-core/configs/config.yaml：平台 `appSecret` 配置在渠道包 JSON，游戏通信 `gameSecret` 配置在游戏 JSON；YAML 中不再维护 `payment.secrets`、`gameAuth.keys` 或 `gameNotify.secrets`。已有私有 YAML 的上述三个字段必须删掉，否则严格校验会拒绝启动。保留 `gameNotify.allowedHosts`。
+配置示例参考 sdk-core/configs/config.yaml：平台 `appSecret` 配置在渠道包 JSON，游戏通信 `gameSecret` 配置在游戏 JSON；YAML 中不再维护 `payment.secrets`、`gameAuth.keys` 或 `gameNotify.secrets`。已有私有 YAML 的上述三个字段以及 `gameNotify.allowedHosts` 必须删掉，否则严格校验会拒绝启动。
 不再使用 `SDK_CORE_ORDER_DB_DSN`；唯一 DSN 可由 `SDK_CORE_DB_DSN` 覆盖。旧的 `orderDatabase` YAML 块必须从私有配置中删除（严格配置校验会拒绝该未知字段）。
 验证：在 sdk-core 目录执行 go test -race ./...、go vet ./...、go build ./cmd/sdk-core。
 
