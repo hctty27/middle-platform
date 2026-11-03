@@ -29,7 +29,7 @@ func main() {
     configPath := flag.String("config", "", "YAML configuration file")
     flag.Parse()
     if err := run(*configPath); err != nil {
-		slog.Error("config access stopped", "error", err)
+		slog.Error("配置接入服务已停止", "error", err)
 		os.Exit(1)
 	}
 }
@@ -83,7 +83,7 @@ func run(configPath string) error {
 	}
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("config access started", "address", cfg.Address, "center", cfg.CenterURL)
+		slog.Info("配置接入服务已启动", "address", cfg.Address, "center", cfg.CenterURL)
 		errCh <- server.ListenAndServe()
 	}()
 
@@ -98,25 +98,25 @@ func run(configPath string) error {
 	ready.Store(false)
 	stop()
 	started := time.Now()
-	slog.Info("config access shutting down")
+	slog.Info("配置接入服务正在关闭")
 	shutdownCtx, done := context.WithTimeout(context.Background(), 30*time.Second)
 	defer done()
 	cancelWorker()
 	shutdownErr := server.Shutdown(shutdownCtx)
 	if shutdownErr != nil {
-		slog.Warn("HTTP graceful shutdown failed; closing active connections", "error", shutdownErr)
+		slog.Warn("HTTP 优雅关闭失败，正在关闭活动连接", "error", shutdownErr)
 		shutdownErr = errors.Join(shutdownErr, server.Close())
 	}
 	var workerErr error
 	select {
 	case <-workerDone:
 	case <-shutdownCtx.Done():
-		workerErr = fmt.Errorf("sync worker shutdown exceeded deadline: %w", shutdownCtx.Err())
+		workerErr = fmt.Errorf("同步工作线程关闭超时: %w", shutdownCtx.Err())
 	}
 	if err := errors.Join(listenErr, shutdownErr, workerErr); err != nil {
 		return err
 	}
-	slog.Info("config access stopped", "duration", time.Since(started))
+	slog.Info("配置接入服务已停止", "duration", time.Since(started))
 	return nil
 }
 

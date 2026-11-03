@@ -16,12 +16,12 @@ import (
 )
 
 func main() {
-	source := flag.String("source", "", "build staging directory")
-	output := flag.String("output", "", "destination tar.gz file")
+	source := flag.String("source", "", "构建暂存目录")
+	output := flag.String("output", "", "目标 tar.gz 文件")
 	flag.Parse()
 
 	if *source == "" || *output == "" {
-		fmt.Fprintln(os.Stderr, "usage: package-archive -source <dir> -output <file.tar.gz>")
+		fmt.Fprintln(os.Stderr, "用法: package-archive -source <dir> -output <file.tar.gz>")
 		os.Exit(2)
 	}
 	if err := writeArchive(*source, *output); err != nil {
@@ -34,7 +34,7 @@ func writeArchive(source, output string) (err error) {
 	for _, name := range []string{"config-center", "config-center-access", "sdk-core"} {
 		info, statErr := os.Stat(filepath.Join(source, "bin", name))
 		if statErr != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("required binary %s is missing or invalid", name)
+			return fmt.Errorf("必需的可执行文件 %s 不存在或格式不合法", name)
 		}
 	}
 
@@ -88,7 +88,7 @@ func writeContents(writer *tar.Writer, source string) error {
 				return writer.WriteHeader(header)
 			}
 			if !entry.Type().IsRegular() {
-				return fmt.Errorf("unsupported non-regular file: %s", path)
+				return fmt.Errorf("不支持的非常规文件: %s", path)
 			}
 			info, err := entry.Info()
 			if err != nil {

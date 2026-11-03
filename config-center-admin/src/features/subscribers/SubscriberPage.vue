@@ -3,6 +3,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { createSubscriber, listSubscribers } from '../../api/subscriberApi'
+import { apiErrorMessage } from '../../api/http'
 import type { Subscriber } from '../../api/subscriberApi'
 
 const subscribers = ref<Subscriber[]>([])
@@ -16,7 +17,7 @@ async function loadSubscribers() {
   loadingSubscribers.value = true
   try {
     subscribers.value = (await listSubscribers()).data
-  } catch { ElMessage.error('读取接入平台失败') }
+  } catch (error) { ElMessage.error(apiErrorMessage(error, '读取接入平台失败')) }
   finally { loadingSubscribers.value = false }
 }
 
@@ -33,7 +34,7 @@ async function addSubscriber() {
     Object.assign(newSubscriber, { code: '', callbackUrl: '', secret: '' })
     await loadSubscribers()
     ElMessage.success('接入平台创建成功')
-  } catch { ElMessage.error('创建失败：请确认回调地址在服务端白名单中') }
+  } catch (error) { ElMessage.error(apiErrorMessage(error, '创建接入平台失败')) }
   finally { creatingSubscriber.value = false }
 }
 

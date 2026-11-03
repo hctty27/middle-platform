@@ -18,7 +18,7 @@ def mysql(statement="", database=None, script=None, ok=True):
     result = subprocess.run(cmd, input=script if script is not None else statement,
                             text=True, capture_output=True, env=env)
     if (result.returncode == 0) != ok:
-        raise AssertionError(f"MySQL expected success={ok}, exit={result.returncode}: {result.stderr}")
+        raise AssertionError(f"MySQL 执行结果不符合预期，预期成功={ok}，退出码={result.returncode}: {result.stderr}")
     return result.stdout.strip()
 
 
@@ -80,7 +80,7 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok
     mysql(database="manual_replica", script=replica)
     assert_sql("SELECT epoch,revision FROM manual_replica.config_sync_state WHERE id=1", "NULL\t0")
     mysql(database="manual_replica", script=replica, ok=False)
-    print("PASS manual authoritative/replica SQL, upgrade-only DDL, legacy data, GTID and constraints", flush=True)
+    print("通过：手动 SQL 初始化、升级、历史数据保留、GTID 与数据库约束", flush=True)
 
 
 if __name__ == "__main__":

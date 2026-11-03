@@ -93,7 +93,7 @@ func Run(configPath string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("Go config center started", "address", address, "revision", revision)
+		slog.Info("配置中心已启动", "address", address, "revision", revision)
 		errCh <- server.ListenAndServe()
 	}()
 	var listenErr error
@@ -108,25 +108,25 @@ func Run(configPath string) error {
 	ready.Store(false)
 	stop()
 	started := time.Now()
-	slog.Info("Go config center shutting down")
+	slog.Info("配置中心正在关闭")
 	shutdownCtx, done := context.WithTimeout(context.Background(), 30*time.Second)
 	defer done()
 	cancelWorker()
 	shutdownErr := server.Shutdown(shutdownCtx)
 	if shutdownErr != nil {
-		slog.Warn("HTTP graceful shutdown failed; closing active connections", "error", shutdownErr)
+		slog.Warn("HTTP 优雅关闭失败，正在关闭活动连接", "error", shutdownErr)
 		shutdownErr = errors.Join(shutdownErr, server.Close())
 	}
 	var workerErr error
 	select {
 	case <-workerDone:
 	case <-shutdownCtx.Done():
-		workerErr = fmt.Errorf("webhook worker shutdown exceeded deadline: %w", shutdownCtx.Err())
+		workerErr = fmt.Errorf("Webhook 工作线程关闭超时: %w", shutdownCtx.Err())
 	}
 	if err := errors.Join(listenErr, shutdownErr, workerErr); err != nil {
 		return err
 	}
-	slog.Info("Go config center stopped", "duration", time.Since(started))
+	slog.Info("配置中心已停止", "duration", time.Since(started))
 	return nil
 }
 

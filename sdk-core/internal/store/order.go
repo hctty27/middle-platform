@@ -59,10 +59,10 @@ func (s *OrderStore) Register(ctx context.Context, incoming model.Order) error {
     if err == nil { return nil }
     var mysqlErr *mysql.MySQLError
     if !errors.As(err, &mysqlErr) || mysqlErr.Number != 1062 {
-        return fmt.Errorf("insert game order: %w", err)
+        return fmt.Errorf("写入游戏订单失败: %w", err)
     }
     old, lookupErr := s.Find(ctx, incoming.AppID, incoming.GameOrderID)
-    if lookupErr != nil { return fmt.Errorf("check duplicate order: %w", lookupErr) }
+    if lookupErr != nil { return fmt.Errorf("检查重复订单失败: %w", lookupErr) }
     if old.GameID != incoming.GameID || old.Env != incoming.Env || old.Amount != incoming.Amount || old.Attach != incoming.Attach {
         return model.ErrOrderConflict
     }

@@ -8,9 +8,9 @@ import (
 )
 
 // ErrInvalid 标识无效的请求参数。
-var ErrInvalid = errors.New("invalid request")
+var ErrInvalid = errors.New("请求参数不合法")
 // ErrConflict 标识重复配置或违反数据库约束。
-var ErrConflict = errors.New("conflicting configuration")
+var ErrConflict = errors.New("配置冲突")
 
 // LocalDateTime 实现与已有服务一致的时间序列化格式。
 type LocalDateTime time.Time

@@ -23,7 +23,7 @@ $gitCommit = 'unknown'
 function Require-Command {
     param([string]$Name)
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "Required command not found: $Name"
+        throw "未找到必需的命令: $Name"
     }
 }
 
@@ -31,7 +31,7 @@ function Require-Command {
 function Assert-ExitCode {
     param([string]$Operation)
     if ($LASTEXITCODE -ne 0) {
-        throw "$Operation failed with exit code $LASTEXITCODE"
+        throw "$Operation 执行失败，退出码: $LASTEXITCODE"
     }
 }
 
@@ -39,7 +39,7 @@ Require-Command 'go'
 $goHost = @(& go env GOHOSTOS GOHOSTARCH)
 Assert-ExitCode 'go env GOHOSTOS GOHOSTARCH'
 if ($goHost.Count -ne 2) {
-    throw 'Could not determine Go host platform'
+    throw '无法识别当前 Go 主机平台'
 }
 if (-not $SkipFrontend) {
     $npmCommand = if ($env:OS -eq 'Windows_NT') { 'npm.cmd' } else { 'npm' }
@@ -71,7 +71,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 }
 
 if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') {
-    throw "Invalid release version: $Version"
+    throw "发布版本号不合法: $Version"
 }
 
 $releaseName = "middle-platform-$Version-linux-$Arch"
@@ -101,7 +101,7 @@ try {
     )
 
     foreach ($target in $targets) {
-        Write-Host "Building $($target.Output) for linux/$Arch..."
+        Write-Host "正在为 linux/$Arch 构建 $($target.Output)..."
         $moduleDir = Join-Path $repoRoot $target.Module
         $outputFile = Join-Path $binDir $target.Output
         Push-Location $moduleDir
@@ -114,7 +114,7 @@ try {
             Pop-Location
         }
         if (-not (Test-Path -LiteralPath $outputFile -PathType Leaf)) {
-            throw "Missing compiled binary: $outputFile"
+            throw "缺少编译产物: $outputFile"
         }
     }
 
@@ -130,7 +130,7 @@ try {
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。
     if (-not $SkipFrontend) {
         $frontendDir = Join-Path $repoRoot 'config-center-admin'
-        Write-Host 'Building Vue admin...'
+        Write-Host '正在构建 Vue 管理端...'
         Push-Location $frontendDir
         try {
             & $npmCommand ci --no-audit --no-fund
@@ -144,7 +144,7 @@ try {
 
         $distDir = Join-Path $frontendDir 'dist'
         if (-not (Test-Path -LiteralPath (Join-Path $distDir 'index.html') -PathType Leaf)) {
-            throw "Frontend build did not produce dist/index.html"
+            throw "前端构建未生成 dist/index.html"
         }
         $adminDir = Join-Path $stageDir 'admin'
         New-Item -ItemType Directory -Force -Path $adminDir | Out-Null
@@ -158,11 +158,11 @@ try {
     $env:CGO_ENABLED = '0'
 
     $archiveTool = Join-Path $PSScriptRoot 'package-archive.go'
-    Write-Host "Creating $archivePath..."
+    Write-Host "正在创建 $archivePath..."
     & go run -buildvcs=false $archiveTool -source $stageDir -output $archivePath
     Assert-ExitCode 'create Linux tar.gz'
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
-        throw "Archive was not created: $archivePath"
+        throw "归档文件未生成: $archivePath"
     }
 
     # 仅清理本脚本的历史归档和旧版 dist/supervisor 中间目录。
@@ -180,9 +180,9 @@ try {
     }
 
     Write-Host ''
-    Write-Host "Package ready: $archivePath"
-    Write-Host 'Archive layout: bin/, sql/, admin/ (unless skipped)'
-    Write-Host 'All Linux binaries carry 0755 executable permissions.'
+    Write-Host "打包完成: $archivePath"
+    Write-Host '归档目录: bin/、sql/、admin/（跳过前端时无 admin/）'
+    Write-Host '所有 Linux 可执行文件均设置为 0755 权限。'
 
 }
 # 无论前端或后端构建是否成功，都恢复进程原有的 Go 环境变量。

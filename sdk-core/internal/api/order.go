@@ -25,7 +25,7 @@ type OrderAPI interface {
 func decodeOrderJSON(raw []byte,required []string,target any)error{
     decoder:=json.NewDecoder(bytes.NewReader(raw))
     start,err:=decoder.Token()
-    if err!=nil||start!=json.Delim('{'){return errors.New("invalid object")}
+    if err!=nil||start!=json.Delim('{'){return errors.New("请求体必须是 JSON 对象")}
     values:=make(map[string]json.RawMessage)
     allowed:=make(map[string]bool,len(required))
     for _,k:=range required{allowed[k]=true}
@@ -33,15 +33,15 @@ func decodeOrderJSON(raw []byte,required []string,target any)error{
         token,err:=decoder.Token()
         if err!=nil{return err}
         key,ok:=token.(string)
-        if !ok||!allowed[key]||values[key]!=nil{return errors.New("duplicate or unexpected field")}
+        if !ok||!allowed[key]||values[key]!=nil{return errors.New("请求体包含重复或不支持的字段")}
         var item json.RawMessage
         if err=decoder.Decode(&item);err!=nil{return err}
-        if bytes.Equal(bytes.TrimSpace(item),[]byte("null")){return errors.New("null field")}
+        if bytes.Equal(bytes.TrimSpace(item),[]byte("null")){return errors.New("请求字段不能为 null")}
         values[key]=item
     }
     if _,err=decoder.Token();err!=nil{return err}
-    if err=decoder.Decode(new(any));!errors.Is(err,io.EOF){return errors.New("trailing json")}
-    for _,k:=range required{if values[k]==nil{return errors.New("missing field")}}
+    if err=decoder.Decode(new(any));!errors.Is(err,io.EOF){return errors.New("请求体存在多余 JSON 内容")}
+    for _,k:=range required{if values[k]==nil{return errors.New("缺少必填字段")}}
     d:=json.NewDecoder(bytes.NewReader(raw))
     d.DisallowUnknownFields()
     return d.Decode(target)
@@ -54,18 +54,18 @@ func readBody(w http.ResponseWriter,r *http.Request)([]byte,error){
 
 func orderError(w http.ResponseWriter,err error){
     code:=http.StatusServiceUnavailable
-    message:="order service unavailable"
+    message:="订单服务暂时不可用"
     switch {
     case errors.Is(err,model.ErrOrderNotFound),errors.Is(err,model.ErrNotFound):
-        code=http.StatusNotFound;message="order or app not found"
+        code=http.StatusNotFound;message="订单或渠道包不存在"
     case errors.Is(err,model.ErrOrderConflict):
-        code=http.StatusConflict;message="order conflict"
+        code=http.StatusConflict;message="订单数据冲突"
     case errors.Is(err,service.ErrInvalidOrder):
-        code=http.StatusBadRequest;message="invalid order"
+        code=http.StatusBadRequest;message="订单请求参数不合法"
     case errors.Is(err,auth.ErrUnauthorized),errors.Is(err,payment.ErrSignature):
-        code=http.StatusUnauthorized;message="invalid signature"
+        code=http.StatusUnauthorized;message="请求签名验证失败"
     case errors.Is(err,model.ErrInvalidConfig):
-        code=http.StatusUnprocessableEntity;message="invalid server configuration"
+        code=http.StatusUnprocessableEntity;message="服务器配置不合法"
     }
     writeJSON(w,code,response{Code:code,Message:message})
 }
@@ -74,7 +74,7 @@ func registerOrderRoutes(mux *http.ServeMux,svc OrderAPI){
     mux.HandleFunc("POST /api/core/{env}/{appid}/orders",func(w http.ResponseWriter,r *http.Request){
         if r.URL.RawQuery!=""{orderError(w,service.ErrInvalidOrder);return}
         raw,err:=readBody(w,r)
-        if err!=nil{writeJSON(w,http.StatusRequestEntityTooLarge,response{Code:413,Message:"invalid or oversized body"});return}
+        if err!=nil{writeJSON(w,http.StatusRequestEntityTooLarge,response{Code:413,Message:"请求体格式不合法或超过大小限制"});return}
         env,appid:=r.PathValue("env"),r.PathValue("appid")
         if err=svc.VerifyRegistration(r,raw,env,appid);err!=nil{orderError(w,err);return}
         var req model.RegisterOrder
@@ -88,7 +88,7 @@ func registerOrderRoutes(mux *http.ServeMux,svc OrderAPI){
     mux.HandleFunc("POST /api/core/{appid}/pay/notify",func(w http.ResponseWriter,r *http.Request){
         if r.URL.RawQuery!=""{orderError(w,service.ErrInvalidOrder);return}
         raw,err:=readBody(w,r)
-        if err!=nil{writeJSON(w,http.StatusRequestEntityTooLarge,response{Code:413,Message:"invalid or oversized body"});return}
+        if err!=nil{writeJSON(w,http.StatusRequestEntityTooLarge,response{Code:413,Message:"请求体格式不合法或超过大小限制"});return}
         var req model.PaymentCallback
         if err=decodeOrderJSON(raw,
             []string{"order_no","game_order_id","amount","attach","paid_at"},&req);err!=nil {

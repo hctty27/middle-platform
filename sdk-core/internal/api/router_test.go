@@ -94,3 +94,32 @@ func TestHealthProbes(t *testing.T) {
         if rec.Code!=tc.want { t.Errorf("%s: got=%d want=%d",tc.url,rec.Code,tc.want) }
     }
 }
+
+ 
+// TestCoreRouteChineseErrors 确保错误消息中文化不影响原有 HTTP 状态码和 JSON 结构。
+func TestCoreRouteChineseErrors(t *testing.T) {
+    cases := []struct {
+        err error
+        status int
+        message string
+    }{
+        {model.ErrInvalidRequest, http.StatusBadRequest, "环境或渠道包 ID 不合法"},
+        {model.ErrNotFound, http.StatusNotFound, "渠道包不存在或未绑定该环境"},
+        {model.ErrAmbiguous, http.StatusConflict, "渠道包 ID 不唯一"},
+        {model.ErrInvalidConfig, http.StatusInternalServerError, "渠道包配置不合法"},
+        {errors.New("sensitive database details"), http.StatusServiceUnavailable, "配置服务暂时不可用"},
+    }
+    for _, tc := range cases {
+        recorder := httptest.NewRecorder()
+        Router(&fakeFetcher{err: tc.err}, fakePinger{}).ServeHTTP(recorder,
+            httptest.NewRequest(http.MethodGet, "/api/core/review/app", nil))
+        var payload struct {
+            Code int `json:"code"`
+            Message string `json:"message"`
+        }
+        if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil { t.Fatal(err) }
+        if recorder.Code != tc.status || payload.Code != tc.status || payload.Message != tc.message {
+            t.Errorf("状态码或错误文案异常: HTTP=%d 响应=%+v", recorder.Code, payload)
+        }
+    }
+}

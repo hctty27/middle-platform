@@ -13,7 +13,7 @@ func main() {
     configPath := flag.String("config", "", "YAML configuration file")
     flag.Parse()
     if err := app.Run(*configPath); err != nil {
-        slog.Error("config-center stopped", "error", err)
+        slog.Error("配置中心启动或运行失败", "error", err)
         os.Exit(1)
     }
 }

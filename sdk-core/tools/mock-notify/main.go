@@ -55,14 +55,14 @@ func newHandler(mode responseMode, logger *log.Logger) http.Handler {
 	mux.HandleFunc("POST /pay/notify", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
 		if err != nil || !json.Valid(body) {
-			http.Error(w, "invalid JSON body", http.StatusBadRequest)
+			http.Error(w, "请求体 JSON 格式不合法", http.StatusBadRequest)
 			return
 		}
 
 		nonce := r.Header.Get("X-SDK-Nonce")
 		rawNonce, err := hex.DecodeString(nonce)
 		if err != nil || len(rawNonce) != 8 || strings.ToLower(nonce) != nonce {
-			http.Error(w, "invalid X-SDK-Nonce", http.StatusBadRequest)
+			http.Error(w, "X-SDK-Nonce 格式不合法", http.StatusBadRequest)
 			return
 		}
 
@@ -71,7 +71,7 @@ func newHandler(mode responseMode, logger *log.Logger) http.Handler {
 
 		if mode == modeFail {
 			logger.Printf("模拟失败：返回 HTTP 500，触发 SDK Core 补偿重试")
-			http.Error(w, "simulated failure", http.StatusInternalServerError)
+			http.Error(w, "模拟通知失败", http.StatusInternalServerError)
 			return
 		}
 

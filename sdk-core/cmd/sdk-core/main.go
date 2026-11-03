@@ -27,12 +27,12 @@ import (
 func main(){
     path:=flag.String("config","configs/config.yaml","YAML configuration file")
     flag.Parse()
-    if err:=run(*path);err!=nil{slog.Error("sdk-core stopped","error",err);os.Exit(1)}
+    if err:=run(*path);err!=nil{slog.Error("SDK Core 启动或运行失败","error",err);os.Exit(1)}
 }
 
 func openDB(cfg settings.Database)(*sql.DB,error){
     parsed,err:=mysql.ParseDSN(cfg.DSN)
-    if err!=nil{return nil,fmt.Errorf("invalid DSN: %w",err)}
+    if err!=nil{return nil,fmt.Errorf("数据库 DSN 不合法: %w",err)}
     parsed.ParseTime=true
     parsed.Loc=time.UTC
     parsed.Timeout=5*time.Second
@@ -52,17 +52,17 @@ func openDB(cfg settings.Database)(*sql.DB,error){
 func run(configPath string)error{
     cfg,err:=settings.Load(configPath)
     if err!=nil{return err}
-    if err=logging.Init("sdk-core",cfg.Log);err!=nil{return fmt.Errorf("initialize logging: %w",err)}
+    if err=logging.Init("sdk-core",cfg.Log);err!=nil{return fmt.Errorf("初始化日志失败: %w",err)}
     db,err:=openDB(cfg.Database)
     if err!=nil{return err}
     defer db.Close()
     initCtx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
     defer cancel()
-    if err=db.PingContext(initCtx);err!=nil{return fmt.Errorf("connect config center: %w",err)}
+    if err=db.PingContext(initCtx);err!=nil{return fmt.Errorf("连接配置中心数据库失败: %w",err)}
     repository:=store.NewStore(db)
     if err=repository.VerifySchema(initCtx);err!=nil{return err}
     resolver,err:=mapping.LoadDefault()
-    if err!=nil{return fmt.Errorf("load response mapping: %w",err)}
+    if err!=nil{return fmt.Errorf("加载响应字段映射失败: %w",err)}
     if err=resolver.Require(mapping.RouteCoreConfig);err!=nil{return err}
 
     // 配置查询与订单读写共用一个 sql.DB，订单路由和补偿 Worker 随进程启动。
@@ -73,9 +73,9 @@ func run(configPath string)error{
             notify_success_at,next_notify_at,created_at,updated_at
             FROM game_order LIMIT 0`)
         if checkErr != nil {
-            return fmt.Errorf("verify game_order schema (requires V12): %w", checkErr)
+            return fmt.Errorf("检查 game_order 表结构失败（需要 V12）: %w", checkErr)
         }
-        if err=rows.Close();err!=nil{return fmt.Errorf("close game_order schema check: %w",err)}
+        if err=rows.Close();err!=nil{return fmt.Errorf("关闭 game_order 表结构检查结果失败: %w",err)}
         orders:=&service.OrderService{
             ConfigReader:repository,
             Orders:store.NewOrderStore(db),
@@ -101,7 +101,7 @@ func run(configPath string)error{
     stopCtx,stop:=signal.NotifyContext(context.Background(),os.Interrupt,syscall.SIGTERM)
     defer stop()
     errCh:=make(chan error,1)
-    go func(){slog.Info("sdk-core started","address",cfg.Server.Address);errCh<-server.ListenAndServe()}()
+    go func(){slog.Info("SDK Core 已启动","address",cfg.Server.Address);errCh<-server.ListenAndServe()}()
     var listenErr error
     select{
     case <-stopCtx.Done():
@@ -111,16 +111,16 @@ func run(configPath string)error{
     ready.Store(false)
     stop()
     stopWorker()
-    slog.Info("sdk-core shutting down")
+    slog.Info("SDK Core 正在关闭")
     shutdownCtx,done:=context.WithTimeout(context.Background(),30*time.Second)
     defer done()
     shutdownErr:=server.Shutdown(shutdownCtx)
     if shutdownErr!=nil{
-        slog.Warn("HTTP graceful shutdown failed; closing active connections","error",shutdownErr)
+        slog.Warn("HTTP 优雅关闭失败，正在关闭活动连接","error",shutdownErr)
         shutdownErr=errors.Join(shutdownErr,server.Close())
     }
     if err=errors.Join(listenErr,shutdownErr);err!=nil{return err}
-    slog.Info("sdk-core stopped")
+    slog.Info("SDK Core 已停止")
     return nil
 }
 

@@ -76,7 +76,7 @@ func LoadFile(path string) (Config,error) {
   if item.value=="" {continue}
   parsed,err:=time.ParseDuration(item.value)
   if err!=nil || parsed<item.min || (item.max>0 && parsed>item.max) {
-   return Config{},fmt.Errorf("invalid %s duration %q",item.name,item.value)
+   return Config{},fmt.Errorf("%s 时间配置不合法: %q",item.name,item.value)
   }
   *item.target=parsed
  }
@@ -91,36 +91,36 @@ func LoadFile(path string) (Config,error) {
  } {
   if raw,ok:=os.LookupEnv(item.name);ok {
    ms,err:=strconv.Atoi(raw)
-   if err!=nil || ms<1 || ms>120000 {return Config{},fmt.Errorf("%s must be 1..120000 milliseconds",item.name)}
+   if err!=nil || ms<1 || ms>120000 {return Config{},fmt.Errorf("%s 必须是 1 到 120000 毫秒",item.name)}
    *item.target=time.Duration(ms)*time.Millisecond
   }
  }
  if raw,ok:=os.LookupEnv("CONFIG_RECONCILE_INTERVAL");ok {
   duration,err:=time.ParseDuration(raw)
-  if err!=nil || duration<time.Second {return Config{},fmt.Errorf("CONFIG_RECONCILE_INTERVAL must be a duration >= 1s")}
+  if err!=nil || duration<time.Second {return Config{},fmt.Errorf("CONFIG_RECONCILE_INTERVAL 必须是大于等于 1s 的时长")}
   cfg.ReconcileInterval=duration
  }
  if err:=cfg.Log.ApplyEnv();err!=nil{return Config{},err}
  cfg.CenterURL=strings.TrimRight(cfg.CenterURL,"/")
- if strings.TrimSpace(cfg.DSN)=="" {return Config{},fmt.Errorf("database.dsn or ACCESS_DB_DSN is required")}
+ if strings.TrimSpace(cfg.DSN)=="" {return Config{},fmt.Errorf("必须配置 database.dsn 或 ACCESS_DB_DSN")}
  if strings.TrimSpace(cfg.WebhookSecret)=="" || cfg.WebhookSecret=="change-me-in-development" {
-  return Config{},fmt.Errorf("webhook.secret or CONFIG_WEBHOOK_SECRET must be configured")
+  return Config{},fmt.Errorf("必须配置 webhook.secret 或 CONFIG_WEBHOOK_SECRET")
  }
  parsed,err:=url.Parse(cfg.CenterURL)
  if err!=nil || parsed.Host=="" || (parsed.Scheme!="http" && parsed.Scheme!="https") || parsed.User!=nil || parsed.RawQuery!="" || parsed.Fragment!="" || parsed.Path!="" {
-  return Config{},fmt.Errorf("configCenter.url must be an http(s) origin without path")
+  return Config{},fmt.Errorf("configCenter.url 必须是没有路径的 HTTP(S) 地址")
  }
  return cfg,nil
 }
 
 func readYAML(path string,target *configFile) error {
  raw,err:=os.ReadFile(path)
- if err!=nil{return fmt.Errorf("read YAML %s: %w",path,err)}
+ if err!=nil{return fmt.Errorf("读取 YAML %s 失败: %w",path,err)}
  decoder:=yaml.NewDecoder(bytes.NewReader(raw))
  decoder.KnownFields(true)
- if err:=decoder.Decode(target);err!=nil{return fmt.Errorf("decode YAML %s: %w",path,err)}
+ if err:=decoder.Decode(target);err!=nil{return fmt.Errorf("解析 YAML %s 失败: %w",path,err)}
  var extra any
- if err:=decoder.Decode(&extra);err!=io.EOF{return fmt.Errorf("YAML %s must contain exactly one document",path)}
+ if err:=decoder.Decode(&extra);err!=io.EOF{return fmt.Errorf("YAML %s 必须只包含一份文档",path)}
  return nil
 }
 

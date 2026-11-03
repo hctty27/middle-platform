@@ -6,9 +6,9 @@ import (
 )
 
 var (
-    ErrOrderNotFound = errors.New("order not found")
-    ErrOrderConflict = errors.New("order conflict")
-    ErrOrderNotPaid = errors.New("order not paid")
+    ErrOrderNotFound = errors.New("订单不存在")
+    ErrOrderConflict = errors.New("订单冲突")
+    ErrOrderNotPaid = errors.New("订单尚未支付")
 )
 
 // RegisterOrder 是游戏服提交的订单登记内容，金额单位为分。

@@ -30,7 +30,7 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := local.Ready(ctx); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error":"database unavailable"})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error":"数据库不可用"})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status":"UP"})
@@ -54,16 +54,16 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 		}
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		if err := decoder.Decode(&payload); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid JSON"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error":"JSON 格式不合法"})
 			return
 		}
 		var extra any
 		if err := decoder.Decode(&extra); err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid JSON"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error":"JSON 格式不合法"})
 			return
 		}
 		if !verify(r.Header.Get("X-Config-Timestamp"), r.Header.Get("X-Config-Signature"), payload.Epoch, payload.Revision, secret) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error":"invalid callback signature"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error":"同步回调签名验证失败"})
 			return
 		}
 		trigger.Request()
@@ -91,14 +91,14 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		slog.Error("write JSON failed", "error", err)
+		slog.Error("写入 JSON 响应失败", "error", err)
 	}
 }
 
 func respond(w http.ResponseWriter, result any, err error) {
 	if err != nil {
-		slog.Error("read replica failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"replica unavailable"})
+		slog.Error("读取本地配置副本失败", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"本地配置副本不可用"})
 		return
 	}
 	writeJSON(w, http.StatusOK, result)

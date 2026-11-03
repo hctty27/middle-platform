@@ -34,10 +34,10 @@ func defaultDB() Database{
 }
 func validateDB(d Database)error {
     if d.MaxOpenConns<1||d.MaxIdleConns<0||d.MaxIdleConns>d.MaxOpenConns {
-        return errors.New("invalid database pool configuration")
+        return errors.New("数据库连接池配置不合法")
     }
     if _,err:=time.ParseDuration(d.ConnMaxLifetime);err!=nil{
-        return fmt.Errorf("invalid database connMaxLifetime: %w",err)
+        return fmt.Errorf("数据库 connMaxLifetime 配置不合法: %w",err)
     }
     return nil
 }
@@ -49,22 +49,22 @@ func Load(path string)(Config,error){
     cfg.Database=defaultDB()
     if path==""{path="configs/config.yaml"}
     raw,err:=os.ReadFile(path)
-    if err!=nil{return Config{},fmt.Errorf("read configuration %s: %w",path,err)}
+    if err!=nil{return Config{},fmt.Errorf("读取配置文件 %s 失败: %w",path,err)}
     d:=yaml.NewDecoder(bytes.NewReader(raw))
     d.KnownFields(true)
-    if err=d.Decode(&cfg);err!=nil{return Config{},fmt.Errorf("decode configuration: %w",err)}
+    if err=d.Decode(&cfg);err!=nil{return Config{},fmt.Errorf("解析配置文件失败: %w",err)}
     var extra any
     if err=d.Decode(&extra);!errors.Is(err,io.EOF){
-        return Config{},errors.New("configuration must contain exactly one YAML document")
+        return Config{},errors.New("配置文件必须只包含一份 YAML 文档")
     }
     if v,ok:=os.LookupEnv("SDK_CORE_DB_DSN");ok{cfg.Database.DSN=v}
     if v,ok:=os.LookupEnv("SDK_CORE_ADDR");ok{cfg.Server.Address=v}
     if err=cfg.Log.ApplyEnv();err!=nil{return Config{},err}
     if strings.TrimSpace(cfg.Database.DSN)==""{
-        return Config{},errors.New("database.dsn or SDK_CORE_DB_DSN is required")
+        return Config{},errors.New("必须配置 database.dsn 或 SDK_CORE_DB_DSN")
     }
     if strings.TrimSpace(cfg.Server.Address)==""{
-        return Config{},errors.New("server.address is required")
+        return Config{},errors.New("必须配置 server.address")
     }
     if err=validateDB(cfg.Database);err!=nil{return Config{},err}
     return cfg,nil

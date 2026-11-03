@@ -60,19 +60,19 @@ func secureWebhookDial(lookup webhookLookup) func(context.Context, string, strin
             return nil, err
         }
         if prohibitedMetadataHost(host) {
-            return nil, fmt.Errorf("webhook metadata endpoint is prohibited")
+            return nil, fmt.Errorf("禁止访问 Webhook 元数据服务地址")
         }
         ips, err := lookup(ctx, host)
         if err != nil {
             return nil, err
         }
         if len(ips) == 0 {
-            return nil, fmt.Errorf("webhook host %q has no DNS records", host)
+            return nil, fmt.Errorf("Webhook 主机 %q 没有 DNS 解析记录", host)
         }
         for _, item := range ips {
             ip, ok := netip.AddrFromSlice(item.IP)
             if !ok || !permittedWebhookIP(ip) {
-                return nil, fmt.Errorf("webhook host %q resolves to a prohibited address", host)
+                return nil, fmt.Errorf("Webhook 主机 %q 解析到了禁止访问的地址", host)
             }
         }
         var dialErr error
@@ -83,7 +83,7 @@ func secureWebhookDial(lookup webhookLookup) func(context.Context, string, strin
             }
             dialErr = err
         }
-        return nil, fmt.Errorf("webhook connection failed: %w", dialErr)
+        return nil, fmt.Errorf("Webhook 连接失败: %w", dialErr)
     }
 }
 

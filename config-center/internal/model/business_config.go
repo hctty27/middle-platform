@@ -34,11 +34,11 @@ var businessConfigKeys = map[string][]string{
 func ValidateBusinessConfig(nodeType, config string) error {
 	keys, ok := businessConfigKeys[nodeType]
 	if !ok {
-		return fmt.Errorf("%w: unknown config type %q", ErrInvalid, nodeType)
+		return fmt.Errorf("%w: 未知的配置类型 %q", ErrInvalid, nodeType)
 	}
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(config), &object); err != nil || object == nil {
-		return fmt.Errorf("%w: config must be a JSON object", ErrInvalid)
+		return fmt.Errorf("%w: 配置必须是 JSON 对象", ErrInvalid)
 	}
 	for _, key := range keys {
 		value, exists := object[key]
@@ -47,7 +47,7 @@ func ValidateBusinessConfig(nodeType, config string) error {
 		}
 		var content string
 		if string(value) == "null" || json.Unmarshal(value, &content) != nil {
-			return fmt.Errorf("%w: %s must be a string", ErrInvalid, key)
+			return fmt.Errorf("%w: %s 必须是字符串", ErrInvalid, key)
 		}
 	}
 	return nil

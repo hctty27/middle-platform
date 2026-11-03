@@ -63,7 +63,7 @@ func (s *ConfigService) Get(ctx context.Context,env,appID string) (map[string]an
         }
         config,err:=mapping.DecodeObject(input.raw)
         if err!=nil {
-            return nil,fmt.Errorf("%w: %s config: %v",model.ErrInvalidConfig,input.name,err)
+            return nil,fmt.Errorf("%w: %s 配置错误: %v",model.ErrInvalidConfig,input.name,err)
         }
         // 渠道包 JSON 允许按需映射普通字段；平台支付密钥不得通过公开配置接口泄露。
         if input.name=="channel_app" { delete(config,"appSecret") }

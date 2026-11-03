@@ -45,19 +45,19 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
     if err:=s.DB.QueryRowContext(ctx,
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='config_sync_state'").Scan(&stateCount);err!=nil{return err}
     if nodeCount!=1||stateCount!=1 {
-        return errors.New("replica schema missing; manually execute config-center-access/db/sql/initialize.sql in an empty config_access database")
+        return errors.New("本地配置副本缺少表结构；请在空的 config_access 数据库手动执行 config-center-access/db/sql/initialize.sql")
     }
 	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,env_type,node_type,
 		code,name,status,config,remark,created_at,updated_at FROM config_node LIMIT 0`)
 	if err != nil {
-		return fmt.Errorf("obsolete replica schema: use the pre-baseline code to upgrade before startup: %w", err)
+		return fmt.Errorf("本地副本表结构已过时，请先使用旧版升级程序升级再启动: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
 	rows, err = s.DB.QueryContext(ctx, "SELECT epoch,revision,updated_at FROM config_sync_state LIMIT 0")
 	if err != nil {
-		return fmt.Errorf("invalid replica sync state: %w", err)
+		return fmt.Errorf("本地副本同步状态不合法: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return err
@@ -69,7 +69,7 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 		return err
 	}
 	if obsoleteColumns != 0 {
-		return errors.New("obsolete replica columns; upgrade the database with pre-baseline scripts first")
+		return errors.New("本地副本字段已过时，请先使用旧版升级脚本更新数据库")
 	}
 	var constraints int
 	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.table_constraints
@@ -78,7 +78,7 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 		return err
 	}
 	if constraints != 2 {
-		return errors.New("replica CHECK constraints missing; upgrade to V6 before startup")
+		return errors.New("本地副本缺少 CHECK 约束，请先升级到 V6")
 	}
 	var clause string
 	if err := s.DB.QueryRowContext(ctx, `SELECT check_clause FROM information_schema.check_constraints
@@ -86,14 +86,14 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 		return err
 	}
 	if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
-		return errors.New("obsolete replica environment CHECK constraint; upgrade to V6 before startup")
+		return errors.New("本地副本环境 CHECK 约束已过时，请先升级到 V6")
 	}
 	var stateRows int
 	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_sync_state WHERE id=1").Scan(&stateRows); err != nil {
 		return err
 	}
 	if stateRows != 1 {
-		return errors.New("replica sync cursor missing; restore it or rebuild a new empty replica")
+		return errors.New("本地副本同步游标缺失，请恢复游标或重建空副本")
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ func readState(_ context.Context, row scanner) (State, error) {
 // Apply 对比期望游标，事务性执行全量快照或增量变更。
 func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remote.Node, deleted []int64, full bool) (bool, error) {
 	if next.Epoch == "" || next.Revision < 0 {
-		return false, fmt.Errorf("invalid target cursor")
+		return false, fmt.Errorf("目标同步游标不合法")
 	}
 	for _, node := range nodes {
 		if err := validateNode(node); err != nil {
@@ -166,7 +166,7 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 			created_at=VALUES(created_at),updated_at=VALUES(updated_at)`,
 			node.ID,node.GameID,node.RegionID,node.NodeType,node.EnvType,node.Code,
 			node.Name,node.Status,node.Config,node.Remark,created,updated)
-		if err != nil { return false, fmt.Errorf("store node %d: %w", node.ID, err) }
+		if err != nil { return false, fmt.Errorf("保存节点 %d 失败: %w", node.ID, err) }
 	}
 	var epoch any = next.Epoch
 	if next.Epoch == "" { epoch = nil }
@@ -175,7 +175,7 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 		epoch, next.Revision)
 	if err != nil { return false, err }
 	count, err := res.RowsAffected()
-	if err != nil || count != 1 { return false, fmt.Errorf("update cursor rows=%d: %w", count, err) }
+	if err != nil || count != 1 { return false, fmt.Errorf("更新同步游标失败，影响行数=%d: %w", count, err) }
 	if err := tx.Commit(); err != nil { return false, err }
 	return true, nil
 }
@@ -183,17 +183,17 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 // validateNode 在持久化前校验远端节点的必填项、环境枚举和日期字段。
 func validateNode(n remote.Node) error {
 	if n.ID <= 0 || n.Code == "" || n.Name == "" || !json.Valid([]byte(n.Config)) {
-		return fmt.Errorf("invalid node id=%d or JSON config", n.ID)
+		return fmt.Errorf("节点 ID=%d 或 JSON 配置不合法", n.ID)
 	}
 	if n.NodeType == "region" {
         if n.EnvType != nil {
             switch *n.EnvType {
             case "test", "review", "prod":
-            default: return fmt.Errorf("invalid region environment %q", *n.EnvType)
+            default: return fmt.Errorf("大区环境 %q 不合法", *n.EnvType)
             }
         }
     } else if n.EnvType != nil {
-        return fmt.Errorf("non-region node with environment")
+        return fmt.Errorf("非大区节点不能设置环境")
     }
     if _, err := parseDate(n.CreatedAt); err != nil { return err }
 	if _, err := parseDate(n.UpdatedAt); err != nil { return err }
@@ -203,7 +203,7 @@ func validateNode(n remote.Node) error {
 func parseDate(v string) (time.Time, error) {
 	parsed, err := time.Parse("2006-01-02T15:04:05.999999999", v)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid config node datetime %q: %w", v, err)
+		return time.Time{}, fmt.Errorf("配置节点日期时间 %q 不合法: %w", v, err)
 	}
 	return parsed, nil
 }
@@ -244,6 +244,6 @@ func (s *Replica) Revision(ctx context.Context) (map[string]any, error) {
 
 // Ready 用真实数据库 Ping 校验服务是否可工作。
 func (s *Replica) Ready(ctx context.Context) error {
-	if s.DB == nil { return errors.New("missing replica database") }
+	if s.DB == nil { return errors.New("未配置本地副本数据库") }
 	return s.DB.PingContext(ctx)
 }

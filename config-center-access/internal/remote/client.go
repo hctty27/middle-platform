@@ -92,20 +92,20 @@ func (c *Client) call(ctx context.Context, method, path string, body []byte, tar
 	}
 	response, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("config center request failed: %w", err)
+		return fmt.Errorf("请求配置中心失败: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(response.Body, 512))
-		return fmt.Errorf("config center %s: HTTP %d: %s", path, response.StatusCode, msg)
+		return fmt.Errorf("配置中心请求 %s 失败，HTTP %d: %s", path, response.StatusCode, msg)
 	}
 	dec := json.NewDecoder(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err := dec.Decode(target); err != nil {
-		return fmt.Errorf("invalid response from %s: %w", path, err)
+		return fmt.Errorf("接口 %s 响应格式错误: %w", path, err)
 	}
 	var trailing any
 	if err := dec.Decode(&trailing); err != io.EOF {
-		return fmt.Errorf("invalid trailing data from %s", path)
+		return fmt.Errorf("接口 %s 响应包含多余内容", path)
 	}
 	return nil
 }

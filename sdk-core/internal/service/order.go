@@ -17,7 +17,7 @@ import (
 )
 
 // ErrInvalidOrder 表示登记或回调的订单参数不符合约束。
-var ErrInvalidOrder = errors.New("invalid order request")
+var ErrInvalidOrder = errors.New("订单请求参数不合法")
 var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 // OrderService 负责订单登记、平台回调确认及游戏发货补偿。
@@ -126,7 +126,7 @@ func(s *OrderService) deliver(ctx context.Context,o model.Order)error {
     commitCtx,commitCancel:=context.WithTimeout(context.Background(),2*time.Second)
     defer commitCancel()
     if saveErr:=s.Orders.CompleteNotify(commitCtx,o.ID,o.NotifyAttempts,err);saveErr!=nil {
-        return fmt.Errorf("persist notification result: %w",saveErr)
+        return fmt.Errorf("保存发货通知结果失败: %w",saveErr)
     }
     return err
 }
@@ -155,7 +155,7 @@ func(s *OrderService) RunWorker(ctx context.Context) {
                         if ctx.Err()==nil {
                             // 避免数据库故障时每 500ms 刷屏，同一消费者 30 秒最多记录一次。
                             if time.Since(lastClaimErrorLog)>=30*time.Second {
-                                slog.Warn("claim game notification failed","error",err)
+                                slog.Warn("领取游戏发货通知任务失败","error",err)
                                 lastClaimErrorLog=time.Now()
                             }
                         }
@@ -163,7 +163,7 @@ func(s *OrderService) RunWorker(ctx context.Context) {
                     }
                     if order==nil{continue}
                     if notifyErr:=s.deliver(ctx,*order);notifyErr!=nil&&ctx.Err()==nil {
-                        slog.Warn("game notification failed","order_id",order.ID,
+                        slog.Warn("游戏发货通知失败","order_id",order.ID,
                             "attempt",order.NotifyAttempts,"error",notifyErr)
                     }
                 }
@@ -176,7 +176,7 @@ func(s *OrderService) RunWorker(ctx context.Context) {
 // Validate 在启动前检查订单服务依赖是否完整。
 func(s *OrderService) Validate()error {
     if s.Orders==nil||s.ConfigReader==nil||s.GameSecretReader==nil||s.PlatformSecretReader==nil||s.Notifier==nil {
-        return errors.New("order service dependency missing")
+        return errors.New("订单服务依赖未配置完整")
     }
      return nil
 }

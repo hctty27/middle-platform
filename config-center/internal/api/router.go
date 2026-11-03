@@ -75,7 +75,7 @@ func router(reader Reader, writer Writer) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := h.reader.Ready(ctx); err != nil {
-			writeError(w, http.StatusServiceUnavailable, "database unavailable")
+			writeError(w, http.StatusServiceUnavailable, "数据库不可用")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "UP"})

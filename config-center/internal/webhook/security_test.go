@@ -66,7 +66,7 @@ func TestWebhookDialBlocksMetadataDNSAlias(t *testing.T) {
     }
     dial := secureWebhookDial(resolver)
     _, err := dial(context.Background(), "tcp", "callback.example.org:8080")
-    if err == nil || !strings.Contains(err.Error(), "prohibited") {
+    if err == nil || !strings.Contains(err.Error(), "禁止访问") {
         t.Fatalf("expected metadata rejection, got %v", err)
     }
 }

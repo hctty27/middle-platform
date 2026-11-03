@@ -1,6 +1,7 @@
 import { nextTick, onBeforeUnmount, reactive, ref, computed } from 'vue'
 import axios from 'axios'
 import { nodeApi } from '../../../api/nodeApi'
+import { apiErrorMessage } from '../../../api/http'
 import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch, RegionEnvType } from '../types'
 import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
 import type { LoadFunction } from 'element-plus'
@@ -111,8 +112,8 @@ const loadTree: LoadFunction = async (node, resolve, reject) => {
   try {
     const result = await nodeApi.getTreeChildren(parentId)
     resolve(result.data)
-  } catch {
-    ElMessage.error('配置目录加载失败，请重新展开')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '配置目录加载失败，请重新展开'))
     reject()
   }
 }
@@ -154,8 +155,8 @@ async function refreshTreeParent(parentId: number) {
   try {
     const result = await nodeApi.getTreeChildren(parentId)
     treeRef.value?.updateKeyChildren(parentId, result.data)
-  } catch {
-    ElMessage.warning('操作已成功，但目录刷新失败，请手动刷新')
+  } catch (error) {
+    ElMessage.warning(apiErrorMessage(error, '操作已成功，但目录刷新失败，请手动刷新'))
   }
 }
 
@@ -176,7 +177,7 @@ async function searchAll() {
     const result = await nodeApi.search(keyword, controller.signal)
     if (sequence === searchSequence) searchMatches.value = result.data
   } catch (error) {
-    if (sequence === searchSequence && !axios.isCancel(error)) ElMessage.error('全局搜索失败')
+    if (sequence === searchSequence && !axios.isCancel(error)) ElMessage.error(apiErrorMessage(error, '全局搜索失败'))
   } finally {
     if (sequence === searchSequence) searchLoading.value = false
   }
@@ -215,7 +216,7 @@ async function loadChildren() {
     children.value = result.data.items
     childTotal.value = result.data.total
   } catch (error) {
-    if (sequence === childSequence && !axios.isCancel(error)) ElMessage.error('子项加载失败')
+    if (sequence === childSequence && !axios.isCancel(error)) ElMessage.error(apiErrorMessage(error, '子项加载失败'))
   } finally {
     if (sequence === childSequence) childrenLoading.value = false
   }
@@ -297,7 +298,7 @@ async function openEditor(node: NodeSummary) {
     if (sequence === detailSequence) setForm(result.data)
   } catch (error) {
     if (sequence === detailSequence && !axios.isCancel(error)) {
-      ElMessage.error('节点详情加载失败')
+      ElMessage.error(apiErrorMessage(error, '节点详情加载失败'))
       drawerVisible.value = false
     }
   } finally {
@@ -361,7 +362,7 @@ async function save() {
     if (axios.isAxiosError(error) && error.response?.status === 409) {
       ElMessage.error('数据存在冲突，请刷新后重试')
     } else {
-      ElMessage.error('保存失败，请检查配置和节点约束')
+      ElMessage.error(apiErrorMessage(error, '保存配置失败'))
     }
   } finally {
     saving.value = false
@@ -397,8 +398,8 @@ async function removeNode(node: NodeSummary) {
     }
     emit('changed')
     ElMessage.success('已删除')
-  } catch {
-    ElMessage.error('删除失败，请先删除子项')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '删除节点失败'))
   }
 }
 
@@ -421,8 +422,8 @@ onBeforeUnmount(() => {
     try {
       const result = await nodeApi.getPath(id)
       return await choose(result.data.node, result.data.path)
-    } catch {
-      ElMessage.error('定位配置节点失败')
+    } catch (error) {
+      ElMessage.error(apiErrorMessage(error, '定位配置节点失败'))
       return false
     }
   }
