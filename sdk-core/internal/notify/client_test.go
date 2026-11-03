@@ -1,12 +1,7 @@
 package notify
 
 import (
-    "bytes"
     "context"
-    "crypto/hmac"
-    "crypto/sha256"
-    "encoding/hex"
-    "fmt"
     "io"
     "net"
     "net/http"
@@ -14,6 +9,11 @@ import (
     "net/netip"
     "testing"
     "time"
+    "sort"
+    "strings"
+    "crypto/sha1"
+    "encoding/json"
+    "fmt"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
@@ -83,32 +83,41 @@ func TestNotificationDialRejectsMetadata(t *testing.T) {
     }
 }
 
-func TestNotifySignatureV2DoesNotDependOnURLPath(t *testing.T) {
-    key:=bytes.Repeat([]byte{0x5a},32)
-    server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
-        if r.URL.Path!="/arbitrary/game/notify" {t.Errorf("unexpected URL %q",r.URL.Path)}
-        body,err:=io.ReadAll(r.Body)
-        if err!=nil {t.Errorf("read request: %v",err);w.WriteHeader(http.StatusBadRequest);return}
-        timestamp:=r.Header.Get("X-SDK-Timestamp")
-        nonce:=r.Header.Get("X-SDK-Nonce")
-        appid:=r.Header.Get("X-SDK-AppID")
-        sum:=sha256.Sum256(body)
-        canonical:=fmt.Sprintf("%s\nPOST\n%s\n%s\n%x",appid,timestamp,nonce,sum)
-        mac:=hmac.New(sha256.New,key)
-        _,_=mac.Write([]byte(canonical))
-        if got:=r.Header.Get("X-SDK-Signature");got!=hex.EncodeToString(mac.Sum(nil)) {
-            t.Errorf("notification signature unexpectedly includes URL path")
-            w.WriteHeader(http.StatusUnauthorized)
-            return
+func TestNotifySignatureUsesPlatformStyleSHA1(t *testing.T) {
+    secret := []byte("game-secret")
+    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+        if r.URL.Path != "/arbitrary/game/notify" {t.Errorf("unexpected path: %s",r.URL.Path)}
+        body,err := io.ReadAll(r.Body)
+        if err != nil {t.Error(err);w.WriteHeader(http.StatusBadRequest);return}
+        var message struct {
+            OrderNo string `json:"order_no"`
+            GameOrderID string `json:"game_order_id"`
+            Amount int64 `json:"amount"`
+            Attach string `json:"attach"`
+            PaidAt string `json:"paid_at"`
         }
-        _,_=w.Write([]byte(nonce))
+        if err := json.Unmarshal(body,&message);err != nil {t.Error(err);w.WriteHeader(http.StatusBadRequest);return}
+        if r.Header.Get("x-app-id") != "110006" {t.Error("wrong appid")}
+        if r.Header.Get("X-SDK-AppID") != "" {t.Error("obsolete header")}
+        if message.Amount != 600 || message.GameOrderID != "G100" {t.Error("bad body")}
+        values := []string{
+            string(secret),"110006",r.Header.Get("x-timestamp"),r.Header.Get("x-nonce"),
+            "test","payment.notify",message.OrderNo,message.GameOrderID,
+            "600",message.Attach,message.PaidAt,
+        }
+        filtered := make([]string,0,len(values))
+        for _,v := range values {if v!="" {filtered=append(filtered,v)}}
+        sort.Strings(filtered)
+        sum := sha1.Sum([]byte(strings.Join(filtered,"_")))
+        got := r.Header.Get("x-signature")
+        expected := fmt.Sprintf("%x",sum)
+        if got != expected {t.Errorf("invalid game notification sign: %s, want %s",got,expected);w.WriteHeader(http.StatusUnauthorized);return}
+        _,_=w.Write([]byte(r.Header.Get("x-nonce")))
     }))
     defer server.Close()
-    order:=model.Order{
-        AppID:"110006",GameOrderID:"G100",PlatformOrderNo:"P100",Amount:600,
-        GameNotifyURL:server.URL+"/arbitrary/game/notify",PaidAt:time.Now(),
+    order := model.Order{
+        AppID:"110006",Env:"test",GameOrderID:"G100",PlatformOrderNo:"P100",
+        Amount:600,GameNotifyURL:server.URL+"/arbitrary/game/notify",PaidAt:time.Now(),
     }
-    if err:=NewClient().Send(context.Background(),order,key);err!=nil {
-        t.Fatalf("send notification: %v",err)
-    }
+    if err := NewClient().Send(context.Background(),order,secret);err != nil {t.Fatal(err)}
 }
