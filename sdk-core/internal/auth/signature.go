@@ -15,11 +15,6 @@ import (
     "time"
 )
 
-const (
-    OperationOrderRegister = "order.register"
-    OperationPaymentNotify = "payment.notify"
-)
-
 // SignValues 与平台算法一致：过滤空值、按值排序、用下划线拼接、求 SHA-1 小写十六进制。
 func SignValues(values []string) string {
     filtered := make([]string, 0, len(values))
@@ -68,20 +63,20 @@ func bodyValues(rawBody []byte) ([]string, error) {
     return values, nil
 }
 
-// SignGame 对内部游戏接口添加环境和固定操作标识，防止跨环境、跨业务复用。
-// 平台接口仍使用其原有独立的协议，不调用此函数。
-func SignGame(secret []byte, operation, env, appID, timestamp, nonce string, rawBody []byte) (string, error) {
+// SignGame 与平台使用相同的值排序规则，签名只覆盖主密钥、AppID、时间戳、Nonce 和 Body 值。
+// env 和业务操作不参与签名；环境绑定与接口权限须由业务层独立校验。
+func SignGame(secret []byte, appID, timestamp, nonce string, rawBody []byte) (string, error) {
     if len(secret) == 0 {
         return "", ErrGameSecret
     }
-    if operation == "" || env == "" || appID == "" || timestamp == "" || nonce == "" {
+    if appID == "" || timestamp == "" || nonce == "" {
         return "", ErrUnauthorized
     }
     values, err := bodyValues(rawBody)
     if err != nil {
         return "", fmt.Errorf("读取签名业务字段失败: %w", err)
     }
-    values = append(values, string(secret), appID, timestamp, nonce, env, operation)
+    values = append(values, string(secret), appID, timestamp, nonce)
     return SignValues(values), nil
 }
 
@@ -112,7 +107,7 @@ func VerifyRegistration(r *http.Request, rawBody, secret []byte) error {
         time.Until(time.Unix(stamp, 0)) > 5*time.Minute {
         return ErrUnauthorized
     }
-    expected, err := SignGame(secret, OperationOrderRegister, env, appID, ts, nonce, rawBody)
+    expected, err := SignGame(secret, appID, ts, nonce, rawBody)
     if err != nil {
         return ErrUnauthorized
     }

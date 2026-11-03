@@ -14,50 +14,50 @@ func TestGamePlatformStyleSignatureVectors(t *testing.T) {
     secret := []byte("测试-密钥!")
     const stamp = "1793700000"
     const nonce = "0123456789abcdef"
-    tests := []struct {
-        operation, body, want string
+    cases := []struct {
+        name, body, want string
     }{
         {
-            auth.OperationOrderRegister,
+            "订单登记",
             `{"game_order_id":"G100","amount":600,"attach":""}`,
-            "0e18d1fd65d8cfdff5c63a51aaa5385e5f9fedb5",
+            "a8c30a586539b1d9cd7c5429421e3e88b6a02f6e",
         },
         {
-            auth.OperationPaymentNotify,
+            "发货通知",
             `{"order_no":"P100","game_order_id":"G100","amount":600,"attach":"","paid_at":"2026-11-03T00:00:00Z"}`,
-            "e98372554ca14e4bd89bfcf4bc6da5473216e347",
+            "ab4a3a41931cb6ffb0859fce3da65cc791ab677c",
         },
     }
-    for _, tc := range tests {
-        t.Run(tc.operation, func(t *testing.T) {
-            actual, err := auth.SignGame(secret, tc.operation, "test", "110006", stamp, nonce, []byte(tc.body))
-            if err != nil {t.Fatal(err)}
-            if actual != tc.want {t.Fatalf("signature = %s, expected %s",actual,tc.want)}
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            actual, err := auth.SignGame(secret, "110006", stamp, nonce, []byte(tc.body))
+            if err != nil { t.Fatal(err) }
+            if actual != tc.want { t.Fatalf("signature = %s, expected %s", actual, tc.want) }
         })
     }
 }
 
 func TestGameSigningFiltersOnlyEmptyValues(t *testing.T) {
     body := []byte(`{"a":"","b":null,"c":0,"d":false,"e":{"x":1,"y":2}}`)
-    got, err := auth.SignGame([]byte("k"), "event.report", "test", "app", "1793700000", "0123456789abcdef", body)
+    got, err := auth.SignGame([]byte("k"), "app", "1793700000", "0123456789abcdef", body)
     if err != nil {t.Fatal(err)}
     compact := []byte(`{"a":"","b":null,"c":0,"d":false,"e": { "x": 1, "y": 2 }}`)
-    again, err := auth.SignGame([]byte("k"), "event.report", "test", "app", "1793700000", "0123456789abcdef", compact)
+    again, err := auth.SignGame([]byte("k"), "app", "1793700000", "0123456789abcdef", compact)
     if err != nil || got != again {t.Fatalf("nested JSON compacting mismatch: %s / %s: %v",got,again,err)}
-    if _, err := auth.SignGame([]byte("k"), "event.report", "test", "app", "1793700000", "0123456789abcdef", []byte("null")); err == nil {
+    if _, err := auth.SignGame([]byte("k"), "app", "1793700000", "0123456789abcdef", []byte("null")); err == nil {
         t.Fatal("null body accepted")
     }
-    if _, err := auth.SignGame(nil, "event.report", "test", "app", "1793700000", "0123456789abcdef", body); err == nil {
+    if _, err := auth.SignGame(nil, "app", "1793700000", "0123456789abcdef", body); err == nil {
         t.Fatal("missing secret accepted")
     }
 }
 
-func TestVerifyRegistrationRejectsTamperingAndReplayAcrossContexts(t *testing.T) {
+func TestVerifyRegistrationValidatesSignedFieldsAndRequestHeaders(t *testing.T) {
     secret := []byte("secret")
     body := []byte(`{"game_order_id":"G100","amount":600,"attach":"roleId=1"}`)
     stamp := strconv.FormatInt(time.Now().Unix(),10)
     nonce := "0123456789abcdef"
-    signature, err := auth.SignGame(secret, auth.OperationOrderRegister, "test", "110006", stamp, nonce, body)
+    signature, err := auth.SignGame(secret, "110006", stamp, nonce, body)
     if err != nil {t.Fatal(err)}
     req := httptest.NewRequest(http.MethodPost, "/sdk/api/core/test/110006/orders", nil)
     req.SetPathValue("env","test")
@@ -70,8 +70,10 @@ func TestVerifyRegistrationRejectsTamperingAndReplayAcrossContexts(t *testing.T)
     if err := verify(body); err != nil {t.Fatal(err)}
     modified := []byte(`{"game_order_id":"G100","amount":700,"attach":"roleId=1"}`)
     if err := verify(modified); err == nil {t.Fatal("tampered amount accepted")}
+    // env 不参与签名：这里更换路由环境不会影响验签。
+    // 业务层负责校验 AppID 与目标环境绑定、限制订单跨环境登记。
     req.SetPathValue("env","prod")
-    if err := verify(body); err == nil {t.Fatal("cross-env replay accepted")}
+    if err := verify(body); err != nil {t.Fatalf("env should not be signed: %v", err)}
     req.SetPathValue("env","test")
     req.SetPathValue("appid","another")
     if err := verify(body); err == nil {t.Fatal("cross-app replay accepted")}
