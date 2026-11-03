@@ -54,5 +54,5 @@ func TestSDKServiceWritesDisabledWithoutWriter(t *testing.T) {
     req:=httptest.NewRequest(http.MethodPut,"/api/config/admin/sdk-services/1",strings.NewReader(`{"enabled":true}`))
     rec:=httptest.NewRecorder()
     Router(sdkServiceReader{}).ServeHTTP(rec,req)
-    if rec.Code!=http.StatusMethodNotAllowed { t.Fatalf("status %d",rec.Code) }
+    if rec.Code!=http.StatusNotFound { t.Fatalf("status %d",rec.Code) }
 }
