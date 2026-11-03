@@ -186,7 +186,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
         </template>
       </section>
     </div>
-    <el-drawer v-model="visible" :title="editing ? '编辑渠道应用' : '新增渠道应用'" size="min(650px, 96vw)" :close-on-click-modal="false">
+    <el-drawer v-model="visible" class="channel-app-editor-drawer" :title="editing ? '编辑渠道应用' : '新增渠道应用'" size="min(650px, 96vw)" :close-on-click-modal="false">
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="编码" required><el-input v-model="form.code" :disabled="!!editing" maxlength="128" /></el-form-item>
