@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-sql-driver/mysql"
+	"github.com/hctty27/middle-platform/config-center/internal/model"
 	"github.com/hctty27/middle-platform/config-center/internal/service"
 	"github.com/hctty27/middle-platform/config-center/internal/sqlcgen"
 )
@@ -39,6 +40,7 @@ func lockRevision(ctx context.Context, tx *sql.Tx) error {
 // Create 校验父子关系后原子写入节点及版本事件。
 func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, error) {
 	if err := service.ValidateCreate(input); err != nil { return Node{}, err }
+	if err := model.ValidateBusinessConfig(input.NodeType, input.Config); err != nil { return Node{}, err }
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil { return Node{}, err }
 	defer tx.Rollback()
@@ -83,6 +85,7 @@ func (s *Store) Update(ctx context.Context, id int64, input UpdateNodeRequest) (
 	if err := lockRevision(ctx, tx); err != nil { return Node{}, err }
 	current, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
     if err != nil { return Node{}, err }
+    if err := model.ValidateBusinessConfig(current.NodeType, input.Config); err != nil { return Node{}, err }
     if err := service.ValidateEnvType(current.NodeType, input.EnvType); err != nil { return Node{}, err }
     if current.NodeType == "region" && current.EnvType != nil && *current.EnvType != *input.EnvType {
         return Node{}, ErrConflict
