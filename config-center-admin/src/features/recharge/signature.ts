@@ -54,11 +54,14 @@ async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<str
 
 export async function signRegistration(gameSecret: string, rawBody: string, signingPath: string, timestamp: string): Promise<string> {
   if (!crypto?.subtle) throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost 访问管理后台')
-  const encoded = gameSecret.trim()
-  if (!/^[A-Za-z0-9+/]{43}=$/.test(encoded)) throw new Error('gameSecret 必须为 32 字节密钥的标准 Base64 编码')
-  const secret = Uint8Array.from(atob(encoded), char => char.charCodeAt(0))
-  if (secret.byteLength !== 32 || btoa(String.fromCharCode(...secret)) !== encoded) {
-    throw new Error('gameSecret 必须是 32 字节密钥的严格标准 Base64 编码')
+  if (!gameSecret.trim()) throw new Error('gameSecret 不能为空')
+  // 与 SDK Core 保持一致：仅旧版 32 字节标准 Base64 作为二进制密钥，其余按 UTF-8 使用。
+  let secret = encoder.encode(gameSecret)
+  if (/^[A-Za-z0-9+/]{43}=$/.test(gameSecret)) {
+    const decoded = Uint8Array.from(atob(gameSecret), char => char.charCodeAt(0))
+    if (decoded.length === 32 && btoa(String.fromCharCode(...decoded)) === gameSecret) {
+      secret = decoded
+    }
   }
   const master = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey'])
   const key = await crypto.subtle.deriveKey({
