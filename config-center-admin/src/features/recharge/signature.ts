@@ -7,7 +7,6 @@ const callbackPathPattern = new RegExp(`/api/core/(${appIDPattern})/pay/notify$`
 export interface Endpoint {
   url: string
   appid: string
-  signingPath?: string
   env?: string
 }
 
@@ -25,7 +24,7 @@ export function parseRegisterEndpoint(raw: string): Endpoint {
   const url = parseUrl(raw)
   const match = url.pathname.match(registerPathPattern)
   if (!match) throw new Error('登记 URL 应以 /api/core/{env}/{appid}/orders 结尾')
-  return { url: url.toString(), signingPath: match[1], env: match[2], appid: match[3] }
+  return { url: url.toString(), env: match[2], appid: match[3] }
 }
 
 export function parseCallbackEndpoint(raw: string): Endpoint {
@@ -33,14 +32,6 @@ export function parseCallbackEndpoint(raw: string): Endpoint {
   const match = url.pathname.match(callbackPathPattern)
   if (!match) throw new Error('回调 URL 应以 /api/core/{appid}/pay/notify 结尾')
   return { url: url.toString(), appid: match[1] }
-}
-
-export function resolveSigningPath(inferred: string, override: string): string {
-  const path = override.trim() || inferred
-  if (!path.startsWith('/') || path.includes('?') || path.includes('#') || path.includes('://')) {
-    throw new Error('签名路径必须是 SDK Core 实际收到的绝对路径，不含域名和查询参数')
-  }
-  return path
 }
 
 function hex(bytes: ArrayBuffer | Uint8Array): string {
@@ -52,7 +43,7 @@ async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<str
   return hex(await crypto.subtle.digest(algorithm, encoder.encode(text)))
 }
 
-export async function signRegistration(gameSecret: string, rawBody: string, signingPath: string, timestamp: string): Promise<string> {
+export async function signRegistration(gameSecret: string, rawBody: string, env: string, appid: string, timestamp: string): Promise<string> {
   if (!crypto?.subtle) throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost 访问管理后台')
   if (!gameSecret.trim()) throw new Error('gameSecret 不能为空')
   // 与 SDK Core 保持一致：仅旧版 32 字节标准 Base64 作为二进制密钥，其余按 UTF-8 使用。
@@ -66,10 +57,10 @@ export async function signRegistration(gameSecret: string, rawBody: string, sign
   const master = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey'])
   const key = await crypto.subtle.deriveKey({
     name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0),
-    info: encoder.encode('middle-platform:sdk-core:order-register:v1')
+    info: encoder.encode('middle-platform:sdk-core:order-register:v2')
   }, master, { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign'])
   const bodyHash = await digest('SHA-256', rawBody)
-  const canonical = ['POST', signingPath, timestamp, bodyHash].join('\n')
+  const canonical = ['POST', env, appid, timestamp, bodyHash].join('\n')
   return hex(await crypto.subtle.sign('HMAC', key, encoder.encode(canonical)))
 }
 
