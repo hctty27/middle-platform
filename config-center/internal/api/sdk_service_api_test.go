@@ -32,7 +32,7 @@ func (sdkServiceWriter) UpsertSDKChannelService(_ context.Context, appID, servic
 }
 
 func TestSDKServiceManagementRoutes(t *testing.T) {
-    handler:=RouterWithWrites(sdkServiceReader{},sdkServiceWriter{})
+    handler:=RouterWithWrites(sdkServiceReader{},&sdkServiceWriter{})
     tests:=[]struct{method,path,body string;status int}{
         {"GET","/api/config/admin/sdk-services","",200},
         {"GET","/api/config/admin/channel-apps/2/services?env=test","",200},
