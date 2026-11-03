@@ -127,3 +127,26 @@ database:
 运行时账号仅需配置表 SELECT、订单表 SELECT/INSERT/UPDATE，不需要 DDL。
 如果原来两个账号分离，需新建或授权合并后的 `sdk_core` 账号；不能单纯沿用只有配置 SELECT 权限的账号。
 如果 `game_order` 已存在，则无需重复执行 SQL；先核对表结构，切勿删除旧订单数据。
+
+## 渠道包事件上报
+
+```http
+POST /api/core/{env}/events
+```
+
+AppID 放在请求头 `x-app-id` 中，不再作为事件接口的路径参数。Body 固定为 `{"event":"login","ext":{}}`，使用所属游戏 `gameSecret` 及 Body 顶层非空值验签；Core 转发平台时改用该渠道 `appSecret`，平台入站签名不包含 Body。
+
+Core 依赖 `sdk_service` 和 `sdk_service_channel` 两张已有开关表。仅当全局 `event_report` 以及目标渠道对应环境的开关均开启时，才同步请求平台；无配置默认关闭。本阶段不使用事件级规则、不持久化事件、不启动事件重试 Worker。
+
+在 `configs/config.yaml` 配置平台固定地址：
+
+```yaml
+platform:
+  eventReportURL: "https://openapiv3.qk6.top/report/event"
+```
+
+这是平台文档提供的测试地址，生产必须替换为平台确认的目标；未配置时已启用的事件请求返回 503。HTTP 客户端超时 5 秒，不跟随重定向。
+
+上线前管理员需要手工执行 `config-center/db/sql/add_sdk_services.sql`（已存在则不要重复执行），并为 SDK Core 数据库账号授予 `sdk_service` / `sdk_service_channel` 的 SELECT 权限。启动时会校验这两张表；不会自动建表。
+
+接入细节见 [渠道事件上报接入说明](../docs/event-report-integration.md)。
