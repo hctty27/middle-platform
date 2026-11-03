@@ -18,10 +18,9 @@ type queryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-// Store 管理节点数据访问、数据库连接及回调白名单。
+// Store 管理节点数据访问和数据库连接。
 type Store struct {
 	DB *sql.DB
-	AllowedHosts string
 }
 
 // Ready 测试数据库连接状态以提供就绪探针。
