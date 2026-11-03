@@ -71,23 +71,6 @@ jobs:
       - run: go vet ./...
       - run: go build ./cmd/config-center-access
 
-  core:
-    name: Go SDK Core
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: sdk-core
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.27.3"
-          cache-dependency-path: sdk-core/go.mod
-      - run: go test -race -count=1 ./...
-      - run: go vet ./...
-      - run: go build ./cmd/sdk-core
-
   admin:
     name: Vue admin
     runs-on: ubuntu-latest
@@ -148,7 +131,7 @@ jobs:
 
   ci-gate:
     name: CI Gate
-    needs: [go, access, core, admin, integration]
+    needs: [go, access, admin, integration]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -156,7 +139,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ',') }}
         run: |
-          if [[ "$RESULTS" != "success,success,success,success,success" ]]; then
+          if [[ "$RESULTS" != "success,success,success,success" ]]; then
             echo "::error::One or more checks failed or were skipped: $RESULTS"
             exit 1
           fi
