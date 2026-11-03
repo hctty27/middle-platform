@@ -1,7 +1,7 @@
 # 游戏充值第三方接入说明
 
 > 适用对象：接入研发中台充值功能的游戏服务端开发者。  
-> 对应版本：`middle-platform` 主分支 `ea3c2067`（2026-11-03）。  
+> 对应版本：以本文件所在分支的 SDK Core 实际部署版本为准。  
 > 仅介绍游戏方需要实现的订单登记、发货通知与签名，不涉及支付平台内部回调、数据库和任务调度。
 
 ## 1. 接入流程
@@ -19,10 +19,10 @@
 | `appid` | 渠道应用 Code，例如 `110006` |
 | `env` | `test` 测试、`prod` 正式、`review` 提审 |
 | `sdkCoreBaseUrl` | SDK Core 服务地址，由中台管理员提供 |
-| `gameSecret` | 共享游戏主密钥，**32 字节随机数据的标准 Base64 编码**；仅保存在服务端 |
+| `gameSecret` | 共享游戏主密钥，**任意非空字符串**（无需 Base64 或固定长度）；仅保存在服务端，建议使用足够长的随机密钥 |
 | `payNotifyUrl` | 游戏服接收发货通知的 HTTP/HTTPS 地址；由管理员配置到对应 `region.config` |
 
-双方使用同一份 `gameSecret`，但会通过 HKDF-SHA256 分别派生订单登记密钥和发货通知密钥；不可直接用主密钥签名。
+双方使用同一份 `gameSecret`，但会通过 HKDF-SHA256 分别派生订单登记密钥和发货通知密钥；不可直接用主密钥签名。普通字符串按 UTF-8 原始字节处理；**为兼容旧配置**，如果字符串恰好是标准 Base64 且解码后为 32 字节，仍按解码后的二进制密钥处理。请确保游戏方采用相同规则。
 
 ## 3. 登记订单
 
@@ -72,7 +72,7 @@
 首先派生登记密钥：
 
 ```text
-IKM    = Base64 解码后的 gameSecret（32 字节）
+IKM    = gameSecret 的 UTF-8 字节；旧版标准 Base64 的 32 字节密钥仍按 Base64 解码后的字节
 salt   = nil
 info   = middle-platform:sdk-core:order-register:v1
 长度   = 32 字节
@@ -132,7 +132,7 @@ X-Game-Signature = hex_lower(HMAC_SHA256(登记密钥, 四行字符串))
 使用同一个 `gameSecret` 派生另一把密钥：
 
 ```text
-IKM    = Base64 解码后的 gameSecret（32 字节）
+IKM    = gameSecret 的 UTF-8 字节；旧版标准 Base64 的 32 字节密钥仍按 Base64 解码后的字节
 salt   = nil
 info   = middle-platform:sdk-core:payment-notify:v1
 长度   = 32 字节
@@ -166,7 +166,8 @@ X-SDK-Signature = hex_lower(HMAC_SHA256(发货通知密钥, 六行字符串))
 
 ## 6. 注意事项
 
-- `gameSecret` 不得放在客户端或日志中；正式环境推荐使用 HTTPS。
+- `gameSecret` 不得放在客户端或日志中；正式环境推荐使用 HTTPS。虽然取消了长度限制，但过短或容易猜测的密钥仍存在风险，生产建议使用高强度随机密钥。
+- 若 `gameSecret` 恰好符合旧版 32 字节标准 Base64 格式，将优先按旧格式解码；接入方应保持相同的兼容策略。
 - `payNotifyUrl` 在订单登记时保存快照，后续修改不会改变已登记订单的目标地址。
 - 目前没有独立的游戏方订单状态查询 API；请自行保存订单和发货记录。
 
