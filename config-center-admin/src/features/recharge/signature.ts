@@ -1,3 +1,4 @@
+import { md5Upper } from './md5'
 // 充值联调签名：严格匹配 SDK Core 当前的游戏登记协议和平台 V1 协议。
 const encoder = new TextEncoder()
 const appIDPattern = '[A-Za-z0-9][A-Za-z0-9._:-]{0,127}'
@@ -43,25 +44,28 @@ async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<str
   return hex(await crypto.subtle.digest(algorithm, encoder.encode(text)))
 }
 
-export async function signRegistration(gameSecret: string, rawBody: string, env: string, appid: string, timestamp: string): Promise<string> {
-  if (!crypto?.subtle) throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost 访问管理后台')
+// 与 Java 游戏服 sortJoinSign(data) + gameSecret + MD5 大写完全一致。
+export async function signRegistration(gameSecret: string, rawBody: string, env: string, appid: string,
+  timestamp: string, nonce: string): Promise<string> {
   if (!gameSecret.trim()) throw new Error('gameSecret 不能为空')
-  // 与 SDK Core 保持一致：仅旧版 32 字节标准 Base64 作为二进制密钥，其余按 UTF-8 使用。
-  let secret = encoder.encode(gameSecret)
-  if (/^[A-Za-z0-9+/]{43}=$/.test(gameSecret)) {
-    const decoded = Uint8Array.from(atob(gameSecret), char => char.charCodeAt(0))
-    if (decoded.length === 32 && btoa(String.fromCharCode(...decoded)) === gameSecret) {
-      secret = decoded
-    }
+  const body = JSON.parse(rawBody) as Record<string, unknown>
+  if (!body || Array.isArray(body) || typeof body !== 'object') throw new Error('请求体必须是 JSON 对象')
+  const data: Record<string, unknown> = {
+    action: 'order.register', appid, env, timestamp, nonce
   }
-  const master = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey'])
-  const key = await crypto.subtle.deriveKey({
-    name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0),
-    info: encoder.encode('middle-platform:sdk-core:order-register:v2')
-  }, master, { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign'])
-  const bodyHash = await digest('SHA-256', rawBody)
-  const canonical = ['POST', env, appid, timestamp, bodyHash].join('\n')
-  return hex(await crypto.subtle.sign('HMAC', key, encoder.encode(canonical)))
+  for (const [key, value] of Object.entries(body)) {
+    if (key === 'sign' || key in data) throw new Error('请求体包含签名保留字段')
+    data[key] = value
+  }
+  const javaTrim = (text: string) => text.replace(/^[\\u0000-\\u0020]+|[\\u0000-\\u0020]+$/g, '')
+  const parts: string[] = []
+  for (const key of Object.keys(data).sort()) {
+    const value = data[key]
+    if (key === 'sign' || value === null || value === undefined || value === '') continue
+    if (typeof value === 'object') throw new Error('签名不支持嵌套 JSON，请先序列化为字符串')
+    parts.push(`${key}=${javaTrim(String(value))}`)
+  }
+  return md5Upper(parts.join('&') + gameSecret)
 }
 
 export function generateNonce(): string {

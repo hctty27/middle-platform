@@ -79,8 +79,10 @@ async function register() {
     const body = assertOrder()
     const rawBody = JSON.stringify(body)
     const timestamp = String(Math.floor(Date.now() / 1000))
-    const signature = await signRegistration(gameSecret.value, rawBody, endpoint.env ?? '', endpoint.appid, timestamp)
-    const headers = { 'X-Game-Timestamp': timestamp, 'X-Game-Signature': signature }
+    const nonce = generateNonce()
+    const signature = await signRegistration(gameSecret.value, rawBody, endpoint.env ?? '', endpoint.appid, timestamp, nonce)
+    const headers = { 'x-app-id': endpoint.appid, 'x-env': endpoint.env ?? '', 'x-timestamp': timestamp,
+      'x-nonce': nonce, 'x-signature': signature }
     const result = await request(endpoint.url, headers, rawBody)
     registerResult.value = result
     if (result.status === 200) {
@@ -169,10 +171,10 @@ async function confirmCallback() {
             <el-form-item label="游戏密钥 gameSecret" required>
               <el-input v-model="gameSecret" type="password" show-password autocomplete="off" placeholder="填写与 game.config.gameSecret 相同的密钥（支持任意非空字符串）" />
             </el-form-item>
-            <div class="recharge-help">兼容旧版 32 字节标准 Base64 密钥；其他字符串直接作为 UTF-8 参与签名。</div>
+            <div class="recharge-help">密钥使用原始 UTF-8 字符串；签名按字段名排序后拼接 MD5 大写。</div>
             <div class="recharge-actions">
               <el-button type="primary" native-type="submit" :loading="registerSubmitting">生成签名并发送登记</el-button>
-              <span class="recharge-help">自动填写 X-Game-Timestamp / X-Game-Signature</span>
+              <span class="recharge-help">自动填写 x-app-id / x-env / x-timestamp / x-nonce / x-signature</span>
             </div>
           </el-form>
         </el-tab-pane>
