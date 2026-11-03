@@ -49,6 +49,8 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		"SELECT id,code,webhook_secret FROM config_subscriber LIMIT 0",
 		"SELECT acknowledged_revision,acknowledged_epoch FROM config_subscriber_delivery_state LIMIT 0",
 		"SELECT id,game_id,code,prod_server_group_id,test_server_group_id,review_server_group_id FROM config_channel_app LIMIT 0",
+        "SELECT id,code,name,description,enabled,sort_order FROM sdk_service LIMIT 0",
+        "SELECT id,channel_app_id,service_id,env,enabled,config FROM sdk_service_channel LIMIT 0",
 	}
 	{
 		statements = append(statements, "SELECT id,appid,game_id,env,game_order_id,amount,attach,game_notify_url,platform_order_no,paid_at,payment_status,notify_status,notify_attempts,last_notify_at,last_notify_error,notify_success_at,next_notify_at,created_at,updated_at FROM game_order LIMIT 0")
@@ -62,7 +64,18 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 			return err
 		}
 	}
-	for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state"} {
+	for _, index := range []struct {table, name string} {
+        {"sdk_service", "uk_sdk_service_code"},
+        {"sdk_service_channel", "uk_sdk_service_channel"},
+    } {
+        var exists int
+        if err := conn.QueryRowContext(ctx,`
+SELECT COUNT(*) FROM information_schema.statistics
+WHERE table_schema=DATABASE() AND table_name=? AND index_name=? AND non_unique=0`,
+            index.table,index.name).Scan(&exists);err!=nil{return err}
+        if exists==0{return fmt.Errorf("缺少 SDK 服务唯一索引 %s",index.name)}
+    }
+    for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state"} {
 		exists, err := hasTable(ctx, conn, obsolete)
 		if err != nil {
 			return err
