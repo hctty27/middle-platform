@@ -23,97 +23,161 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
-// ErrTarget 表示游戏回调 URL 不符合 HTTPS 和目标白名单要求。
-var ErrTarget = errors.New("game notification target not approved")
-var denyNetworks = func() []netip.Prefix {
-    candidates:=[]string{"100.64.0.0/10","192.0.0.0/24","198.18.0.0/15",
-        "192.0.2.0/24","198.51.100.0/24","203.0.113.0/24",
-        "2001:db8::/32","2001::/23"}
-    result:=make([]netip.Prefix,0,len(candidates))
-    for _,s:=range candidates { result=append(result,netip.MustParsePrefix(s)) }
-    return result
-}()
+var ErrTarget = errors.New("invalid game notification target")
 
-// Client 向已批准的游戏域名投递独立签名的发货通知。
-type Client struct {
-    http *http.Client
-    allowed map[string]bool
+var blockedCallbackNetworks = []netip.Prefix{
+    netip.MustParsePrefix("0.0.0.0/8"),
+    netip.MustParsePrefix("240.0.0.0/4"),
+    netip.MustParsePrefix("100.100.100.200/32"),
+    netip.MustParsePrefix("fd00:ec2::254/128"),
 }
 
-// NewClient 限定目标域名并在 TCP 连接时再次检查 DNS 解析结果。
-func NewClient(hosts []string) *Client {
-    allow:=make(map[string]bool,len(hosts))
-    for _,h:=range hosts {allow[strings.ToLower(h)]=true}
-    tr:=&http.Transport{
-        DisableKeepAlives:true, TLSHandshakeTimeout:3*time.Second,
-        ResponseHeaderTimeout:4*time.Second,
-        DialContext: func(ctx context.Context,network,address string)(net.Conn,error){
-            host,port,err:=net.SplitHostPort(address)
-            if err!=nil{return nil,ErrTarget}
-            resolved,err:=net.DefaultResolver.LookupIPAddr(ctx,host)
-            if err!=nil||len(resolved)==0{return nil,ErrTarget}
-            for _,item:=range resolved {
-                ip,ok:=netip.AddrFromSlice(item.IP)
-                if !ok || !publicIP(ip.Unmap()) {return nil,ErrTarget}
-            }
-            return (&net.Dialer{Timeout:3*time.Second}).DialContext(ctx,network,net.JoinHostPort(resolved[0].IP.String(),port))
-        },
+func permittedCallbackIP(ip netip.Addr) bool {
+    ip = ip.Unmap()
+    if !ip.IsValid() || ip.IsUnspecified() || ip.IsMulticast() ||
+        ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+        return false
     }
-    h:=&http.Client{Timeout:5*time.Second,Transport:tr,
-        CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}
-    return &Client{http:h,allowed:allow}
-}
-
-func publicIP(ip netip.Addr)bool {
-    if !ip.IsValid()||!ip.IsGlobalUnicast()||ip.IsPrivate()||ip.IsLoopback()||ip.IsLinkLocalUnicast(){return false}
-    for _,prefix:=range denyNetworks {if prefix.Contains(ip){return false}}
+    for _, block := range blockedCallbackNetworks {
+        if block.Contains(ip) {
+            return false
+        }
+    }
     return true
 }
 
-// ValidateTarget 校验回调地址的协议、域名、端口及 URL 结构。
-func (c *Client) ValidateTarget(raw string)error {
-    u,err:=url.Parse(raw)
-    if err!=nil||u.Scheme!="https"||u.User!=nil||u.Hostname()==""||
-        u.Fragment!=""||u.RawQuery!=""||u.Opaque!="" {return ErrTarget}
-    host:=strings.ToLower(u.Hostname())
-    if !c.allowed[host]||net.ParseIP(host)!=nil{return ErrTarget}
-    if u.Port()!="" && u.Port()!="443" {return ErrTarget}
+func prohibitedMetadataHost(host string) bool {
+    switch strings.ToLower(strings.TrimSuffix(host, ".")) {
+    case "metadata.google.internal", "metadata.amazonaws.com", "metadata.tencentyun.com", "metadata.aliyun.com":
+        return true
+    }
+    return false
+}
+
+// Client 向公网或内网的 HTTP/HTTPS 地址发送独立签名通知。
+type Client struct {
+    http *http.Client
+}
+
+// NewClient 直连实际解析的 IP，禁用重定向并拦截敏感地址。
+func NewClient() *Client {
+    transport := &http.Transport{
+        DisableKeepAlives: true,
+        TLSHandshakeTimeout: 3 * time.Second,
+        ResponseHeaderTimeout: 4 * time.Second,
+        DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+            host, port, err := net.SplitHostPort(address)
+            if err != nil || prohibitedMetadataHost(host) {
+                return nil, ErrTarget
+            }
+            resolved, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+            if err != nil || len(resolved) == 0 {
+                return nil, ErrTarget
+            }
+            for _, item := range resolved {
+                ip, ok := netip.AddrFromSlice(item.IP)
+                if !ok || !permittedCallbackIP(ip) {
+                    return nil, ErrTarget
+                }
+            }
+            dialer := &net.Dialer{Timeout: 3 * time.Second}
+            var dialErr error
+            for _, item := range resolved {
+                conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(item.IP.String(), port))
+                if err == nil {
+                    return conn, nil
+                }
+                dialErr = err
+            }
+            return nil, fmt.Errorf("notification connection failed: %w", dialErr)
+        },
+    }
+    return &Client{
+        http: &http.Client{
+            Timeout: 5 * time.Second,
+            Transport: transport,
+            CheckRedirect: func(*http.Request, []*http.Request) error {
+                return http.ErrUseLastResponse
+            },
+        },
+    }
+}
+
+// ValidateTarget 不限制合法业务域名、IP 或端口。
+func (c *Client) ValidateTarget(raw string) error {
+    if raw == "" || strings.TrimSpace(raw) != raw || len(raw) > 1024 {
+        return ErrTarget
+    }
+    u, err := url.Parse(raw)
+    if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") ||
+        u.User != nil || u.Hostname() == "" || u.Fragment != "" ||
+        u.RawQuery != "" || u.ForceQuery || u.Opaque != "" {
+        return ErrTarget
+    }
+    host := u.Hostname()
+    if prohibitedMetadataHost(host) {
+        return ErrTarget
+    }
+    if ip, err := netip.ParseAddr(host); err == nil && !permittedCallbackIP(ip) {
+        return ErrTarget
+    }
+    if port := u.Port(); port != "" {
+        number, err := strconv.Atoi(port)
+        if err != nil || number < 1 || number > 65535 {
+            return ErrTarget
+        }
+    }
     return nil
 }
 
 // Send 使用 SDK Core 与游戏间的 HMAC-SHA256，不转发平台密钥。
 // 签名串: appid, POST, path, timestamp, nonce, SHA256(rawBody)，以 LF 连接。
-func(c *Client)Send(ctx context.Context,o model.Order,key []byte)error {
-    if err:=c.ValidateTarget(o.GameNotifyURL);err!=nil{return err}
-    if len(key)!=32{return errors.New("invalid notification signing key")}
-    body,err:=json.Marshal(model.PaymentCallback{
-        OrderNo:o.PlatformOrderNo,GameOrderID:o.GameOrderID,
-        Amount:o.Amount,Attach:o.Attach,PaidAt:o.PaidAt.UTC().Format(time.RFC3339),
+func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
+    if err := c.ValidateTarget(o.GameNotifyURL); err != nil {
+        return err
+    }
+    if len(key) != 32 {
+        return errors.New("invalid notification signing key")
+    }
+    body, err := json.Marshal(model.PaymentCallback{
+        OrderNo:o.PlatformOrderNo, GameOrderID:o.GameOrderID,
+        Amount:o.Amount, Attach:o.Attach, PaidAt:o.PaidAt.UTC().Format(time.RFC3339),
     })
-    if err!=nil{return err}
-    u,_:=url.Parse(o.GameNotifyURL)
-    var b [8]byte
-    if _,err=rand.Read(b[:]);err!=nil{return err}
-    nonce:=hex.EncodeToString(b[:])
-    ts:=strconv.FormatInt(time.Now().Unix(),10)
-    sum:=sha256.Sum256(body)
-    canonical:=fmt.Sprintf("%s\nPOST\n%s\n%s\n%s\n%x",o.AppID,u.EscapedPath(),ts,nonce,sum)
-    mac:=hmac.New(sha256.New,key)
-    mac.Write([]byte(canonical))
-    req,err:=http.NewRequestWithContext(ctx,http.MethodPost,o.GameNotifyURL,bytes.NewReader(body))
-    if err!=nil{return err}
-    req.Header.Set("Content-Type","application/json")
-    req.Header.Set("X-SDK-AppID",o.AppID)
-    req.Header.Set("X-SDK-Timestamp",ts)
-    req.Header.Set("X-SDK-Nonce",nonce)
-    req.Header.Set("X-SDK-Signature",hex.EncodeToString(mac.Sum(nil)))
-    resp,err:=c.http.Do(req)
-    if err!=nil{return fmt.Errorf("notification transport error: %w",err)}
+    if err != nil {
+        return err
+    }
+    u, _ := url.Parse(o.GameNotifyURL)
+    var nonceBytes [8]byte
+    if _, err = rand.Read(nonceBytes[:]); err != nil {
+        return err
+    }
+    nonce := hex.EncodeToString(nonceBytes[:])
+    timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+    sum := sha256.Sum256(body)
+    canonical := fmt.Sprintf("%s\nPOST\n%s\n%s\n%s\n%x",
+        o.AppID, u.EscapedPath(), timestamp, nonce, sum)
+    mac := hmac.New(sha256.New, key)
+    _, _ = mac.Write([]byte(canonical))
+    req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.GameNotifyURL, bytes.NewReader(body))
+    if err != nil {
+        return err
+    }
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("X-SDK-AppID", o.AppID)
+    req.Header.Set("X-SDK-Timestamp", timestamp)
+    req.Header.Set("X-SDK-Nonce", nonce)
+    req.Header.Set("X-SDK-Signature", hex.EncodeToString(mac.Sum(nil)))
+    resp, err := c.http.Do(req)
+    if err != nil {
+        return fmt.Errorf("notification transport error: %w", err)
+    }
     defer resp.Body.Close()
-    ack,err:=io.ReadAll(io.LimitReader(resp.Body,65))
-    if err!=nil{return errors.New("invalid notification response")}
-    if resp.StatusCode!=http.StatusOK||string(ack)!=nonce {
-        return fmt.Errorf("notification not acknowledged: status=%d",resp.StatusCode)
+    ack, err := io.ReadAll(io.LimitReader(resp.Body, 65))
+    if err != nil {
+        return errors.New("invalid notification response")
+    }
+    if resp.StatusCode != http.StatusOK || string(ack) != nonce {
+        return fmt.Errorf("notification not acknowledged: status=%d", resp.StatusCode)
     }
     return nil
 }
