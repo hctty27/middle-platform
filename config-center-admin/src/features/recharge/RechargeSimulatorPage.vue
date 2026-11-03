@@ -175,9 +175,10 @@ async function confirmCallback() {
             <el-form-item label="透传参数 attach">
               <el-input v-model="attach" placeholder="roleId=10001&productId=gem60（可为空）" />
             </el-form-item>
-            <el-form-item label="游戏密钥 gameSecret（Base64）" required>
-              <el-input v-model="gameSecret" type="password" show-password autocomplete="off" placeholder="32 字节游戏主密钥的标准 Base64" />
+            <el-form-item label="游戏密钥 gameSecret" required>
+              <el-input v-model="gameSecret" type="password" show-password autocomplete="off" placeholder="填写与 game.config.gameSecret 相同的密钥（支持任意非空字符串）" />
             </el-form-item>
+            <div class="recharge-help">兼容旧版 32 字节标准 Base64 密钥；其他字符串直接作为 UTF-8 参与签名。</div>
             <div class="recharge-actions">
               <el-button type="primary" native-type="submit" :loading="registerSubmitting">生成签名并发送登记</el-button>
               <span class="recharge-help">自动填写 X-Game-Timestamp / X-Game-Signature</span>
