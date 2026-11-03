@@ -4,9 +4,7 @@ package notify
 import (
     "bytes"
     "context"
-    "crypto/hmac"
     "crypto/rand"
-    "crypto/sha256"
     "encoding/hex"
     "encoding/json"
     "errors"
@@ -20,6 +18,7 @@ import (
     "strings"
     "time"
 
+    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
 )
 
@@ -131,7 +130,7 @@ func (c *Client) ValidateTarget(raw string) error {
 }
 
 // Send 使用 SDK Core 与游戏间的 HMAC-SHA256，不转发平台密钥。
-// V2 签名串: appid, POST, timestamp, nonce, SHA256(rawBody)，以 LF 连接，不依赖通知 URL。
+// V2 签名由 auth.SignNotification 统一封装，不依赖通知 URL。
 func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     if err := c.ValidateTarget(o.GameNotifyURL); err != nil {
         return err
@@ -152,11 +151,10 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     }
     nonce := hex.EncodeToString(nonceBytes[:])
     timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-    sum := sha256.Sum256(body)
-    canonical := fmt.Sprintf("%s\nPOST\n%s\n%s\n%x",
-        o.AppID, timestamp, nonce, sum)
-    mac := hmac.New(sha256.New, key)
-    _, _ = mac.Write([]byte(canonical))
+    signature, err := auth.SignNotification(key, o.AppID, timestamp, nonce, body)
+    if err != nil {
+        return err
+    }
     req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.GameNotifyURL, bytes.NewReader(body))
     if err != nil {
         return err
@@ -165,7 +163,7 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
     req.Header.Set("X-SDK-AppID", o.AppID)
     req.Header.Set("X-SDK-Timestamp", timestamp)
     req.Header.Set("X-SDK-Nonce", nonce)
-    req.Header.Set("X-SDK-Signature", hex.EncodeToString(mac.Sum(nil)))
+    req.Header.Set("X-SDK-Signature", signature)
     resp, err := c.http.Do(req)
     if err != nil {
         return fmt.Errorf("notification transport error: %w", err)

@@ -78,7 +78,7 @@ SDK Core 不自动执行 SQL，也不提供独立建表脚本。
 
 登记 Body：game_order_id（同 AppID 跨环境唯一）、amount（人民币分）、attach（原样字符串）。
 服务从绑定大区的 region.config 顶层读取 payNotifyUrl，首次登记后快照存储。
-游戏登记不再使用 `X-Game-Key-Id`。仅需 `X-Game-Timestamp` 与 `X-Game-Signature`：先从 AppID 所属游戏读取 `game.config.gameSecret`，经 HKDF 派生登记密钥，签名串为 `POST`、请求路径、Unix 秒时间戳、原始 Body 的 SHA256 小写十六进制四段，LF 连接且无末尾换行。具体见下文。
+游戏登记不再使用 `X-Game-Key-Id`。仅需 `X-Game-Timestamp` 与 `X-Game-Signature`：先从 AppID 所属游戏读取 `game.config.gameSecret`，经 HKDF 派生登记密钥，签名串为 `POST`、`env`、`appid`、Unix 秒时间戳、原始 Body 的 SHA256 小写十六进制五段，LF 连接且无末尾换行，不包含 URL 路径。具体见下文。
 
 平台回调使用文档指定的 v1 SHA-1 协议，并校验已登记订单及绑定的平台订单号。平台密钥不是按环境配置在本服务 YAML 中，而是通过全局唯一 AppID 从 `config_channel_app.config` 的顶层 `appSecret` 读取；渠道包 JSON 跨 `prod/test/review` 环境共享同一份支付密钥，不要求当前环境仍处于绑定/启用状态，避免历史回调受影响。
 
@@ -97,7 +97,7 @@ SDK Core 不自动执行 SQL，也不提供独立建表脚本。
 SDK Core -> 游戏的发货通知不采用平台签名透明转发，而是独立签名。
 请求 Body 包含 order_no、game_order_id、amount、attach、paid_at。
 Header：X-SDK-AppID、X-SDK-Timestamp、X-SDK-Nonce、X-SDK-Signature。
-签名串依次为 appid、POST、通知 URL 路径、timestamp、nonce、原始 Body 的 SHA256 小写十六进制，LF 连接，HMAC-SHA256。
+签名串依次为 appid、POST、timestamp、nonce、原始 Body 的 SHA256 小写十六进制，LF 连接，HMAC-SHA256，不包含通知 URL 路径。
 游戏服须验证签名并按 game_order_id 数据库事务幂等发货，返回 HTTP 200，Body 精确等于 X-SDK-Nonce。
 SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确等于本次 x-nonce；
 **不等待游戏服通知完成**。游戏服异常不会阻塞平台回调，发货交给持久化任务队列。
@@ -128,6 +128,8 @@ SDK Core 在支付确认事务提交后立即回复平台 HTTP 200，Body 精确
 - 通知：`info=middle-platform:sdk-core:payment-notify:v2`
 
 两个子密钥由相同主密钥自动生成，无需分别配置，且不可混用于另一种请求。
+
+游戏侧签名逻辑统一放在 `internal/auth`：`Derive` 负责 HKDF，`SignRegistration` / `SignNotification` 负责 V2 HMAC-SHA256 与原始 Body 哈希，`VerifyRegistration` 复用同一签名计算。发货服务向 `notify.Client` 传入已按通知用途派生的密钥，不会将平台 `appSecret` 用于游戏侧签名。`internal/payment` 中的支付平台 V1 SHA-1 验签保持独立，协议不变。
 `gameSecret` 在三个环境中共享；环境隔离要求较高时应改为不同环境的主密钥。
 
 ### 游戏服 → SDK Core（订单登记）
