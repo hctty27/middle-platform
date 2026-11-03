@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { api, apiErrorMessage } from '../../../api/http'
+import { api, apiErrorMessage } from '../../api/http'
 
 type Env = 'prod' | 'test' | 'review'
 interface ServiceEntry {
