@@ -47,18 +47,18 @@ func LoadFile(path string) (Settings,error) {
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_GO_ADDR",&cfg.Address)
  if err:=cfg.Log.ApplyEnv();err!=nil{return Settings{},err}
- if strings.TrimSpace(cfg.DSN)=="" {return Settings{},errors.New("database.dsn or CONFIG_DB_DSN is required")}
+ if strings.TrimSpace(cfg.DSN)=="" {return Settings{},errors.New("必须配置 database.dsn 或 CONFIG_DB_DSN")}
  return cfg,nil
 }
 
 func readYAML(path string,target *configFile) error {
  raw,err:=os.ReadFile(path)
- if err!=nil {return fmt.Errorf("read YAML %s: %w",path,err)}
+ if err!=nil {return fmt.Errorf("读取 YAML %s 失败: %w",path,err)}
  dec:=yaml.NewDecoder(bytes.NewReader(raw))
  dec.KnownFields(true)
- if err:=dec.Decode(target);err!=nil{return fmt.Errorf("decode YAML %s: %w",path,err)}
+ if err:=dec.Decode(target);err!=nil{return fmt.Errorf("解析 YAML %s 失败: %w",path,err)}
  var next any
- if err:=dec.Decode(&next);err!=io.EOF {return fmt.Errorf("YAML %s must contain exactly one document",path)}
+ if err:=dec.Decode(&next);err!=io.EOF {return fmt.Errorf("YAML %s 必须只包含一份文档",path)}
  return nil
 }
 

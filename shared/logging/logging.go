@@ -50,7 +50,7 @@ func (c *Config) ApplyEnv() error {
 	if value, ok := os.LookupEnv("LOG_ACCESS_ENABLED"); ok {
 		parsed, err := strconv.ParseBool(value)
 		if err != nil {
-			return fmt.Errorf("invalid LOG_ACCESS_ENABLED: %w", err)
+			return fmt.Errorf("LOG_ACCESS_ENABLED 配置不合法: %w", err)
 		}
 		c.AccessEnabled = parsed
 	}
@@ -62,21 +62,21 @@ func (c Config) Validate() error {
 	switch strings.ToLower(c.Level) {
 	case "debug", "info", "warn", "error":
 	default:
-		return fmt.Errorf("invalid log.level %q", c.Level)
+		return fmt.Errorf("log.level 配置不合法: %q", c.Level)
 	}
 	switch strings.ToLower(c.Format) {
 	case "json", "text":
 	default:
-		return fmt.Errorf("invalid log.format %q", c.Format)
+		return fmt.Errorf("log.format 配置不合法: %q", c.Format)
 	}
 	switch strings.ToLower(c.Output) {
 	case "stdout", "stderr":
 	default:
-		return fmt.Errorf("invalid log.output %q", c.Output)
+		return fmt.Errorf("log.output 配置不合法: %q", c.Output)
 	}
 	threshold, err := time.ParseDuration(c.SlowThreshold)
 	if err != nil || threshold <= 0 {
-		return fmt.Errorf("invalid log.slowThreshold %q", c.SlowThreshold)
+		return fmt.Errorf("log.slowThreshold 配置不合法: %q", c.SlowThreshold)
 	}
 	return nil
 }
@@ -190,9 +190,9 @@ func HTTP(c Config, next http.Handler) http.Handler {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				if writer.status == 0 {
-					http.Error(writer, "internal server error", http.StatusInternalServerError)
+					http.Error(writer, "服务器内部错误", http.StatusInternalServerError)
 				}
-				FromContext(ctx).ErrorContext(ctx, "http handler panic", "panic_type", fmt.Sprintf("%T", recovered))
+				FromContext(ctx).ErrorContext(ctx, "HTTP 处理请求时发生 panic", "panic_type", fmt.Sprintf("%T", recovered))
 			}
 			if writer.status == 0 {
 				writer.status = http.StatusOK
@@ -215,7 +215,7 @@ func HTTP(c Config, next http.Handler) http.Handler {
 			if path == "" {
 				path = r.URL.EscapedPath()
 			}
-			slog.Log(ctx, level, "http request",
+			slog.Log(ctx, level, "HTTP 请求",
 				"request_id", id, "method", r.Method, "path", path,
 				"status", writer.status, "duration_ms", elapsed.Milliseconds())
 		}()

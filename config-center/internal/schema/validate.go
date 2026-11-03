@@ -16,7 +16,7 @@ import (
 func Validate(ctx context.Context, dsn string) error {
  cfg,err:=mysql.ParseDSN(dsn)
  if err!=nil{return err}
- if cfg.DBName=="" {return errors.New("database name is required")}
+ if cfg.DBName=="" {return errors.New("必须配置数据库名称")}
  cfg.ParseTime=true
  cfg.Loc=time.UTC
  cfg.Timeout=5*time.Second
@@ -28,7 +28,7 @@ func Validate(ctx context.Context, dsn string) error {
  if err!=nil{return err}
  defer conn.Close()
  if err=validateSchema(ctx,conn);err!=nil{
-    return fmt.Errorf("database structure invalid: %w; execute the reviewed SQL in config-center/db/sql manually",err)
+    return fmt.Errorf("数据库结构不符合要求: %w；请手动执行 config-center/db/sql 中已审核的 SQL",err)
  }
  return nil
 }
@@ -56,7 +56,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 	for _, statement := range statements {
 		rows, err := conn.QueryContext(ctx, statement)
 		if err != nil {
-			return fmt.Errorf("database schema validation failed: %w", err)
+			return fmt.Errorf("数据库表结构校验失败: %w", err)
 		}
 		if err := rows.Close(); err != nil {
 			return err
@@ -68,7 +68,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 			return err
 		}
 		if exists {
-			return fmt.Errorf("obsolete table %s still exists", obsolete)
+			return fmt.Errorf("旧版数据表 %s 仍然存在", obsolete)
 		}
 	}
 	var indexCount int
@@ -79,7 +79,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		return err
 	}
 	if indexCount != 1 {
-		return errors.New("config_channel_app global code unique index missing")
+		return errors.New("config_channel_app 表缺少 code 全局唯一索引")
 	}
 	for _, constraint := range []string{"chk_config_node_env_type", "fk_app_prod_group", "fk_app_test_group", "fk_app_review_group"} {
 		var count int
@@ -88,7 +88,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 			return err
 		}
 		if count == 0 {
-			return fmt.Errorf("missing schema constraint %s", constraint)
+			return fmt.Errorf("缺少数据库约束 %s", constraint)
 		}
 	}
 	var clause string
@@ -97,7 +97,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		return err
 	}
 	if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
-		return errors.New("region environment CHECK constraint is obsolete")
+		return errors.New("大区环境 CHECK 约束已过时")
 	}
 	{
 		for _, index := range []struct { name, column string; position int }{
@@ -111,7 +111,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 				AND index_name=? AND column_name=? AND seq_in_index=? AND non_unique=0`,
 				index.name,index.column,index.position).Scan(&count)
 			if err != nil { return err }
-			if count != 1 { return fmt.Errorf("game_order unique index %s column %s missing",index.name,index.column) }
+			if count != 1 { return fmt.Errorf("game_order 唯一索引 %s 缺少字段 %s",index.name,index.column) }
 		}
 	}
 	return nil

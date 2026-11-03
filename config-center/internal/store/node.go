@@ -173,7 +173,7 @@ func match(n Node, index map[int64]Node) (NodeMatch, error) {
 	for _, id := range []int64{value(n.GameID), value(n.RegionID), n.ID} {
 		if id == 0 { continue }
 		item, ok := index[id]
-		if !ok { return NodeMatch{}, fmt.Errorf("missing ancestor %d: %w", id, errors.New("inconsistent configuration hierarchy")) }
+		if !ok { return NodeMatch{}, fmt.Errorf("缺少上级节点 %d: %w", id, errors.New("配置层级关系不一致")) }
 		path = append(path, summary(item))
 	}
 	return NodeMatch{Node: summary(n), Path: path}, nil

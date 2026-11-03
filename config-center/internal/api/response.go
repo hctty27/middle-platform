@@ -16,7 +16,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		slog.Error("encode JSON response failed", "error", err)
+		slog.Error("编码 JSON 响应失败", "error", err)
 	}
 }
 
@@ -30,14 +30,14 @@ func respond(w http.ResponseWriter, value any, err error) {
 	if err == nil { writeJSON(w, http.StatusOK, value); return }
 	switch {
 	case errors.Is(err, ErrInvalid):
-		writeError(w, http.StatusBadRequest, "invalid request")
+		writeError(w, http.StatusBadRequest, "请求参数不合法")
 	case errors.Is(err, sql.ErrNoRows):
-		writeError(w, http.StatusNotFound, "node not found")
+		writeError(w, http.StatusNotFound, "节点不存在")
 	case errors.Is(err, ErrConflict):
-		writeError(w, http.StatusConflict, "conflicting configuration")
+		writeError(w, http.StatusConflict, "配置冲突")
 	default:
-		slog.Error("configuration query failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		slog.Error("配置查询失败", "error", err)
+		writeError(w, http.StatusInternalServerError, "服务器内部错误")
 	}
 }
 

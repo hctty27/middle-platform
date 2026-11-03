@@ -15,8 +15,8 @@ import (
 func databaseError(err error) error {
 	var mysqlErr *mysql.MySQLError
 	if errors.As(err, &mysqlErr) {
-		if mysqlErr.Number == 1062 { return fmt.Errorf("%w: duplicate unique code", ErrConflict) }
-		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 { return fmt.Errorf("%w: database constraint", ErrConflict) }
+		if mysqlErr.Number == 1062 { return fmt.Errorf("%w: 编码重复，违反唯一约束", ErrConflict) }
+		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 { return fmt.Errorf("%w: 违反数据库约束", ErrConflict) }
 	}
 	return err
 }
