@@ -86,7 +86,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 		WHERE subscriber_id=?`, delivery.LeaseID, delivery.SubscriberID)
 	if err != nil { return nil, err }
 	rows, err := result.RowsAffected()
-	if err != nil || rows != 1 { return nil, fmt.Errorf("failed to claim webhook lease: %v", err) }
+	if err != nil || rows != 1 { return nil, fmt.Errorf("领取 Webhook 投递租约失败: %v", err) }
 	if err := tx.Commit(); err != nil { return nil, err }
 	return delivery, nil
 }
@@ -95,7 +95,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 // send 校验回调目标并发送签名通知，不把配置内容直接传给接入端。
 func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err := ValidateCallback(job.URL); err != nil {
-		return fmt.Errorf("unsafe webhook destination: %w", err)
+		return fmt.Errorf("Webhook 通知目标不安全: %w", err)
 	}
 	timestamp := time.Now().Unix()
 	message := fmt.Sprintf("%d.%s.%d", timestamp, job.Epoch, job.Revision)
@@ -116,7 +116,7 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	defer response.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("webhook HTTP %d", response.StatusCode)
+		return fmt.Errorf("Webhook 返回 HTTP %d", response.StatusCode)
 	}
 	return nil
 }
@@ -181,10 +181,10 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 				err = d.delivered(outcomeCtx, job)
 			} else {
 				if dbErr := d.failed(outcomeCtx, job, err); dbErr != nil {
-					slog.Error("webhook failure state update failed", "subscriber", job.SubscriberID, "error", dbErr)
+					slog.Error("更新 Webhook 失败状态失败", "subscriber", job.SubscriberID, "error", dbErr)
 				}
 			}
-			if err != nil { slog.Warn("webhook delivery failed", "subscriber", job.SubscriberID, "error", err) }
+			if err != nil { slog.Warn("Webhook 投递失败", "subscriber", job.SubscriberID, "error", err) }
 		}(job)
 	}
 	wg.Wait()
@@ -199,7 +199,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		if err := d.dispatch(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("webhook dispatch failed", "error", err)
+			slog.Error("Webhook 分发失败", "error", err)
 		}
 		select {
 		case <-ctx.Done():

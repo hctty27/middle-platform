@@ -40,7 +40,7 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 		head, err := s.remote.Head(ctx)
 		if err != nil { return err }
 		if head.Epoch == "" || head.Revision < 0 {
-			return fmt.Errorf("invalid authority revision")
+			return fmt.Errorf("配置中心版本号不合法")
 		}
 		if state.Epoch == "" || state.Epoch != head.Epoch || state.Revision > head.Revision {
 			applied, err := s.snapshot(ctx, state)
@@ -61,7 +61,7 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 		ids := make([]int64, 0, len(events))
 		seen := make(map[int64]struct{}, len(events))
 		for _, event := range events {
-			if event.NodeID <= 0 { return fmt.Errorf("invalid change node id") }
+			if event.NodeID <= 0 { return fmt.Errorf("变更事件节点 ID 不合法") }
 			if _, ok := seen[event.NodeID]; !ok {
 				ids = append(ids, event.NodeID)
 				seen[event.NodeID] = struct{}{}
@@ -71,8 +71,8 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 		if err != nil { return err }
 		latest := make(map[int64]remote.Node, len(nodes))
 		for _, n := range nodes {
-			if _, requested := seen[n.ID]; !requested { return fmt.Errorf("unexpected batch node %d", n.ID) }
-			if _, exists := latest[n.ID]; exists { return fmt.Errorf("duplicate batch node %d", n.ID) }
+			if _, requested := seen[n.ID]; !requested { return fmt.Errorf("批量响应包含未请求的节点 %d", n.ID) }
+			if _, exists := latest[n.ID]; exists { return fmt.Errorf("批量响应包含重复节点 %d", n.ID) }
 			latest[n.ID] = n
 		}
 		current, err := s.remote.Head(ctx)
@@ -90,7 +90,7 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 		// 可能还有多页变更；继续直到追平 head。
 		retries = -1
 	}
-	return fmt.Errorf("config synchronization exceeded retry limit")
+	return fmt.Errorf("配置同步超过重试次数限制")
 }
 
 // snapshot 只从权威端的一致性接口构建完整副本。
@@ -98,12 +98,12 @@ func (s *Synchronizer) snapshot(ctx context.Context, expected store.State) (bool
 	data, err := s.remote.Full(ctx)
 	if err != nil { return false, err }
 	if data.Epoch == "" || data.Revision < 0 || data.Nodes == nil {
-		return false, fmt.Errorf("invalid config snapshot")
+		return false, fmt.Errorf("配置快照不合法")
 	}
 	seen := make(map[int64]struct{}, len(data.Nodes))
 	for _, node := range data.Nodes {
 		if _, exists := seen[node.ID]; exists {
-			return false, fmt.Errorf("duplicate snapshot node %d", node.ID)
+			return false, fmt.Errorf("配置快照存在重复节点 %d", node.ID)
 		}
 		seen[node.ID] = struct{}{}
 	}
@@ -159,7 +159,7 @@ func (t *Trigger) Run(ctx context.Context) {
 		case <-t.pending:
 		}
 		if err := t.sync.Sync(ctx); err != nil && ctx.Err() == nil {
-			slog.Warn("config sync failed; next notification or reconciliation will retry", "error", err)
+			slog.Warn("配置同步失败，将在下次通知或定期对账时重试", "error", err)
 		}
 	}
 }
