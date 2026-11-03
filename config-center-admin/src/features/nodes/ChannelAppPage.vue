@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, apiErrorMessage } from '../../api/http'
 import BusinessConfigEditor from './components/BusinessConfigEditor.vue'
+import ChannelServicePanel from '../services/ChannelServicePanel.vue'
 import { validateBusinessConfig } from './businessConfig'
 import type { RegionEnvType } from './types'
 
@@ -173,6 +174,9 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
                 <p class="muted">三个环境使用同一份 JSON 配置，独立字段直接展示在下方。</p></div>
                 <el-button @click="openEditor(active)">修改配置</el-button></div>
               <BusinessConfigEditor :model-value="active.config" node-type="channel_app" readonly />
+            </el-tab-pane>
+            <el-tab-pane label="服务配置">
+              <ChannelServicePanel :key="active.id" :app-id="active.id" />
             </el-tab-pane>
             <el-tab-pane label="应用信息">
               <el-descriptions :column="1" border>
