@@ -14,12 +14,16 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
                                             HTTP 拉取节点     本地 MySQL
                                             快照/增量日志     （config_access）
 
-SDK 客户端 ──GET /api/core/config/{env}/{appid}──> sdk-core ───> 权威 MySQL
+游戏/客户端 ──配置、订单、渠道事件──> sdk-core ───> 权威 MySQL
+平台 ──支付回调──────────────────────> sdk-core ───> 游戏发货通知
+平台 ──用户核验──────────────────────> sdk-service ──适配器──> 游戏核验 API
+                                               └──────────────> 权威 MySQL（只读）
 ```
 
 - `config-center`：管理节点、渠道应用与订阅者，并提供同步版本、变更记录、快照查询。
 - `config-center-access`：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。
-- `sdk-core`：直接查询权威库，根据环境绑定和接口级映射生成响应；不使用接入端副本。
+- `sdk-core`：直接查询权威库，根据环境绑定和接口映射生成配置；管理订单、支付回调、异步发货与渠道事件转发。
+- `sdk-service`：平台主动调用游戏，目前实现用户核验；通过默认或定制适配器请求大区配置的 `userCheckUrl`，不保存用户核验数据。
 - `config-center-admin`：Vue 3 管理界面，后端管理 API 当前没有内建用户认证。
 
 ## 配置数据模型
@@ -44,9 +48,16 @@ SDK 客户端 ──GET /api/core/config/{env}/{appid}──> sdk-core ───
 
 ## 边界与演进原则
 
-- 权威库初始基线为 V11，迁移命令由发布流程单独执行，应用启动仅执行只读结构校验。
-- 对外路径不包含 `/v1`；Nginx 可按 `/api/config/` 和 `/api/core/` 分流。
+- 当前数据库由管理员手动执行 SQL 建表或升级；各服务启动只校验表结构，不执行 DDL、也不维护历史迁移版本。
+- 服务内部业务路由不包含 `/sdk` 或 `/v1`；Nginx 可分别转发 `/api/config/`、`/api/core/`、`/api/service/`，公网若使用 `/sdk/` 前缀由网关负责转换。
 - 接口级字段映射编译进 `sdk-core`，新增映射字段不必修改 SQL，但需要重新构建并滚动部署。
 - 管理接口、同步接口、回调地址只允许可信内网或受保护的网关访问。生产环境不能将管理 API 与公开 SDK API 无差别暴露。
 
 部署方案见 [生产运维](production.md)。
+
+## SDK 业务与密钥边界
+
+- `sdk_service` 管理已实现功能的全局开关，`sdk_service_channel` 按服务、渠道包、环境唯一绑定；当前功能为 `event_report` 和 `user_check`。
+- 游戏侧用 `game.config.gameSecret` 验签，平台侧用 `channel_app.config.appSecret` 验签；两套签名密钥不能混用。
+- 订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。
+- 对外协议及签名细节以 [游戏 HTML](game.html) 和 [平台 HTML](platform.html) 为准，避免维护多份相同字段表。
