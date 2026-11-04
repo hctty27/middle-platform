@@ -36,8 +36,7 @@ JOIN config_node r ON r.id=sg.region_id
 LEFT JOIN sdk_service sv ON sv.code='user_check'
 LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id
     AND ch.channel_app_id=a.id AND ch.env=?
-WHERE a.code=? AND a.status=1
-LIMIT 1`
+WHERE a.code=? AND a.status=1`
 
 func (s *Store) VerifySchema(ctx context.Context) error {
     rows, err := s.db.QueryContext(ctx, routeQuery+" LIMIT 0", "prod", "prod", "prod", "__probe__")
