@@ -48,6 +48,7 @@ sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/
 
 - 全新、空的 `config_center`：`sql/config-center/initialize.sql`。
 - 已有 `config_center` 仅缺少订单表：`sql/config-center/add_game_order.sql`。
+- 已有当前通用功能绑定表 `sdk_service_binding`：`sql/config-center/migrate_sdk_service_channel.sql`（需停写并备份）。
 - 全新、空的 `config_access`：`sql/config-center-access/initialize.sql`。
 
 例如在 Linux 发布包解压目录（已有库补建订单表）：
