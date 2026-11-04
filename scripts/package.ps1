@@ -126,6 +126,7 @@ try {
     New-Item -ItemType Directory -Force -Path $authorityDir, $accessDir | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/initialize.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_game_order.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_services.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_user_check.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center-access/db/sql/initialize.sql') -Destination $accessDir
 
