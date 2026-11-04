@@ -1,4 +1,4 @@
-# Run UTF-8-compatible temporary copies without modifying the repository's build scripts.
+# Invoke the original UTF-8-BOM packaging script directly; reject corrupted Go helper sources.
 [CmdletBinding()]
 param(
     [ValidateSet('amd64', 'arm64')]
