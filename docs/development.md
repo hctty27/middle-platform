@@ -1,11 +1,11 @@
 # 本地开发与联调
 
-本文以 **Windows PowerShell** 为例；三个 Go 服务使用各自的 `configs/config.yaml` 作为公开模板，复制为未提交的 `configs/config-dev.yaml` 并填写凭据。不要将包含真实密码的 YAML 提交 Git。
+本文以 **Windows PowerShell** 为例；四个 Go 服务使用各自的 `configs/config.yaml` 作为公开模板，复制为未提交的 `configs/config-dev.yaml` 并填写凭据。不要将包含真实密码的 YAML 提交 Git。
 
 ## 环境
 
 - Go 1.27.3、MySQL 8.0+；运行 Vue 管理端另需 Node.js 22 / npm。
-- 本地默认端口：`config-center:8080`、`config-center-access:8081`、`sdk-core:8082`。
+- 本地默认端口：`config-center:8080`、`config-center-access:8081`、`sdk-core:8082`、`sdk-service:8221`。
 - 权威数据库和接入副本必须分开：`config_center` 与 `config_access`。
 
 使用 MySQL 管理工具执行：
@@ -84,7 +84,21 @@ Invoke-RestMethod "http://127.0.0.1:8082/api/core/config/prod/your-appid"
 
 `your-appid` 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口映射见 [API 文档](api.md) 与 [SDK Core 说明](../sdk-core/README.md)。
 
-## 4. Vue 管理端
+## 4. SDK Service（用户核验）
+
+进入 `sdk-service` 目录，复制配置文件，`database.dsn` 指向 `config_center`（只读账号）：
+
+```powershell
+cd sdk-service
+Copy-Item configs/config.yaml configs/config-dev.yaml
+go run ./cmd/sdk-service -config configs/config-dev.yaml
+```
+
+首次部署应确认功能开关表已建立并包含 `user_check`；游戏 `gameSecret`、渠道包 `appSecret`、大区 `userCheckUrl` 已配置，且全局与当前渠道环境的用户核验开关均开启。**默认 `standard` 适配器无需配置**。本地健康检查：`http://127.0.0.1:8221/health/ready`。
+
+平台和游戏联调报文分别见 [平台接口 HTML](platform.html)、[游戏接口 HTML](game.html)。
+
+## 5. Vue 管理端
 
 ```powershell
 cd config-center-admin
@@ -94,19 +108,46 @@ npm run dev
 
 按 Vite 控制台显示的地址打开管理端。需要其他局域网设备访问时可运行 `npm run dev -- --host 0.0.0.0`，并配置相应防火墙与后端访问策略；切勿将无认证的管理端直接开放公网。
 
-## 5. 检查与排障
+## 6. 检查与排障
 
 | 现象 | 检查项 |
 | --- | --- |
 | `database.dsn ... is required` | 指定 YAML 中是否填 DSN；也可使用对应环境变量 |
 | `database structure invalid` | 检查表、关键索引以及手动 SQL 是否执行 |
-| `obsolete replica schema` | 副本版本过旧；迁移到 V6 或备份后使用新空库 |
+| `obsolete replica schema` | 接入端表结构不兼容；先备份并确认真实结构，禁止对非空库直接初始化 |
 | SDK Core 返回 404 | AppID、`env`、三个绑定字段、节点启用状态 |
 | Webhook 不生效 | 订阅者密钥、回调 URL 可达性、反向代理访问和同步游标 |
 | 前端接口失败 | Vite 代理、配置中心端口及网关允许访问管理接口的规则 |
 
 公共配置优先级以各工程的 `configs/config.yaml` 与 `internal/settings` 实现为准，通常由默认值、配置文件和环境变量叠加。线上发布请转到 [生产运维](production.md)。
 
-配置中心不再识别 `webhook.enabled` 与 `migration.allowLegacyUpgrade`，旧环境 YAML 需删除这两个字段（严格校验会报错）。`CONFIG_GO_ENABLE_WEBHOOK` 也已废弃。
+旧版 YAML 可能包含已废弃字段，必须以当前各服务 `configs/config.yaml` 模板为准更新，避免严格解析失败；不要在生产库运行开发或模拟支付脚本。
 
-三个已删开关 `admin.writesEnabled`、`order.enabled`、`payment.allowUnverifiedNonProd` 不再可用，旧 YAML 必须删除；若需测试付款，需先实现可信查单或完整金额签名，不能通过开关绕过。
+## 7. 测试与 CI
+
+四个 Go 服务各自运行（`shared/logging` 与 `shared/signature` 为独立 Go Module，也应单独验证）：
+
+```bash
+go test -race ./...
+go vet ./...
+go build ./cmd/...
+```
+
+Vue 管理端：
+
+```bash
+cd config-center-admin
+npm ci
+npm run build
+```
+
+GitHub Actions 工作流：
+
+| 名称 | 文件 | 作用 |
+| --- | --- | --- |
+| Build | `.github/workflows/build.yml` | 配置中心、接入端、Vue、人工 SQL 与 Webhook 集成测试 |
+| sdk-core | `.github/workflows/sdk-core.yml` | Core 单元测试、race、vet 与集成测试 |
+| sdk-service | `.github/workflows/sdk-service.yml` | Service 与公共签名校验 |
+| Package Linux | `.github/workflows/package.yml` | tar.gz 构建、ELF 架构与权限验证 |
+
+`scripts/ci_schema_sql_smoke.py` 和 `scripts/ci_smoke.py` 是 CI 测试脚本，**不得在生产数据库执行**。Build 的 CI Gate 不会自动覆盖其他独立工作流。发布流程、打包参数统一参见 [生产运维](production.md)。
