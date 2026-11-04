@@ -266,7 +266,14 @@ try {
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
         throw "Build did not produce the expected archive: $archivePath"
     }
-    $sha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $hashStream = [System.IO.File]::OpenRead($archivePath)
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $sha256 = ([System.BitConverter]::ToString($hasher.ComputeHash($hashStream))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $hashStream.Dispose()
+        $hasher.Dispose()
+    }
     $destination = "$User@$ServerHost"
     $remoteStage = "$RemoteDirectory/.publish-$([guid]::NewGuid().ToString('N'))"
 
