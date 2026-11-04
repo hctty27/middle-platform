@@ -43,7 +43,7 @@ WHERE sv.code=? AND sv.scope_type='channel_app' AND sv.enabled=1 LIMIT 1`
 
 // VerifySDKServiceSchema 检查事件上报依赖的服务开关表，不执行 DDL。
 func (s *Store) VerifySDKServiceSchema(ctx context.Context) error {
-    rows, err := s.db.QueryContext(ctx, `SELECT sv.id,sv.code,sv.enabled,
+    rows, err := s.db.QueryContext(ctx, `SELECT sv.id,sv.code,sv.scope_type,sv.enabled,
         ch.target_id,ch.service_id,ch.env,ch.enabled,ch.config
         FROM sdk_service sv
         LEFT JOIN sdk_service_binding ch ON ch.service_id=sv.id LIMIT 0`)
