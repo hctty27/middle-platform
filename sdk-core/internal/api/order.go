@@ -71,7 +71,7 @@ func orderError(w http.ResponseWriter,err error){
 }
 
 func registerOrderRoutes(mux *http.ServeMux,svc OrderAPI){
-    mux.HandleFunc("POST /api/core/{env}/{appid}/orders",func(w http.ResponseWriter,r *http.Request){
+    mux.HandleFunc("POST /api/core/orders/{env}/{appid}",func(w http.ResponseWriter,r *http.Request){
         if r.URL.RawQuery!=""{orderError(w,service.ErrInvalidOrder);return}
         raw,err:=readBody(w,r)
         if err!=nil{writeJSON(w,http.StatusRequestEntityTooLarge,response{Code:413,Message:"请求体格式不合法或超过大小限制"});return}
@@ -85,7 +85,7 @@ func registerOrderRoutes(mux *http.ServeMux,svc OrderAPI){
         writeJSON(w,http.StatusOK,response{Code:0,Message:"success",
             Data:map[string]string{"game_order_id":req.GameOrderID,"registration_status":"REGISTERED"}})
     })
-    mux.HandleFunc("POST /api/core/{appid}/pay/notify",func(w http.ResponseWriter,r *http.Request){
+    mux.HandleFunc("POST /api/core/pay/notify/{appid}",func(w http.ResponseWriter,r *http.Request){
         if r.URL.RawQuery!=""{orderError(w,service.ErrInvalidOrder);return}
         raw,err:=readBody(w,r)
         if err!=nil{writeJSON(w,http.StatusRequestEntityTooLarge,response{Code:413,Message:"请求体格式不合法或超过大小限制"});return}

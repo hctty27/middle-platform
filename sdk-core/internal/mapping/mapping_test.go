@@ -23,7 +23,7 @@ func TestDefaultMappingProducesExpectedResponse(t *testing.T) {
 
 func TestRouteSpecificMappingAndNestedJSON(t *testing.T) {
     resolver,err:=Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "app": "channel_app.code"
         },
         "POST /api/core/metadata/{appid}": {
@@ -167,7 +167,7 @@ func TestDecodeObject(t *testing.T) {
 
 func TestRegionConfigMapping(t *testing.T) {
     resolver, err := Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "regionKey": "region.config.regionKey",
             "loginUrl": "region.config.login.url",
             "missing": "region.config.login.optional"
@@ -197,7 +197,7 @@ func TestRegionConfigMapping(t *testing.T) {
 
 func TestGameConfigNestedAndFullObjectMapping(t *testing.T) {
     resolver, err := Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "gameCode": "game.code",
             "gameName": "game.config.name",
             "nestedValue": "game.config.settings.login.url",
@@ -237,7 +237,7 @@ func TestGameConfigNestedAndFullObjectMapping(t *testing.T) {
 
 func TestUsesConfigDependsOnRouteAndSource(t *testing.T) {
     resolver,err:=Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "snKey": "channel_app.code",
             "tsKey": "channel_app.config.tsKey",
             "gameCode": "game.code"
@@ -292,7 +292,7 @@ func TestRejectPaymentSecretResponseMapping(t *testing.T) {
     for _, path := range []string{"channel_app.config.appSecret", "channel_app.config.APPSECRET",
         "channel_app.config.appSecret.value"} {
         raw, err := json.Marshal(map[string]map[string]string{
-            "GET /api/core/{env}/{appid}": {"unsafe":path},
+            "GET /api/core/config/{env}/{appid}": {"unsafe":path},
         })
         if err != nil {t.Fatal(err)}
         if _,err=Load(raw);err==nil {t.Errorf("payment secret mapping accepted: %s",path)}
@@ -303,7 +303,7 @@ func TestRejectGameSecretResponseMapping(t *testing.T) {
     for _,path:=range []string{"game.config.gameSecret","game.config.GAMESECRET",
         "game.config.gameSecret.nested"} {
         raw,err:=json.Marshal(map[string]map[string]string{
-            "GET /api/core/{env}/{appid}":{"secret":path},
+            "GET /api/core/config/{env}/{appid}":{"secret":path},
         })
         if err!=nil{t.Fatal(err)}
         if _,err=Load(raw);err==nil{t.Errorf("accepted game secret mapping: %s",path)}

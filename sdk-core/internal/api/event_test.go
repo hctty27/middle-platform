@@ -26,7 +26,7 @@ func (f *fakeEventAPI) Report(_ *http.Request, env, appID string, body []byte) e
     return f.err
 }
 func runEventRequest(h http.Handler, body string) *httptest.ResponseRecorder {
-    req := httptest.NewRequest(http.MethodPost, "/api/core/test/events", strings.NewReader(body))
+    req := httptest.NewRequest(http.MethodPost, "/api/core/events/test", strings.NewReader(body))
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("x-app-id", "110006")
     recorder := httptest.NewRecorder()
@@ -86,7 +86,7 @@ func TestEventRouteErrorMapping(t *testing.T) {
 func TestNoEventRouteInLegacyRouter(t *testing.T) {
     legacy := Router(&fakeFetcher{}, fakePinger{})
     response := runEventRequest(legacy, `{"event":"login","ext":{}}`)
-    if response.Code != http.StatusMethodNotAllowed {
+    if response.Code != http.StatusNotFound {
         t.Fatalf("旧 Router 意外注册事件: %d", response.Code)
     }
 }
