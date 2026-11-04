@@ -9,7 +9,7 @@ interface SDKService {
   name: string
   description: string
   enabled: boolean
-  sortOrder: number
+  scopeType: 'channel_app' | 'server_group'
 }
 
 const items = ref<SDKService[]>([])
@@ -53,7 +53,7 @@ onMounted(() => void load())
       <div>
         <div class="eyebrow">SDK SERVICES</div>
         <h1>服务管理</h1>
-        <p class="muted">全局开关决定服务是否允许使用；各渠道包仍需在对应环境独立启用。</p>
+        <p class="muted">全局开关决定服务是否允许使用；渠道包或区服组仍需独立配置目标开关。</p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -61,6 +61,9 @@ onMounted(() => void load())
       <el-table v-loading="loading" :data="items" stripe>
         <el-table-column prop="name" label="服务名称" min-width="140" />
         <el-table-column prop="code" label="服务编码" min-width="170" />
+        <el-table-column label="作用范围" width="125">
+          <template #default="{ row }">{{ row.scopeType === "channel_app" ? "渠道包" : "区服组" }}</template>
+        </el-table-column>
         <el-table-column prop="description" label="说明" min-width="240" />
         <el-table-column label="全局状态" width="140" align="center">
           <template #default="{ row }">
