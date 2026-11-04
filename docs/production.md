@@ -230,7 +230,7 @@ log:
 
 **提醒：** Go 的 Shutdown 不会自动排空 WebSocket/hijacked 连接；未来 SDK 新增此类连接需单独处理退出。
 
-## 三项开关移除后的发布检查
+## 上线发布前检查
 
 - 配置中心管理写接口**始终注册**：升级部署前必须由防火墙、私有网络或具备身份验证的网关限制整个 `/api/config/` 前缀，特别是 `/api/config/admin/`、节点原始 JSON 和同步快照，避免任意用户写入或读取服务端密钥。不要仅隐藏管理网页。
 - SDK Core 订单接口和补偿 Worker 始终加载，数据库必须已有 `game_order` 表，账号需配置表 SELECT 与订单表 SELECT/INSERT/UPDATE；SDK Service 还需服务开关表与游戏、大区、渠道包的只读权限。
