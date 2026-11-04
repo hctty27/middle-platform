@@ -114,17 +114,17 @@ Nginx 不会因 `/health/ready` 自动从静态 upstream 中摘除后端；需�
 
 ### 配置管理前端：运行时配置
 
-前端构建采用 Vite `base: './'`，可以直接放在 Nginx 的 `/sdk/admin/` 或其他子路径下。静态资源使用相对路径，不需要修改打包脚本或重新构建。
+前端构建采用 Vite `base: './'`，可以直接放在 Nginx 的 `/admin/` 或其他子路径下。静态资源使用相对路径，不需要修改打包脚本或重新构建。
 
 前端所有配置中心 API 请求从 `admin/config.js` 中读取：
 
 ```js
 window.__MIDDLE_PLATFORM_CONFIG__ = {
-  apiBaseUrl: '/sdk/api/config'
+  apiBaseUrl: '/api/config'
 }
 ```
 
-注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。配置项是 **配置中心 API 前缀**，而不是 SDK Core 的 `/sdk/api/core`。
+注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。配置项是 **配置中心 API 前缀**，而不是 SDK Core 的 `/api/core`。
 
 为了确保更新 `admin/` 静态资源时不覆盖生产配置，建议在正式服务器将配置长期保存于 `/data/middle-platform/config/admin.js`：
 
@@ -136,33 +136,33 @@ vi /data/middle-platform/config/admin.js
 在现有的 `zk.skybluek.com` HTTPS `server {}` 内，优先配置精确匹配：
 
 ```nginx
-location = /sdk/admin/config.js {
+location = /admin/config.js {
     alias /data/middle-platform/config/admin.js;
     add_header Cache-Control "no-store" always;
 }
-location = /sdk/admin {
-    return 301 /sdk/admin/;
+location = /admin {
+    return 301 /admin/;
 }
-location ^~ /sdk/admin/ {
+location ^~ /admin/ {
     alias /data/middle-platform/admin/;
     index index.html;
-    try_files $uri $uri/ /sdk/admin/index.html;
+    try_files $uri $uri/ /admin/index.html;
 }
-location ^~ /sdk/api/config/ {
-    proxy_pass http://127.0.0.1:8201/api/config/;
+location ^~ /api/config/ {
+    proxy_pass http://127.0.0.1:8201;
 }
 ```
 
-该规则只演示配置中心相关路径。SDK Core 的 `/sdk/api/core/` 仍应独立配置负载均衡代理，不能转发到配置中心。使用 `proxy_pass` 带 URI 的写法将 `/sdk/api/config/` 映射为 Go 现有的 `/api/config/`。
+该规则只演示配置中心相关路径。SDK Core 的 `/api/core/` 仍应独立配置负载均衡代理，不能转发到配置中心。此处 `proxy_pass` 不附加 URI，直接透传原始 `/api/config/` 请求路径。
 
 ```bash
 nginx -t && systemctl reload nginx
-curl -i https://zk.skybluek.com/sdk/admin/config.js
+curl -i https://zk.skybluek.com/admin/config.js
 ```
 
 改动 `admin.js` 后强制刷新浏览器即可生效，不需要重启 Supervisor。原项目使用 hash 路由，子路径刷新不会要求额外的前端路由配置。
 
-**安全提醒：** 现在配置中心管理 API 尚无完整认证，`/sdk/admin/` 和 `/sdk/api/config/admin/` 必须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。
+**安全提醒：** 现在配置中心管理 API 尚无完整认证，`/admin/` 和 `/api/config/admin/` 必须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。
 
 ## 6. 安全发布与回滚
 

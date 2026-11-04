@@ -12,7 +12,7 @@ import (
 )
 
 // RouteCoreConfig 同时用于接口注册和映射查询，避免路由名称漂移。
-const RouteCoreConfig = "GET /api/core/{env}/{appid}"
+const RouteCoreConfig = "GET /api/core/config/{env}/{appid}"
 
 //go:embed response-mapping.json
 var defaultMapping []byte

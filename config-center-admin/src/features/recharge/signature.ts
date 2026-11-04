@@ -1,8 +1,8 @@
 // 充值联调签名：严格匹配 SDK Core 当前的游戏登记协议和平台 V1 协议。
 const encoder = new TextEncoder()
 const appIDPattern = '[A-Za-z0-9][A-Za-z0-9._:-]{0,127}'
-const registerPathPattern = new RegExp(`(/api/core/(test|prod|review)/(${appIDPattern})/orders)$`)
-const callbackPathPattern = new RegExp(`/api/core/(${appIDPattern})/pay/notify$`)
+const registerPathPattern = new RegExp(`(/api/core/orders/(test|prod|review)/(${appIDPattern}))$`)
+const callbackPathPattern = new RegExp(`/api/core/pay/notify/(${appIDPattern})$`)
 
 export interface Endpoint {
   url: string
@@ -23,14 +23,14 @@ function parseUrl(raw: string): URL {
 export function parseRegisterEndpoint(raw: string): Endpoint {
   const url = parseUrl(raw)
   const match = url.pathname.match(registerPathPattern)
-  if (!match) throw new Error('登记 URL 应以 /api/core/{env}/{appid}/orders 结尾')
+  if (!match) throw new Error('登记 URL 应以 /api/core/orders/{env}/{appid} 结尾')
   return { url: url.toString(), env: match[2], appid: match[3] }
 }
 
 export function parseCallbackEndpoint(raw: string): Endpoint {
   const url = parseUrl(raw)
   const match = url.pathname.match(callbackPathPattern)
-  if (!match) throw new Error('回调 URL 应以 /api/core/{appid}/pay/notify 结尾')
+  if (!match) throw new Error('回调 URL 应以 /api/core/pay/notify/{appid} 结尾')
   return { url: url.toString(), appid: match[1] }
 }
 

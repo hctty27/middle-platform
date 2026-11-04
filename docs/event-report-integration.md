@@ -12,7 +12,7 @@
 ## 2. 游戏请求
 
 ```http
-POST /api/core/test/events
+POST /api/core/events/test
 Content-Type: application/json
 x-app-id: 110006
 x-timestamp: <Unix 秒>

@@ -111,7 +111,7 @@ func TestGetPropagatesLookupError(t *testing.T) {
 
 func TestGetRegionConfigMappingWithoutCodeChanges(t *testing.T) {
     resolver, err := mapping.Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "snKey": "channel_app.code",
             "regionKey": "region.config.regionKey",
             "loginUrl": "region.config.login.url",
@@ -143,7 +143,7 @@ func TestGetRegionConfigMappingWithoutCodeChanges(t *testing.T) {
 
 func TestGetGameConfigNestedMapping(t *testing.T) {
     resolver, err := mapping.Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "gameConfig": "game.config",
             "gameTitle": "game.config.title",
             "regionConfig": "region.config",
@@ -187,7 +187,7 @@ func TestGetRejectsMalformedGameConfig(t *testing.T) {
         },
     }
     resolver,err:=mapping.Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "gameTitle": "game.config.title"
         }
     }`))
@@ -218,7 +218,7 @@ func TestGetSkipsUnusedJSONSources(t *testing.T) {
 
 func TestGetDoesNotParseJSONWhenRouteOnlyUsesCodes(t *testing.T) {
     resolver,err:=mapping.Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "snKey": "channel_app.code",
             "zoneKey": "server_group.code",
             "gameCode": "game.code"
@@ -245,7 +245,7 @@ func TestGetDoesNotParseJSONWhenRouteOnlyUsesCodes(t *testing.T) {
 
 func TestGetMultipleFieldsReuseOneDecodedConfig(t *testing.T) {
     resolver,err:=mapping.Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "tsKey": "channel_app.config.tsKey",
             "login": "channel_app.config.login.url",
             "wholeApp": "channel_app.config",
@@ -302,7 +302,7 @@ func BenchmarkGetDefaultMapping(b *testing.B) {
 
 func TestGetDoesNotExposePaymentSecretThroughWholeConfig(t *testing.T) {
     resolver,err:=mapping.Load([]byte(`{
-        "GET /api/core/{env}/{appid}": {
+        "GET /api/core/config/{env}/{appid}": {
             "wholeApp":"channel_app.config",
             "tsKey":"channel_app.config.tsKey"
         }
@@ -321,7 +321,7 @@ func TestGetDoesNotExposePaymentSecretThroughWholeConfig(t *testing.T) {
 }
 
 func TestWholeGameConfigStripsGameSecret(t *testing.T) {
-    resolver,err:=mapping.Load([]byte("{\"GET /api/core/{env}/{appid}\":{\"wholeGame\":\"game.config\",\"title\":\"game.config.title\"}}"))
+    resolver,err:=mapping.Load([]byte("{\"GET /api/core/config/{env}/{appid}\":{\"wholeGame\":\"game.config\",\"title\":\"game.config.title\"}}"))
     if err!=nil{t.Fatal(err)}
     reader:=&fakeReader{
         app:model.ChannelApp{GameConfig:json.RawMessage("{\"title\":\"shown\",\"gameSecret\":\"PRIVATE_BASE64\"}")},

@@ -42,7 +42,7 @@ func eventError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func registerEventRoutes(mux *http.ServeMux, svc EventAPI) {
-    mux.HandleFunc("POST /api/core/{env}/events", func(w http.ResponseWriter, r *http.Request) {
+    mux.HandleFunc("POST /api/core/events/{env}", func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Cache-Control", "no-store")
         if r.URL.RawQuery != "" {
             eventError(w, r, service.ErrInvalidEvent)

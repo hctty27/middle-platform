@@ -31,7 +31,7 @@ func TestCoreRouteUsesMappedResponseData(t *testing.T) {
     data:=map[string]any{"snKey":"a1","zoneKey":"s1","tsKey":"secretless"}
     f:=&fakeFetcher{result:data}
     rec:=httptest.NewRecorder()
-    Router(f,fakePinger{}).ServeHTTP(rec,httptest.NewRequest(http.MethodGet,"/api/core/prod/app",nil))
+    Router(f,fakePinger{}).ServeHTTP(rec,httptest.NewRequest(http.MethodGet,"/api/core/config/prod/app",nil))
     if rec.Code!=http.StatusOK || f.env!="prod" || f.appID!="app" {
         t.Fatalf("status=%d env=%s appID=%s",rec.Code,f.env,f.appID)
     }
@@ -56,7 +56,7 @@ func TestCoreRouteReturnsSuccessWithOmittedFields(t *testing.T) {
     }}
     rec := httptest.NewRecorder()
     Router(f, fakePinger{}).ServeHTTP(rec,
-        httptest.NewRequest(http.MethodGet, "/api/core/prod/app1001", nil))
+        httptest.NewRequest(http.MethodGet, "/api/core/config/prod/app1001", nil))
     if rec.Code != http.StatusOK { t.Fatalf("HTTP %d: %s", rec.Code, rec.Body.String()) }
     var result struct {
         Code int `json:"code"`
@@ -79,7 +79,7 @@ func TestConfigErrors(t *testing.T) {
     for _,tc:=range cases {
         rec:=httptest.NewRecorder()
         Router(&fakeFetcher{err:tc.err},fakePinger{}).ServeHTTP(rec,
-            httptest.NewRequest(http.MethodGet,"/api/core/review/app",nil))
+            httptest.NewRequest(http.MethodGet,"/api/core/config/review/app",nil))
         if rec.Code!=tc.want { t.Errorf("err=%v got=%d want=%d",tc.err,rec.Code,tc.want) }
     }
 }
@@ -112,7 +112,7 @@ func TestCoreRouteChineseErrors(t *testing.T) {
     for _, tc := range cases {
         recorder := httptest.NewRecorder()
         Router(&fakeFetcher{err: tc.err}, fakePinger{}).ServeHTTP(recorder,
-            httptest.NewRequest(http.MethodGet, "/api/core/review/app", nil))
+            httptest.NewRequest(http.MethodGet, "/api/core/config/review/app", nil))
         var payload struct {
             Code int `json:"code"`
             Message string `json:"message"`

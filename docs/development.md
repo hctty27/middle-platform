@@ -79,7 +79,7 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml
 SDK Core **直接查询权威库**，不连接 `config_access`，也不执行迁移；需要先在管理端创建已启用游戏、大区、区服组和渠道应用，并给对应环境绑定区服组，再调用：
 
 ```powershell
-Invoke-RestMethod "http://127.0.0.1:8082/api/core/prod/your-appid"
+Invoke-RestMethod "http://127.0.0.1:8082/api/core/config/prod/your-appid"
 ```
 
 `your-appid` 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口映射见 [API 文档](api.md) 与 [SDK Core 说明](../sdk-core/README.md)。

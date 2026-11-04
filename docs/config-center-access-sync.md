@@ -138,6 +138,6 @@ GET /api/config/sync/snapshot
 - 回调地址支持公网和内网 HTTP/HTTPS；正式环境建议 HTTPS。
 - 同步 API 可能返回敏感配置，应通过可信网络或受保护网关访问，不要将密钥暴露给浏览器。
 - 接入服务器需保持时间同步。
-- 只需要按 AppID 查询 SDK 配置时，应使用独立的 `GET /api/core/{env}/{appid}`，而不是三级节点同步协议。
+- 只需要按 AppID 查询 SDK 配置时，应使用独立的 `GET /api/core/config/{env}/{appid}`，而不是三级节点同步协议。
 
 **第三方最低接入工作量：一个验签回调接口、一个全量拉取流程、本地配置存储，以及定期版本检查。**
