@@ -60,4 +60,4 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
 - `sdk_service` 管理已实现功能的全局开关，`sdk_service_channel` 按服务、渠道包、环境唯一绑定；当前功能为 `event_report` 和 `user_check`。
 - 游戏侧用 `game.config.gameSecret` 验签，平台侧用 `channel_app.config.appSecret` 验签；两套签名密钥不能混用。
 - 订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。
-- 对外协议及签名细节以 [游戏 HTML](game.html) 和 [平台 HTML](platform.html) 为准，避免维护多份相同字段表。
+- 对外协议及签名细节以 [游戏 HTML](index.html#g-start) 和 [平台 HTML](index.html#p-start) 为准，避免维护多份相同字段表。

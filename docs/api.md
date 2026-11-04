@@ -1,6 +1,6 @@
 # HTTP API 契约
 
-本文件仅维护内部 HTTP 路由索引。对外请求字段、签名规则与代码示例以 [游戏接口 HTML](game.html)、[平台接口 HTML](platform.html) 为准。本地默认监听：配置中心 `:8080`、接入端 `:8081`、SDK Core `:8082`、SDK Service `:8221`。生产按 Nginx 转发规则调整。
+本文件仅维护内部 HTTP 路由索引。对外请求字段、签名规则与代码示例以 [统一接口文档](index.html) 为准。本地默认监听：配置中心 `:8080`、接入端 `:8081`、SDK Core `:8082`、SDK Service `:8221`。生产按 Nginx 转发规则调整。
 
 ## 1. 配置中心（config-center）
 
@@ -112,7 +112,7 @@ x-signature: <40 位小写 SHA-1>
 {"event":"login","ext":{"roleId":"10001"}}
 ```
 
-只支持已绑定环境的渠道包。Core 从 Header 读取 AppID，使用所属游戏密钥验签；只有全局和渠道环境的 `event_report` 服务开关同时开启才同步转发至平台。平台请求使用渠道包 `appSecret` 重新签名。当前不保存或自动重试事件。对外协议见 [游戏接口 HTML](game.html)。
+只支持已绑定环境的渠道包。Core 从 Header 读取 AppID，使用所属游戏密钥验签；只有全局和渠道环境的 `event_report` 服务开关同时开启才同步转发至平台。平台请求使用渠道包 `appSecret` 重新签名。当前不保存或自动重试事件。对外协议见 [游戏接口 HTML](index.html#g-start)。
 
 ## 5. SDK 功能管理（config-center）
 
@@ -130,7 +130,7 @@ x-signature: <40 位小写 SHA-1>
 `POST /api/service/user/check/{env}`，AppID 来自 `x-app-id`，Body 仅含 `open_id`。
 根据游戏配置 `serviceAdapters.user_check` 选择 Go 适配器；游戏接口 URL 从大区 `userCheckUrl` 获取。
 成功 `{"code":0,"message":"ok","data":true}`；用户不存在 `{"code":1021003,"message":"用户信息不存在","data":null}`。
-游戏端与平台端请求详见 [游戏接口 HTML](game.html)、[平台接口 HTML](platform.html)。平台核验接口签名样本与环境回调能力仍需联调确认。
+游戏端与平台端请求详见 [游戏接口 HTML](index.html#g-start)、[平台接口 HTML](index.html#p-start)。平台核验接口签名样本与环境回调能力仍需联调确认。
 
 ## 7. 健康检查与响应约定
 

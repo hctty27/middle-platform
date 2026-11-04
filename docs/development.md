@@ -96,7 +96,7 @@ go run ./cmd/sdk-service -config configs/config-dev.yaml
 
 首次部署应确认功能开关表已建立并包含 `user_check`；游戏 `gameSecret`、渠道包 `appSecret`、大区 `userCheckUrl` 已配置，且全局与当前渠道环境的用户核验开关均开启。**默认 `standard` 适配器无需配置**。本地健康检查：`http://127.0.0.1:8221/health/ready`。
 
-平台和游戏联调报文分别见 [平台接口 HTML](platform.html)、[游戏接口 HTML](game.html)。
+平台和游戏联调报文分别见 [平台接口 HTML](index.html#p-start)、[游戏接口 HTML](index.html#g-start)。
 
 ## 5. Vue 管理端
 

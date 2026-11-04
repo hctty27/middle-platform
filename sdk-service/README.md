@@ -11,7 +11,7 @@
 - **默认适配器无需配置**：`game.config.serviceAdapters.user_check` 为空或未设置时自动使用 `standard`；仅特殊游戏显式选择已注册适配器。
 - 标准游戏结果要求 HTTP 200、`code=0`、`data.exists` 为布尔值；游戏故障不能映射为用户不存在。
 
-对外参数和签名规则分别见 [平台 HTML](../docs/platform.html)、[游戏 HTML](../docs/game.html)。平台用户核验是否签 `open_id` 需要真实请求样本联调确认，正式接入前必须核准。
+对外参数和签名规则分别见 [平台 HTML](../docs/index.html#p-start)、[游戏 HTML](../docs/index.html#g-start)。平台用户核验是否签 `open_id` 需要真实请求样本联调确认，正式接入前必须核准。
 
 ## 本地启动
 
