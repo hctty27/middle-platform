@@ -80,10 +80,11 @@ function Get-RestartPlan {
     $selected = New-Object 'System.Collections.Generic.List[string]'
     foreach ($item in $property.Value.PSObject.Properties) {
         $name = [string]$item.Name
-        if ($name -notmatch '^(config-center-access|config-center|sdk-core|sdk-service)(-[1-9][0-9]*)?$') {
+        if ($name -match '^(config-center-access|config-center|sdk-core|sdk-service)(-[1-9][0-9]*)?$') {
+            $module = $Matches[1]
+        } else {
             throw "services 包含不支持的进程名: $name"
         }
-        $module = $Matches[1]
         $value = $item.Value
         if (($value -isnot [int] -and $value -isnot [long]) -or $value -lt 1 -or $value -gt 65535) {
             throw "services.$name 的端口必须为 1 到 65535 的整数"
