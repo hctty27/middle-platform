@@ -82,6 +82,7 @@ function New-PublishAskPass {
     param([string]$Stage)
     # csc keeps the helper out of this process, so the temp directory can be deleted.
     # Add-Type would load and lock the exe until PowerShell exits.
+    if (-not $env:SystemRoot) { throw 'Password helper requires Windows; use SSH keys or interactive password on this host.' }
     $csc = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     if (-not (Test-Path -LiteralPath $csc)) {
         $csc = Join-Path $env:SystemRoot 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
