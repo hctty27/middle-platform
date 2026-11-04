@@ -176,7 +176,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
               <BusinessConfigEditor :model-value="active.config" node-type="channel_app" readonly />
             </el-tab-pane>
             <el-tab-pane label="服务配置">
-              <ServiceBindingPanel :key="active.id" :target-id="active.id" scope-type="channel_app" />
+              <ServiceBindingPanel :key="active.id" :target-id="active.id" />
             </el-tab-pane>
             <el-tab-pane label="应用信息">
               <el-descriptions :column="1" border>

@@ -15,11 +15,9 @@ interface ServiceEntry {
   config: Record<string, unknown>
 }
 interface EditableEntry extends ServiceEntry { configText: string }
-const props = defineProps<{ targetId: number; scopeType: 'channel_app' | 'server_group'; fixedEnv?: Env | null }>()
-const endpoint = computed(() => props.scopeType === 'channel_app'
-  ? `/admin/channel-apps/${props.targetId}/services`
-  : `/admin/server-groups/${props.targetId}/services`)
-const env = ref<Env>(props.fixedEnv ?? 'test')
+const props = defineProps<{ targetId: number }>()
+const endpoint = computed(() => `/admin/channel-apps/${props.targetId}/services`)
+const env = ref<Env>('test')
 const loading = ref(false)
 const savingId = ref<number | null>(null)
 const entries = ref<EditableEntry[]>([])
@@ -71,8 +69,7 @@ async function save(item: EditableEntry) {
   }
 }
 
-watch(() => [props.targetId, props.scopeType, props.fixedEnv, env.value], () => {
-  if (props.fixedEnv) env.value = props.fixedEnv
+watch(() => [props.targetId, env.value], () => {
   void load()
 }, { immediate: true })
 </script>
@@ -81,16 +78,15 @@ watch(() => [props.targetId, props.scopeType, props.fixedEnv, env.value], () => 
   <div class="node-detail-content">
     <div class="section-heading">
       <div>
-        <h3>{{ scopeType === 'channel_app' ? '渠道服务配置' : '区服组服务配置' }}</h3>
+        <h3>渠道服务配置</h3>
         <p class="muted">未单独配置的服务默认关闭；全局关闭后渠道无法使用。</p>
       </div>
       <div class="panel-actions">
-        <el-select v-if="!fixedEnv" v-model="env" :disabled="savingId !== null" style="width: 130px">
+        <el-select v-model="env" :disabled="savingId !== null" style="width: 130px">
           <el-option label="测试环境" value="test" />
           <el-option label="正式环境" value="prod" />
           <el-option label="提审环境" value="review" />
         </el-select>
-        <el-tag v-if="fixedEnv" type="info">{{ fixedEnv === "prod" ? "正式环境" : fixedEnv === "test" ? "测试环境" : "提审环境" }}</el-tag>
         <el-button @click="load">刷新</el-button>
       </div>
     </div>

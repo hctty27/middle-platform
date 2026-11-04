@@ -49,8 +49,8 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		"SELECT id,code,webhook_secret FROM config_subscriber LIMIT 0",
 		"SELECT acknowledged_revision,acknowledged_epoch FROM config_subscriber_delivery_state LIMIT 0",
 		"SELECT id,game_id,code,prod_server_group_id,test_server_group_id,review_server_group_id FROM config_channel_app LIMIT 0",
-        "SELECT id,code,name,scope_type,description,enabled FROM sdk_service LIMIT 0",
-        "SELECT id,service_id,target_id,env,enabled,config FROM sdk_service_binding LIMIT 0",
+        "SELECT id,code,name,description,enabled FROM sdk_service LIMIT 0",
+        "SELECT id,service_id,channel_app_id,env,enabled,config FROM sdk_service_channel LIMIT 0",
 	}
 	{
 		statements = append(statements, "SELECT id,appid,game_id,env,game_order_id,amount,attach,game_notify_url,platform_order_no,paid_at,payment_status,notify_status,notify_attempts,last_notify_at,last_notify_error,notify_success_at,next_notify_at,created_at,updated_at FROM game_order LIMIT 0")
@@ -66,7 +66,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 	}
 	for _, index := range []struct {table, name string} {
         {"sdk_service", "uk_sdk_service_code"},
-        {"sdk_service_binding", "uk_sdk_service_binding"},
+        {"sdk_service_channel", "uk_sdk_service_channel"},
     } {
         var exists int
         if err := conn.QueryRowContext(ctx,`
@@ -75,7 +75,7 @@ WHERE table_schema=DATABASE() AND table_name=? AND index_name=? AND non_unique=0
             index.table,index.name).Scan(&exists);err!=nil{return err}
         if exists==0{return fmt.Errorf("缺少 SDK 服务唯一索引 %s",index.name)}
     }
-    for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state"} {
+    for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state", "sdk_service_binding"} {
 		exists, err := hasTable(ctx, conn, obsolete)
 		if err != nil {
 			return err
@@ -94,7 +94,7 @@ WHERE table_schema=DATABASE() AND table_name=? AND index_name=? AND non_unique=0
 	if indexCount != 1 {
 		return errors.New("config_channel_app 表缺少 code 全局唯一索引")
 	}
-	for _, constraint := range []string{"chk_config_node_env_type", "fk_app_prod_group", "fk_app_test_group", "fk_app_review_group", "chk_sdk_service_scope", "fk_sdk_binding_service", "chk_sdk_binding_env"} {
+	for _, constraint := range []string{"chk_config_node_env_type", "fk_app_prod_group", "fk_app_test_group", "fk_app_review_group"} {
 		var count int
 		if err := conn.QueryRowContext(ctx,
 			"SELECT COUNT(*) FROM information_schema.table_constraints WHERE constraint_schema=DATABASE() AND constraint_name=?", constraint).Scan(&count); err != nil {
@@ -103,6 +103,20 @@ WHERE table_schema=DATABASE() AND table_name=? AND index_name=? AND non_unique=0
 		if count == 0 {
 			return fmt.Errorf("缺少数据库约束 %s", constraint)
 		}
+	}
+	// 历史通用绑定表改名后可能保留旧约束名；两种名称均可校验同一渠道表。
+	for _, names := range [][2]string{
+		{"fk_sdk_channel_service", "fk_sdk_binding_service"},
+		{"chk_sdk_channel_env", "chk_sdk_binding_env"},
+	} {
+		var count int
+		if err := conn.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM information_schema.table_constraints
+WHERE constraint_schema=DATABASE() AND table_name='sdk_service_channel'
+  AND constraint_name IN (?,?)`, names[0], names[1]).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 { return fmt.Errorf("缺少 SDK 渠道绑定约束 %s", names[0]) }
 	}
 	var clause string
 	if err := conn.QueryRowContext(ctx, `SELECT check_clause FROM information_schema.check_constraints

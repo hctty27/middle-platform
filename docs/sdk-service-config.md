@@ -1,53 +1,57 @@
-# SDK 服务定义与通用绑定
+# SDK 渠道包服务配置
 
 ## 数据模型
 
-- `sdk_service`：服务目录，`code` 全局唯一，`scope_type` 仅支持 `channel_app` / `server_group`，并提供全局 `enabled`。已删除 `sort_order`，按 ID 稳定展示。
-- `sdk_service_binding`：唯一键 `(service_id,target_id,env)`；根据服务定义的 `scope_type` 解释 `target_id`，`env` 支持 `prod/test/review`。
-- `target_id` 不建立跨类型外键，Go 写入时校验目标存在、区服组对应环境以及作用范围，并在删除渠道应用或区服组时事务清理对应绑定。
-- 原有 6 个服务在迁移时统一标记为 `channel_app`，以保持原有渠道绑定有效。只有确认一个服务不存在旧渠道绑定后，才允许通过人工 SQL 将它重分类为 `server_group`；建议为语义不同的新业务另建独立服务编码。
-- 未创建绑定记录默认关闭。功能生效要求全局服务、绑定开关、目标、上级配置节点和环境均有效。充值支付补偿不受服务开关控制。
+- `sdk_service`：SDK 功能目录和全局开关，`code` 唯一；不再使用 `scope_type` 或 `sort_order`。当前只初始化已实现的 `event_report`（事件上报），未实现功能不添加占位数据。
+- `sdk_service_channel`：渠道包服务绑定，`service_id` 对应服务目录，`channel_app_id` 对应 `config_channel_app.id`，`env` 为 `prod/test/review`。
+- 每个服务与渠道包、环境组合唯一：`(service_id,channel_app_id,env)`。无绑定记录时默认关闭，全局或渠道环境关闭时该功能不生效。
+- 功能生效还要求渠道包、游戏、当前环境区服组、大区均有效。充值、订单回调和补偿不受事件上报开关控制。
+- 服务扩展配置继续保留 JSON 对象结构，目前事件上报不使用扩展配置、不保存事件数据、不自动重试。
 
-## 手动 SQL（两种安装路径互斥）
+区服组不再使用 SDK 功能开关绑定；以后若实现区服级接口，单独评估区服功能配置。
 
-- 新建空库：`config-center/db/sql/initialize.sql`。
-- 旧库已经有 `sdk_service`、`sdk_service_channel`：先备份并停止旧服务写入，再执行 `config-center/db/sql/migrate_sdk_service_binding.sql`。脚本保留旧表作回退，不会删除现有绑定。
-- 旧库没有任何服务表：执行 `config-center/db/sql/add_sdk_services.sql`，不要再执行迁移脚本。
+## 手动 SQL
 
-SQL 不由服务自动执行。旧库迁移后，需要核对脚本末尾的记录计数和差异查询，确认两个结果分别为“计数相等”和“差异为 0”。**更新数据库结构与切换服务二进制必须协调停写窗口**：旧服务依赖 `sort_order` 和 `sdk_service_channel`；切换后不要再运行旧版写服务。
+SQL 由管理员手动执行，服务不会自动创建或迁移表：
+
+| 数据库现状 | 操作 |
+| --- | --- |
+| 新建空 `config_center` | 执行 `config-center/db/sql/initialize.sql` |
+| 已有配置库，但无 SDK 服务表 | 执行 `config-center/db/sql/add_sdk_services.sql` |
+| 已经使用 `sdk_service_binding` 通用表 | 执行 `config-center/db/sql/migrate_sdk_service_channel.sql` |
+| 只有历史 `sdk_service_channel`（`sdk_service.sort_order`） | 先执行 `migrate_sdk_service_binding.sql`，再执行 `migrate_sdk_service_channel.sql` |
+
+已有数据升级前必须备份并停止 config-center、sdk-core。请检查 `SHOW CREATE TABLE sdk_service`、`SHOW CREATE TABLE sdk_service_binding`、原有渠道表，以及旧服务绑定记录。
+
+`migrate_sdk_service_channel.sql` 会：
+
+1. 如果旧的 `sdk_service_channel` 仍存在，将其归档为 `sdk_service_channel_legacy`，移除归档表指向服务目录的外键，以便历史数据独立保留。
+2. 清理非 `event_report` 功能的当前绑定和服务目录记录；事件上报的服务 ID、绑定 ID、环境、开关、配置保持不变。
+3. 将 `sdk_service_binding` 改名为 `sdk_service_channel`，`target_id` 改名为 `channel_app_id`；删除 `scope_type` 与对应 CHECK 约束。
+4. 校验目录最终只有事件上报，检查渠道包绑定是否存在孤儿记录。
+
+如果 `sdk_service_channel_legacy` 已存在或此前迁移中断，不要重复执行；先人工核对冲突。MySQL DDL 会隐式提交，不能假定错误后自动回滚。
 
 ## 管理 API
 
-以下接口都属于需网关鉴权的配置中心管理接口：
+管理接口必须由可信网关保护。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/config/admin/sdk-services` | 返回服务目录及 `scopeType` |
-| PUT | `/api/config/admin/sdk-services/{id}` | 修改全局启用开关 |
-| GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 渠道包服务配置（兼容原路径） |
-| PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包绑定 |
-| GET | `/api/config/admin/server-groups/{id}/services?env=prod` | 区服组服务配置 |
-| PUT | `/api/config/admin/server-groups/{id}/services/{serviceId}?env=prod` | 保存区服组绑定 |
+| GET | `/api/config/admin/sdk-services` | 服务目录与全局开关 |
+| PUT | `/api/config/admin/sdk-services/{id}` | 修改全局开关 |
+| GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查看渠道包功能开关 |
+| PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包功能配置 |
 
-请求保存结构仍为 `{"enabled":true,"config":{}}`，只有 `enabled` 和 `config` 可更改；服务作用范围由初始化 SQL 管理而非 UI 修改。
-
-## 前端
-
-- 「服务管理」增加作用范围展示。
-- 「渠道应用 → 服务配置」只展示 `channel_app` 作用范围。
-- 「区服组 → 服务配置」只展示 `server_group`，环境来自所属大区。
-- 两处复用 `ServiceBindingPanel.vue`。
+保存请求保持 `{"enabled":true,"config":{}}`。原先的 `/api/config/admin/server-groups/{id}/services` 系列接口已经移除。
 
 ## 事件上报
 
-现有 `POST /api/core/{env}/events` 接口、SHA-1 签名、平台转发以及 `event_report` 功能码不变；`sdk-core` 的开关查询改为 `sdk_service_binding` 并明确要求 `scope_type='channel_app'`。
+继续使用 `POST /api/core/{env}/events`、`event_report` 功能编码与现有游戏验签、平台转发流程。事件上报必须同时开启全局开关、当前渠道包环境开关。接口不保存事件数据，也不自动重试。
 
-不增加事件级规则、不保存事件数据、不自动重试。区服上报及区服查询等业务接口仍未实现。
+## 上线检查
 
-## 上线校验
-
-1. 备份数据库，暂停旧服务的相关写操作，执行对应 SQL。
-2. 验证服务目录、旧绑定数据、唯一约束、作用范围及目标有效性。
-3. 先发布配置中心和 SDK Core，再发布管理端；确认服务启动时只读校验通过。
-4. 验证原渠道事件开关、区服组配置读取/保存与原有订单功能。
-5. 稳定后单独评审是否归档或删除旧 `sdk_service_channel`，本次不会自动删除。
+1. 全库备份，核对现有 SDK 服务表和绑定数据，停写后执行匹配的 SQL。
+2. 核对目录恰好一条 `event_report`，以及绑定记录的 `service_id`、`channel_app_id`、`env`、`enabled`、`config`。
+3. 发布配置中心和 SDK Core 后，再发布管理端，检查 SDK Core 表结构只读校验通过。
+4. 对 `test/prod/review` 分别测试开启、关闭及无绑定时的事件上报行为；验证充值流程不受影响。
