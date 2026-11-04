@@ -1,6 +1,6 @@
 # Linux 发布包构建
 
-唯一需要手动运行的打包入口为 `scripts/package.ps1`；Windows PowerShell 和 GitHub Actions 共用该脚本。脚本交叉编译三个 Linux ELF，并可同时构建 Vue 静态资源。**打包与进程管理方式无关**，不要求安装 Supervisor 才能打包。
+唯一需要手动运行的打包入口为 `scripts/package.ps1`；Windows PowerShell 和 GitHub Actions 共用该脚本。脚本交叉编译四个 Linux ELF，并可同时构建 Vue 静态资源。**打包与进程管理方式无关**，不要求安装 Supervisor 才能打包。
 
 ## 构建依赖与命令
 
@@ -33,11 +33,13 @@ dist/
 bin/
 ├── config-center
 ├── config-center-access
-└── sdk-core
+├── sdk-core
+└── sdk-service
 sql/
 ├── config-center/
 │   ├── initialize.sql
-│   └── add_game_order.sql
+│   ├── add_game_order.sql
+│   └── add_sdk_user_check.sql
 └── config-center-access/
     └── initialize.sql
 admin/                      # -SkipFrontend 时不存在
