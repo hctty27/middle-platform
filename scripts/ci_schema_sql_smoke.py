@@ -77,7 +77,7 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""")
 (appid,game_id,env,game_order_id,amount,attach,game_notify_url)
 VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok=False)
 
-    # 模拟已运行旧版 sdk_service/sdK_service_channel 的数据库，验证无损迁移。
+    # 模拟旧版渠道绑定先升级通用表、再收敛回渠道专用表。
     mysql("CREATE DATABASE manual_service_legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
     mysql(database="manual_service_legacy", script="""CREATE TABLE sdk_service (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -87,6 +87,8 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok
       created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     );
+    CREATE TABLE config_channel_app (id BIGINT PRIMARY KEY);
+    INSERT INTO config_channel_app(id) VALUES(900);
     CREATE TABLE sdk_service_channel (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       channel_app_id BIGINT NOT NULL,service_id BIGINT NOT NULL,
@@ -98,21 +100,30 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok
       FOREIGN KEY(service_id) REFERENCES sdk_service(id)
     );
     INSERT INTO sdk_service(id,code,name,enabled,sort_order)
-      VALUES(11,'event_report','事件上报',1,10);
+      VALUES(11,'event_report','事件上报',1,10),(12,'role_query','角色查询',1,20);
     INSERT INTO sdk_service_channel(id,channel_app_id,service_id,env,enabled,config)
-      VALUES(77,900,11,'test',1,'{"retained":true}');
+      VALUES(77,900,11,'test',1,'{"retained":true}'),(78,900,12,'test',1,'{}');
     """)
-    migration = source("config-center/db/sql/migrate_sdk_service_binding.sql")
+    # 老版本迁移到中间态，历史数据仍保留。
+    old_migration = source("config-center/db/sql/migrate_sdk_service_binding.sql")
+    mysql(database="manual_service_legacy", script=old_migration)
+    assert_sql("""SELECT COUNT(*) FROM manual_service_legacy.sdk_service_binding""", "2")
+    mysql(database="manual_service_legacy", script=old_migration, ok=False)
+
+    # 收敛为渠道包专用表，清理未实现的服务及其绑定。
+    migration = source("config-center/db/sql/migrate_sdk_service_channel.sql")
     mysql(database="manual_service_legacy", script=migration)
-    assert_sql("""SELECT id,service_id,target_id,env,enabled,JSON_UNQUOTE(JSON_EXTRACT(config,'$.retained'))
-FROM manual_service_legacy.sdk_service_binding""", "77\t11\t900\ttest\t1\ttrue")
-    assert_sql("""SELECT scope_type FROM manual_service_legacy.sdk_service WHERE id=11""", "channel_app")
-    assert_sql("""SELECT scope_type,enabled FROM manual_service_legacy.sdk_service
-WHERE code='server_status'""", "server_group\t0")
-    assert_sql("""SELECT COUNT(*) FROM manual_service_legacy.sdk_service_channel""", "1")
+    assert_sql("""SELECT id,service_id,channel_app_id,env,enabled,
+JSON_UNQUOTE(JSON_EXTRACT(config,'$.retained'))
+FROM manual_service_legacy.sdk_service_channel""", "77\\t11\\t900\\ttest\\t1\\ttrue")
+    assert_sql("""SELECT code FROM manual_service_legacy.sdk_service""", "event_report")
+    assert_sql("""SELECT COUNT(*) FROM manual_service_legacy.sdk_service_channel_legacy""", "2")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema='manual_service_legacy' AND table_name='sdk_service'
+  AND column_name='scope_type'""", "0")
     mysql(database="manual_service_legacy", script=migration, ok=False)
-    mysql("""INSERT INTO manual_service_legacy.sdk_service_binding
-(service_id,target_id,env,enabled,config) VALUES(11,900,'test',0,'{}');""", ok=False)
+    mysql("""INSERT INTO manual_service_legacy.sdk_service_channel
+(service_id,channel_app_id,env,enabled,config) VALUES(11,900,'test',0,'{}');""", ok=False)
 
     mysql(database="manual_replica", script=replica)
     assert_sql("SELECT epoch,revision FROM manual_replica.config_sync_state WHERE id=1", "NULL\t0")
