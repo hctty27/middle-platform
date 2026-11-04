@@ -9,11 +9,21 @@ param(
 
     [string]$Version = '',
 
-    [switch]$SkipFrontend
+    [switch]$SkipFrontend,
+
+    [ValidateSet('all', 'config-center', 'config-center-access', 'sdk-core', 'sdk-service', 'admin')]
+    [string]$Service = 'all',
+
+    [switch]$Fast
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($Service -eq 'admin' -and $SkipFrontend) {
+    throw '只打包 admin 时不能指定 -SkipFrontend'
+}
+$buildFrontend = -not $SkipFrontend -and ($Service -eq 'all' -or $Service -eq 'admin')
+$buildTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $outputRoot = Join-Path $repoRoot 'dist'
@@ -41,7 +51,7 @@ Assert-ExitCode 'go env GOHOSTOS GOHOSTARCH'
 if ($goHost.Count -ne 2) {
     throw '无法识别当前 Go 主机平台'
 }
-if (-not $SkipFrontend) {
+if ($buildFrontend) {
     $npmCommand = if ($env:OS -eq 'Windows_NT') { 'npm.cmd' } else { 'npm' }
     Require-Command $npmCommand
 }
@@ -109,7 +119,14 @@ try {
         @{ Module = 'sdk-service';          Command = 'sdk-service';          Output = 'sdk-service' }
     )
 
+    if ($Service -eq 'admin') {
+        $targets = @()
+    } elseif ($Service -ne 'all') {
+        $targets = @($targets | Where-Object { $_.Output -eq $Service })
+    }
+
     foreach ($target in $targets) {
+        $targetTimer = [System.Diagnostics.Stopwatch]::StartNew()
         Write-Host "正在为 linux/$Arch 构建 $($target.Output)..."
         $moduleDir = Join-Path $repoRoot $target.Module
         $outputFile = Join-Path $binDir $target.Output
@@ -125,6 +142,7 @@ try {
         if (-not (Test-Path -LiteralPath $outputFile -PathType Leaf)) {
             throw "缺少编译产物: $outputFile"
         }
+        Write-Host ("$($target.Output) 构建耗时: {0:N1}s" -f $targetTimer.Elapsed.TotalSeconds)
     }
 
     # 发布包携带人工审核的 SQL，不会在安装或运行服务时执行。
@@ -139,13 +157,24 @@ try {
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center-access/db/sql/initialize.sql') -Destination $accessDir
 
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。
-    if (-not $SkipFrontend) {
+    if ($buildFrontend) {
+        $frontendTimer = [System.Diagnostics.Stopwatch]::StartNew()
         $frontendDir = Join-Path $repoRoot 'config-center-admin'
         Write-Host '正在构建 Vue 管理端...'
         Push-Location $frontendDir
         try {
-            & $npmCommand ci --no-audit --no-fund
-            Assert-ExitCode 'npm ci'
+            $lockFile = Join-Path $frontendDir 'package-lock.json'
+            $marker = Join-Path $frontendDir 'node_modules/.middle-platform-lock.sha256'
+            $lockHash = (Get-FileHash -LiteralPath $lockFile -Algorithm SHA256).Hash
+            $reuseModules = $Fast -and (Test-Path -LiteralPath $marker -PathType Leaf) -and
+                ([System.IO.File]::ReadAllText($marker).Trim() -eq $lockHash)
+            if (-not $reuseModules) {
+                & $npmCommand ci --no-audit --no-fund
+                Assert-ExitCode 'npm ci'
+                [System.IO.File]::WriteAllText($marker, $lockHash, (New-Object System.Text.UTF8Encoding($false)))
+            } else {
+                Write-Host '依赖锁文件未变化，快速模式复用前端 node_modules。'
+            }
             & $npmCommand run build
             Assert-ExitCode 'npm run build'
         }
@@ -160,6 +189,7 @@ try {
         $adminDir = Join-Path $stageDir 'admin'
         New-Item -ItemType Directory -Force -Path $adminDir | Out-Null
         Copy-Item -Path (Join-Path $distDir '*') -Destination $adminDir -Recurse -Force
+        Write-Host ("Vue 构建耗时: {0:N1}s" -f $frontendTimer.Elapsed.TotalSeconds)
     }
 
     # 发布包只包含 bin/、sql/ 和可选的 admin/，不附加校验文件或构建说明。
@@ -209,7 +239,8 @@ try {
 
     Write-Host ''
     Write-Host "打包完成: $archivePath"
-    Write-Host '归档目录: bin/、sql/、admin/（跳过前端时无 admin/）'
+    Write-Host '归档目录: sql/ 以及本次选择的 bin/、admin/（按实际打包内容）'
+    Write-Host ("总耗时: {0:N1}s" -f $buildTimer.Elapsed.TotalSeconds)
     Write-Host '所有 Linux 可执行文件均设置为 0755 权限。'
 
 }
