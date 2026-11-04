@@ -1,10 +1,12 @@
 /** 业务字段的表单模型。底层仍使用原有 config JSON 字符串。 */
 export interface GameConfig {
   gameSecret?: string
+  serviceAdapters?: { user_check?: string; [key: string]: unknown }
 }
 
 export interface RegionConfig {
   payNotifyUrl?: string
+  userCheckUrl?: string
 }
 
 export interface ServerGroupConfig {
@@ -28,10 +30,12 @@ export interface BusinessConfigField {
 
 export const businessConfigFields: Record<BusinessConfigType, readonly BusinessConfigField[]> = {
   game: [
-    { key: 'gameSecret', label: '游戏主密钥', description: '用于游戏服与 SDK Core 的签名密钥派生，所有环境共享', placeholder: '请输入游戏主密钥', secret: true }
+    { key: 'gameSecret', label: '游戏主密钥', description: '游戏服与 SDK Core/Service 共用的服务端签名密钥，所有环境共享', placeholder: '请输入游戏主密钥', secret: true },
+    { key: 'serviceAdapters.user_check', label: '用户核验适配器', description: 'SDK Service 根据此名称选择 Go 适配器；默认实现填 standard', placeholder: 'standard' }
   ],
   region: [
-    { key: 'payNotifyUrl', label: '支付发货通知地址', description: 'SDK Core 支付成功后通知游戏服的 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/pay/notify' }
+    { key: 'payNotifyUrl', label: '支付发货通知地址', description: 'SDK Core 支付成功后通知游戏服的 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/pay/notify' },
+    { key: 'userCheckUrl', label: '用户核验地址', description: 'SDK Service 核验玩家时请求的完整游戏服 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/user/check' }
   ],
   server_group: [],
   channel_app: [
@@ -48,25 +52,59 @@ export function parseBusinessConfig(config: string): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
+function getPath(object: Record<string, unknown>, key: string): unknown {
+  return key.split('.').reduce<unknown>((parent, part) =>
+    parent && typeof parent === 'object' && !Array.isArray(parent)
+      ? (parent as Record<string, unknown>)[part] : undefined, object)
+}
+
+function setPath(object: Record<string, unknown>, key: string, value: string): void {
+  const segments = key.split('.')
+  let parent = object
+  for (const part of segments.slice(0, -1)) {
+    if (parent[part] === undefined && value !== '') parent[part] = {}
+    const nested = parent[part]
+    if (nested === undefined && value === '') return
+    if (nested === null || typeof nested !== 'object' || Array.isArray(nested)) {
+      throw new Error('配置节点必须是 JSON 对象')
+    }
+    parent = nested as Record<string, unknown>
+  }
+  const leaf = segments[segments.length - 1]
+  if (value === '') delete parent[leaf]
+  else parent[leaf] = value
+  for (const part of segments.slice(0, -1)) {
+    const nested = object[part]
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)
+        && Object.keys(nested).length === 0) delete object[part]
+    break
+  }
+}
+
 export function validateBusinessConfig(nodeType: BusinessConfigType, config: string): void {
   const value = parseBusinessConfig(config)
+  if (nodeType === 'game' && 'serviceAdapters' in value &&
+      (value.serviceAdapters === null || Array.isArray(value.serviceAdapters) ||
+      typeof value.serviceAdapters !== 'object')) {
+    throw new Error('serviceAdapters 必须是 JSON 对象')
+  }
   for (const field of businessConfigFields[nodeType]) {
-    if (field.key in value && typeof value[field.key] !== 'string') {
+    const fieldValue = getPath(value, field.key)
+    if (fieldValue !== undefined && typeof fieldValue !== 'string') {
       throw new Error(`${field.label} 必须是字符串`)
     }
   }
 }
 
 export function getBusinessConfigValue(config: string, key: string): string {
-  const value = parseBusinessConfig(config)[key]
+  const value = getPath(parseBusinessConfig(config), key)
   return typeof value === 'string' ? value : ''
 }
 
-/** 只更新指定业务字段，保留所有其他 JSON 属性，清空输入则移除字段。 */
+/** 只更新指定业务字段，保留其他 JSON 属性。 */
 export function setBusinessConfigValue(config: string, key: string, value: string): string {
   const object = parseBusinessConfig(config)
-  if (value === '') delete object[key]
-  else object[key] = value
+  setPath(object, key, value)
   return JSON.stringify(object, null, 2)
 }
 
@@ -75,7 +113,7 @@ export function redactBusinessConfig(nodeType: BusinessConfigType, config: strin
   try {
     const object = parseBusinessConfig(config)
     for (const field of businessConfigFields[nodeType]) {
-      if (field.secret && field.key in object) object[field.key] = '******'
+      if (field.secret && getPath(object, field.key) !== undefined) setPath(object, field.key, '******')
     }
     return JSON.stringify(object, null, 2)
   } catch {
