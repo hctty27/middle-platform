@@ -93,11 +93,12 @@ try {
     $env:GOARCH = $Arch
     $env:CGO_ENABLED = '0'
 
-    # 三个 Go 服务使用统一的交叉编译参数；数据库由人工执行 SQL。
+    # 四个 Go 服务使用统一的交叉编译参数；数据库由人工执行 SQL。
     $targets = @(
         @{ Module = 'config-center';        Command = 'config-center';        Output = 'config-center' },
         @{ Module = 'config-center-access'; Command = 'config-center-access'; Output = 'config-center-access' },
-        @{ Module = 'sdk-core';             Command = 'sdk-core';             Output = 'sdk-core' }
+        @{ Module = 'sdk-core';             Command = 'sdk-core';             Output = 'sdk-core' },
+        @{ Module = 'sdk-service';          Command = 'sdk-service';          Output = 'sdk-service' }
     )
 
     foreach ($target in $targets) {
@@ -125,6 +126,8 @@ try {
     New-Item -ItemType Directory -Force -Path $authorityDir, $accessDir | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/initialize.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_game_order.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_services.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_user_check.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center-access/db/sql/initialize.sql') -Destination $accessDir
 
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。

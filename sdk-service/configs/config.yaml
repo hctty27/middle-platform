@@ -1,0 +1,19 @@
+# SDK Service：同库只读，游戏地址与适配器来自配置中心节点。
+server:
+  address: ":8221"
+
+database:
+  dsn: ""
+  maxOpenConns: 10
+  maxIdleConns: 5
+  connMaxLifetime: "30m"
+
+game:
+  timeout: "5s"
+
+log:
+  level: info
+  format: json
+  output: stdout
+  accessEnabled: true
+  slowThreshold: 500ms

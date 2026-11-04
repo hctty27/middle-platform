@@ -1,6 +1,6 @@
 # HTTP API 契约
 
-以下路径直接对应当前三个服务的路由。服务默认分别监听 `:8080`、`:8081`、`:8082`，生产由 Nginx 按前缀转发；所有示例主机仅用于本地调试。
+以下路径直接对应当前四个服务的路由。服务默认分别监听 `:8080`、`:8081`、`:8082`，生产由 Nginx 按前缀转发；所有示例主机仅用于本地调试。
 
 ## 1. 配置中心（config-center）
 
@@ -114,9 +114,16 @@ x-signature: <40 位小写 SHA-1>
 
 只支持已绑定环境的渠道包。Core 从 Header 读取 AppID，使用所属游戏密钥验签；只有全局和渠道环境的 `event_report` 服务开关同时开启才同步转发至平台。平台请求使用渠道包 `appSecret` 重新签名。当前不保存或自动重试事件。详见 [事件上报接入说明](event-report-integration.md)。
 
-## 5. 健康检查与响应约定
+## 5. SDK Service 用户核验
 
-三个服务均有：
+`POST /api/service/user/check/{env}`，AppID 来自 `x-app-id`，Body 仅含 `open_id`。
+根据游戏配置 `serviceAdapters.user_check` 选择 Go 适配器；游戏接口 URL 从大区 `userCheckUrl` 获取。
+成功 `{"code":0,"message":"ok","data":true}`；用户不存在 `{"code":1021003,"message":"用户信息不存在","data":null}`。
+详见 [SDK Service 接入文档](sdk-service-integration.md)。平台核验接口签名样本与环境回调能力仍需联调确认。
+
+## 6. 健康检查与响应约定
+
+四个服务均有：
 
 - `GET /health/live`：进程存活检查。
 - `GET /health/ready`：依赖就绪检查（数据库不可用或停机时通常为 HTTP 503）。
