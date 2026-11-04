@@ -76,7 +76,7 @@ x-signature: <40 位小写 SHA-1>
 
 ## 6. 上线顺序
 
-1. 人工执行已有 `config-center/db/sql/add_sdk_services.sql`（若两表已存在，禁止重复执行；新空库使用 `initialize.sql`），先备份数据库。
+1. 人工确认 SDK 服务表结构：无服务表执行 `add_sdk_services.sql`，已有通用绑定表执行 `migrate_sdk_service_channel.sql`（更早版本按 `docs/sdk-service-config.md` 升级）；新空库执行 `initialize.sql`。操作前备份并停写。
 2. 为 SDK Core 的数据库账号授予服务开关表 SELECT 权限。
 3. 更新 SDK Core YAML 中的平台上报地址，再部署 SDK Core。
 4. 管理端开启全局与目标渠道环境开关。

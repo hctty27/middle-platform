@@ -8,11 +8,12 @@
 | --- | --- |
 | 新建空的 `config_center` | [config-center/db/sql/initialize.sql](../config-center/db/sql/initialize.sql) |
 | 已有权威库，只缺 `game_order` | [config-center/db/sql/add_game_order.sql](../config-center/db/sql/add_game_order.sql) |
-| 已有权威库且存在旧 SDK 服务表 | [config-center/db/sql/migrate_sdk_service_binding.sql](../config-center/db/sql/migrate_sdk_service_binding.sql)（手动备份、停写、迁移及核对） |
+| 已有权威库，使用通用 `sdk_service_binding` | [config-center/db/sql/migrate_sdk_service_channel.sql](../config-center/db/sql/migrate_sdk_service_channel.sql)（手动备份、停写、核对） |
+| 只有更早的 `sdk_service_channel` 表 | 先执行 [旧表迁移](../config-center/db/sql/migrate_sdk_service_binding.sql)，再执行 [渠道专用迁移](../config-center/db/sql/migrate_sdk_service_channel.sql) |
 | 已有权威库但尚无 SDK 服务表 | [config-center/db/sql/add_sdk_services.sql](../config-center/db/sql/add_sdk_services.sql) |
 | 新建空的 `config_access` | [config-center-access/db/sql/initialize.sql](../config-center-access/db/sql/initialize.sql) |
 
-不得对已有配置数据的库再次执行 `initialize.sql`。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。SQL 不包含 `DROP TABLE` 或自动重置历史数据的逻辑。
+不得对已有配置数据的库再次执行 `initialize.sql`。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 `DROP TABLE`。服务表升级会清理未实现功能的目录及当前绑定记录，执行前必须备份并核对影响范围。
 
 ## 本地 MySQL 示例
 
@@ -56,8 +57,8 @@ SELECT COUNT(*) FROM config_center.config_node;
 - `config_revision`、`config_node_change_log`：同步游标和变更日志
 - `config_subscriber`、`config_subscriber_delivery_state`：Webhook 订阅者和投递状态
 - `game_order`：SDK Core 充值订单、支付状态、通知租约和补偿
-- `sdk_service`：统一功能目录及 `scope_type`，不再使用 `sort_order`
-- `sdk_service_binding`：按 `service_id + target_id + env` 唯一的通用服务绑定；旧表在升级后暂时保留用于核对与回退
+- `sdk_service`：SDK 功能目录与全局开关，目前仅预置 `event_report`，不再使用 `scope_type`、`sort_order`
+- `sdk_service_channel`：按 `service_id + channel_app_id + env` 唯一的渠道包服务绑定；历史旧表可能归档为 `sdk_service_channel_legacy`
 
 `config_center` 的配置表与订单表使用同一个数据库。SDK Core 只使用一个 `database.dsn` 连接池；建议配置表只授予 SELECT、订单表授予 SELECT/INSERT/UPDATE，运行账号不授予 DDL。
 
