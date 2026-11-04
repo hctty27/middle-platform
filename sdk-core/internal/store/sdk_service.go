@@ -19,8 +19,8 @@ func (s *Store) LookupSDKService(ctx context.Context, appID, env, serviceCode st
     const query = `
 SELECT ch.config
 FROM sdk_service sv
-JOIN sdk_service_channel ch ON ch.service_id=sv.id AND ch.env=? AND ch.enabled=1
-JOIN config_channel_app a ON a.id=ch.channel_app_id AND a.code=? AND a.status=1
+JOIN sdk_service_binding ch ON ch.service_id=sv.id AND ch.env=? AND ch.enabled=1
+JOIN config_channel_app a ON a.id=ch.target_id AND a.code=? AND a.status=1
 JOIN config_node g ON g.id=a.game_id AND g.node_type='game' AND g.status=1
 JOIN config_node sg ON sg.id=CASE ?
   WHEN 'prod' THEN a.prod_server_group_id
@@ -29,7 +29,7 @@ JOIN config_node sg ON sg.id=CASE ?
 END AND sg.node_type='server_group' AND sg.status=1 AND sg.game_id=a.game_id
 JOIN config_node r ON r.id=sg.region_id AND r.node_type='region'
  AND r.status=1 AND r.game_id=a.game_id AND r.env_type=?
-WHERE sv.code=? AND sv.enabled=1 LIMIT 1`
+WHERE sv.code=? AND sv.scope_type='channel_app' AND sv.enabled=1 LIMIT 1`
     var raw []byte
     err := s.db.QueryRowContext(ctx, query, env, appID, env, env, serviceCode).Scan(&raw)
     if err == sql.ErrNoRows { return false, nil, nil }
@@ -44,9 +44,9 @@ WHERE sv.code=? AND sv.enabled=1 LIMIT 1`
 // VerifySDKServiceSchema 检查事件上报依赖的服务开关表，不执行 DDL。
 func (s *Store) VerifySDKServiceSchema(ctx context.Context) error {
     rows, err := s.db.QueryContext(ctx, `SELECT sv.id,sv.code,sv.enabled,
-        ch.channel_app_id,ch.service_id,ch.env,ch.enabled,ch.config
+        ch.target_id,ch.service_id,ch.env,ch.enabled,ch.config
         FROM sdk_service sv
-        LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id LIMIT 0`)
+        LEFT JOIN sdk_service_binding ch ON ch.service_id=sv.id LIMIT 0`)
     if err != nil {
         return fmt.Errorf("检查 SDK 服务开关表结构失败: %w", err)
     }
