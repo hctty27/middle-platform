@@ -29,7 +29,7 @@
 
 ## 文档导航
 
-**对外接口**：[游戏服务端 HTML](docs/game.html) · [平台服务端 HTML](docs/platform.html) · [第三方配置同步](docs/config-center-access-sync.md)
+**对外接口**：[游戏服务端 HTML](docs/game.html) · [平台服务端 HTML](docs/platform.html) · [第三方配置同步](docs/config-center-access-sync.html)
 
 **内部开发**：[HTTP API 索引](docs/api.md) · [架构](docs/architecture.md) · [数据库与手动 SQL](docs/database.md) · [开发与 CI](docs/development.md) · [打包与生产运维](docs/production.md)
 
