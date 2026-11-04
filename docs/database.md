@@ -8,11 +8,11 @@
 | --- | --- |
 | 新建空的 `config_center` | [config-center/db/sql/initialize.sql](../config-center/db/sql/initialize.sql) |
 | 已有权威库，只缺 `game_order` | [config-center/db/sql/add_game_order.sql](../config-center/db/sql/add_game_order.sql) |
-| 已有权威库，使用当前通用 `sdk_service_binding` | [config-center/db/sql/migrate_sdk_service_channel.sql](../config-center/db/sql/migrate_sdk_service_channel.sql)（手动备份、停写、核对） |
 | 已有权威库但尚无 SDK 服务表 | [config-center/db/sql/add_sdk_services.sql](../config-center/db/sql/add_sdk_services.sql) |
+| 已有服务表但缺少用户核验功能目录 | [config-center/db/sql/add_sdk_user_check.sql](../config-center/db/sql/add_sdk_user_check.sql) |
 | 新建空的 `config_access` | [config-center-access/db/sql/initialize.sql](../config-center-access/db/sql/initialize.sql) |
 
-不得对已有配置数据的库再次执行 `initialize.sql`。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 `DROP TABLE`。服务表升级会清理未实现功能的目录及当前绑定记录，执行前必须备份并核对影响范围。
+不得对已有配置数据的库再次执行 `initialize.sql`。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 `DROP TABLE`。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。
 
 ## 本地 MySQL 示例
 
@@ -56,15 +56,20 @@ SELECT COUNT(*) FROM config_center.config_node;
 - `config_revision`、`config_node_change_log`：同步游标和变更日志
 - `config_subscriber`、`config_subscriber_delivery_state`：Webhook 订阅者和投递状态
 - `game_order`：SDK Core 充值订单、支付状态、通知租约和补偿
-- `sdk_service`：SDK 功能目录与全局开关，目前仅预置 `event_report`，不再使用 `scope_type`、`sort_order`
+- `sdk_service`：SDK 功能目录与全局开关，新库初始化预置已实现的 `event_report`、`user_check`，不包含 `scope_type`、`sort_order`
 - `sdk_service_channel`：按 `service_id + channel_app_id + env` 唯一的渠道包服务绑定
 
 `config_center` 的配置表与订单表使用同一个数据库。SDK Core 只使用一个 `database.dsn` 连接池；建议配置表只授予 SELECT、订单表授予 SELECT/INSERT/UPDATE，运行账号不授予 DDL。
 
-## 旧数据库兼容与注意事项
+## SDK 功能配置与数据安全
 
-- 旧的 `config_schema_migrations` 属于历史版本记录，**新程序不再依赖或维护它**；不要为消除旧版本号手工修改、清空或删除它。
-- 历史 V1～V10 库或旧接入端 V1～V5 副本若结构不兼容，不可直接覆盖全量初始化脚本；先备份并制定升级 SQL。
+- `sdk_service_channel` 使用 `(service_id, channel_app_id, env)` 唯一约束，`env` 只能是 `prod/test/review`。
+- `event_report` 与 `user_check` 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。
+- `sdk_service_channel.config` 为 JSON 对象；当前事件上报不使用事件级规则，不持久化和自动重试。
+- 配置中心的管理接口为 `GET /api/config/admin/sdk-services`、`PUT /api/config/admin/sdk-services/{id}` 和渠道包 `/api/config/admin/channel-apps/{id}/services` 系列，详见 [内部 API](api.md)。
+- 充值订单和发货通知不依赖功能开关。
+
+
 - MySQL DDL 会隐式提交，失败时不能假定事务回滚。应检查实际执行到哪一条 SQL，再制定恢复步骤。
 - 接入端副本 `config_access` 独立于权威库，只保存三级节点及同步游标。首次全量拉取由接入服务在表结构就绪后完成，不再自动建表。
 - 生产环境继续控制 `/api/config/**` 的访问权限，保护 `gameSecret` 和其他原始配置密钥。
