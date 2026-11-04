@@ -12,12 +12,21 @@
 
 ```json
 {
-  "gameSecret": "服务端密钥",
+  "gameSecret": "服务端密钥"
+}
+```
+
+默认不需要配置适配器。针对特殊协议，才添加 `game.config.serviceAdapters`，例如：
+
+```json
+{
   "serviceAdapters": {
-    "user_check": "standard"
+    "user_check": "game_a"
   }
 }
 ```
+
+适配器选择由通用的 `NameForService` 统一处理；以后新增角色查询、区服查询等接口也遵循“未配置使用 standard、明确指定使用对应实现”的规则。明确指定但未注册的名称报错，不自动回退。
 
 大区 `region.config`：
 

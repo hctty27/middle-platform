@@ -22,10 +22,12 @@ x-signature: <40 位小写 SHA-1>
 ## 配置
 
 - `game.config.gameSecret`：标准游戏适配器的签名密钥。
-- `game.config.serviceAdapters.user_check`：注册的适配器名称，首版为 `standard`。
+- `game.config.serviceAdapters.user_check`：**可选**。不配置或留空时使用 `standard`；仅特殊游戏需要设置已注册的适配器名称。
 - `region.config.userCheckUrl`：该环境游戏核验的完整 HTTP/HTTPS 地址。
 - `channel_app.config.appSecret`：平台请求验签密钥。
 - `sdk_service + sdk_service_channel`：全局 + 渠道环境两级开关，未绑定默认关闭。
+
+所有游戏业务统一通过 `internal/adapter.NameForService` 解析适配器：以后新增的角色查询、区服查询等接口没有对应配置时同样使用 `standard`。若显式配置未知适配器，则报错，不静默回退。
 
 扩展不同游戏：在 `internal/adapter/usercheck` 编写实现并注册，在游戏配置中选择名称即可。适配器只负责游戏请求构建、认证与响应转换；平台响应由统一 HTTP 层生成。不引入动态映射引擎。
 
@@ -50,7 +52,7 @@ x-signature: <SHA-1 小写十六进制>
 
 1. 在已有库上**手动**执行 `config-center/db/sql/add_sdk_user_check.sql`；先确认 SDK 服务表已经存在。程序不自动运行 DDL。
 2. 在配置中心启用全局 `user_check`，并在对应渠道包环境启用服务。
-3. 配置游戏的适配器和大区核验地址，使用只读账号连接权威库。
+3. 在大区配置核验地址。只有非标准游戏才需要指定适配器；使用只读账号连接权威库。
 4. `cp configs/config.yaml configs/config-dev.yaml`，设置 `database.dsn`。也支持环境变量 `SDK_SERVICE_DB_DSN` 和 `SDK_SERVICE_ADDR`。
 5. `go test ./...`、`go vet ./...`、`go run ./cmd/sdk-service -config configs/config-dev.yaml`。
 6. Nginx 转发 `/api/service/` 到本机 `8221`，不附加 `/sdk` 前缀；生产由 Supervisor 管理。
