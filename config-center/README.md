@@ -39,6 +39,4 @@ go build ./cmd/config-center
 
 [接口文档](../docs/api.md) · [数据库与手动 SQL](../docs/database.md) · [本地开发](../docs/development.md) · [生产部署](../docs/production.md)
 
-已移除废弃配置 `webhook.enabled`、`migration.allowLegacyUpgrade` 和环境变量 `CONFIG_GO_ENABLE_WEBHOOK`。升级旧配置时请删除对应 YAML 字段。
-
-已移除 `admin.writesEnabled` 和 `CONFIG_GO_ENABLE_WRITES`。旧 YAML 的 `admin` 块需删掉；合并代码后管理写接口将始终存在。仅从防火墙/网关受控网络允许访问 `/api/config/`，不要公开包含游戏和渠道密钥的原始配置接口。
+当前配置模板只保留生效字段。管理写接口始终存在，必须在 Nginx、网关或私网层面限制访问 `/api/config/`，避免暴露原始密钥与管理写接口。
