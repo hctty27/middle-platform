@@ -77,6 +77,43 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""")
 (appid,game_id,env,game_order_id,amount,attach,game_notify_url)
 VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok=False)
 
+    # 模拟已运行旧版 sdk_service/sdK_service_channel 的数据库，验证无损迁移。
+    mysql("CREATE DATABASE manual_service_legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
+    mysql(database="manual_service_legacy", script="""CREATE TABLE sdk_service (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL UNIQUE,
+      name VARCHAR(100) NOT NULL,description VARCHAR(500) NOT NULL DEFAULT '',
+      enabled TINYINT NOT NULL DEFAULT 1,sort_order INT NOT NULL DEFAULT 0,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+    );
+    CREATE TABLE sdk_service_channel (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      channel_app_id BIGINT NOT NULL,service_id BIGINT NOT NULL,
+      env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,enabled TINYINT NOT NULL DEFAULT 0,
+      config JSON NOT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      UNIQUE KEY uk_sdk_service_channel(channel_app_id,service_id,env),
+      FOREIGN KEY(service_id) REFERENCES sdk_service(id)
+    );
+    INSERT INTO sdk_service(id,code,name,enabled,sort_order)
+      VALUES(11,'event_report','事件上报',1,10);
+    INSERT INTO sdk_service_channel(id,channel_app_id,service_id,env,enabled,config)
+      VALUES(77,900,11,'test',1,'{"retained":true}');
+    """)
+    migration = source("config-center/db/sql/migrate_sdk_service_binding.sql")
+    mysql(database="manual_service_legacy", script=migration)
+    assert_sql("""SELECT id,service_id,target_id,env,enabled,JSON_UNQUOTE(JSON_EXTRACT(config,'$.retained'))
+FROM manual_service_legacy.sdk_service_binding""", "77\t11\t900\ttest\t1\ttrue")
+    assert_sql("""SELECT scope_type FROM manual_service_legacy.sdk_service WHERE id=11""", "channel_app")
+    assert_sql("""SELECT scope_type,enabled FROM manual_service_legacy.sdk_service
+WHERE code='server_status'""", "server_group\t0")
+    assert_sql("""SELECT COUNT(*) FROM manual_service_legacy.sdk_service_channel""", "1")
+    mysql(database="manual_service_legacy", script=migration, ok=False)
+    mysql("""INSERT INTO manual_service_legacy.sdk_service_binding
+(service_id,target_id,env,enabled,config) VALUES(11,900,'test',0,'{}');""", ok=False)
+
     mysql(database="manual_replica", script=replica)
     assert_sql("SELECT epoch,revision FROM manual_replica.config_sync_state WHERE id=1", "NULL\t0")
     mysql(database="manual_replica", script=replica, ok=False)
