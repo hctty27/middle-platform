@@ -63,14 +63,32 @@ class RemotePublishTests(unittest.TestCase):
             if extra:
                 archive.addfile(extra)
 
-    def run_publish(self, digest=None, machine="x86_64", service=None):
+    def run_publish(self, digest=None, machine="x86_64", service=None,
+                    restart=False, restart_fail=False):
         digest = digest or hashlib.sha256(self.archive.read_bytes()).hexdigest()
-        extra_args = ["0", service] if service else []
+        extra_args = ["1" if restart else "0", service] if service else []
+        commands = """
+uname() { printf '%s\\n' "$TEST_MACHINE"; }
+export -f uname
+if [[ "$TEST_RESTART" == 1 ]]; then
+    supervisorctl() {
+        case "$1" in
+            status) printf '%s RUNNING pid 100\\n' "$2" ;;
+            restart) [[ "$TEST_RESTART_FAIL" == 0 ]] ;;
+        esac
+    }
+    curl() { return 0; }
+    export -f supervisorctl curl
+fi
+exec bash "$@"
+"""
         return subprocess.run(
-            [BASH, "-c", 'uname() { printf "%s\\n" "$TEST_MACHINE"; }; export -f uname; exec bash "$@"',
-             "test", bash_path(SCRIPTS / "publish-remote.sh"), bash_path(self.root),
-             bash_path(self.archive), digest, *extra_args],
-            env={**os.environ, "TEST_MACHINE": machine}, capture_output=True, text=True,
+            [BASH, "-c", commands, "test", bash_path(SCRIPTS / "publish-remote.sh"),
+             bash_path(self.root), bash_path(self.archive), digest, *extra_args],
+            env={**os.environ, "TEST_MACHINE": machine,
+                 "TEST_RESTART": "1" if restart else "0",
+                 "TEST_RESTART_FAIL": "1" if restart_fail else "0"},
+            capture_output=True, text=True,
         )
 
     def seed(self, relative, content):
@@ -133,6 +151,20 @@ class RemotePublishTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.root / "admin/index.html").read_bytes(), b"new-index")
         self.assertFalse((self.root / "bin/sdk-core").exists())
+
+    def test_core_instances_restart_sequentially_and_pass_health(self):
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.run_publish(service="sdk-core", restart=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Healthy: sdk-core-1", result.stdout)
+        self.assertIn("Healthy: sdk-core-2", result.stdout)
+
+    def test_restart_failure_reports_error_without_rollback(self):
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.run_publish(service="sdk-core", restart=True, restart_fail=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.root / "bin/sdk-core").is_file())
+        self.assertIn("Restarting sdk-core-1", result.stdout)
 
     def test_bad_checksum(self):
         self.make_package()
