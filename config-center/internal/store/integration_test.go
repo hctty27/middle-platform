@@ -92,7 +92,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		if _, err := db.ExecContext(ctx, statement); err != nil { t.Fatalf("%s: %v", statement, err) }
 	}
 	defer func() {
-		for _, name := range []string{"config_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
+		for _, name := range []string{"sdk_service_binding","sdk_service","config_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
 			if _, err := db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+name); err != nil { t.Log(err) }
 		}
 	}()
@@ -114,6 +114,24 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	app, err := store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "a1", Name: "App", Status: &enabled, Config: `{"x":1}`,TestServerGroupID:&group.ID})
     if err != nil { t.Fatal(err) }
     if app.TestServerGroupID==nil || *app.TestServerGroupID!=group.ID { t.Fatalf("binding not saved: %+v",app) }
+    // 通用服务绑定：同一 ID 空间的渠道包与区服组必须按 scope_type 严格区分。
+    if _,err=db.ExecContext(ctx,`INSERT INTO sdk_service
+      (id,code,name,scope_type,enabled) VALUES
+      (501,'event_report','事件上报','channel_app',1),
+      (502,'server_status','区服状态','server_group',1)`);err!=nil {t.Fatal(err)}
+    if err=store.UpsertSDKServiceBinding(ctx,ScopeChannelApp,app.ID,501,"test",true,json.RawMessage("{}"));err!=nil {t.Fatal(err)}
+    if err=store.UpsertSDKServiceBinding(ctx,ScopeServerGroup,group.ID,502,"test",true,json.RawMessage("{}"));err!=nil {t.Fatal(err)}
+    if err=store.UpsertSDKServiceBinding(ctx,ScopeServerGroup,group.ID,501,"test",true,json.RawMessage("{}"));!errors.Is(err,ErrInvalid) {
+        t.Fatalf("cross-scope binding accepted: %v",err)
+    }
+    if err=store.UpsertSDKServiceBinding(ctx,ScopeServerGroup,group.ID,502,"prod",true,json.RawMessage("{}"));!errors.Is(err,ErrInvalid) {
+        t.Fatalf("cross-env group binding accepted: %v",err)
+    }
+    services,err:=store.SDKServiceBindings(ctx,ScopeServerGroup,group.ID,"test")
+    if err!=nil||len(services)!=1||services[0].Code!="server_status"||!services[0].EffectiveEnabled {
+        t.Fatalf("group service binding: %+v %v",services,err)
+    }
+
     if _,err=store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:app.Name,Status:&enabled,Config:app.Config,ProdServerGroupID:&group.ID,TestServerGroupID:&group.ID}); !errorsIs(err,ErrInvalid) { t.Fatalf("cross-environment binding accepted: %v",err) }
 	// 渠道绑定存在时快照仍仅包含节点，不能暴露渠道应用配置。
 	boundSnapshot, err := store.Snapshot(ctx)
@@ -140,6 +158,11 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err := store.DeleteChannelApp(ctx,app.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected bound app conflict: %v",err) }
 	if _,err:=store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:"Updated App",Status:&enabled,Config:`{"x":3}`});err!=nil { t.Fatalf("clear environment binding: %v",err) }
     if err := store.DeleteChannelApp(ctx,app.ID); err != nil { t.Fatalf("delete app: %v",err) }
+    var appBindings,groupBindings int
+    if err=db.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_service_binding WHERE service_id=501").Scan(&appBindings);err!=nil {t.Fatal(err)}
+    if err=db.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_service_binding WHERE service_id=502").Scan(&groupBindings);err!=nil {t.Fatal(err)}
+    if appBindings!=0||groupBindings!=1 {t.Fatalf("deleted wrong target bindings: app=%d group=%d",appBindings,groupBindings)}
+
 	finalRevision, err := store.Revision(ctx)
 	if err != nil || finalRevision != initial { t.Fatalf("channel delete changed cursor: %+v vs %+v (%v)",finalRevision,initial,err) }
 	changeList, err := store.Changes(ctx, 0, 100)
@@ -269,6 +292,8 @@ func errorsIs(err, target error) bool {
 }
 
 var integrationSchema = []string{
+	`DROP TABLE IF EXISTS sdk_service_binding`,
+	`DROP TABLE IF EXISTS sdk_service`,
 	`DROP TABLE IF EXISTS config_channel_app_binding`,
  `DROP TABLE IF EXISTS config_channel_app`,
  `DROP TABLE IF EXISTS config_subscriber_delivery_state`,
@@ -301,6 +326,28 @@ var integrationSchema = []string{
 		UNIQUE KEY uq_config_node_sibling(node_type,code,((COALESCE(region_id,game_id,0)))),
 		KEY idx_config_node_game_type(game_id,node_type),KEY idx_config_node_region_type(region_id,node_type)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+    `CREATE TABLE sdk_service (
+        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        scope_type VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
+        enabled TINYINT NOT NULL DEFAULT 1,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        CONSTRAINT chk_sdk_service_scope CHECK(scope_type IN ('channel_app','server_group'))
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE sdk_service_binding (
+        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        service_id BIGINT NOT NULL,
+        target_id BIGINT NOT NULL,
+        env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,
+        enabled TINYINT NOT NULL DEFAULT 0,
+        config JSON NOT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY uk_sdk_service_binding(service_id,target_id,env),
+        FOREIGN KEY(service_id) REFERENCES sdk_service(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	`CREATE TABLE config_channel_app (
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,game_id BIGINT NOT NULL,
 		code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,name VARCHAR(128) NOT NULL,
