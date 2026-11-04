@@ -1,6 +1,6 @@
 # HTTP API 契约
 
-以下路径直接对应当前四个服务的路由。服务默认分别监听 `:8080`、`:8081`、`:8082`，生产由 Nginx 按前缀转发；所有示例主机仅用于本地调试。
+本文件仅维护内部 HTTP 路由索引。对外请求字段、签名规则与代码示例以 [游戏接口 HTML](game.html)、[平台接口 HTML](platform.html) 为准。本地默认监听：配置中心 `:8080`、接入端 `:8081`、SDK Core `:8082`、SDK Service `:8221`。生产按 Nginx 转发规则调整。
 
 ## 1. 配置中心（config-center）
 
@@ -25,7 +25,7 @@
 | GET | `/api/config/sync/changes?afterRevision=0&limit=200` | 变更记录，`limit` 最大 500 |
 | GET | `/api/config/sync/snapshot` | 一致性三级节点快照 |
 
-管理写路由只有在 `admin.writesEnabled=true` 时才注册；关闭时可能返回 404，而非业务级“无权限”。管理 API 无内建登录与 RBAC，必须从网关侧限制访问。
+管理写路由始终注册。管理 API 没有内建登录与 RBAC，必须由私网或认证网关限制访问。
 
 创建节点示例（`config` 为 JSON 字符串）：
 
@@ -112,16 +112,27 @@ x-signature: <40 位小写 SHA-1>
 {"event":"login","ext":{"roleId":"10001"}}
 ```
 
-只支持已绑定环境的渠道包。Core 从 Header 读取 AppID，使用所属游戏密钥验签；只有全局和渠道环境的 `event_report` 服务开关同时开启才同步转发至平台。平台请求使用渠道包 `appSecret` 重新签名。当前不保存或自动重试事件。详见 [事件上报接入说明](event-report-integration.md)。
+只支持已绑定环境的渠道包。Core 从 Header 读取 AppID，使用所属游戏密钥验签；只有全局和渠道环境的 `event_report` 服务开关同时开启才同步转发至平台。平台请求使用渠道包 `appSecret` 重新签名。当前不保存或自动重试事件。对外协议见 [游戏接口 HTML](game.html)。
 
-## 5. SDK Service 用户核验
+## 5. SDK 功能管理（config-center）
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET | `/api/config/admin/sdk-services` | 功能目录及全局开关 |
+| PUT | `/api/config/admin/sdk-services/{id}` | 修改全局开关 |
+| GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查看渠道包指定环境的服务配置 |
+| PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包指定环境的服务配置 |
+
+目前仅有已实现的 `event_report` 和 `user_check`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
+
+## 6. SDK Service 用户核验
 
 `POST /api/service/user/check/{env}`，AppID 来自 `x-app-id`，Body 仅含 `open_id`。
 根据游戏配置 `serviceAdapters.user_check` 选择 Go 适配器；游戏接口 URL 从大区 `userCheckUrl` 获取。
 成功 `{"code":0,"message":"ok","data":true}`；用户不存在 `{"code":1021003,"message":"用户信息不存在","data":null}`。
-详见 [SDK Service 接入文档](sdk-service-integration.md)。平台核验接口签名样本与环境回调能力仍需联调确认。
+游戏端与平台端请求详见 [游戏接口 HTML](game.html)、[平台接口 HTML](platform.html)。平台核验接口签名样本与环境回调能力仍需联调确认。
 
-## 6. 健康检查与响应约定
+## 7. 健康检查与响应约定
 
 四个服务均有：
 
@@ -131,3 +142,5 @@ x-signature: <40 位小写 SHA-1>
 配置中心与接入端的错误使用 `{"error":"..."}`；SDK Core 使用 `{"code":...,"message":"..."}`。不要假设所有模块共享一套错误外壳。API 的 `config` 字段为 JSON 文本字符串，和 SDK Core 最终输出的结构化 `data` 不同。
 
 **公开范围：** 仅按实际业务需要开放 `/api/core/**`；管理、配置同步、接入查询及回调必须部署在可信网络或有独立鉴权的网关之后。
+
+> 维护约定：本文仅保留路由、内部权限和实现索引。游戏和平台的字段、错误码与验签说明不在本文件重复维护。
