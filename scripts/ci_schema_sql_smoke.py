@@ -77,58 +77,74 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""")
 (appid,game_id,env,game_order_id,amount,attach,game_notify_url)
 VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok=False)
 
-    # 模拟旧版渠道绑定先升级通用表、再收敛回渠道专用表。
-    mysql("CREATE DATABASE manual_service_legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
-    mysql(database="manual_service_legacy", script="""CREATE TABLE sdk_service (
+    # 从当前通用绑定表升级到渠道专用表，保留事件上报绑定。
+    mysql("CREATE DATABASE manual_service_current CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
+    mysql(database="manual_service_current", script="""CREATE TABLE sdk_service (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL UNIQUE,
-      name VARCHAR(100) NOT NULL,description VARCHAR(500) NOT NULL DEFAULT '',
-      enabled TINYINT NOT NULL DEFAULT 1,sort_order INT NOT NULL DEFAULT 0,
+      code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      scope_type VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
+      description VARCHAR(500) NOT NULL DEFAULT '',
+      enabled TINYINT NOT NULL DEFAULT 1,
       created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      UNIQUE KEY uk_sdk_service_code (code),
+      CONSTRAINT chk_sdk_service_scope CHECK (scope_type IN ('channel_app','server_group'))
     );
     CREATE TABLE config_channel_app (id BIGINT PRIMARY KEY);
-    INSERT INTO config_channel_app(id) VALUES(900);
-    CREATE TABLE sdk_service_channel (
+    INSERT INTO config_channel_app (id) VALUES (900);
+    CREATE TABLE sdk_service_binding (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      channel_app_id BIGINT NOT NULL,service_id BIGINT NOT NULL,
-      env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,enabled TINYINT NOT NULL DEFAULT 0,
+      service_id BIGINT NOT NULL,
+      target_id BIGINT NOT NULL,
+      env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,
+      enabled TINYINT NOT NULL DEFAULT 0,
       config JSON NOT NULL,
       created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      UNIQUE KEY uk_sdk_service_channel(channel_app_id,service_id,env),
-      FOREIGN KEY(service_id) REFERENCES sdk_service(id)
+      UNIQUE KEY uk_sdk_service_binding (service_id,target_id,env),
+      KEY idx_sdk_binding_target (target_id,env),
+      CONSTRAINT fk_sdk_binding_service FOREIGN KEY (service_id)
+        REFERENCES sdk_service(id) ON DELETE RESTRICT,
+      CONSTRAINT chk_sdk_binding_env CHECK (env IN ('prod','test','review')),
+      CONSTRAINT chk_sdk_binding_enabled CHECK (enabled IN (0,1)),
+      CONSTRAINT chk_sdk_binding_config CHECK (JSON_TYPE(config)='OBJECT')
     );
-    INSERT INTO sdk_service(id,code,name,enabled,sort_order)
-      VALUES(11,'event_report','事件上报',1,10),(12,'role_query','角色查询',1,20);
-    INSERT INTO sdk_service_channel(id,channel_app_id,service_id,env,enabled,config)
-      VALUES(77,900,11,'test',1,'{"retained":true}'),(78,900,12,'test',1,'{}');
+    INSERT INTO sdk_service (id,code,name,scope_type,enabled)
+      VALUES (11,'event_report','事件上报','channel_app',1),
+             (12,'role_query','角色查询','channel_app',1);
+    INSERT INTO sdk_service_binding (id,service_id,target_id,env,enabled,config)
+      VALUES (77,11,900,'test',1,'{"retained":true}'),
+             (78,12,900,'test',1,'{}');
     """)
-    # 老版本迁移到中间态，历史数据仍保留。
-    old_migration = source("config-center/db/sql/migrate_sdk_service_binding.sql")
-    mysql(database="manual_service_legacy", script=old_migration)
-    assert_sql("""SELECT COUNT(*) FROM manual_service_legacy.sdk_service_binding""", "2")
-    mysql(database="manual_service_legacy", script=old_migration, ok=False)
 
-    # 收敛为渠道包专用表，清理未实现的服务及其绑定。
     migration = source("config-center/db/sql/migrate_sdk_service_channel.sql")
-    mysql(database="manual_service_legacy", script=migration)
+    mysql(database="manual_service_current", script=migration)
     assert_sql("""SELECT id,service_id,channel_app_id,env,enabled,
 JSON_UNQUOTE(JSON_EXTRACT(config,'$.retained'))
-FROM manual_service_legacy.sdk_service_channel""", "77\t11\t900\ttest\t1\ttrue")
-    assert_sql("""SELECT code FROM manual_service_legacy.sdk_service""", "event_report")
-    assert_sql("""SELECT COUNT(*) FROM manual_service_legacy.sdk_service_channel_legacy""", "2")
+FROM manual_service_current.sdk_service_channel""", "77\t11\t900\ttest\t1\ttrue")
+    assert_sql("SELECT code FROM manual_service_current.sdk_service", "event_report")
     assert_sql("""SELECT COUNT(*) FROM information_schema.columns
-WHERE table_schema='manual_service_legacy' AND table_name='sdk_service'
+WHERE table_schema='manual_service_current' AND table_name='sdk_service'
   AND column_name='scope_type'""", "0")
-    mysql(database="manual_service_legacy", script=migration, ok=False)
-    mysql("""INSERT INTO manual_service_legacy.sdk_service_channel
-(service_id,channel_app_id,env,enabled,config) VALUES(11,900,'test',0,'{}');""", ok=False)
+    assert_sql("""SELECT COUNT(*) FROM information_schema.tables
+WHERE table_schema='manual_service_current' AND table_name='sdk_service_binding'""", "0")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.table_constraints
+WHERE constraint_schema='manual_service_current'
+  AND table_name='sdk_service_channel'
+  AND constraint_name IN
+    ('fk_sdk_channel_service','chk_sdk_channel_env',
+     'chk_sdk_channel_enabled','chk_sdk_channel_config')""", "4")
+    # 重复迁移与重复渠道绑定均应被拒绝。
+    mysql(database="manual_service_current", script=migration, ok=False)
+    mysql("""INSERT INTO manual_service_current.sdk_service_channel
+(service_id,channel_app_id,env,enabled,config)
+VALUES (11,900,'test',0,'{}');""", ok=False)
 
     mysql(database="manual_replica", script=replica)
     assert_sql("SELECT epoch,revision FROM manual_replica.config_sync_state WHERE id=1", "NULL\t0")
     mysql(database="manual_replica", script=replica, ok=False)
-    print("通过：手动 SQL 初始化、升级、历史数据保留、GTID 与数据库约束", flush=True)
+    print("通过：手动 SQL 初始化、升级、现有事件绑定保留、GTID 与数据库约束", flush=True)
 
 
 if __name__ == "__main__":

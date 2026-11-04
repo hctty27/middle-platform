@@ -104,19 +104,21 @@ WHERE table_schema=DATABASE() AND table_name=? AND index_name=? AND non_unique=0
 			return fmt.Errorf("缺少数据库约束 %s", constraint)
 		}
 	}
-	// 历史通用绑定表改名后可能保留旧约束名；两种名称均可校验同一渠道表。
-	for _, names := range [][2]string{
-		{"fk_sdk_channel_service", "fk_sdk_binding_service"},
-		{"chk_sdk_channel_env", "chk_sdk_binding_env"},
+	// 校验当前渠道绑定表的正式约束名称。
+	for _, constraint := range []string{
+		"fk_sdk_channel_service",
+		"chk_sdk_channel_env",
+		"chk_sdk_channel_enabled",
+		"chk_sdk_channel_config",
 	} {
 		var count int
 		if err := conn.QueryRowContext(ctx, `
 SELECT COUNT(*) FROM information_schema.table_constraints
 WHERE constraint_schema=DATABASE() AND table_name='sdk_service_channel'
-  AND constraint_name IN (?,?)`, names[0], names[1]).Scan(&count); err != nil {
+  AND constraint_name=?`, constraint).Scan(&count); err != nil {
 			return err
 		}
-		if count == 0 { return fmt.Errorf("缺少 SDK 渠道绑定约束 %s", names[0]) }
+		if count != 1 { return fmt.Errorf("缺少 SDK 渠道绑定约束 %s", constraint) }
 	}
 	var clause string
 	if err := conn.QueryRowContext(ctx, `SELECT check_clause FROM information_schema.check_constraints

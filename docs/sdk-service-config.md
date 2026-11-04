@@ -12,25 +12,20 @@
 
 ## 手动 SQL
 
-SQL 由管理员手动执行，服务不会自动创建或迁移表：
+数据库结构由管理员手动管理；服务不会自动执行 DDL 或迁移。
 
-| 数据库现状 | 操作 |
+| 场景 | SQL |
 | --- | --- |
-| 新建空 `config_center` | 执行 `config-center/db/sql/initialize.sql` |
-| 已有配置库，但无 SDK 服务表 | 执行 `config-center/db/sql/add_sdk_services.sql` |
-| 已经使用 `sdk_service_binding` 通用表 | 执行 `config-center/db/sql/migrate_sdk_service_channel.sql` |
-| 只有历史 `sdk_service_channel`（`sdk_service.sort_order`） | 先执行 `migrate_sdk_service_binding.sql`，再执行 `migrate_sdk_service_channel.sql` |
+| 新建空 `config_center` | `config-center/db/sql/initialize.sql` |
+| 已有库但尚无 SDK 功能表 | `config-center/db/sql/add_sdk_services.sql` |
+| 已有库使用当前 `sdk_service_binding` 通用表 | `config-center/db/sql/migrate_sdk_service_channel.sql` |
 
-已有数据升级前必须备份并停止 config-center、sdk-core。请检查 `SHOW CREATE TABLE sdk_service`、`SHOW CREATE TABLE sdk_service_binding`、原有渠道表，以及旧服务绑定记录。
+`migrate_sdk_service_channel.sql` **仅针对当前通用绑定结构**，不包含更早版本的表结构迁移。执行前须全库备份并停止 config-center、sdk-core，确认表中数据与预期一致。
 
-`migrate_sdk_service_channel.sql` 会：
+该 SQL 将表名改为 `sdk_service_channel`、`target_id` 改为 `channel_app_id`，统一索引与约束名称，移除 `scope_type`，并仅保留已实现的 `event_report` 功能及其渠道绑定。事件上报原有绑定 ID、环境、启用状态、JSON 配置保持不变，其他未实现功能的记录及其绑定会被删除。
 
-1. 如果旧的 `sdk_service_channel` 仍存在，将其归档为 `sdk_service_channel_legacy`，移除归档表指向服务目录的外键，以便历史数据独立保留。
-2. 清理非 `event_report` 功能的当前绑定和服务目录记录；事件上报的服务 ID、绑定 ID、环境、开关、配置保持不变。
-3. 将 `sdk_service_binding` 改名为 `sdk_service_channel`，`target_id` 改名为 `channel_app_id`；删除 `scope_type` 与对应 CHECK 约束。
-4. 校验目录最终只有事件上报，检查渠道包绑定是否存在孤儿记录。
+MySQL DDL 会隐式提交；禁止在已经迁移的数据库重复执行。完成后确认功能目录恰好一条 `event_report`，并核对绑定数量和孤儿记录。
 
-如果 `sdk_service_channel_legacy` 已存在或此前迁移中断，不要重复执行；先人工核对冲突。MySQL DDL 会隐式提交，不能假定错误后自动回滚。
 
 ## 管理 API
 
