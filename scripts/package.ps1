@@ -167,6 +167,7 @@ try {
             $marker = Join-Path $frontendDir 'node_modules/.middle-platform-lock.sha256'
             $lockHash = (Get-FileHash -LiteralPath $lockFile -Algorithm SHA256).Hash
             $reuseModules = $Fast -and (Test-Path -LiteralPath $marker -PathType Leaf) -and
+                (Test-Path -LiteralPath (Join-Path $frontendDir 'node_modules/.package-lock.json') -PathType Leaf) -and
                 ([System.IO.File]::ReadAllText($marker).Trim() -eq $lockHash)
             if (-not $reuseModules) {
                 & $npmCommand ci --no-audit --no-fund
