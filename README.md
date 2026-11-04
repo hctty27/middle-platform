@@ -29,7 +29,7 @@
 
 ## 文档导航
 
-**对外接口**：[游戏服务端 HTML](docs/game.html) · [平台服务端 HTML](docs/platform.html) · [第三方配置同步](docs/config-center-access-sync.html)
+**对外接口**：[统一接口文档](docs/index.html)（游戏服务端 / 平台服务端 / 第三方配置同步）
 
 **内部开发**：[HTTP API 索引](docs/api.md) · [架构](docs/architecture.md) · [数据库与手动 SQL](docs/database.md) · [开发与 CI](docs/development.md) · [打包与生产运维](docs/production.md)
 
@@ -42,4 +42,4 @@
 - 数据库 DDL 由管理员审核后手动执行，服务启动不建表、不自动迁移。
 - 管理写接口始终注册，`/api/config/admin/**` 和可能包含密钥的原始配置/同步接口必须通过内网或受保护的网关访问。
 - Go 业务路由不包含 `/sdk` 前缀，公网如使用 `/sdk/` 应由 Nginx 负责前缀转换。
-- 订单与发货通知必须幂等；事件上报当前不落库、不自动重试。对外请求与签名规范只在两份 HTML 中维护。
+- 订单与发货通知必须幂等；事件上报当前不落库、不自动重试。对外请求与签名规范统一在 `docs/index.html` 中维护。
