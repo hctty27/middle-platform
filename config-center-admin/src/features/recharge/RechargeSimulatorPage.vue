@@ -23,6 +23,8 @@ function restoreUrl(key: string): string {
     const saved = localStorage.getItem(key) ?? ''
     if (!saved) return ''
     const url = new URL(saved)
+    // 旧部署路径仅用于迁移浏览器缓存，不再作为请求地址。
+    url.pathname = url.pathname.replace(/^\/sdk(?=\/api\/core\/)/, '')
     if (key === registerKey) {
       url.pathname = url.pathname.replace(/\/api\/core\/(test|prod|review)\/([^/]+)\/orders$/, '/api/core/orders/$1/$2')
     } else if (key === callbackKey) {
@@ -168,7 +170,7 @@ async function confirmCallback() {
         <el-tab-pane label="订单登记" name="register">
           <el-form label-position="top" class="recharge-form" @submit.prevent="register">
             <el-form-item label="请求 URL（完整地址）" required>
-              <el-input v-model="registerUrl" placeholder="https://example.com/sdk/api/core/orders/test/110006" clearable />
+              <el-input v-model="registerUrl" placeholder="https://example.com/api/core/orders/test/110006" clearable />
             </el-form-item>
             <div class="recharge-fields">
               <el-form-item label="游戏订单号" required>
@@ -194,7 +196,7 @@ async function confirmCallback() {
         <el-tab-pane label="支付回调" name="callback">
           <el-form label-position="top" class="recharge-form" @submit.prevent="confirmCallback">
             <el-form-item label="请求 URL（完整地址）" required>
-              <el-input v-model="callbackUrl" placeholder="https://example.com/sdk/api/core/pay/notify/110006" clearable />
+              <el-input v-model="callbackUrl" placeholder="https://example.com/api/core/pay/notify/110006" clearable />
             </el-form-item>
             <div class="recharge-fields">
               <el-form-item label="平台订单号" required>
