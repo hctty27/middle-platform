@@ -1,11 +1,12 @@
 # CI 与回归测试
 
-当前 GitHub Actions 包含三个独立工作流：
+当前 GitHub Actions 包含四个独立工作流：
 
 | 工作流 | 文件 | 主要验证 |
 | --- | --- | --- |
 | Build | `.github/workflows/build.yml` | 配置中心与接入端 Go 测试、race、vet、build；sqlc 生成文件；Vue 构建；MySQL 迁移、双实例与 Webhook E2E |
 | sdk-core | `.github/workflows/sdk-core.yml` | SDK Core Go 测试、race、vet、build 与 MySQL 集成测试 |
+| sdk-service | `.github/workflows/sdk-service.yml` | SDK Service 和共享签名库 Go 测试、race、vet、build |
 | Package Linux | `.github/workflows/package.yml` | 统一 `package.ps1` 生成 Linux tar.gz，检查归档条目、ELF 架构与 Unix 0755 权限 |
 
 Build 工作流的 `CI Gate` 要求 Go、接入端、Vue、迁移/集群回归均通过。`sdk-core` 与 `Package Linux` 为独立工作流；若配置分支保护，需检查实际状态检查名称和触发条件，不要误以为它们属于 `CI Gate`。
