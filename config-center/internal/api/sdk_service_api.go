@@ -50,3 +50,29 @@ func (h *api) upsertSDKChannelService(w http.ResponseWriter, r *http.Request) {
     }
     w.WriteHeader(http.StatusNoContent)
 }
+
+// sdkServerGroupServices 列出指定区服组在对应环境的服务配置。
+func (h *api) sdkServerGroupServices(w http.ResponseWriter,r *http.Request){
+    targetID,err:=id(r)
+    if err!=nil || targetID<=0 {respond(w,nil,ErrInvalid);return}
+    env:=r.URL.Query().Get("env")
+    if env!="prod"&&env!="test"&&env!="review"{respond(w,nil,ErrInvalid);return}
+    items,err:=h.reader.SDKServiceBindings(r.Context(),"server_group",targetID,env)
+    respond(w,items,err)
+}
+
+// upsertSDKServerGroupService 仅允许修改 scope_type 为 server_group 的服务。
+func (h *api) upsertSDKServerGroupService(w http.ResponseWriter,r *http.Request){
+    targetID,err:=id(r)
+    if err!=nil || targetID<=0{respond(w,nil,ErrInvalid);return}
+    serviceID,err:=strconv.ParseInt(chi.URLParam(r,"serviceId"),10,64)
+    if err!=nil||serviceID<=0{respond(w,nil,ErrInvalid);return}
+    env:=r.URL.Query().Get("env")
+    if env!="prod"&&env!="test"&&env!="review"{respond(w,nil,ErrInvalid);return}
+    var req model.UpsertSDKChannelServiceRequest
+    if err=decodeBody(w,r,&req);err!=nil||req.Enabled==nil{respond(w,nil,ErrInvalid);return}
+    if err=h.writer.UpsertSDKServiceBinding(r.Context(),"server_group",targetID,serviceID,env,*req.Enabled,req.Config);err!=nil{
+        respond(w,nil,err);return
+    }
+    w.WriteHeader(http.StatusNoContent)
+}

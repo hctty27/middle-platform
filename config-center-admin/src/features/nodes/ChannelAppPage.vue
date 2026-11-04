@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, apiErrorMessage } from '../../api/http'
 import BusinessConfigEditor from './components/BusinessConfigEditor.vue'
-import ChannelServicePanel from '../services/ChannelServicePanel.vue'
+import ServiceBindingPanel from '../services/ServiceBindingPanel.vue'
 import { validateBusinessConfig } from './businessConfig'
 import type { RegionEnvType } from './types'
 
@@ -176,7 +176,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
               <BusinessConfigEditor :model-value="active.config" node-type="channel_app" readonly />
             </el-tab-pane>
             <el-tab-pane label="服务配置">
-              <ChannelServicePanel :key="active.id" :app-id="active.id" />
+              <ServiceBindingPanel :key="active.id" :target-id="active.id" scope-type="channel_app" />
             </el-tab-pane>
             <el-tab-pane label="应用信息">
               <el-descriptions :column="1" border>

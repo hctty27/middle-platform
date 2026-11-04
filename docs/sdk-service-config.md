@@ -1,58 +1,53 @@
-# SDK 服务开关配置
+# SDK 服务定义与通用绑定
 
-## 设计范围
+## 数据模型
 
-提供 SDK 全局和渠道环境开关。当前已接入渠道包事件上报；角色查询等其他业务仍按需实现。不影响订单登记、支付回调与发货补偿。
+- `sdk_service`：服务目录，`code` 全局唯一，`scope_type` 仅支持 `channel_app` / `server_group`，并提供全局 `enabled`。已删除 `sort_order`，按 ID 稳定展示。
+- `sdk_service_binding`：唯一键 `(service_id,target_id,env)`；根据服务定义的 `scope_type` 解释 `target_id`，`env` 支持 `prod/test/review`。
+- `target_id` 不建立跨类型外键，Go 写入时校验目标存在、区服组对应环境以及作用范围，并在删除渠道应用或区服组时事务清理对应绑定。
+- 原有 6 个服务在迁移时统一标记为 `channel_app`，以保持原有渠道绑定有效。只有确认一个服务不存在旧渠道绑定后，才允许通过人工 SQL 将它重分类为 `server_group`；建议为语义不同的新业务另建独立服务编码。
+- 未创建绑定记录默认关闭。功能生效要求全局服务、绑定开关、目标、上级配置节点和环境均有效。充值支付补偿不受服务开关控制。
 
-- `sdk_service`：服务目录，唯一编码 `code`，全局总开关 `enabled`。
-- `sdk_service_channel`：通过 `channel_app_id` 关联 `config_channel_app.id`，按 `prod/test/review` 保存 `enabled` 和独立 `config` JSON 对象。
-- 未创建渠道服务记录时，默认关闭；全局禁用时，无论渠道开关状态如何，服务不可用。
-- `SDK Core` 的服务判断还要求渠道包、所属游戏、大区、区服组处于启用状态且环境绑定有效。
-- 已确认支付订单的补偿不受服务开关控制。当前不把 `payment` 注册为可关闭服务。
+## 手动 SQL（两种安装路径互斥）
 
-## 手动执行 SQL
+- 新建空库：`config-center/db/sql/initialize.sql`。
+- 旧库已经有 `sdk_service`、`sdk_service_channel`：先备份并停止旧服务写入，再执行 `config-center/db/sql/migrate_sdk_service_binding.sql`。脚本保留旧表作回退，不会删除现有绑定。
+- 旧库没有任何服务表：执行 `config-center/db/sql/add_sdk_services.sql`，不要再执行迁移脚本。
 
-现有 `config_center` 数据库先备份，再由管理员手动执行：
-
-```bash
-mysql -u <user> -p config_center < config-center/db/sql/add_sdk_services.sql
-```
-
-新数据库使用 `config-center/db/sql/initialize.sql`，其中已包含两张表和内置服务目录。两个 SQL 是二选一，不可同时执行。运行时绝不自动执行 DDL；配置中心启动前会校验新增表结构。
+SQL 不由服务自动执行。旧库迁移后，需要核对脚本末尾的记录计数和差异查询，确认两个结果分别为“计数相等”和“差异为 0”。**更新数据库结构与切换服务二进制必须协调停写窗口**：旧服务依赖 `sort_order` 和 `sdk_service_channel`；切换后不要再运行旧版写服务。
 
 ## 管理 API
 
-所有接口位于配置中心管理路由，必须由网关访问控制保护，禁止未经认证向公网开放。
+以下接口都属于需网关鉴权的配置中心管理接口：
 
-| 方法 | 路径 | 用途 |
+| 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/config/admin/sdk-services` | 查询全局服务目录 |
-| PUT | `/api/config/admin/sdk-services/{id}` | 修改全局开关，Body `{"enabled":true}` |
-| GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查询渠道包某环境服务配置 |
-| PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 修改渠道包功能，Body `{"enabled":true,"config":{}}` |
+| GET | `/api/config/admin/sdk-services` | 返回服务目录及 `scopeType` |
+| PUT | `/api/config/admin/sdk-services/{id}` | 修改全局启用开关 |
+| GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 渠道包服务配置（兼容原路径） |
+| PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包绑定 |
+| GET | `/api/config/admin/server-groups/{id}/services?env=prod` | 区服组服务配置 |
+| PUT | `/api/config/admin/server-groups/{id}/services/{serviceId}?env=prod` | 保存区服组绑定 |
 
-全局服务目录通过初始化 SQL 维护，不提供在管理页面随意创建未知代码的能力；数据库新增服务编码并不意味着 Go 自动支持业务路由。
+请求保存结构仍为 `{"enabled":true,"config":{}}`，只有 `enabled` 和 `config` 可更改；服务作用范围由初始化 SQL 管理而非 UI 修改。
 
-## 页面
+## 前端
 
-- 左侧导航的「服务管理」：全局目录和总开关。
-- 「渠道应用」详情的「服务配置」：按测试、正式、提审环境维护对应开关与 JSON 扩展配置。
+- 「服务管理」增加作用范围展示。
+- 「渠道应用 → 服务配置」只展示 `channel_app` 作用范围。
+- 「区服组 → 服务配置」只展示 `server_group`，环境来自所属大区。
+- 两处复用 `ServiceBindingPanel.vue`。
 
-## 渠道包事件上报
+## 事件上报
 
-事件上报入口为 `POST /api/core/{env}/events`，通过请求头 `x-app-id` 识别渠道包。游戏使用所属游戏 `gameSecret` 验签，Core 使用渠道包 `appSecret` 重新生成平台签名，向固定的 `/report/event` 同步转发。
+现有 `POST /api/core/{env}/events` 接口、SHA-1 签名、平台转发以及 `event_report` 功能码不变；`sdk-core` 的开关查询改为 `sdk_service_binding` 并明确要求 `scope_type='channel_app'`。
 
-**只有两层开关**：`sdk_service.code=event_report` 全局开启，且 `sdk_service_channel` 对应渠道包及环境的记录 `enabled=1` 时才转发；未设置记录时默认关闭。
+不增加事件级规则、不保存事件数据、不自动重试。区服上报及区服查询等业务接口仍未实现。
 
-事件上报目前不读取 `sdk_service_channel.config` 的任何规则；页面不展示事件级配置，保存开关时配置为 `{}`。不保存事件、不启动异步队列或自动补偿，由游戏服根据结果决定是否重试。
+## 上线校验
 
-详细请求参数与响应见 [渠道事件上报接入](event-report-integration.md)。
-
-## 上线顺序
-
-1. 备份数据库，手动执行 SQL 并核对新增表、索引。
-2. 更新配置中心，确认启动校验通过，GET 管理接口正常。
-3. 更新管理前端，配置各环境开关。
-4. 在 SDK Core 的 YAML 中填写平台事件地址并更新 SDK Core；通过测试环境渠道进行联调。
-
-`sdk_service_channel.config` 不应存放客户端可读的密钥。需要审计全局开关变更时，应在后续管理审计模块中增加操作审计。
+1. 备份数据库，暂停旧服务的相关写操作，执行对应 SQL。
+2. 验证服务目录、旧绑定数据、唯一约束、作用范围及目标有效性。
+3. 先发布配置中心和 SDK Core，再发布管理端；确认服务启动时只读校验通过。
+4. 验证原渠道事件开关、区服组配置读取/保存与原有订单功能。
+5. 稳定后单独评审是否归档或删除旧 `sdk_service_channel`，本次不会自动删除。

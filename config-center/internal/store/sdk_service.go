@@ -5,17 +5,31 @@ import (
     "context"
     "database/sql"
     "encoding/json"
+    "errors"
     "io"
     "time"
 
     "github.com/hctty27/middle-platform/config-center/internal/model"
 )
 
-const sdkServiceColumns = "id,code,name,description,enabled,sort_order,created_at,updated_at"
+const (
+    ScopeChannelApp = "channel_app"
+    ScopeServerGroup = "server_group"
+)
 
-// SDKServices 返回 SDK 支持的全局服务目录。
+func validSDKScope(scope string) bool {
+    return scope == ScopeChannelApp || scope == ScopeServerGroup
+}
+
+func validSDKEnv(env string) bool {
+    return env == "prod" || env == "test" || env == "review"
+}
+
+const sdkServiceColumns = "id,code,name,scope_type,description,enabled,created_at,updated_at"
+
+// SDKServices 返回全局服务目录，使用 ID 排序，不再使用 sort_order。
 func (s *Store) SDKServices(ctx context.Context) ([]model.SDKService, error) {
-    rows, err := s.DB.QueryContext(ctx, "SELECT "+sdkServiceColumns+" FROM sdk_service ORDER BY sort_order,id")
+    rows, err := s.DB.QueryContext(ctx, "SELECT "+sdkServiceColumns+" FROM sdk_service ORDER BY id")
     if err != nil { return nil, err }
     defer rows.Close()
     items := make([]model.SDKService, 0)
@@ -23,39 +37,33 @@ func (s *Store) SDKServices(ctx context.Context) ([]model.SDKService, error) {
         var item model.SDKService
         var enabled int
         var created, updated time.Time
-        if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Description, &enabled, &item.SortOrder, &created, &updated); err != nil {
-            return nil, err
-        }
+        if err := rows.Scan(&item.ID,&item.Code,&item.Name,&item.ScopeType,
+            &item.Description,&enabled,&created,&updated); err != nil {return nil,err}
         item.Enabled = enabled == 1
-        item.CreatedAt, item.UpdatedAt = model.LocalDateTime(created), model.LocalDateTime(updated)
-        items = append(items, item)
+        item.CreatedAt, item.UpdatedAt = model.LocalDateTime(created),model.LocalDateTime(updated)
+        items = append(items,item)
     }
-    return items, rows.Err()
+    return items,rows.Err()
 }
 
-// UpdateSDKService 只允许修改全局启用状态；服务编码由代码及初始化 SQL 管理。
 func (s *Store) UpdateSDKService(ctx context.Context, id int64, enabled bool) error {
     if id <= 0 { return ErrInvalid }
     result, err := s.DB.ExecContext(ctx,
-        "UPDATE sdk_service SET enabled=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?", enabled, id)
+        "UPDATE sdk_service SET enabled=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?",enabled,id)
     if err != nil { return databaseError(err) }
-    affected, err := result.RowsAffected()
-    if err != nil { return err }
-    if affected > 0 { return nil }
+    affected,err:=result.RowsAffected()
+    if err != nil {return err}
+    if affected>0 {return nil}
     var exists int
-    return s.DB.QueryRowContext(ctx, "SELECT 1 FROM sdk_service WHERE id=?", id).Scan(&exists)
+    return s.DB.QueryRowContext(ctx,"SELECT 1 FROM sdk_service WHERE id=?",id).Scan(&exists)
 }
 
-func validSDKEnv(env string) bool {
-    return env == "prod" || env == "test" || env == "review"
-}
-
-// SDKChannelServices 返回整个服务目录，其中无渠道覆盖记录的服务默认关闭。
-func (s *Store) SDKChannelServices(ctx context.Context, appID int64, env string) ([]model.SDKChannelService, error) {
-    if appID <= 0 || !validSDKEnv(env) { return nil, ErrInvalid }
-    var appStatus int
-    var gameStatus, groupStatus, regionStatus sql.NullInt64
-    if err := s.DB.QueryRowContext(ctx, `
+// targetState 检查目标存在及环境归属；目标停用时仍允许预先配置，但生效状态为关闭。
+func targetState(ctx context.Context, db queryer, scope string, targetID int64, env string) (bool,error) {
+    var statuses [4]sql.NullInt64
+    switch scope {
+    case ScopeChannelApp:
+        err:=db.QueryRowContext(ctx,`
 SELECT app.status,g.status,sg.status,r.status FROM config_channel_app app
 LEFT JOIN config_node g ON g.id=app.game_id AND g.node_type='game'
 LEFT JOIN config_node sg ON sg.id=CASE ?
@@ -65,50 +73,96 @@ LEFT JOIN config_node sg ON sg.id=CASE ?
 END AND sg.node_type='server_group' AND sg.game_id=app.game_id
 LEFT JOIN config_node r ON r.id=sg.region_id AND r.node_type='region'
  AND r.game_id=app.game_id AND r.env_type=?
-WHERE app.id=?`, env, env, appID).Scan(&appStatus,&gameStatus,&groupStatus,&regionStatus); err != nil {
-        return nil, err
+WHERE app.id=?`,env,env,targetID).Scan(&statuses[0],&statuses[1],&statuses[2],&statuses[3])
+        if err!=nil{return false,err}
+    case ScopeServerGroup:
+        err:=db.QueryRowContext(ctx,`
+SELECT sg.status,r.status,g.status
+FROM config_node sg
+JOIN config_node r ON r.id=sg.region_id AND r.node_type='region' AND r.env_type=?
+JOIN config_node g ON g.id=sg.game_id AND g.node_type='game' AND r.game_id=g.id
+WHERE sg.id=? AND sg.node_type='server_group' AND sg.game_id=r.game_id`,env,targetID).
+            Scan(&statuses[0],&statuses[1],&statuses[2])
+        if errors.Is(err,sql.ErrNoRows){return false,ErrInvalid}
+        if err!=nil{return false,err}
+        statuses[3]=sql.NullInt64{Int64:1,Valid:true}
+    default:
+        return false,ErrInvalid
     }
-    bindingEnabled := appStatus == 1 && gameStatus.Valid && groupStatus.Valid && regionStatus.Valid &&
-        gameStatus.Int64 == 1 && groupStatus.Int64 == 1 && regionStatus.Int64 == 1
-    rows, err := s.DB.QueryContext(ctx, `
-SELECT service.id,service.code,service.name,service.description,service.enabled,
-       COALESCE(channel.enabled,0),COALESCE(channel.config,JSON_OBJECT())
-FROM sdk_service service
-LEFT JOIN sdk_service_channel channel
-  ON channel.service_id=service.id AND channel.channel_app_id=? AND channel.env=?
-ORDER BY service.sort_order,service.id`, appID, env)
-    if err != nil { return nil, err }
-    defer rows.Close()
-    items := make([]model.SDKChannelService, 0)
-    for rows.Next() {
-        var item model.SDKChannelService
-        var globalEnabled, channelEnabled int
-        var config []byte
-        if err := rows.Scan(&item.ServiceID, &item.Code, &item.Name, &item.Description,
-            &globalEnabled, &channelEnabled, &config); err != nil { return nil, err }
-        item.GlobalEnabled = globalEnabled == 1
-        item.Enabled = channelEnabled == 1
-        item.EffectiveEnabled = item.GlobalEnabled && item.Enabled && bindingEnabled
-        item.Config = append(json.RawMessage(nil), config...)
-        items = append(items, item)
+    for _,v:=range statuses {
+        if !v.Valid || v.Int64!=1 {return false,nil}
     }
-    return items, rows.Err()
+    return true,nil
 }
 
-// UpsertSDKChannelService 原子保存某渠道包在指定环境的开关和专属参数。
-func (s *Store) UpsertSDKChannelService(ctx context.Context, appID, serviceID int64, env string,
-    enabled bool, config json.RawMessage) error {
-    if appID <= 0 || serviceID <= 0 || !validSDKEnv(env) || len(config) == 0 || len(config) > 64<<10 {
-        return ErrInvalid
+// SDKServiceBindings 按 scope_type 过滤服务目录并读取指定目标在某环境的绑定。
+func (s *Store) SDKServiceBindings(ctx context.Context,scope string,targetID int64,env string)([]model.SDKBindingService,error) {
+    if !validSDKScope(scope)||targetID<=0||!validSDKEnv(env){return nil,ErrInvalid}
+    active,err:=targetState(ctx,s.DB,scope,targetID,env)
+    if err!=nil{return nil,err}
+    rows,err:=s.DB.QueryContext(ctx,`
+SELECT sv.id,sv.code,sv.name,sv.description,sv.enabled,
+       COALESCE(b.enabled,0),COALESCE(b.config,JSON_OBJECT())
+FROM sdk_service sv
+LEFT JOIN sdk_service_binding b ON b.service_id=sv.id AND b.target_id=? AND b.env=?
+WHERE sv.scope_type=?
+ORDER BY sv.id`,targetID,env,scope)
+    if err!=nil{return nil,err}
+    defer rows.Close()
+    items:=make([]model.SDKBindingService,0)
+    for rows.Next(){
+        var item model.SDKBindingService
+        var globalEnabled,bindingEnabled int
+        var raw []byte
+        if err:=rows.Scan(&item.ServiceID,&item.Code,&item.Name,&item.Description,
+            &globalEnabled,&bindingEnabled,&raw);err!=nil{return nil,err}
+        item.GlobalEnabled=globalEnabled==1
+        item.Enabled=bindingEnabled==1
+        item.EffectiveEnabled=item.GlobalEnabled && item.Enabled && active
+        item.Config=append(json.RawMessage(nil),raw...)
+        items=append(items,item)
     }
-    decoder := json.NewDecoder(bytes.NewReader(config))
+    return items,rows.Err()
+}
+
+// SDKChannelServices 兼容现有管理端路径，底层共享通用查询。
+func (s *Store) SDKChannelServices(ctx context.Context,appID int64,env string)([]model.SDKChannelService,error){
+    return s.SDKServiceBindings(ctx,ScopeChannelApp,appID,env)
+}
+
+func validBindingConfig(config json.RawMessage) bool {
+    if len(config)==0 || len(config)>64<<10{return false}
+    decoder:=json.NewDecoder(bytes.NewReader(config))
     var object map[string]json.RawMessage
-    if err := decoder.Decode(&object); err != nil || object == nil { return ErrInvalid }
-    if decoder.Decode(new(any)) != io.EOF { return ErrInvalid }
-    _, err := s.DB.ExecContext(ctx, `
-INSERT INTO sdk_service_channel (channel_app_id,service_id,env,enabled,config)
+    if err:=decoder.Decode(&object);err!=nil||object==nil{return false}
+    return decoder.Decode(new(any))==io.EOF
+}
+
+// UpsertSDKServiceBinding 以配置版本行串行化绑定写入与目标删除，校验目标类型及环境。
+func (s *Store) UpsertSDKServiceBinding(ctx context.Context,scope string,targetID,serviceID int64,
+    env string,enabled bool,config json.RawMessage)error {
+    if !validSDKScope(scope)||targetID<=0||serviceID<=0||!validSDKEnv(env)||
+        !validBindingConfig(config){return ErrInvalid}
+    tx,err:=s.DB.BeginTx(ctx,nil)
+    if err!=nil{return err}
+    defer tx.Rollback()
+    if err=lockRevision(ctx,tx);err!=nil{return err}
+
+    var actualScope string
+    if err=tx.QueryRowContext(ctx,"SELECT scope_type FROM sdk_service WHERE id=?",serviceID).
+        Scan(&actualScope);err!=nil{return err}
+    if actualScope!=scope{return ErrInvalid}
+    if _,err=targetState(ctx,tx,scope,targetID,env);err!=nil{return err}
+    _,err=tx.ExecContext(ctx,`
+INSERT INTO sdk_service_binding (service_id,target_id,env,enabled,config)
 VALUES (?,?,?,?,?)
-ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),config=VALUES(config),updated_at=UTC_TIMESTAMP(3)`,
-        appID, serviceID, env, enabled, string(config))
-    return databaseError(err)
+ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),config=VALUES(config),updated_at=UTC_TIMESTAMP(3)`,serviceID,targetID,env,enabled,string(config))
+    if err!=nil{return databaseError(err)}
+    return tx.Commit()
+}
+
+// UpsertSDKChannelService 兼容当前管理端 API。
+func (s *Store) UpsertSDKChannelService(ctx context.Context,appID,serviceID int64,
+    env string,enabled bool,config json.RawMessage)error {
+    return s.UpsertSDKServiceBinding(ctx,ScopeChannelApp,appID,serviceID,env,enabled,config)
 }

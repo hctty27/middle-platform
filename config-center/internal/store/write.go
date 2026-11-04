@@ -146,6 +146,12 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE prod_server_group_id=? OR test_server_group_id=? OR review_server_group_id=?",id,id,id).Scan(&count); err != nil { return err }
         if count>0 { return ErrConflict }
     }
+    if current.NodeType=="server_group" {
+        // 按 scope_type 删除，避免与同 ID 的渠道应用发生误关联。
+        if _,err:=tx.ExecContext(ctx,`DELETE b FROM sdk_service_binding b
+JOIN sdk_service sv ON sv.id=b.service_id AND sv.scope_type='server_group'
+WHERE b.target_id=?`,id);err!=nil{return databaseError(err)}
+    }
     if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil { return databaseError(err) }
 	if err := recordChange(ctx, tx, id, "DELETE"); err != nil { return err }
 	return tx.Commit()

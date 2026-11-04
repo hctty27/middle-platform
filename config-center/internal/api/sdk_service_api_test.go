@@ -21,6 +21,11 @@ func (sdkServiceReader) SDKChannelServices(_ context.Context, appID int64, env s
     return []model.SDKChannelService{{ServiceID:1,Code:"event_report",Enabled:false,GlobalEnabled:true,Config:json.RawMessage("{}")}},nil
 }
 
+func (sdkServiceReader) SDKServiceBindings(_ context.Context,scope string,targetID int64,env string)([]model.SDKBindingService,error){
+    if scope!="server_group"||targetID!=3||env!="test"{return nil,ErrInvalid}
+    return []model.SDKBindingService{{ServiceID:2,Code:"server_status",Enabled:true,GlobalEnabled:true,EffectiveEnabled:true,Config:json.RawMessage("{}")}},nil
+}
+
 type sdkServiceWriter struct { fakeWriter }
 func (sdkServiceWriter) UpdateSDKService(_ context.Context, id int64, enabled bool)error {
     if id!=1 || !enabled { return ErrInvalid }
@@ -31,16 +36,28 @@ func (sdkServiceWriter) UpsertSDKChannelService(_ context.Context, appID, servic
     return nil
 }
 
+func (sdkServiceWriter) UpsertSDKServiceBinding(_ context.Context,scope string,targetID,serviceID int64,
+    env string,enabled bool,config json.RawMessage)error{
+    if scope!="server_group"||targetID!=3||serviceID!=2||env!="test"||!enabled||string(config)!="{}"{
+        return ErrInvalid
+    }
+    return nil
+}
+
 func TestSDKServiceManagementRoutes(t *testing.T) {
     handler:=RouterWithWrites(sdkServiceReader{},&sdkServiceWriter{})
     tests:=[]struct{method,path,body string;status int}{
         {"GET","/api/config/admin/sdk-services","",200},
         {"GET","/api/config/admin/channel-apps/2/services?env=test","",200},
         {"GET","/api/config/admin/channel-apps/2/services?env=bad","",400},
+        {"GET","/api/config/admin/server-groups/3/services?env=test","",200},
+        {"GET","/api/config/admin/server-groups/3/services?env=prod","",400},
         {"PUT","/api/config/admin/sdk-services/1",`{"enabled":true}`,204},
         {"PUT","/api/config/admin/sdk-services/1",`{}`,400},
         {"PUT","/api/config/admin/channel-apps/2/services/1?env=test",`{"enabled":true,"config":{}}`,204},
         {"PUT","/api/config/admin/channel-apps/2/services/1?env=bad",`{"enabled":true,"config":{}}`,400},
+        {"PUT","/api/config/admin/server-groups/3/services/2?env=test",`{"enabled":true,"config":{}}`,204},
+        {"PUT","/api/config/admin/server-groups/3/services/2?env=bad",`{"enabled":true,"config":{}}`,400},
     }
     for _,tc:=range tests {
         rec:=httptest.NewRecorder()
