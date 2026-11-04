@@ -26,12 +26,13 @@ export interface BusinessConfigField {
   description: string
   placeholder: string
   secret?: boolean
+  defaultValue?: string
 }
 
 export const businessConfigFields: Record<BusinessConfigType, readonly BusinessConfigField[]> = {
   game: [
     { key: 'gameSecret', label: '游戏主密钥', description: '游戏服与 SDK Core/Service 共用的服务端签名密钥，所有环境共享', placeholder: '请输入游戏主密钥', secret: true },
-    { key: 'serviceAdapters.user_check', label: '用户核验适配器', description: 'SDK Service 根据此名称选择 Go 适配器；默认实现填 standard', placeholder: 'standard' }
+    { key: 'serviceAdapters.user_check', label: '用户核验适配器', description: '可选。留空自动使用标准适配器，只有特殊游戏才需要填写', placeholder: '留空默认 standard', defaultValue: 'standard' }
   ],
   region: [
     { key: 'payNotifyUrl', label: '支付发货通知地址', description: 'SDK Core 支付成功后通知游戏服的 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/pay/notify' },
