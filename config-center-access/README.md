@@ -30,4 +30,4 @@ go build ./cmd/config-center-access
 
 [API 文档](../docs/api.md) · [同步架构](../docs/architecture.md) · [数据库结构](../docs/database.md) · [联调](../docs/development.md)
 
-第三方同步接入协议见 [配置同步接入文档](../docs/config-center-access-sync.md)。
+第三方同步接入协议见 [配置同步接入文档](../docs/config-center-access-sync.html)。
