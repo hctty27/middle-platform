@@ -1,4 +1,4 @@
-# Build, upload, and extract a Linux package without restarting services.
+﻿# Build or reuse a Linux package, upload it and optionally restart checked Supervisor services.
 # Copy publish.config.example.json to publish.config.json and fill it in.
 # That file is gitignored. Parameters override it. An empty password is typed interactively.
 # Usage: .\publish\publish.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
@@ -8,6 +8,11 @@ param(
     [string]$Arch = 'amd64',
     [string]$Version = '',
     [switch]$SkipFrontend,
+    [switch]$SkipBuild,
+    [switch]$SkipRestart,
+    [switch]$Fast,
+    [ValidateSet('all', 'config-center', 'config-center-access', 'sdk-core', 'sdk-service', 'admin')]
+    [string]$Service = 'all',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9.-]*$')]
     [string]$ServerHost,
     [ValidateRange(1, 65535)]
@@ -20,6 +25,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($Service -eq 'admin' -and $SkipFrontend) { throw '发布 admin 时不能跳过前端构建。' }
+if ($SkipBuild -and [string]::IsNullOrWhiteSpace($Version)) { throw '-SkipBuild 必须同时指定 -Version，以准确选择已存在的归档。' }
 
 $ConfigPath = Join-Path $PSScriptRoot 'publish.config.json'
 
@@ -75,6 +82,7 @@ function New-PublishAskPass {
     param([string]$Stage)
     # csc keeps the helper out of this process, so the temp directory can be deleted.
     # Add-Type would load and lock the exe until PowerShell exits.
+    if (-not $env:SystemRoot) { throw 'Password helper requires Windows; use SSH keys or interactive password on this host.' }
     $csc = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     if (-not (Test-Path -LiteralPath $csc)) {
         $csc = Join-Path $env:SystemRoot 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
@@ -215,6 +223,9 @@ if (-not (Test-Path -LiteralPath $remoteScript -PathType Leaf)) {
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = 'publish-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 }
+if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') {
+    throw "不合法的发布版本号: $Version"
+}
 
 $localStage = $null
 $publishAuthTouched = $false
@@ -245,13 +256,24 @@ try {
         Write-Host 'Using the password from publish.config.json.'
     }
 
-    & (Join-Path $PSScriptRoot 'package-local.ps1') -Arch $Arch -Version $Version -SkipFrontend:$SkipFrontend
+    if (-not $SkipBuild) {
+        & (Join-Path $PSScriptRoot 'package-local.ps1') -Arch $Arch -Version $Version -SkipFrontend:$SkipFrontend -Service $Service -Fast:$Fast
+    } else {
+        Write-Host "跳过构建，使用已存在的 $Version 归档。"
+    }
     $archiveName = "middle-platform-$Version-linux-$Arch.tar.gz"
     $archivePath = Join-Path (Join-Path $repoRoot 'dist') $archiveName
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
         throw "Build did not produce the expected archive: $archivePath"
     }
-    $sha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $hashStream = [System.IO.File]::OpenRead($archivePath)
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $sha256 = ([System.BitConverter]::ToString($hasher.ComputeHash($hashStream))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $hashStream.Dispose()
+        $hasher.Dispose()
+    }
     $destination = "$User@$ServerHost"
     $remoteStage = "$RemoteDirectory/.publish-$([guid]::NewGuid().ToString('N'))"
 
@@ -290,7 +312,8 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Upload failed (exit $LASTEXITCODE). No application files were updated. Temporary directory: $remoteStage"
     }
-    Invoke-Remote "bash '$remoteStage/publish-remote.sh' '$RemoteDirectory' '$remoteStage/$archiveName' '$sha256'"
+    $restartFlag = if ($SkipRestart -or $Service -eq 'admin') { '0' } else { '1' }
+    Invoke-Remote "bash '$remoteStage/publish-remote.sh' '$RemoteDirectory' '$remoteStage/$archiveName' '$sha256' '$restartFlag' '$Service'"
 } finally {
     if ($publishAuthTouched) {
         Restore-EnvValue 'PUBLISH_SSH_PASSWORD' $null
@@ -311,5 +334,9 @@ try {
 
 Write-Host ''
 Write-Host "Published archive: $RemoteDirectory/packages/$archiveName"
-Write-Host 'Package uploaded and extracted. No services were restarted and no SQL was executed.'
-Write-Host 'Running backend processes still use the old binaries until you restart them manually.'
+Write-Host '发布包已更新到服务器，未执行数据库 SQL。'
+if ($SkipRestart -or $Service -eq 'admin') {
+    Write-Host '已跳过 Supervisor 重启，现有进程仍需人工重启才能加载新二进制。'
+} else {
+    Write-Host '已执行 Supervisor 重启与健康检查；失败会中止发布并报错，不提供自动回滚。'
+}

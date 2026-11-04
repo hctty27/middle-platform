@@ -31,10 +31,25 @@ func main() {
 }
 
 func writeArchive(source, output string) (err error) {
+	// 全量包与单模块包共用归档格式；单独发布管理端时可以没有 bin 文件。
+	hasExecutable := false
 	for _, name := range []string{"config-center", "config-center-access", "sdk-core", "sdk-service"} {
 		info, statErr := os.Stat(filepath.Join(source, "bin", name))
+		if errors.Is(statErr, os.ErrNotExist) {
+			continue
+		}
+		if statErr != nil {
+			return fmt.Errorf("读取可执行文件 %s 失败: %w", name, statErr)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("可执行文件 %s 不是普通文件", name)
+		}
+		hasExecutable = true
+	}
+	if !hasExecutable {
+		info, statErr := os.Stat(filepath.Join(source, "admin", "index.html"))
 		if statErr != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("必需的可执行文件 %s 不存在或格式不合法", name)
+			return errors.New("发布包至少需要一个 Go 可执行文件或 admin/index.html")
 		}
 	}
 

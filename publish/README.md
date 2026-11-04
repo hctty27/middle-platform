@@ -1,69 +1,62 @@
-# 本地发布工具
+# 本地打包与发布
 
-脚本可以提交。连接信息写在 `publish.config.json`，该文件已加入 `.gitignore`，不要提交。
+在 Windows/PowerShell 上构建 Linux ELF 和 Vue 静态文件，经 SSH/SCP 上传到现有服务器目录并直接更新。**不使用 releases 版本目录，不提供自动或手动回滚功能**；数据库 SQL 永远由管理员手动执行。
 
-原有的 `scripts/package.ps1` 和 `scripts/package-archive.go` 保持原位置与内容。发布入口通过本地 `package-local.ps1` 包装器执行原有打包逻辑，压缩包仍生成到仓库根目录 `dist/`。
+## 首次配置
 
-包装器用 .NET 读取原文件，在系统临时目录生成 UTF-8 BOM 的 PowerShell 副本和原始字节的 Go 副本：前者兼容 Windows PowerShell 5.1 的中文脚本读取，后者规避当前机器上 Go 从原路径读取到 NUL 字节的异常。仅在临时 PowerShell 副本中固定仓库路径，不修改原文件；成功或失败都会清理本次临时副本。若原有脚本布局发生变化，包装器会明确报错，不会猜测路径。
+复制 `publish.config.example.json` 为本地 `publish.config.json`，填写 `host`、`port`、`user`、`remoteDirectory`。该文件已加入 `.gitignore`，不要提交账号或密码。
 
-## 使用
+推荐 SSH Ed25519 私钥认证（`password` 留空，SSH 可以交互输入口令）；若配置了明文 `password`，现有兼容逻辑会临时调用 `askpass.exe`，并只响应密码提示，不会自动信任未知 SSH 主机指纹。首次发布应手动 `ssh` 确认指纹。
 
-首次使用时，把 [publish.config.example.json](publish.config.example.json) 复制为同目录的 `publish.config.json` 再填写。没有这个文件，或少了 `host`、`port`、`user`、`remoteDirectory`，脚本会直接报错、不会连接。命令行参数优先于配置文件。
-
-```json
-{
-  "host": "203.0.113.10",
-  "port": 22,
-  "user": "deploy",
-  "remoteDirectory": "/opt/middle-platform",
-  "password": ""
-}
-```
-
-`203.0.113.10` 只是文档示例地址，不能拿来发布。`password` 留空时仍在 `ssh` / `scp` 交互输入，可能问多次。填上之后，这几次认证用配置里的密码，密码不出现在命令行上，打包过程也不会把它带给 `go` 或 `npm`。此时只走密码认证，不再尝试本机私钥。密码是明文，只留在本机的 `publish.config.json`，该文件不会进 Git。
-
-在仓库根目录执行：
+## 使用命令
 
 ```powershell
-.\publish\publish.ps1
-```
+# 完整打包，不上传；正式构建仍使用 npm ci
+.\scripts\package.ps1 -Version v1.0.0
 
-可选：
+# 单独构建 SDK Core，或者仅构建管理端
+.\scripts\package.ps1 -Version local-core -Service sdk-core
+.\scripts\package.ps1 -Version local-admin -Service admin -Fast
 
-```powershell
-.\publish\publish.ps1 -SkipFrontend
+# 默认：打包、上传、校验、直接更新、重启 Supervisor 并验活
 .\publish\publish.ps1 -Version v1.0.0
-.\publish\publish.ps1 -ServerHost 10.0.0.8 -Port 22
+
+# 只发布 sdk-core；保留其他服务二进制和 admin
+.\publish\publish.ps1 -Service sdk-core -Version v1.0.1
+
+# 快速构建：仅当 lock 文件哈希匹配时复用 node_modules
+.\publish\publish.ps1 -Version v1.0.2 -Fast
+
+# 已有同名归档，跳过编译；归档必须符合所选 Service
+.\publish\publish.ps1 -Version v1.0.2 -SkipBuild
+
+# 只更新文件，不重启进程
+.\publish\publish.ps1 -Version v1.0.3 -SkipRestart
 ```
 
-`-ServerHost`、`-Port`、`-User`、`-RemoteDirectory` 覆盖配置文件，`-Arch amd64|arm64` 指定架构。
+`-Service` 可选 `all`（默认）、`config-center`、`config-center-access`、`sdk-core`、`sdk-service`、`admin`。单独选服务时不构建 Vue；仅 `all` 模式默认构建 Vue，`admin` 仅构建 Vue。兼容 `-SkipFrontend`（不能与 `-Service admin` 同时使用）、`-Arch amd64|arm64` 和覆盖服务器参数 `-ServerHost`、`-Port`、`-User`、`-RemoteDirectory`。
 
-需要本机具备原有打包依赖、.NET Framework 的 `csc.exe`（仅在填写了密码时用来生成密码助手）和 OpenSSH 的 `ssh`、`scp`；服务器需提供 Bash、GNU tar/coreutils。首次连接时应先手动 `ssh` 核对主机指纹。密码助手只回答密码提问，不会自动接受新的主机指纹。
+`-SkipBuild` 必须显式指定 `-Version`，避免错误地上传历史文件。归档由本地包校验和服务器 SHA-256、架构、文件类型、服务选择器等多重检查拦截。构建失败不会连接服务器。
 
-## 行为与边界
+## 生产发布行为
 
-- 打包成功后才上传，上传后校验 SHA-256、架构、归档路径与文件类型。
-- 在服务器独立暂存目录解压，再逐文件更新 `bin/`、`sql/` 和可选的 `admin/`。
-- 保留已有 `admin/config.js`，不修改 `config/` 和 `logs/`，不清空目标目录。
-- 以同目录临时文件加重命名替换程序，不直接覆盖运行中的二进制。
-- 成功后归档保留在 `packages/`，本次暂存目录删除；失败留下的 `.publish-*` 目录需自行清理。
-- 不停止或重启服务，不修改 Nginx/Supervisor，不执行 SQL，不备份或回滚。运行中的后端需要手动重启后才使用新程序。
-- 文件逐个替换，不是整个版本的原子切换；失败可能已更新部分文件，前端更新期间可能短暂混用新旧资源。
+1. 本地构建并输出各阶段耗时，生成 `dist/middle-platform-<版本>-linux-<架构>.tar.gz`；成功后清理匹配命名规则的其他旧本地归档。
+2. 上传到服务器 `.publish-* ` 临时目录，校验 SHA-256、文件类型、架构和全部必需文件。
+3. 在**已有的** `bin/`、`admin/`、`sql/` 内逐文件以同目录临时文件和 rename 更新，不使用 `releases/`。
+4. `config/`、`logs/` 不更新；已有 `admin/config.js` 始终保留。数据库 SQL 只传输、不执行。
+5. 默认按服务重启对应 Supervisor 程序，轮询 `/health/ready`；`sdk-core-1`、`sdk-core-2` 依次重启。使用 `-SkipRestart` 可只更新文件。
+6. 服务健康检查成功后，归档保存到服务器 `packages/`，临时目录清理；失败时立即报错，保留暂存目录供人工排查。
 
-## 只验证打包，不上传
+预设 Supervisor 名称：`config-center`、`config-center-access`（全量发布时可选）、`sdk-core-1`、`sdk-core-2`、`sdk-service`。健康检查地址为本机 `127.0.0.1` 的 `8201`、`8291`、`8211`、`8212`、`8221` 对应的 `/health/ready`。**如果线上实例命名或端口不同，必须先修改 `publish/publish-remote.sh` 对应映射，或者使用 `-SkipRestart` 后手动维护。** 发布账号需要执行 `supervisorctl restart` 的权限。
 
-在仓库根目录执行本地包装器（仍使用原有打包依赖）：
+**不提供回滚：** 多文件逐一替换不具备全量事务性。替换中途失败可能留下部分新文件；进程验活失败时也不会恢复旧版本。发布前请确保服务与数据库结构兼容；需要手工恢复时自行处理。普通 Nginx 静态 upstream 不会因健康接口不可用就主动摘流量，因此顺序重启两个 Core 实例也**不保证零中断**。
 
-```powershell
-.\publish\package-local.ps1 -Version local-check
-```
+## CI 和自测
 
-与原有打包脚本一致，成功后只保留本次构建的归档，会清理 `dist/` 下本脚本命名规则内的旧归档。
-
-## 本地测试
-
-不构建真实发布包、不连接服务器：
+仓库 `.github/workflows/package.yml` 在 Go/Vue/共享库/打包发布脚本修改后验证完整 Linux 归档，同时运行无实际 SSH 的发布冒烟测试：
 
 ```bash
 python -I publish/ci_publish_smoke.py
 ```
+
+在 CI 中优先复用各 Go 模块依赖缓存；`-Fast` 只供本地快速构建，正式发布建议省略以执行 `npm ci`。

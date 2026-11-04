@@ -203,13 +203,26 @@ curl -i https://zk.skybluek.com/admin/config.js
 
 **安全提醒：** 现在配置中心管理 API 尚无完整认证，`/admin/` 和 `/api/config/admin/` 必须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。
 
-## 6. 安全发布与回滚
+## 6. 直接发布与失败排查
 
-1. 备份权威库并确认新旧代码与数据库版本的兼容性。涉及 DDL 时先停写，在单独的变更窗口人工执行经过审核的 SQL。
-2. 先把发布包解压到临时目录，校验目标 Linux 架构、权限和归档内容。**绝不直接向正在运行的 `bin/` 覆盖归档。**
-3. 逐节点从 Nginx upstream 摘流量，确认其他节点可服务；停止目标进程，备份旧二进制，用同一文件系统的安全替换方式部署新版本，再启动。
-4. 验证 `/health/live`、`/health/ready`、关键 API、日志和必要的配置同步后恢复流量，再更新下一节点。
-5. 回滚二进制前检查数据库兼容性。**二进制回滚不会自动回滚 MySQL DDL**；不应盲目恢复旧程序写入新表结构。
+本项目使用固定的 `bin/`、`admin/`、`sql/` 目录，不建立 `releases/` 版本目录，也不提供自动或手动回滚脚本。发布工具见 [本地发布说明](../publish/README.md)。
+
+```powershell
+# 在开发机上执行：默认打包、上传、更新文件、重启 Supervisor 并验活
+.\publish\publish.ps1 -Version v1.0.0
+
+# 仅部署 SDK Core（两个 Core 进程顺序重启）
+.\publish\publish.ps1 -Version v1.0.1 -Service sdk-core
+
+# 仅更新文件，不重启
+.\publish\publish.ps1 -Version v1.0.2 -SkipRestart
+```
+
+1. 发布前确认服务与数据库结构兼容。DDL 仍在单独变更窗口由管理员审核并执行，不随脚本自动迁移。
+2. 上传后校验 SHA-256、架构、归档内容、所选服务；校验成功再把文件逐个写入同目录临时文件并重命名替换，保留 `config/`、`logs/`、`admin/config.js`。
+3. 默认对所选 Supervisor 进程逐个重启并验证本地 `/health/ready`，端口/进程名以 `publish/publish-remote.sh` 的预设为准。如现场端口不同，先调整映射或加 `-SkipRestart` 后手工重启。
+4. **单次发布不是跨多个文件的事务**；更新、重启或验活失败不会自动回滚，可能需要人工修复。Nginx 静态 upstream 不自动根据健康端点摘流量，两个 Core 顺序重启不保证零中断。
+5. 发布后还需人工抽查充值订单、配置同步和事件上报等关键业务，确认未发生接口或配置不兼容。
 
 ## 7. 日志、停服与排障
 

@@ -48,8 +48,9 @@ class RemotePublishTests(unittest.TestCase):
         self.stage.mkdir(parents=True)
         self.archive = self.stage / ARCHIVE
 
-    def make_package(self, frontend=True, extra=None, omit=None):
-        files = {f"bin/{name}": b"#!/bin/sh\nexit 0\n" for name in BINARIES if name != omit}
+    def make_package(self, frontend=True, extra=None, omit=None, only=None):
+        files = {f"bin/{name}": b"#!/bin/sh\nexit 0\n" for name in BINARIES
+                 if name != omit and (only is None or name == only)}
         files["sql/config-center/initialize.sql"] = b"DO NOT EXECUTE"
         if frontend:
             files.update({"admin/index.html": b"new-index", "admin/config.js": b"default-config"})
@@ -62,13 +63,32 @@ class RemotePublishTests(unittest.TestCase):
             if extra:
                 archive.addfile(extra)
 
-    def run_publish(self, digest=None, machine="x86_64"):
+    def run_publish(self, digest=None, machine="x86_64", service=None,
+                    restart=False, restart_fail=False):
         digest = digest or hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        extra_args = ["1" if restart else "0", service] if service else []
+        commands = """
+uname() { printf '%s\\n' "$TEST_MACHINE"; }
+export -f uname
+if [[ "$TEST_RESTART" == 1 ]]; then
+    supervisorctl() {
+        case "$1" in
+            status) printf '%s RUNNING pid 100\\n' "$2" ;;
+            restart) [[ "$TEST_RESTART_FAIL" == 0 ]] ;;
+        esac
+    }
+    curl() { return 0; }
+    export -f supervisorctl curl
+fi
+exec bash "$@"
+"""
         return subprocess.run(
-            [BASH, "-c", 'uname() { printf "%s\\n" "$TEST_MACHINE"; }; export -f uname; exec bash "$@"',
-             "test", bash_path(SCRIPTS / "publish-remote.sh"), bash_path(self.root),
-             bash_path(self.archive), digest],
-            env={**os.environ, "TEST_MACHINE": machine}, capture_output=True, text=True,
+            [BASH, "-c", commands, "test", bash_path(SCRIPTS / "publish-remote.sh"),
+             bash_path(self.root), bash_path(self.archive), digest, *extra_args],
+            env={**os.environ, "TEST_MACHINE": machine,
+                 "TEST_RESTART": "1" if restart else "0",
+                 "TEST_RESTART_FAIL": "1" if restart_fail else "0"},
+            capture_output=True, text=True,
         )
 
     def seed(self, relative, content):
@@ -112,6 +132,39 @@ class RemotePublishTests(unittest.TestCase):
         self.assertEqual(old.read_text(), "old-binary")
         self.assertTrue(self.archive.exists())
         return result
+
+    def test_partial_sdk_core_does_not_replace_other_binaries(self):
+        self.make_package(frontend=False, only="sdk-core")
+        other = self.seed("bin/config-center", "original")
+        result = self.run_publish(service="sdk-core")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(other.read_text(), "original")
+        self.assertTrue((self.root / "bin/sdk-core").is_file())
+
+    def test_mismatched_service_selector_does_not_change_files(self):
+        self.make_package(frontend=False)
+        self.assert_rejected(service="sdk-core")
+
+    def test_admin_only_archive_does_not_require_binaries(self):
+        self.make_package(only="admin")
+        result = self.run_publish(service="admin")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.root / "admin/index.html").read_bytes(), b"new-index")
+        self.assertFalse((self.root / "bin/sdk-core").exists())
+
+    def test_core_instances_restart_sequentially_and_pass_health(self):
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.run_publish(service="sdk-core", restart=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Healthy: sdk-core-1", result.stdout)
+        self.assertIn("Healthy: sdk-core-2", result.stdout)
+
+    def test_restart_failure_reports_error_without_rollback(self):
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.run_publish(service="sdk-core", restart=True, restart_fail=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.root / "bin/sdk-core").is_file())
+        self.assertIn("Restarting sdk-core-1", result.stdout)
 
     def test_bad_checksum(self):
         self.make_package()
@@ -157,9 +210,8 @@ class LocalPublishTests(unittest.TestCase):
         package_scripts = self.root / "scripts"
         package_scripts.mkdir()
         (package_scripts / "package-archive.go").write_bytes(b"package main\nfunc main() {}\n")
-        (package_scripts / "package.ps1").write_text('''param($Arch, $Version, [switch]$SkipFrontend)
+        (package_scripts / "package.ps1").write_text('''param($Arch, $Version, [switch]$SkipFrontend, $Service = 'all', [switch]$Fast)
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-[IO.File]::WriteAllText((Join-Path $repoRoot 'runtime-path.txt'), $PSScriptRoot)
 $prefix = [IO.File]::ReadAllBytes($PSCommandPath)
 if ($prefix[0] -ne 239 -or $prefix[1] -ne 187 -or $prefix[2] -ne 191) { throw 'Missing UTF-8 BOM' }
 $helper = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'package-archive.go'))
@@ -169,7 +221,7 @@ if ($global:TestMode -eq 'build-fail') { throw 'Simulated build failure' }
 $dir = Join-Path $repoRoot 'dist'
 New-Item -ItemType Directory -Force $dir | Out-Null
 [IO.File]::WriteAllText((Join-Path $dir "middle-platform-$Version-linux-$Arch.tar.gz"), 'fake-package')
-''', encoding="utf-8")
+''', encoding="utf-8-sig")
         self.originals = {path: path.read_bytes() for path in package_scripts.iterdir()}
         self.wrapper = self.root / "test.ps1"
         self.wrapper.write_text('''param($Mode)
@@ -198,7 +250,7 @@ function global:scp {
     if ($global:TestMode -eq 'upload-fail') { $global:LASTEXITCODE = 8 }
 }
 $code = 0
-$publishArgs = @{ Version = 'smoke'; SkipFrontend = $true }
+$publishArgs = @{ Version = 'smoke'; SkipFrontend = $true; SkipRestart = $true }
 $overrideFile = Join-Path $PSScriptRoot 'cli-override.txt'
 if (Test-Path -LiteralPath $overrideFile) {
     foreach ($line in @(Get-Content -LiteralPath $overrideFile)) {
@@ -253,7 +305,7 @@ exit $code
         self.assertIn("/srv/app/.publish-", calls[2])
         self.assertNotIn("askpass|set", calls)
         self.assertNotIn("PubkeyAuthentication=no", calls[0])
-        self.assertIn("No services were restarted", result.stdout)
+        self.assertIn("已跳过 Supervisor 重启", result.stdout)
         self.assertIn("UTF8-CHECK: 中文正常", result.stdout)
 
     def test_cli_host_overrides_config(self):
@@ -264,6 +316,7 @@ exit $code
         self.assertIn("ssh|-p|2222|deploy@10.9.8.7", calls[0])
         self.assertIn("/srv/app/.publish-", calls[2])
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows-only .NET Framework password helper')
     def test_configured_password_is_given_to_ssh_without_being_logged(self):
         self.write_config(password="s3cret-value")
         result, calls = self.invoke("password")
@@ -306,7 +359,7 @@ exit $code
         result, calls = self.invoke("changed-layout")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls, [])
-        self.assertIn("layout has changed", result.stdout)
+        self.assertIn("Build did not produce the expected archive", result.stdout)
 
     def test_build_failure_does_not_connect(self):
         self.write_config()
