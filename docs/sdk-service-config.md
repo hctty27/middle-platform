@@ -2,7 +2,7 @@
 
 ## 数据模型
 
-- `sdk_service`：SDK 功能目录和全局开关，`code` 唯一；不再使用 `scope_type` 或 `sort_order`。当前只初始化已实现的 `event_report`（事件上报），未实现功能不添加占位数据。
+- `sdk_service`：SDK 功能目录和全局开关，`code` 唯一；不再使用 `scope_type` 或 `sort_order`。当前初始化已实现的 `event_report`（事件上报）和 `user_check`（用户核验），未实现功能不添加占位数据。
 - `sdk_service_channel`：渠道包服务绑定，`service_id` 对应服务目录，`channel_app_id` 对应 `config_channel_app.id`，`env` 为 `prod/test/review`。
 - 每个服务与渠道包、环境组合唯一：`(service_id,channel_app_id,env)`。无绑定记录时默认关闭，全局或渠道环境关闭时该功能不生效。
 - 功能生效还要求渠道包、游戏、当前环境区服组、大区均有效。充值、订单回调和补偿不受事件上报开关控制。
@@ -18,13 +18,14 @@
 | --- | --- |
 | 新建空 `config_center` | `config-center/db/sql/initialize.sql` |
 | 已有库但尚无 SDK 功能表 | `config-center/db/sql/add_sdk_services.sql` |
+| 已有服务表但缺用户核验目录 | `config-center/db/sql/add_sdk_user_check.sql` |
 | 已有库使用当前 `sdk_service_binding` 通用表 | `config-center/db/sql/migrate_sdk_service_channel.sql` |
 
 `migrate_sdk_service_channel.sql` **仅针对当前通用绑定结构**，不包含更早版本的表结构迁移。执行前须全库备份并停止 config-center、sdk-core，确认表中数据与预期一致。
 
-该 SQL 将表名改为 `sdk_service_channel`、`target_id` 改为 `channel_app_id`，统一索引与约束名称，移除 `scope_type`，并仅保留已实现的 `event_report` 功能及其渠道绑定。事件上报原有绑定 ID、环境、启用状态、JSON 配置保持不变，其他未实现功能的记录及其绑定会被删除。
+该 SQL 将表名改为 `sdk_service_channel`、`target_id` 改为 `channel_app_id`，统一索引与约束名称，移除 `scope_type`，并仅保留当时已实现的 `event_report` 功能及其渠道绑定；之后另行执行 add_sdk_user_check.sql。事件上报原有绑定 ID、环境、启用状态、JSON 配置保持不变，其他未实现功能的记录及其绑定会被删除。
 
-MySQL DDL 会隐式提交；禁止在已经迁移的数据库重复执行。完成后确认功能目录恰好一条 `event_report`，并核对绑定数量和孤儿记录。
+MySQL DDL 会隐式提交；禁止在已经迁移的数据库重复执行。完成后确认原 `event_report` 保留，按需注册 `user_check`，并核对绑定数量和孤儿记录。
 
 
 ## 管理 API
@@ -44,9 +45,16 @@ MySQL DDL 会隐式提交；禁止在已经迁移的数据库重复执行。完�
 
 继续使用 `POST /api/core/events/{env}`、`event_report` 功能编码与现有游戏验签、平台转发流程。事件上报必须同时开启全局开关、当前渠道包环境开关。接口不保存事件数据，也不自动重试。
 
+## 用户核验
+
+新增独立的 `sdk-service` Go 工程，`POST /api/service/user/check/{env}`，使用渠道的 `appSecret` 验签后，按游戏的 `serviceAdapters.user_check` 选择 Adapter。
+大区的 `userCheckUrl` 为目标地址，游戏侧使用 `gameSecret` 或特定适配器协议。
+全局与渠道环境的 `user_check` 双开关必须开启，缺少绑定默认关闭；不保存核验数据。
+平台签名具体是否包含 `open_id` 需要用平台真实请求确认。参见 [SDK Service 接入](sdk-service-integration.md)。
+
 ## 上线检查
 
 1. 全库备份，核对现有 SDK 服务表和绑定数据，停写后执行匹配的 SQL。
-2. 核对目录恰好一条 `event_report`，以及绑定记录的 `service_id`、`channel_app_id`、`env`、`enabled`、`config`。
+2. 核对目录包含 `event_report` 与 `user_check`，以及绑定记录的 `service_id`、`channel_app_id`、`env`、`enabled`、`config`。
 3. 发布配置中心和 SDK Core 后，再发布管理端，检查 SDK Core 表结构只读校验通过。
 4. 对 `test/prod/review` 分别测试开启、关闭及无绑定时的事件上报行为；验证充值流程不受影响。
