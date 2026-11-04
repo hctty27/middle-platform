@@ -1,6 +1,6 @@
 # Middle Platform · 研发中台
 
-基于 **Go + MySQL 8.0+ + Vue 3** 的游戏研发配置中台。代码仓库包含三个独立 Go 服务、一个 Vue 管理端以及发布与 CI 脚本；不依赖 Java、Flyway 或 Docker。
+基于 **Go + MySQL 8.0+ + Vue 3** 的游戏研发配置中台。代码仓库包含四个独立 Go 服务、一个 Vue 管理端以及发布与 CI 脚本；不依赖 Java、Flyway 或 Docker。
 
 ## 工程组成
 
@@ -8,7 +8,8 @@
 | --- | --- |
 | `config-center/` | 权威配置中心：三级配置节点、渠道应用、订阅者、同步日志与手动 SQL |
 | `config-center-access/` | 可选接入端：独立 MySQL 节点副本、Webhook 验签、快照与增量同步 |
-| `sdk-core/` | SDK 核心服务：目前提供按环境与 AppID 查询配置，登录/充值能力尚未在此文档宣称实现 |
+| `sdk-core/` | SDK 核心服务：配置查询、订单、充值通知与事件上报 |
+| `sdk-service/` | 平台主动调用游戏：用户核验及按游戏适配器转换 |
 | `config-center-admin/` | Vue 3 配置管理后台 |
 | `shared/logging/` | 三个 Go 服务共用的结构化日志 |
 | `scripts/` | 统一 Linux 打包脚本及 CI 测试脚本 |
@@ -44,6 +45,8 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml
 5. 在 `config-center-admin/` 下运行 `npm ci`、`npm run dev`。
 
 默认监听端口：配置中心 `8080`、接入端 `8081`、SDK Core `8082`。完整建库、配置项及联调步骤见 [本地开发指南](docs/development.md)。
+
+用户核验新服务详情参见 [SDK Service 接入](docs/sdk-service-integration.md)。
 
 ## 生产发布
 
