@@ -14,7 +14,7 @@
 └── logs/            # 由 Supervisor 或系统负责轮转
 ```
 
-建议：`config-center:8201`、`sdk-core-1:8211`、`sdk-core-2:8212`、`config-center-access:8291`（可选），管理端由内部 Nginx 提供。具体端口按现有主机资源调整；不同实例不得占用同一监听地址。
+建议：`config-center:8201`、`sdk-core-1:8211`、`sdk-core-2:8212`、`sdk-service:8221`、`config-center-access:8291`（可选），管理端由内部 Nginx 提供。具体端口按现有主机资源调整；不同实例不得占用同一监听地址。
 
 - `config-center` 多实例共享 `config_center` 权威库。
 - `sdk-core` 使用单一 `database.dsn` 和单连接池，配置表只读、`config_center.game_order` 限定读写；订单接口及补偿 Worker 随服务启动。多实例可共用一份 YAML，并通过 `SDK_CORE_ADDR` 覆盖监听端口。平台 v1 通过签名、订单与金额一致性校验后确认支付；不查单，但签名未覆盖金额的残余风险必须明确接受。
@@ -40,7 +40,40 @@ sudo cp -a /tmp/middle-platform-stage/bin/. /data/middle-platform/bin/
 sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/
 ```
 
-使用 `-SkipFrontend` 构建的包没有 `admin/`，不要执行对应 `cp`。创建低权限服务账号 `middle-platform`，按实际用户/组授予 `bin/`、`config/` 和 `logs/` 最小权限；真实 `config-center.yaml`、`config-center-access.yaml`、`sdk-core.yaml` 单独放在 `/data/middle-platform/config/`。
+使用 `-SkipFrontend` 构建的包没有 `admin/`，不要执行对应 `cp`。创建低权限服务账号 `middle-platform`，按实际用户/组授予 `bin/`、`config/` 和 `logs/` 最小权限；真实 `config-center.yaml`、`config-center-access.yaml`、`sdk-core.yaml`、`sdk-service.yaml` 单独放在 `/data/middle-platform/config/`。
+
+### 打包参数及产物
+
+`scripts/package.ps1` 是唯一手动打包入口，支持 Windows PowerShell 与 GitHub Actions 统一生成 Linux ELF + tar.gz。依赖 Go 1.27.3；包含前端时还需要 Node.js 22 / npm。
+
+```powershell
+.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
+.\scripts\package.ps1 -Arch arm64 -Version v1.0.0
+.\scripts\package.ps1 -SkipFrontend -Version v1.0.0
+```
+
+省略 `-Version` 时使用提交号或本地时间作为版本标识；Go 交叉编译加 `-buildvcs=false`。正常情况下 `dist/` 只保留一个版本归档，没有中间目录。
+
+归档结构以打包脚本为准：
+
+```text
+bin/
+  config-center
+  config-center-access
+  sdk-core
+  sdk-service
+sql/
+  config-center/
+    initialize.sql
+    add_game_order.sql
+    add_sdk_services.sql
+    add_sdk_user_check.sql
+  config-center-access/
+    initialize.sql
+admin/                     # -SkipFrontend 时不存在
+```
+
+归档不包含生产密钥、YAML、Nginx/Supervisor 配置。Linux 可执行文件保存 0755 权限，可在上传后执行 `tar -tzf`、`file bin/*` 校验。GitHub Actions `.github/workflows/package.yml` 使用同一脚本并检查 ELF 架构与权限。打包不会自动部署、执行 SQL 或管理 Supervisor。
 
 ## 3. 手动 SQL 先于启动
 
@@ -48,7 +81,8 @@ sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/
 
 - 全新、空的 `config_center`：`sql/config-center/initialize.sql`。
 - 已有 `config_center` 仅缺少订单表：`sql/config-center/add_game_order.sql`。
-- 已有当前通用功能绑定表 `sdk_service_binding`：`sql/config-center/migrate_sdk_service_channel.sql`（需停写并备份）。
+- 已有权威库但没有 SDK 服务表：`sql/config-center/add_sdk_services.sql`（仅表确实不存在时执行）。
+- 已有功能表但缺少 `user_check` 服务目录：`sql/config-center/add_sdk_user_check.sql`。
 - 全新、空的 `config_access`：`sql/config-center-access/initialize.sql`。
 
 例如在 Linux 发布包解压目录（已有库补建订单表）：
@@ -81,7 +115,7 @@ stdout_logfile_backups=5
 environment=CONFIG_GO_ADDR=":8201"
 ```
 
-对于 `sdk-core-1` / `sdk-core-2`，可复用 `bin/sdk-core` 与 `config/sdk-core.yaml`，但分别配置 `SDK_CORE_ADDR=":8211"` / `":8212"`、独立 `[program:...]` 名称和日志文件。接入端同理使用自己的 DSN 与端口。配置变更后：
+对于 `sdk-core-1` / `sdk-core-2`，可复用 `bin/sdk-core` 与 `config/sdk-core.yaml`，但分别配置 `SDK_CORE_ADDR=":8211"` / `":8212"`、独立 `[program:...]` 名称和日志文件。`sdk-service` 使用独立的 `bin/sdk-service`、`config/sdk-service.yaml`，默认监听 `:8221`；接入端同理使用独立进程、DSN 与端口。配置变更后：
 
 ```bash
 sudo supervisorctl reread
@@ -95,7 +129,9 @@ sudo supervisorctl tail -f config-center
 
 ## 5. Nginx 网关与访问边界
 
-- 对外业务域名：只转发 `/api/core/` 到 SDK Core 多实例。
+以下示例按后端内部路由 `/api/...` 转发。若公网使用 `/sdk/api/...`，需在 Nginx 明确移除 `/sdk` 前缀后再交给后端，避免出现双重前缀。
+
+- 对外业务域名：`/api/core/` 转发到 SDK Core 多实例；`/api/service/` 转发到 SDK Service（平台用户核验）。
 - 管理域名或受保护内网：`/api/config/` 转发到配置中心，后台静态页来自 `admin/`；对管理和同步路径设置白名单/认证。
 - `/internal/config/callback` 只允许配置中心从可信网络访问接入端；验证 HMAC 和时间窗口并不能替代网络边界。
 
@@ -107,6 +143,9 @@ upstream sdk_core {
 # 以下 location 仅放在对外 SDK API 对应的 server 中
 location ^~ /api/core/ {
     proxy_pass http://sdk_core;
+}
+location ^~ /api/service/ {
+    proxy_pass http://127.0.0.1:8221;
 }
 ```
 
@@ -174,7 +213,7 @@ curl -i https://zk.skybluek.com/admin/config.js
 
 ## 7. 日志、停服与排障
 
-三个 Go 进程共用 `shared/logging`（`log/slog`），YAML 示例：
+四个 Go 进程共用 `shared/logging`（`log/slog`），YAML 示例：
 
 ```yaml
 log:
@@ -194,6 +233,6 @@ log:
 ## 三项开关移除后的发布检查
 
 - 配置中心管理写接口**始终注册**：升级部署前必须由防火墙、私有网络或具备身份验证的网关限制整个 `/api/config/` 前缀，特别是 `/api/config/admin/`、节点原始 JSON 和同步快照，避免任意用户写入或读取服务端密钥。不要仅隐藏管理网页。
-- SDK Core 订单接口与补偿 Worker 始终加载，数据库必须完成 V12 `game_order` 迁移，账号仅需配置表 SELECT 与订单表 SELECT/INSERT/UPDATE；启动会验证关键字段。
+- SDK Core 订单接口和补偿 Worker 始终加载，数据库必须已有 `game_order` 表，账号需配置表 SELECT 与订单表 SELECT/INSERT/UPDATE；SDK Service 还需服务开关表与游戏、大区、渠道包的只读权限。
 - 平台 v1 缺少实付金额字段的签名完整性认证；SDK Core 不做二次查单，按签名和登记金额一致性执行支付确认。上线前须核实平台服务端可信定价、支付成功回调保障和游戏幂等发货，并接受现有回调协议的残余风险。
-- 部署前从旧私有配置删除 `admin.writesEnabled`、`order.enabled`、`payment.allowUnverifiedNonProd`；停用的 `CONFIG_GO_ENABLE_WRITES` 环境变量也应清除。代码合并不代表已经更新 Nginx ACL、线上配置或数据库。
+- 部署前按各模块当前 YAML 模板更新私有配置，删除废弃开关及环境变量；代码合并不代表已经更新 Nginx ACL、线上配置或数据库。
