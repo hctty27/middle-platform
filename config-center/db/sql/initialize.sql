@@ -168,4 +168,5 @@ INSERT INTO sdk_service (code,name,scope_type,description,enabled) VALUES
 ('server_query','区服查询','channel_app','平台查询区服信息',1),
 ('user_check','用户信息核验','channel_app','核验平台用户信息',1),
 ('role_ban','封解禁','channel_app','角色封号、禁言及解除',1),
-('subscribe_message','订阅消息','channel_app','微信等渠道的订阅消息',1);
+('subscribe_message','订阅消息','channel_app','微信等渠道的订阅消息',1),
+('server_status','区服状态上报','server_group','预留区服组状态上报能力，尚未实现业务接口',0);
