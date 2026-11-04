@@ -11,7 +11,7 @@
 ## 2. 游戏登记订单
 
 ```http
-POST /api/core/{env}/{appid}/orders
+POST /api/core/orders/{env}/{appid}
 Content-Type: application/json
 x-app-id: 110006
 x-timestamp: 1793700000
@@ -34,6 +34,8 @@ x-signature: <40 位小写 SHA-1>
 ```
 
 登记成功仅代表记录订单，不代表支付完成。同一 AppID 下的订单号跨环境唯一，相同参数重复登记为幂等成功；环境、金额或 attach 与原记录冲突返回 409。
+
+平台支付成功后回调 SDK Core 的 `POST /api/core/pay/notify/{appid}`，此路径不含 `env`；游戏服无需直接调用该接口，平台回调验签规则保持不变。
 
 ## 3. SDK Core 发货通知
 

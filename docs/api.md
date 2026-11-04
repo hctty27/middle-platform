@@ -64,8 +64,17 @@ Webhook JSON 只包括 `epoch`、`revision`；请求必须携带 `X-Config-Times
 
 ## 3. SDK Core
 
+当前业务路由如下（不保留旧路径兼容）：
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET | `/api/core/config/{env}/{appid}` | 查询 SDK 配置 |
+| POST | `/api/core/orders/{env}/{appid}` | 游戏登记订单 |
+| POST | `/api/core/pay/notify/{appid}` | 第三方平台支付回调（无 env） |
+| POST | `/api/core/events/{env}` | 渠道包事件上报（AppID 在 x-app-id Header） |
+
 ```http
-GET /api/core/{env}/{appid}
+GET /api/core/config/{env}/{appid}
 ```
 
 - `env` 只能是 `prod`、`test`、`review`；`appid` 是 `config_channel_app.code`。
@@ -91,7 +100,7 @@ SDK Core 错误外壳同样带 `code` 与 `message`；典型 HTTP 状态：400 �
 ## 4. 渠道包事件上报（SDK Core）
 
 ```http
-POST /api/core/{env}/events
+POST /api/core/events/{env}
 Content-Type: application/json
 x-app-id: 110006
 x-timestamp: <Unix 秒>

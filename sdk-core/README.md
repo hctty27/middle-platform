@@ -5,7 +5,7 @@
 ## 配置查询
 
 ```http
-GET /api/core/{env}/{appid}
+GET /api/core/config/{env}/{appid}
 ```
 
 - `env` 只接受 `prod`、`test`、`review`；`appid` 是全局唯一 `config_channel_app.code`。
@@ -19,7 +19,7 @@ GET /api/core/{env}/{appid}
 
 ```json
 {
-  "GET /api/core/{env}/{appid}": {
+  "GET /api/core/config/{env}/{appid}": {
     "snKey": "channel_app.code",
     "zoneKey": "server_group.code",
     "tsKey": "channel_app.config.tsKey"
@@ -49,7 +49,7 @@ GET /api/core/{env}/{appid}
 ```powershell
 Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-core -config configs/config-dev.yaml
-Invoke-RestMethod "http://127.0.0.1:8082/api/core/prod/app1001"
+Invoke-RestMethod "http://127.0.0.1:8082/api/core/config/prod/app1001"
 ```
 
 可通过 `SDK_CORE_DB_DSN`、`SDK_CORE_ADDR` 覆盖配置。尚无匹配 AppID/绑定时 404 属预期结果。生产以 Nginx 代理多实例，每个实例使用独立端口；修改响应映射是客户端契约变更，应协调已有 SDK。
@@ -69,10 +69,10 @@ go build ./cmd/sdk-core
 
 | 请求方向 | 接口 | 签名规则 |
 | --- | --- | --- |
-| 游戏 → SDK Core | `POST /api/core/{env}/{appid}/orders` | 平台式 SHA-1 + 全部 Body 非空值 |
-| 平台 → SDK Core | `POST /api/core/{appid}/pay/notify` | 第三方平台原生 V1 SHA-1（不修改） |
+| 游戏 → SDK Core | `POST /api/core/orders/{env}/{appid}` | 平台式 SHA-1 + 全部 Body 非空值 |
+| 平台 → SDK Core | `POST /api/core/pay/notify/{appid}` | 第三方平台原生 V1 SHA-1（不修改） |
 | SDK Core → 游戏 | `POST {region.config.payNotifyUrl}` | 平台式 SHA-1 + 全部 Body 非空值 |
-| 客户端 → SDK Core | `GET /api/core/{env}/{appid}` | 公开查询逻辑不变 |
+| 客户端 → SDK Core | `GET /api/core/config/{env}/{appid}` | 公开查询逻辑不变 |
 
 订单首次登记时把大区配置的 `payNotifyUrl` 保存为快照；支付平台回调通过独立 V1 验签，确认支付后保存状态并原样回显平台 `x-nonce`。游戏发货由持久化 Worker 异步重试，多实例使用数据库事务领取任务。游戏必须按订单号事务幂等发货。
 
@@ -131,7 +131,7 @@ database:
 ## 渠道包事件上报
 
 ```http
-POST /api/core/{env}/events
+POST /api/core/events/{env}
 ```
 
 AppID 放在请求头 `x-app-id` 中，不再作为事件接口的路径参数。Body 固定为 `{"event":"login","ext":{}}`，使用所属游戏 `gameSecret` 及 Body 顶层非空值验签；Core 转发平台时改用该渠道 `appSecret`，平台入站签名不包含 Body。

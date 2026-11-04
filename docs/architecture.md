@@ -14,7 +14,7 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
                                             HTTP 拉取节点     本地 MySQL
                                             快照/增量日志     （config_access）
 
-SDK 客户端 ──GET /api/core/{env}/{appid}──> sdk-core ───> 权威 MySQL
+SDK 客户端 ──GET /api/core/config/{env}/{appid}──> sdk-core ───> 权威 MySQL
 ```
 
 - `config-center`：管理节点、渠道应用与订阅者，并提供同步版本、变更记录、快照查询。
