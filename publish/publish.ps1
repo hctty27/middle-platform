@@ -1,4 +1,4 @@
-# Build or reuse a Linux package, upload it and optionally restart checked Supervisor services.
+﻿# Build or reuse a Linux package, upload it and optionally restart checked Supervisor services.
 # Copy publish.config.example.json to publish.config.json and fill it in.
 # That file is gitignored. Parameters override it. An empty password is typed interactively.
 # Usage: .\publish\publish.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
@@ -222,7 +222,10 @@ if (-not (Test-Path -LiteralPath $remoteScript -PathType Leaf)) {
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = 'publish-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 }
-if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}
+if ($Version -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') {
+    throw "不合法的发布版本号: $Version"
+}
+
 $localStage = $null
 $publishAuthTouched = $false
 $createdDisplay = $false
@@ -329,104 +332,3 @@ if ($SkipRestart -or $Service -eq 'admin') {
 } else {
     Write-Host '已执行 Supervisor 重启与健康检查；失败会中止发布并报错，不提供自动回滚。'
 }
-) {
-    throw "不合法的发布版本号: $Version"
-}
-
-$localStage = $null
-$publishAuthTouched = $false
-$createdDisplay = $false
-$priorSshAskPass = $null
-$priorAskPassRequire = $null
-$priorDisplay = $null
-try {
-    $localStage = Join-Path ([System.IO.Path]::GetTempPath()) ('middle-platform-publish-' + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $localStage | Out-Null
-    $sshOptions = @()
-    $askPassExe = $null
-    if ($Password -ne '') {
-        $askPassExe = New-PublishAskPass $localStage
-        # Self-check needs the password, but the build's go/npm children must not inherit it.
-        $env:PUBLISH_SSH_PASSWORD = $Password
-        try {
-            Assert-PublishAskPass $askPassExe $Password
-        } finally {
-            Remove-Item Env:PUBLISH_SSH_PASSWORD -ErrorAction SilentlyContinue
-        }
-        # Skip private keys so an encrypted local key cannot steal the password prompt.
-        $sshOptions = @(
-            '-o', 'PreferredAuthentications=password,keyboard-interactive',
-            '-o', 'PubkeyAuthentication=no',
-            '-o', 'NumberOfPasswordPrompts=1'
-        )
-        Write-Host 'Using the password from publish.config.json.'
-    }
-
-    & (Join-Path $PSScriptRoot 'package-local.ps1') -Arch $Arch -Version $Version -SkipFrontend:$SkipFrontend
-    $archiveName = "middle-platform-$Version-linux-$Arch.tar.gz"
-    $archivePath = Join-Path (Join-Path $repoRoot 'dist') $archiveName
-    if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
-        throw "Build did not produce the expected archive: $archivePath"
-    }
-    $sha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    $destination = "$User@$ServerHost"
-    $remoteStage = "$RemoteDirectory/.publish-$([guid]::NewGuid().ToString('N'))"
-
-    function Invoke-Remote {
-        param([string]$Command)
-        & ssh @sshOptions -p $Port $destination $Command
-        if ($LASTEXITCODE -ne 0) {
-            throw "Remote command failed (exit $LASTEXITCODE). Upload directory: $remoteStage"
-        }
-    }
-
-    Write-Host "Uploading to ${destination}:$RemoteDirectory (SSH port $Port)."
-    if ($Password -eq '') {
-        Write-Host 'SSH may request a password more than once. Existing host-key verification is retained.'
-    } else {
-        $priorSshAskPass = $env:SSH_ASKPASS
-        $priorAskPassRequire = $env:SSH_ASKPASS_REQUIRE
-        $priorDisplay = $env:DISPLAY
-        $env:PUBLISH_SSH_PASSWORD = $Password
-        $env:SSH_ASKPASS = $askPassExe
-        $env:SSH_ASKPASS_REQUIRE = 'force'
-        if ([string]::IsNullOrEmpty($priorDisplay)) {
-            $env:DISPLAY = 'localhost:0.0'
-            $createdDisplay = $true
-        }
-        $publishAuthTouched = $true
-        Write-Host 'Existing host-key verification is retained. A new host key must be accepted with ssh first.'
-    }
-    Invoke-Remote "mkdir -p -- '$RemoteDirectory' && mkdir -- '$remoteStage'"
-
-    # Upload an LF-only script even when the checkout uses Windows line endings.
-    $uploadScript = Join-Path $localStage 'publish-remote.sh'
-    $scriptText = [System.IO.File]::ReadAllText($remoteScript).Replace("`r`n", "`n")
-    [System.IO.File]::WriteAllText($uploadScript, $scriptText, (New-Object System.Text.UTF8Encoding($false)))
-    & scp @sshOptions -P $Port $archivePath $uploadScript "${destination}:${remoteStage}/"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Upload failed (exit $LASTEXITCODE). No application files were updated. Temporary directory: $remoteStage"
-    }
-    Invoke-Remote "bash '$remoteStage/publish-remote.sh' '$RemoteDirectory' '$remoteStage/$archiveName' '$sha256'"
-} finally {
-    if ($publishAuthTouched) {
-        Restore-EnvValue 'PUBLISH_SSH_PASSWORD' $null
-        Restore-EnvValue 'SSH_ASKPASS' $priorSshAskPass
-        Restore-EnvValue 'SSH_ASKPASS_REQUIRE' $priorAskPassRequire
-        if ($createdDisplay) {
-            Restore-EnvValue 'DISPLAY' $null
-        }
-    }
-    if ($localStage -and (Test-Path -LiteralPath $localStage)) {
-        try {
-            Remove-Item -LiteralPath $localStage -Recurse -Force -ErrorAction Stop
-        } catch {
-            Write-Warning "Could not delete temporary directory: $localStage"
-        }
-    }
-}
-
-Write-Host ''
-Write-Host "Published archive: $RemoteDirectory/packages/$archiveName"
-Write-Host 'Package uploaded and extracted. No services were restarted and no SQL was executed.'
-Write-Host 'Running backend processes still use the old binaries until you restart them manually.'
