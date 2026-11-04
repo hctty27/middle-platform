@@ -1,4 +1,4 @@
-# 将 Go 服务和 Vue 前端交叉编译、校验，并打包为 Linux 发布归档。
+﻿# 将 Go 服务和 Vue 前端交叉编译、校验，并打包为 Linux 发布归档。
 # Windows / Linux 统一生成 tar.gz，显式设置 bin/ 下 Linux ELF 的 0755 执行权限。
 # 用法：.\scripts\package.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
 # 依赖：Go；启用前端构建时还需要 npm。真实凭据和生产 YAML 不打包。
@@ -87,8 +87,16 @@ New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 $originalGoOS = [Environment]::GetEnvironmentVariable('GOOS', 'Process')
 $originalGoArch = [Environment]::GetEnvironmentVariable('GOARCH', 'Process')
 $originalCgo = [Environment]::GetEnvironmentVariable('CGO_ENABLED', 'Process')
+$originalConsoleOutputEncoding = [Console]::OutputEncoding
+$originalOutputEncoding = $OutputEncoding
 
 try {
+    # Windows PowerShell 5.1 默认按系统代码页解码原生程序输出；Go/npm 统一使用 UTF-8。
+    if ($env:OS -eq 'Windows_NT') {
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        [Console]::OutputEncoding = $utf8
+        $OutputEncoding = $utf8
+    }
     $env:GOOS = 'linux'
     $env:GOARCH = $Arch
     $env:CGO_ENABLED = '0'
@@ -161,8 +169,25 @@ try {
     $env:CGO_ENABLED = '0'
 
     $archiveTool = Join-Path $PSScriptRoot 'package-archive.go'
+    $archiveToolToRun = $archiveTool
+    $archiveBytes = [System.IO.File]::ReadAllBytes($archiveTool)
+
+    # 兼容本地被 Windows PowerShell 重定向为 UTF-16 的 Go 源码；
+    # 只使用临时 UTF-8 副本，不覆盖开发者的工作区文件。
+    $isUtf16Le = $archiveBytes.Length -ge 2 -and $archiveBytes[0] -eq 0xFF -and $archiveBytes[1] -eq 0xFE
+    $isUtf16Be = $archiveBytes.Length -ge 2 -and $archiveBytes[0] -eq 0xFE -and $archiveBytes[1] -eq 0xFF
+    if ($isUtf16Le -or $isUtf16Be) {
+        $sourceEncoding = if ($isUtf16Le) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::BigEndianUnicode }
+        $sourceText = $sourceEncoding.GetString($archiveBytes, 2, $archiveBytes.Length - 2)
+        $archiveToolToRun = Join-Path $stageDir 'package-archive.go'
+        [System.IO.File]::WriteAllText($archiveToolToRun, $sourceText, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Warning '检测到 package-archive.go 是 UTF-16，已使用临时 UTF-8 副本执行。请检查本地源文件编码。'
+    } elseif ([System.Array]::IndexOf($archiveBytes, [byte]0) -ge 0) {
+        throw 'package-archive.go 包含 NUL 字节，无法作为 Go 源码执行。请检查文件编码；确认无本地修改后可执行 git restore -- scripts/package-archive.go。'
+    }
+
     Write-Host "正在创建 $archivePath..."
-    & go run -buildvcs=false $archiveTool -source $stageDir -output $archivePath
+    & go run -buildvcs=false $archiveToolToRun -source $stageDir -output $archivePath
     Assert-ExitCode 'create Linux tar.gz'
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
         throw "归档文件未生成: $archivePath"
@@ -193,6 +218,8 @@ finally {
     [Environment]::SetEnvironmentVariable('GOOS', $originalGoOS, 'Process')
     [Environment]::SetEnvironmentVariable('GOARCH', $originalGoArch, 'Process')
     [Environment]::SetEnvironmentVariable('CGO_ENABLED', $originalCgo, 'Process')
+    [Console]::OutputEncoding = $originalConsoleOutputEncoding
+    $OutputEncoding = $originalOutputEncoding
     if (Test-Path -LiteralPath $stageDir) {
         Remove-Item -LiteralPath $stageDir -Recurse -Force
     }

@@ -31,7 +31,7 @@ func main() {
 }
 
 func writeArchive(source, output string) (err error) {
-	for _, name := range []string{"config-center", "config-center-access", "sdk-core"} {
+	for _, name := range []string{"config-center", "config-center-access", "sdk-core", "sdk-service"} {
 		info, statErr := os.Stat(filepath.Join(source, "bin", name))
 		if statErr != nil || !info.Mode().IsRegular() {
 			return fmt.Errorf("必需的可执行文件 %s 不存在或格式不合法", name)
