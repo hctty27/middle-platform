@@ -165,7 +165,14 @@ try {
         try {
             $lockFile = Join-Path $frontendDir 'package-lock.json'
             $marker = Join-Path $frontendDir 'node_modules/.middle-platform-lock.sha256'
-            $lockHash = (Get-FileHash -LiteralPath $lockFile -Algorithm SHA256).Hash
+            $lockStream = [System.IO.File]::OpenRead($lockFile)
+            $hasher = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $lockHash = ([System.BitConverter]::ToString($hasher.ComputeHash($lockStream))).Replace('-', '')
+            } finally {
+                $lockStream.Dispose()
+                $hasher.Dispose()
+            }
             $reuseModules = $Fast -and (Test-Path -LiteralPath $marker -PathType Leaf) -and
                 (Test-Path -LiteralPath (Join-Path $frontendDir 'node_modules/.package-lock.json') -PathType Leaf) -and
                 ([System.IO.File]::ReadAllText($marker).Trim() -eq $lockHash)
