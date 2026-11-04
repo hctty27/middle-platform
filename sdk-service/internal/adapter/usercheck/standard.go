@@ -6,7 +6,6 @@ import (
     "crypto/rand"
     "encoding/hex"
     "encoding/json"
-    "errors"
     "fmt"
     "io"
     "net/http"
@@ -36,7 +35,7 @@ func (a *Standard) Check(ctx context.Context, target model.Target, in model.User
     req.Header.Set("x-nonce", nonce)
     req.Header.Set("x-signature", signature.SignValues(target.GameSecret, target.AppID, timestamp, nonce, in.OpenID))
     resp, err := a.Client.Do(req)
-    if err != nil { return model.UserCheckResult{}, fmt.Errorf("%w: %v", model.ErrUpstream, err) }
+    if err != nil { return model.UserCheckResult{}, fmt.Errorf("%w: %w", model.ErrUpstream, err) }
     defer resp.Body.Close()
     if resp.StatusCode != http.StatusOK {
         return model.UserCheckResult{}, fmt.Errorf("%w: HTTP %d", model.ErrUpstream, resp.StatusCode)
@@ -73,4 +72,3 @@ func NewHTTPClient(timeout time.Duration) *http.Client {
 }
 
 var _ Adapter = (*Standard)(nil)
-var _ = errors.Is
