@@ -22,7 +22,7 @@ type UserChecker interface {
 
 type Pinger interface { PingContext(context.Context) error }
 
-var appIDPattern = regexp.MustCompile(`^[A-Za-z0-9_\-]{1,128}$`)
+var appIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 var errInvalidBody = errors.New("请求体必须只包含非空 open_id 字符串")
 
 type response struct {
