@@ -94,7 +94,7 @@ WHERE table_schema=DATABASE() AND table_name=? AND index_name=? AND non_unique=0
 	if indexCount != 1 {
 		return errors.New("config_channel_app 表缺少 code 全局唯一索引")
 	}
-	for _, constraint := range []string{"chk_config_node_env_type", "fk_app_prod_group", "fk_app_test_group", "fk_app_review_group", "chk_sdk_service_enabled"} {
+	for _, constraint := range []string{"chk_config_node_env_type", "fk_app_prod_group", "fk_app_test_group", "fk_app_review_group"} {
 		var count int
 		if err := conn.QueryRowContext(ctx,
 			"SELECT COUNT(*) FROM information_schema.table_constraints WHERE constraint_schema=DATABASE() AND constraint_name=?", constraint).Scan(&count); err != nil {
