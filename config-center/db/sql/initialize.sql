@@ -160,4 +160,5 @@ CREATE TABLE sdk_service_channel (
 
 -- 只初始化已实现的事件上报；充值不受此开关影响。
 INSERT INTO sdk_service (code,name,description,enabled) VALUES
-('event_report','事件上报','游戏事件向发行平台上报',1);
+('event_report','事件上报','游戏事件向发行平台上报',1),
+('user_check','核验用户信息','平台核验用户信息并转发至游戏',1);
