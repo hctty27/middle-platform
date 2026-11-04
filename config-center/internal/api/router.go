@@ -42,6 +42,7 @@ type Reader interface {
 	ChannelApps(context.Context,int64) ([]model.ChannelApp,error)
     SDKServices(context.Context) ([]model.SDKService,error)
     SDKChannelServices(context.Context,int64,string) ([]model.SDKChannelService,error)
+    SDKServiceBindings(context.Context,string,int64,string) ([]model.SDKBindingService,error)
 	ServerGroupOptions(context.Context,int64,string,string) ([]model.ServerGroupOption,error)
 	ServerGroupBindings(context.Context,int64) ([]model.ServerGroupBinding,error)
 }
@@ -57,6 +58,7 @@ type Writer interface {
 	DeleteChannelApp(context.Context,int64) error
     UpdateSDKService(context.Context,int64,bool) error
     UpsertSDKChannelService(context.Context,int64,int64,string,bool,json.RawMessage) error
+    UpsertSDKServiceBinding(context.Context,string,int64,int64,string,bool,json.RawMessage) error
 }
 
 // api 保存 HTTP 路由处理所需的读写依赖。
@@ -97,6 +99,7 @@ func router(reader Reader, writer Writer) http.Handler {
 	r.Get("/api/config/admin/channel-apps",h.channelApps)
     r.Get("/api/config/admin/sdk-services",h.sdkServices)
     r.Get("/api/config/admin/channel-apps/{id}/services",h.sdkChannelServices)
+    r.Get("/api/config/admin/server-groups/{id}/services",h.sdkServerGroupServices)
 	r.Get("/api/config/admin/channel-apps/server-groups",h.serverGroupOptions)
     r.Get("/api/config/admin/server-groups/{id}/channel-apps",h.serverGroupBindings)
 	r.Get("/api/config/nodes/{id}", h.node)
@@ -115,6 +118,7 @@ func router(reader Reader, writer Writer) http.Handler {
 		r.Delete("/api/config/admin/channel-apps/{id}",h.deleteChannelApp)
         r.Put("/api/config/admin/sdk-services/{id}",h.updateSDKService)
         r.Put("/api/config/admin/channel-apps/{id}/services/{serviceId}",h.upsertSDKChannelService)
+        r.Put("/api/config/admin/server-groups/{id}/services/{serviceId}",h.upsertSDKServerGroupService)
 	}
 	return r
 }
