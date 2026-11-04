@@ -11,7 +11,7 @@ SDK Core 直接访问 `config_center` 权威数据库，负责 SDK 配置查询�
 | POST | `/api/core/pay/notify/{appid}` | 平台 → Core（不含 env） |
 | POST | `/api/core/events/{env}` | 游戏 → Core（AppID 在 x-app-id Header） |
 
-**对外协议权威文档**：[游戏 HTML](../docs/game.html) · [平台 HTML](../docs/platform.html)。字段、签名、请求示例统一在这两份文件维护，模块 README 不再重复协议细节。
+**对外协议权威文档**：[游戏 HTML](../docs/index.html#g-start) · [平台 HTML](../docs/index.html#p-start)。字段、签名、请求示例统一在此文档维护，模块 README 不再重复协议细节。
 
 ## 配置和业务约束
 
