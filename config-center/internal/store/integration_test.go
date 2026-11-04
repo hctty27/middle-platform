@@ -330,6 +330,7 @@ var integrationSchema = []string{
         id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL UNIQUE,
         name VARCHAR(100) NOT NULL,
+        description VARCHAR(500) NOT NULL DEFAULT '',
         scope_type VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
         enabled TINYINT NOT NULL DEFAULT 1,
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
