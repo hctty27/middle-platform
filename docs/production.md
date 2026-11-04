@@ -211,7 +211,7 @@ curl -i https://zk.skybluek.com/admin/config.js
 # 在开发机上执行：默认打包、上传、更新文件、重启 Supervisor 并验活
 .\publish\publish.ps1 -Version v1.0.0
 
-# 仅部署 SDK Core（两个 Core 进程顺序重启）
+# 仅部署 SDK Core（按 publish.config.json 的 services 配置依次重启）
 .\publish\publish.ps1 -Version v1.0.1 -Service sdk-core
 
 # 仅更新文件，不重启
@@ -220,7 +220,7 @@ curl -i https://zk.skybluek.com/admin/config.js
 
 1. 发布前确认服务与数据库结构兼容。DDL 仍在单独变更窗口由管理员审核并执行，不随脚本自动迁移。
 2. 上传后校验 SHA-256、架构、归档内容、所选服务；校验成功再把文件逐个写入同目录临时文件并重命名替换，保留 `config/`、`logs/`、`admin/config.js`。
-3. 默认对所选 Supervisor 进程逐个重启并验证本地 `/health/ready`，端口/进程名以 `publish/publish-remote.sh` 的预设为准。如现场端口不同，先调整映射或加 `-SkipRestart` 后手工重启。
+3. 默认读取本地 `publish/publish.config.json` 的 `services`（Supervisor 进程名 → 健康检查端口），只重启选中模块对应的实例并逐个验证本机 `/health/ready`。实例支持 `config-center-1/2`、`sdk-core-1/2/3` 等名称；新增实例只需改 JSON。`-SkipRestart` 可跳过这一阶段。
 4. **单次发布不是跨多个文件的事务**；更新、重启或验活失败不会自动回滚，可能需要人工修复。Nginx 静态 upstream 不自动根据健康端点摘流量，两个 Core 顺序重启不保证零中断。
 5. 发布后还需人工抽查充值订单、配置同步和事件上报等关键业务，确认未发生接口或配置不兼容。
 

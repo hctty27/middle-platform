@@ -64,9 +64,11 @@ class RemotePublishTests(unittest.TestCase):
                 archive.addfile(extra)
 
     def run_publish(self, digest=None, machine="x86_64", service=None,
-                    restart=False, restart_fail=False):
+                    restart=False, restart_fail=False, plan=None):
         digest = digest or hashlib.sha256(self.archive.read_bytes()).hexdigest()
-        extra_args = ["1" if restart else "0", service] if service else []
+        if plan is None:
+            plan = "sdk-core-1:8211,sdk-core-2:8212" if restart else "-"
+        extra_args = ["1" if restart else "0", service, plan] if service else []
         commands = """
 uname() { printf '%s\\n' "$TEST_MACHINE"; }
 export -f uname
@@ -157,7 +159,40 @@ exec bash "$@"
         result = self.run_publish(service="sdk-core", restart=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Healthy: sdk-core-1", result.stdout)
-        self.assertIn("Healthy: sdk-core-2", result.stdout)
+        self.assertIn("Healthy: sdk-core-2 (port 8212)", result.stdout)
+
+    def test_config_center_instances_use_configured_ports(self):
+        self.make_package(frontend=False, only="config-center")
+        result = self.run_publish(
+            service="config-center", restart=True,
+            plan="config-center-1:8201,config-center-2:8202")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Healthy: config-center-1 (port 8201)", result.stdout)
+        self.assertIn("Healthy: config-center-2 (port 8202)", result.stdout)
+        self.assertNotIn("Restarting config-center-access", result.stdout)
+        self.assertLess(result.stdout.index("Restarting config-center-1"),
+                        result.stdout.index("Restarting config-center-2"))
+
+    def test_config_center_access_not_matched_to_config_center(self):
+        self.make_package(frontend=False, only="config-center")
+        self.assert_rejected(service="config-center", restart=True,
+                             plan="config-center-access:8291")
+
+    def test_invalid_restart_plan_is_rejected_before_replacing_files(self):
+        self.make_package(frontend=False, only="sdk-core")
+        for plan in ("-", "sdk-core-1:65536", "sdk-core-1:8211,sdk-core-1:8212",
+                     "sdk-core-a:8211", "config-center-1:8201",
+                     "sdk-core-1:8211;whoami"):
+            with self.subTest(plan=plan):
+                self.assert_rejected(service="sdk-core", restart=True, plan=plan)
+
+    def test_full_publish_restarts_only_configured_instances(self):
+        self.make_package(frontend=False)
+        result = self.run_publish(service="all", restart=True,
+                                  plan="sdk-core-3:8213")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Healthy: sdk-core-3 (port 8213)", result.stdout)
+        self.assertNotIn("Restarting config-center", result.stdout)
 
     def test_restart_failure_reports_error_without_rollback(self):
         self.make_package(frontend=False, only="sdk-core")
@@ -251,6 +286,10 @@ function global:scp {
 }
 $code = 0
 $publishArgs = @{ Version = 'smoke'; SkipFrontend = $true; SkipRestart = $true }
+if ($Mode -eq 'restart-plan') {
+    $publishArgs.SkipRestart = $false
+    $publishArgs.Service = 'config-center'
+}
 $overrideFile = Join-Path $PSScriptRoot 'cli-override.txt'
 if (Test-Path -LiteralPath $overrideFile) {
     foreach ($line in @(Get-Content -LiteralPath $overrideFile)) {
@@ -278,7 +317,8 @@ exit $code
         calls = calls_file.read_text(encoding="utf-8-sig").splitlines() if calls_file.exists() else []
         return result, calls
 
-    def write_config(self, host="10.0.0.8", port=2222, user="deploy", directory="/srv/app", password=""):
+    def write_config(self, host="10.0.0.8", port=2222, user="deploy",
+                     directory="/srv/app", password="", services=None):
         payload = {
             "host": host,
             "port": port,
@@ -286,9 +326,39 @@ exit $code
             "remoteDirectory": directory,
             "password": password,
         }
+        if services is not None:
+            payload["services"] = services
         (self.root / "publish" / "publish.config.json").write_text(
             json.dumps(payload), encoding="utf-8"
         )
+
+    def test_local_services_selects_config_center_instances(self):
+        self.write_config(services={
+            "config-center-1": 8201,
+            "config-center-2": 8202,
+            "config-center-access": 8291,
+            "sdk-core-3": 8213,
+        })
+        result, calls = self.invoke("restart-plan")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        remote_calls = [line for line in calls if line.startswith("ssh|")]
+        self.assertIn("config-center-1:8201,config-center-2:8202", remote_calls[-1])
+        self.assertNotIn("config-center-access:8291", remote_calls[-1])
+        self.assertNotIn("sdk-core-3:8213", remote_calls[-1])
+
+    def test_invalid_local_services_fails_before_upload(self):
+        for services in (
+            {"config-center-access": 8291},
+            {"config-center-1": "8201"},
+            {"config-center-1": 65536},
+            {"other-project": 9000},
+            {},
+        ):
+            with self.subTest(services=services):
+                self.write_config(services=services)
+                result, calls = self.invoke("restart-plan")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(calls, [])
 
     def test_missing_config_does_not_connect(self):
         result, calls = self.invoke("success")

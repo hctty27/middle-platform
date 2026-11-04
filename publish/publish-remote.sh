@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 && $# -ne 5 ]]; then
-    printf 'Usage: publish-remote.sh <target-directory> <archive> <sha256> [restart-flag service]\n' >&2
+if [[ $# -ne 3 && $# -ne 5 && $# -ne 6 ]]; then
+    printf 'Usage: publish-remote.sh <target-directory> <archive> <sha256> [restart-flag service name:port,...]\n' >&2
     exit 2
 fi
 root=$1
@@ -10,6 +10,7 @@ archive=$2
 expected=$3
 restart=${4:-0}
 service=${5:-all}
+plan=${6:--}
 case "$service" in
     all|config-center|config-center-access|sdk-core|sdk-service|admin) ;;
     *) printf 'Invalid service selector\n' >&2; exit 2 ;;
@@ -117,22 +118,48 @@ while IFS= read -r -d '' source; do
     ensure_directory "$(dirname -- "$relative")"
 done < "$stage/files"
 
-# Supervisor 预检查发生在替换前。只要已发布文件发生更新，失败后不会自动回滚。
+# Validate every configured instance before replacing application files.
+# The plan contains only supervised process names and localhost HTTP ports, not secrets.
 programs=()
+ports=()
 if [[ "$restart" == 1 && "$service" != admin ]]; then
     for command in supervisorctl curl grep sleep; do
         command -v "$command" >/dev/null || { printf 'Required command not found: %s\n' "$command" >&2; exit 1; }
     done
-    case "$service" in
-        all)
-            programs=(config-center sdk-core-1 sdk-core-2 sdk-service)
-            if supervisorctl status config-center-access >/dev/null 2>&1; then
-                programs+=(config-center-access)
-            fi
-            ;;
-        sdk-core) programs=(sdk-core-1 sdk-core-2) ;;
-        *) programs=("$service") ;;
-    esac
+    if [[ -z "$plan" || "$plan" == "-" || ${#plan} -gt 4096 ]]; then
+        printf 'Missing or oversized Supervisor restart plan; no application files were changed\n' >&2
+        exit 1
+    fi
+    declare -A seen=()
+    IFS=',' read -r -a requested <<< "$plan"
+    for entry in "${requested[@]}"; do
+        if [[ ! "$entry" =~ ^(config-center-access|config-center|sdk-core|sdk-service)(-[1-9][0-9]*)?:([0-9]{1,5})$ ]]; then
+            printf 'Invalid Supervisor plan entry: %s\n' "$entry" >&2
+            exit 1
+        fi
+        module="${BASH_REMATCH[1]}"
+        program="${module}${BASH_REMATCH[2]:-}"
+        port="${BASH_REMATCH[3]}"
+        if [[ "$service" != all && "$module" != "$service" ]]; then
+            printf 'Supervisor plan entry outside selected service: %s\n' "$program" >&2
+            exit 1
+        fi
+        if (( 10#$port < 1 || 10#$port > 65535 )); then
+            printf 'Invalid health-check port for %s\n' "$program" >&2
+            exit 1
+        fi
+        if [[ -n "${seen[$program]:-}" ]]; then
+            printf 'Duplicate Supervisor process in plan: %s\n' "$program" >&2
+            exit 1
+        fi
+        seen["$program"]=1
+        programs+=("$program")
+        ports+=("$((10#$port))")
+    done
+    if [[ ${#programs[@]} -eq 0 ]]; then
+        printf 'Empty Supervisor restart plan\n' >&2
+        exit 1
+    fi
     for program in "${programs[@]}"; do
         if ! supervisorctl status "$program" >/dev/null 2>&1; then
             printf 'Supervisor program is unavailable: %s; no application files were changed\n' "$program" >&2
@@ -157,35 +184,26 @@ while IFS= read -r -d '' source; do
     temporary=''
     printf 'Updated %s\n' "$relative"
 done < "$stage/files"
-# 本项目约定的本机健康检查端口；部署端口变更时需同步修改。
-health_url() {
-    case "$1" in
-        config-center) printf 'http://127.0.0.1:8201/health/ready' ;;
-        config-center-access) printf 'http://127.0.0.1:8291/health/ready' ;;
-        sdk-core-1) printf 'http://127.0.0.1:8211/health/ready' ;;
-        sdk-core-2) printf 'http://127.0.0.1:8212/health/ready' ;;
-        sdk-service) printf 'http://127.0.0.1:8221/health/ready' ;;
-        *) return 1 ;;
-    esac
-}
 if [[ "${#programs[@]}" -gt 0 ]]; then
-    for program in "${programs[@]}"; do
+    for index in "${!programs[@]}"; do
+        program="${programs[$index]}"
+        port="${ports[$index]}"
         printf 'Restarting %s...\n' "$program"
         supervisorctl restart "$program"
         ready=0
         for attempt in {1..15}; do
             if supervisorctl status "$program" | grep -Eq '[[:space:]]RUNNING[[:space:]]' &&
-               curl -fsS -o /dev/null --max-time 2 "$(health_url "$program")"; then
+               curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$port/health/ready"; then
                 ready=1
                 break
             fi
             sleep 2
         done
         if [[ $ready -ne 1 ]]; then
-            printf 'Health check failed: %s; files remain updated, no rollback performed\n' "$program" >&2
+            printf 'Health check failed: %s on port %s; files remain updated, no rollback performed\n' "$program" "$port" >&2
             exit 1
         fi
-        printf 'Healthy: %s\n' "$program"
+        printf 'Healthy: %s (port %s)\n' "$program" "$port"
     done
 fi
 mv -fT -- "$archive" "$root/packages/$name"

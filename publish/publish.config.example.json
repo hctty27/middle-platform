@@ -3,5 +3,11 @@
   "port": 22,
   "user": "deploy",
   "remoteDirectory": "/opt/middle-platform",
-  "password": ""
+  "password": "",
+  "services": {
+    "config-center": 8201,
+    "sdk-core-1": 8211,
+    "sdk-core-2": 8212,
+    "sdk-service": 8221
+  }
 }

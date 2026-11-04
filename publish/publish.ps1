@@ -69,6 +69,36 @@ function Get-ConfigString {
     return [string]$property.Value
 }
 
+# Supervisor names and health ports are local-only settings; never upload the full config.
+function Get-RestartPlan {
+    param($Config, [string]$SelectedService)
+
+    $property = Get-ConfigProperty $Config 'services'
+    if ($null -eq $property -or $property.Value -isnot [System.Management.Automation.PSCustomObject]) {
+        throw "publish.config.json 必须配置 services 对象（Supervisor 进程名: 健康检查端口）。"
+    }
+    $selected = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($item in $property.Value.PSObject.Properties) {
+        $name = [string]$item.Name
+        if ($name -match '^(config-center-access|config-center|sdk-core|sdk-service)(-[1-9][0-9]*)?$') {
+            $module = $Matches[1]
+        } else {
+            throw "services 包含不支持的进程名: $name"
+        }
+        $value = $item.Value
+        if (($value -isnot [int] -and $value -isnot [long]) -or $value -lt 1 -or $value -gt 65535) {
+            throw "services.$name 的端口必须为 1 到 65535 的整数"
+        }
+        if ($SelectedService -eq 'all' -or $SelectedService -eq $module) {
+            $selected.Add(('{0}:{1}' -f $name, $value))
+        }
+    }
+    if ($selected.Count -eq 0) {
+        throw "services 未配置 $SelectedService 对应的 Supervisor 进程，无法执行自动重启。"
+    }
+    return ($selected -join ',')
+}
+
 function Test-ByteMatch {
     param([byte[]]$Actual, [byte[]]$Expected)
     if ($Actual.Length -ne $Expected.Length) { return $false }
@@ -213,6 +243,12 @@ if ($null -eq $passwordProperty -or $null -eq $passwordProperty.Value) {
     $Password = [string]$passwordProperty.Value
 }
 
+$restartPlan = if ($SkipRestart -or $Service -eq 'admin') {
+    '-'
+} else {
+    Get-RestartPlan $config $Service
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $remoteScript = Join-Path $PSScriptRoot 'publish-remote.sh'
 if (-not (Test-Path -LiteralPath $remoteScript -PathType Leaf)) {
@@ -313,7 +349,7 @@ try {
         throw "Upload failed (exit $LASTEXITCODE). No application files were updated. Temporary directory: $remoteStage"
     }
     $restartFlag = if ($SkipRestart -or $Service -eq 'admin') { '0' } else { '1' }
-    Invoke-Remote "bash '$remoteStage/publish-remote.sh' '$RemoteDirectory' '$remoteStage/$archiveName' '$sha256' '$restartFlag' '$Service'"
+    Invoke-Remote "bash '$remoteStage/publish-remote.sh' '$RemoteDirectory' '$remoteStage/$archiveName' '$sha256' '$restartFlag' '$Service' '$restartPlan'"
 } finally {
     if ($publishAuthTouched) {
         Restore-EnvValue 'PUBLISH_SSH_PASSWORD' $null
