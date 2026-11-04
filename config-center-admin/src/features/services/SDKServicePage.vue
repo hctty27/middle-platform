@@ -68,7 +68,7 @@ onMounted(() => void load())
           </template>
         </el-table-column>
       </el-table>
-      <p class="muted">当前只预置已实现的事件上报；后续功能在实现后再增加。</p>
+      <p class="muted">当前服务包括事件上报与用户核验；渠道环境开关需在渠道应用页面单独开启。</p>
     </section>
   </main>
 </template>
