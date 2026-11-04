@@ -9,7 +9,6 @@ interface SDKService {
   name: string
   description: string
   enabled: boolean
-  scopeType: 'channel_app' | 'server_group'
 }
 
 const items = ref<SDKService[]>([])
@@ -53,7 +52,7 @@ onMounted(() => void load())
       <div>
         <div class="eyebrow">SDK SERVICES</div>
         <h1>服务管理</h1>
-        <p class="muted">全局开关决定服务是否允许使用；渠道包或区服组仍需独立配置目标开关。</p>
+        <p class="muted">全局开关控制服务是否可用；每个渠道包还需独立配置环境开关。</p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -61,9 +60,6 @@ onMounted(() => void load())
       <el-table v-loading="loading" :data="items" stripe>
         <el-table-column prop="name" label="服务名称" min-width="140" />
         <el-table-column prop="code" label="服务编码" min-width="170" />
-        <el-table-column label="作用范围" width="125">
-          <template #default="{ row }">{{ row.scopeType === "channel_app" ? "渠道包" : "区服组" }}</template>
-        </el-table-column>
         <el-table-column prop="description" label="说明" min-width="240" />
         <el-table-column label="全局状态" width="140" align="center">
           <template #default="{ row }">
@@ -72,7 +68,7 @@ onMounted(() => void load())
           </template>
         </el-table-column>
       </el-table>
-      <p class="muted">服务目录由初始化 SQL 预置；这里仅维护全局状态，不自动开放尚未实现的业务接口。</p>
+      <p class="muted">当前只预置已实现的事件上报；后续功能在实现后再增加。</p>
     </section>
   </main>
 </template>
