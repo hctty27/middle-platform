@@ -1,4 +1,4 @@
-# Build, upload, and extract a Linux package without restarting services.
+# Build or reuse a Linux package, upload it and optionally restart checked Supervisor services.
 # Copy publish.config.example.json to publish.config.json and fill it in.
 # That file is gitignored. Parameters override it. An empty password is typed interactively.
 # Usage: .\publish\publish.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
