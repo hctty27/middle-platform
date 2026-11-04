@@ -12,7 +12,7 @@
 go run ./cmd/config-center-access -config configs/config-dev.yaml
 ```
 
-首次使用**空库**时请先手工执行 `db/sql/initialize.sql` 创建 `config_node`、`config_sync_state`；接入端启动只校验，再全量拉取快照。已有合法 V6 副本只做校验。旧 V1～V5 副本必须先通过历史脚本升级，或在确认可丢弃缓存、完成备份后另建空库；不要对非空副本执行初始化 SQL。
+首次使用**空库**时请先手工执行 `db/sql/initialize.sql` 创建 `config_node`、`config_sync_state`；接入端启动只校验，再全量拉取快照。已有副本只做结构校验；若表结构不兼容，先备份并核对后制定升级方案，不能在非空副本上执行初始化 SQL。
 
 ## 同步协议
 
@@ -29,3 +29,5 @@ go build ./cmd/config-center-access
 ```
 
 [API 文档](../docs/api.md) · [同步架构](../docs/architecture.md) · [数据库结构](../docs/database.md) · [联调](../docs/development.md)
+
+第三方同步接入协议见 [配置同步接入文档](../docs/config-center-access-sync.md)。
