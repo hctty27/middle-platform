@@ -1,39 +1,127 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="研发中台统一接口文档：游戏服务端、平台服务端和第三方配置同步接入。"><title>研发中台 · 接口文档</title><style>
-:root{color-scheme:light;--bg:#f6f8fb;--surface:#fff;--subtle:#f0f4fa;--text:#1c2636;--muted:#617187;--border:#e2e8f0;--accent:#2563eb;--accent-bg:#eaf1ff;--code:#111827;--codeText:#e5eaf2;--shadow:0 8px 28px rgba(26,44,76,.055)}
-html[data-theme="dark"]{color-scheme:dark;--bg:#0c111b;--surface:#151d2b;--subtle:#1d293a;--text:#e5eaf2;--muted:#9aa9bc;--border:#293649;--accent:#83adff;--accent-bg:#20375a;--code:#0a111e;--codeText:#d7e5f3;--shadow:0 8px 30px rgba(0,0,0,.16)}
-*{box-sizing:border-box}[hidden]{display:none!important}html{scroll-behavior:smooth;scroll-padding-top:98px}body{margin:0;font:15px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
-button,input{font:inherit}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-.top{height:70px;position:sticky;top:0;z-index:15;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;gap:12px}
-.brand{display:flex;align-items:center;gap:13px;min-width:0}.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#3762d8,#568be8);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;letter-spacing:-.5px;flex:none}.brand-name{font-size:15px;font-weight:750;letter-spacing:.2px}.brand-sub{font-size:12px;color:var(--muted);line-height:1.3}.actions{display:flex;gap:10px;align-items:center}.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;padding:7px 12px;cursor:pointer;white-space:nowrap}.btn:hover,.copy:hover{background:var(--subtle)}.menuBtn{display:none}
-.shell{max-width:1600px;margin:auto;display:grid;grid-template-columns:258px minmax(0,1fr);min-height:calc(100vh - 70px)}
-.side{background:var(--surface);border-right:1px solid var(--border);padding:23px 16px;position:sticky;top:70px;height:calc(100vh - 70px);overflow:auto}.side-title{font-size:12px;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted);font-weight:700;margin:20px 10px 8px}.side-title:first-of-type{margin-top:10px}
-.search{width:100%;height:38px;border:1px solid var(--border);border-radius:9px;background:var(--subtle);color:var(--text);padding:8px 12px;outline:none}.search:focus{border-color:var(--accent)}
-.nav-link{display:block;padding:7px 11px;color:var(--muted);border-radius:8px;font-size:13px;margin:2px 0;line-height:1.5;overflow-wrap:anywhere}.nav-link:hover{text-decoration:none;background:var(--subtle);color:var(--text)}.nav-link.active{background:var(--accent-bg);color:var(--accent);font-weight:650}.nav-link .method{font-size:10px;font-weight:800;margin-right:6px}.method.get{color:#0a9364}.method.post{color:#db8a29}
-.side-foot{margin:26px 10px 0;color:var(--muted);font-size:11px}.empty{font-size:13px;color:var(--muted);padding:10px}
-.main{min-width:0;padding:42px clamp(20px,5vw,80px) 100px;max-width:1150px;width:100%;margin:auto}.eyebrow{font-size:12px;color:var(--accent);font-weight:750;letter-spacing:.8px;text-transform:uppercase}.hero h1{font-size:clamp(30px,3vw,43px);line-height:1.23;margin:12px 0}.hero p{max-width:800px;color:var(--muted);margin:8px 0 23px;font-size:15px}.pills{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:34px}.pill{background:var(--accent-bg);color:var(--accent);border-radius:999px;padding:3px 11px;font-size:12px;font-weight:650}.pill.gray{background:var(--subtle);color:var(--muted)}
-.section{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:29px 32px;margin:0 0 24px;box-shadow:var(--shadow);scroll-margin-top:95px}.section-title{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:5px}.section h2{font-size:23px;line-height:1.4;margin:0;letter-spacing:-.4px}.section h3{font-size:15px;font-weight:750;margin:26px 0 12px}.summary{color:var(--muted);margin:5px 0 20px}.section p{margin:12px 0;color:var(--text)}.section code:not(pre code){background:var(--subtle);color:var(--text);border:1px solid var(--border);padding:1px 5px;border-radius:5px;font-size:12px;overflow-wrap:anywhere}.route{background:var(--subtle);border:1px solid var(--border);padding:11px 14px;border-radius:10px;display:flex;gap:10px;align-items:center;margin:15px 0 22px;overflow-wrap:anywhere}.route code{font-size:12px;color:var(--text);word-break:break-all}.verb{font-size:11px;font-weight:800;letter-spacing:.3px;border-radius:6px;padding:2px 7px;background:var(--accent-bg);color:var(--accent);flex:none}.verb.get{color:#0b9b70;background:#e4f7ee}.verb.post{color:#a96a0b;background:#fff0d9}
-.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin:14px 0 19px}table{border-collapse:collapse;width:100%;font-size:13px;min-width:470px}th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--border)}th{background:var(--subtle);color:var(--muted);font-size:12px;font-weight:750}tr:last-child td{border-bottom:0}td:first-child{white-space:normal}.points{padding-left:20px;margin:13px 0}.points li{padding-left:3px;margin:8px 0}.points li::marker{color:var(--accent)}
-.codebox{border:1px solid var(--border);border-radius:11px;overflow:hidden;margin:13px 0 22px}.codehead{display:flex;align-items:center;justify-content:space-between;background:var(--subtle);padding:6px 10px 6px 15px;font-size:12px;color:var(--muted);font-weight:650}.copy{border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;padding:3px 12px}.codebox pre{margin:0;padding:16px 18px;background:var(--code);color:var(--codeText);overflow-x:auto;font-size:12.5px;line-height:1.65;tab-size:4}.codebox pre code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;white-space:pre}
-.notice{background:var(--accent-bg);border-left:3px solid var(--accent);padding:12px 15px;border-radius:0 8px 8px 0;margin:17px 0;font-size:13px}.notice.warn{background:rgba(229,156,46,.095);border-left-color:#e19a35}.footnote{color:var(--muted);font-size:12px;padding:22px 5px}.footnote a{margin-right:12px}
-.backTop{position:fixed;right:26px;bottom:25px;z-index:5;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:7px 12px;border-radius:10px;box-shadow:var(--shadow);cursor:pointer}.backTop:hover{background:var(--subtle)}
-@media(max-width:840px){.top{padding:0 15px}.menuBtn{display:inline-flex}.shell{display:block}.side{position:fixed;top:70px;bottom:0;left:0;height:auto;width:280px;z-index:14;box-shadow:var(--shadow);transform:translateX(-110%);transition:transform .18s ease}.side.open{transform:translateX(0)}.main{padding:28px 16px 100px}.section{padding:24px 19px}.backTop{right:12px;bottom:12px}.brand-sub{display:none}}@media print{.top,.side,.backTop,.copy{display:none!important}.shell{display:block}.main{max-width:none;padding:0}.section{box-shadow:none;break-inside:avoid;border-color:#bbb}.codebox pre{white-space:pre-wrap;color:#111;background:#eee}.hero h1{font-size:27px}body{background:#fff;color:#111}}
-
-/* 三类协议共用一套导航和布局，切换不触发页面重新加载。 */
-html{scroll-padding-top:146px}
-.doc-tabs{position:sticky;top:70px;z-index:15;display:flex;justify-content:center;align-items:stretch;gap:3px;height:48px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto}
-.doc-tab{appearance:none;border:0;border-bottom:3px solid transparent;padding:0 22px;background:transparent;color:var(--muted);font-size:13px;font-weight:650;white-space:nowrap;cursor:pointer}
-.doc-tab:hover{color:var(--text);background:var(--subtle)}
-.doc-tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
-.doc-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
-.shell{min-height:calc(100vh - 118px)}
-.side{top:118px;height:calc(100vh - 118px)}
-.doc-content{min-width:0}
-.section{scroll-margin-top:146px}
-@media(max-width:840px){.doc-tabs{justify-content:flex-start;gap:0;padding:0 8px}.doc-tab{padding:0 14px}.side{top:118px;bottom:0;height:auto}}
-@media print{.doc-tabs{display:none!important}}
+:root{
+  color-scheme:light;
+  --bg:#fff;--surface:#fff;--subtle:#f6f7f9;--text:#202632;--muted:#687386;
+  --border:#e6e9ef;--accent:#3467eb;--accent-bg:#eef3ff;
+  --code:#161d2b;--codeText:#e8edf5;
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#10151e;--surface:#10151e;--subtle:#1a2230;--text:#e9edf4;--muted:#99a6ba;
+  --border:#293447;--accent:#8bafff;--accent-bg:#1c3052;
+  --code:#0c111b;--codeText:#dfe8f5;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth;scroll-padding-top:122px}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+button,input{font:inherit}
+button{cursor:pointer}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.top{height:56px;position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 26px}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.logo{width:30px;height:30px;border-radius:8px;background:var(--text);color:var(--surface);display:grid;place-items:center;font-size:11px;font-weight:800;letter-spacing:-.5px;flex:none}
+.brand-name{font-weight:700;font-size:14px;white-space:nowrap}
+.brand-sub{display:none}
+.actions{display:flex;align-items:center;gap:8px}
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;min-width:35px;height:35px;padding:0 10px}
+.btn:hover,.copy:hover{background:var(--subtle);color:var(--text)}
+.btn:focus-visible,.doc-tab:focus-visible,.nav-link:focus-visible,.copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.menuBtn{display:none}
+.doc-tabs{height:44px;position:sticky;top:56px;z-index:29;background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:center;align-items:stretch;padding:0 16px;gap:12px;overflow-x:auto}
+.doc-tab{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:13px;font-weight:550;padding:0 18px;white-space:nowrap}
+.doc-tab:hover{color:var(--text)}
+.doc-tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);font-weight:650}
+.shell{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100vh - 100px)}
+.side{background:var(--surface);border-right:1px solid var(--border);position:sticky;top:100px;height:calc(100vh - 100px);overflow-y:auto;padding:20px 13px 28px}
+.search{display:block;width:100%;height:36px;padding:6px 11px;outline:none;background:var(--subtle);border:1px solid transparent;border-radius:8px;color:var(--text);font-size:13px}
+.search:focus{background:var(--surface);border-color:var(--accent)}
+.search::placeholder{color:var(--muted)}
+.side-title{margin:18px 10px 7px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.25px}
+.side-title:first-child{margin-top:19px}
+.nav-link{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:8px 10px;border-radius:7px;color:var(--muted);font-size:13px;line-height:21px;margin:1px 0}
+.nav-link:hover{text-decoration:none;background:var(--subtle);color:var(--text)}
+.nav-link.active{background:var(--accent-bg);color:var(--accent);font-weight:650}
+.method{display:inline-block;vertical-align:baseline;font-weight:750;font-size:10px;margin-right:7px}
+.method.get{color:#12966d}
+.method.post{color:#c28524}
+.empty{font-size:13px;color:var(--muted);padding:12px 10px}
+.side-foot{display:none}
+.doc-content{min-width:0;width:100%}
+.main{width:100%;max-width:900px;margin:0 auto;padding:42px 46px 100px;min-width:0}
+.hero,.pills,.footnote{display:none}
+.section{display:none;margin:0;padding:0;border:0;background:none;box-shadow:none;scroll-margin-top:120px}
+.section.is-active{display:block}
+.section-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.section h2{font-size:26px;line-height:1.4;letter-spacing:-.55px;font-weight:720;margin:0}
+.section h3{font-size:15px;font-weight:680;margin:29px 0 10px}
+.summary{color:var(--muted);font-size:14px;margin:7px 0 24px}
+.section p{margin:12px 0;color:var(--text)}
+.section strong{font-weight:650}
+.section code:not(pre code){background:var(--subtle);border-radius:4px;padding:1px 5px;font-size:12px;overflow-wrap:anywhere;color:var(--text)}
+.route{display:flex;align-items:center;gap:12px;min-width:0;background:var(--subtle);border-radius:9px;padding:12px 14px;margin:19px 0 24px}
+.route code{color:var(--text);font-size:13px;word-break:break-all}
+.verb{font-weight:800;font-size:11px;flex:none}
+.verb.get{color:#12966d}
+.verb.post{color:#c28524}
+.table-wrap{overflow-x:auto;margin:14px 0 22px;border:1px solid var(--border);border-radius:9px}
+table{border-collapse:collapse;width:100%;min-width:440px;font-size:13px}
+th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--border)}
+th{background:var(--subtle);color:var(--muted);font-size:12px;font-weight:650}
+tr:last-child td{border-bottom:0}
+.points{padding-left:20px;margin:12px 0}
+.points li{padding-left:2px;margin:7px 0}
+.points li::marker{color:var(--muted)}
+.codebox{border:1px solid var(--border);border-radius:9px;overflow:hidden;margin:13px 0 23px}
+.codehead{display:flex;align-items:center;justify-content:space-between;background:var(--subtle);color:var(--muted);font-weight:600;font-size:12px;padding:6px 9px 6px 14px}
+.copy{border:0;background:transparent;color:var(--muted);border-radius:6px;padding:4px 9px;font-size:12px}
+.codebox pre{margin:0;padding:17px 19px;background:var(--code);color:var(--codeText);overflow-x:auto;font-size:12.5px;line-height:1.7;tab-size:4}
+.codebox pre code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;white-space:pre}
+.notice{background:var(--subtle);border-left:2px solid var(--border);padding:12px 14px;border-radius:0 6px 6px 0;margin:19px 0;font-size:13px}
+.notice.warn{border-left-color:#cf9639}
+.backTop{display:none}
+.side-overlay{display:none}
+@media(max-width:900px){
+  .main{padding:34px 26px 80px}
+}
+@media(max-width:760px){
+  .top{padding:0 15px}
+  .menuBtn{display:inline-block;margin-right:2px}
+  .doc-tabs{justify-content:flex-start;gap:0;padding:0 7px}
+  .doc-tab{padding:0 13px}
+  .shell{display:block}
+  .side{position:fixed;top:100px;bottom:0;left:0;width:min(290px,83vw);height:auto;z-index:28;transform:translateX(-105%);transition:transform .18s ease;box-shadow:6px 0 24px rgba(0,0,0,.09)}
+  .side.open{transform:translateX(0)}
+  .side-overlay{display:block;position:fixed;inset:100px 0 0;background:rgba(10,20,40,.34);z-index:27;border:0;padding:0}
+  .main{padding:30px 20px 74px}
+  .section h2{font-size:23px}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .side{transition:none}
+}
+@media print{
+  @page{margin:15mm}
+  html{scroll-behavior:auto}
+  body{background:#fff;color:#111;font-size:12px}
+  .top,.doc-tabs,.side,.side-overlay,.copy,.backTop{display:none!important}
+  .shell{display:block;min-height:0}
+  .doc-content{display:block}
+  .main{max-width:none;padding:0}
+  .doc-panel:not([hidden]) .hero{display:block!important;margin:0 0 26px}
+  .hero .eyebrow,.hero .pills{display:none!important}
+  .hero h1{margin:0 0 8px;font-size:24px}
+  .doc-panel:not([hidden]) .section{display:block!important;margin-bottom:28px;break-inside:auto}
+  .section h2{font-size:19px;break-after:avoid}
+  .section h3{break-after:avoid}
+  .table-wrap,.codebox{break-inside:avoid}
+  .codebox pre{background:#f4f5f7;color:#111;white-space:pre-wrap;overflow-wrap:anywhere}
+  .notice{background:#f5f6f8;color:#111}
+}
 </style></head><body>
-<header class="top"><div class="brand"><button class="btn menuBtn" id="mobileMenu" type="button" aria-label="打开或收起目录">☰</button><div class="logo">MP</div><div><div class="brand-name">研发中台 · 接口文档</div><div class="brand-sub">游戏服务端 · 平台服务端 · 配置同步</div></div></div><div class="actions"><span class="pill gray">2026-11-04</span><button class="btn" type="button" id="theme">☾ 深色</button></div></header>
+<header class="top"><div class="brand"><button class="btn menuBtn" id="mobileMenu" type="button" aria-label="打开或收起目录" aria-expanded="false" aria-controls="sidebar">☰</button><div class="logo">MP</div><div><div class="brand-name">研发中台 · 接口文档</div></div></div><div class="actions"><button class="btn" type="button" id="theme" aria-label="切换主题" title="切换主题">☾</button></div></header>
 <div class="doc-tabs" role="tablist" aria-label="文档类型"><button class="doc-tab" type="button" role="tab" id="tab-game" data-doc="game" aria-controls="panel-game" aria-selected="true">游戏服务端</button><button class="doc-tab" type="button" role="tab" id="tab-platform" data-doc="platform" aria-controls="panel-platform" aria-selected="false">平台服务端</button><button class="doc-tab" type="button" role="tab" id="tab-sync" data-doc="sync" aria-controls="panel-sync" aria-selected="false">配置同步</button></div>
 <div class="shell"><aside class="side" id="sidebar"><input class="search" id="search" type="search" aria-label="搜索当前分类接口" placeholder="搜索接口 / 关键字"><nav class="doc-nav" data-doc="game" aria-label="游戏服务端目录"><div class="side-title" data-group="开始使用">开始使用</div><a class="nav-link" data-group="开始使用" data-keywords="接入准备 游戏方所需参数、环境与职责   开始使用" href="#g-start">接入准备</a><div class="side-title" data-group="接口">接口</div><a class="nav-link" data-group="接口" data-keywords="查询 SDK 配置 根据环境和渠道包获取映射后的配置 GET /api/core/config/{env}/{appid} 接口" href="#g-config"><span class="method get">GET</span>查询 SDK 配置</a><a class="nav-link" data-group="接口" data-keywords="登记充值订单 支付前登记游戏订单，支持幂等 POST /api/core/orders/{env}/{appid} 接口" href="#g-orders"><span class="method post">POST</span>登记充值订单</a><a class="nav-link" data-group="接口" data-keywords="上报渠道事件 游戏统一上报 Core，再转发至渠道平台 POST /api/core/events/{env} 接口" href="#g-events"><span class="method post">POST</span>上报渠道事件</a><div class="side-title" data-group="回调">回调</div><a class="nav-link" data-group="回调" data-keywords="接收充值发货通知 SDK Core 向游戏的固定通知地址 POST POST {region.config.payNotifyUrl} 回调" href="#g-delivery"><span class="method post">POST</span>接收充值发货通知</a><a class="nav-link" data-group="回调" data-keywords="实现用户核验接口 SDK Service 主动调用游戏侧标准适配器协议 POST {region.config.userCheckUrl} 回调" href="#g-user-check"><span class="method post">POST</span>实现用户核验接口</a><div class="side-title" data-group="规范">规范</div><a class="nav-link" data-group="规范" data-keywords="游戏侧签名规则 订单、事件和游戏接收回调采用统一 SHA-1   规范" href="#g-sign">游戏侧签名规则</a><a class="nav-link" data-group="规范" data-keywords="错误处理与联调 常见 HTTP 错误和接入检查   规范" href="#g-errors">错误处理与联调</a></nav><nav class="doc-nav" data-doc="platform" aria-label="平台服务端目录" hidden><div class="side-title" data-group="开始使用">开始使用</div><a class="nav-link" data-group="开始使用" data-keywords="平台对接准备 中台对平台开放的请求与中台主动上报接口   开始使用" href="#p-start">平台对接准备</a><div class="side-title" data-group="平台 → 中台">平台 → 中台</div><a class="nav-link" data-group="平台 → 中台" data-keywords="支付成功回调 平台支付成功后通知 SDK Core POST /api/core/pay/notify/{appid} 平台 → 中台" href="#p-payment"><span class="method post">POST</span>支付成功回调</a><a class="nav-link" data-group="平台 → 中台" data-keywords="用户核验 平台验证 open_id 对应的游戏用户是否存在 POST /api/service/user/check/{env} 平台 → 中台" href="#p-user"><span class="method post">POST</span>用户核验</a><div class="side-title" data-group="中台 → 平台">中台 → 平台</div><a class="nav-link" data-group="中台 → 平台" data-keywords="接收事件上报 Core 同步转发游戏的渠道包事件 POST {platform.eventReportURL} 中台 → 平台" href="#p-events"><span class="method post">POST</span>接收事件上报</a><div class="side-title" data-group="规范">规范</div><a class="nav-link" data-group="规范" data-keywords="签名算法对照 三种平台交互采用不同的参与字段   规范" href="#p-sign">签名算法对照</a><a class="nav-link" data-group="规范" data-keywords="响应与联调检查 平台对接常见状态及验收条件   规范" href="#p-errors">响应与联调检查</a></nav><nav class="doc-nav" data-doc="sync" aria-label="配置同步目录" hidden><div class="side-title" data-group="开始使用">开始使用</div><a class="nav-link" data-group="开始使用" data-keywords="接入流程 开始使用 Webhook 通知 + 主动拉取；优先采用全量快照  " href="#s-intro">接入流程</a><a class="nav-link" data-group="开始使用" data-keywords="接入参数 开始使用 双方交换的最小配置项  " href="#s-config">接入参数</a><div class="side-title" data-group="Webhook">Webhook</div><a class="nav-link" data-group="Webhook" data-keywords="接收 Webhook 回调 Webhook 配置变更通知；签名通过后尽快返回 2xx {callbackUrl} POST" href="#s-webhook"><span class="method post">POST</span>接收 Webhook 回调</a><div class="side-title" data-group="同步接口">同步接口</div><a class="nav-link" data-group="同步接口" data-keywords="查询当前版本 同步接口 按 epoch + revision 判断是否需要更新 /api/config/sync/revision GET" href="#s-revision"><span class="method get">GET</span>查询当前版本</a><a class="nav-link" data-group="同步接口" data-keywords="拉取全量快照 同步接口 第三方推荐的主要同步方式 /api/config/sync/snapshot GET" href="#s-snapshot"><span class="method get">GET</span>拉取全量快照</a><div class="side-title" data-group="增量同步">增量同步</div><a class="nav-link" data-group="增量同步" data-keywords="查询增量变更 增量同步 获取本地游标之后的修改/删除事件 /api/config/sync/changes GET" href="#s-changes"><span class="method get">GET</span>查询增量变更</a><a class="nav-link" data-group="增量同步" data-keywords="批量查询节点 增量同步 为增量事件取回节点最新值 /api/config/nodes/batch-get POST" href="#s-batch"><span class="method post">POST</span>批量查询节点</a><div class="side-title" data-group="最佳实践">最佳实践</div><a class="nav-link" data-group="最佳实践" data-keywords="同步策略与边界 最佳实践 全量优先、版本一致、异常补偿  " href="#s-strategy">同步策略与边界</a><a class="nav-link" data-group="最佳实践" data-keywords="错误处理与联调 最佳实践 最低接入清单、状态码与安全说明  " href="#s-check">错误处理与联调</a></nav><div id="noResults" class="empty" hidden>未找到匹配内容</div><div class="side-foot">统一 HTML · 离线可用<br>路由不包含 /sdk 前缀</div></aside>
 <div class="doc-content"><main class="main doc-panel" id="panel-game" data-doc="game" role="tabpanel" aria-labelledby="tab-game">
@@ -277,92 +365,136 @@ Content-Type: application/json
     定期检查最新版本，直到追平</code></pre></div><h3>必须注意</h3><ul class="points"><li>Webhook 是加速通知，不是唯一同步来源；定时校对建议每 5 分钟执行一次。</li><li>Webhook 可能重复、乱序；异常和网络错误后继续等待下次通知或周期重试。</li><li>只有已落地并可供业务读取的配置版本才能推进本地游标。</li><li>大规模配置才开启增量路径，并正确处理分批、删除、并发配置变更及 epoch 重建。</li><li>只需要按 AppID 获取 SDK 配置时，请使用 <code>GET /api/core/config/{env}/{appid}</code>，而不是三级节点同步协议。</li></ul></section>
 <section id="s-check" class="section"><div class="section-title"><h2>错误处理与联调</h2></div><div class="summary">最低接入清单、状态码与安全说明</div><h3>常见状态</h3><div class="table-wrap"><table><thead><tr><th>状态</th><th>可能原因</th><th>建议处理</th></tr></thead><tbody><tr><td><code>202</code></td><td>中台自带接入端的 Webhook 验签成功</td><td>立即应答，后台拉取</td></tr><tr><td><code>400</code></td><td>Webhook JSON 不合法 / 同步请求参数错误</td><td>校正请求格式</td></tr><tr><td><code>401</code></td><td>Webhook 签名错误或超出时间窗口</td><td>检查 secret、时钟、签名输入</td></tr><tr><td><code>404</code></td><td>节点不存在等</td><td>核对节点状态；批量读取缺项按删除处理</td></tr><tr><td><code>500</code></td><td>配置中心读取失败等</td><td>保留原游标，后续重试</td></tr></tbody></table></div><h3>联调检查表</h3><ul class="points"><li>修改游戏、大区或区服组，第三方收到签名 Webhook，并能成功更新本地配置。</li><li>使用错误密钥或篡改 revision，WebHook 返回 401，且不会推进游标。</li><li>重复通知不会导致配置回退或重复执行破坏性操作。</li><li>临时关闭回调后，定期版本检查仍然能补齐配置。</li><li>修改渠道应用不会触发三级配置节点的版本增量。</li><li>本地配置与 epoch/revision 同步提交；异常中断不会造成游标领先配置。</li></ul><div class="notice info">最低接入工作量：<strong>一个验签回调接口、一条全量拉取流程、一份本地配置存储、一个定期版本校对任务</strong>。服务端密钥仅存于受控系统。</div></section>
 <div class="footnote">研发中台 middle-platform · 协议核对日期 2026-11-04。示例域名和标识均为演示值；上线前请确认实际网关与密钥。<a href="#s-intro">返回接入说明</a></div></main></div></div>
-<button class="backTop" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ 顶部</button><script>
+<button class="side-overlay" id="sideOverlay" type="button" aria-label="关闭目录" hidden></button><button class="backTop" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ 顶部</button><script>
 (function(){
-  var root=document.documentElement, key="mp-api-theme";
-  try{
-    var saved=localStorage.getItem(key);
-    if(saved==="dark"||saved==="light")root.setAttribute("data-theme",saved);
-    else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)root.setAttribute("data-theme","dark");
-  }catch(_){}
+  "use strict";
+  var root=document.documentElement;
   var theme=document.getElementById("theme");
-  function syncTheme(){theme.textContent=root.getAttribute("data-theme")==="dark"?"☀ 浅色":"☾ 深色";}
-  syncTheme();
-  theme.addEventListener("click",function(){
-    var val=root.getAttribute("data-theme")==="dark"?"light":"dark";
-    root.setAttribute("data-theme",val);
-    try{localStorage.setItem(key,val);}catch(_){}
-    syncTheme();
-  });
-
-  var side=document.getElementById("sidebar");
+  var sidebar=document.getElementById("sidebar");
   var search=document.getElementById("search");
+  var overlay=document.getElementById("sideOverlay");
   var tabs=Array.prototype.slice.call(document.querySelectorAll(".doc-tab"));
   var panels=Array.prototype.slice.call(document.querySelectorAll(".doc-panel"));
   var navs=Array.prototype.slice.call(document.querySelectorAll(".doc-nav"));
-  var activeDoc=null;
+  var sections=Array.prototype.slice.call(document.querySelectorAll(".section"));
+  var activeDoc="";
 
-  document.getElementById("mobileMenu").addEventListener("click",function(){side.classList.toggle("open");});
+  function syncTheme(){
+    var dark=root.getAttribute("data-theme")==="dark";
+    theme.textContent=dark?"☀":"☾";
+    theme.setAttribute("aria-label",dark?"切换为浅色主题":"切换为深色主题");
+    theme.title=dark?"浅色模式":"深色模式";
+  }
+  try{
+    var saved=localStorage.getItem("mp-api-theme");
+    if(saved==="light"||saved==="dark")root.setAttribute("data-theme",saved);
+    else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)root.setAttribute("data-theme","dark");
+  }catch(_){}
+  syncTheme();
+  theme.addEventListener("click",function(){
+    var value=root.getAttribute("data-theme")==="dark"?"light":"dark";
+    root.setAttribute("data-theme",value);
+    try{localStorage.setItem("mp-api-theme",value);}catch(_){}
+    syncTheme();
+  });
+
+  function setSidebarOpen(open){
+    sidebar.classList.toggle("open",open);
+    overlay.hidden=!open;
+    document.getElementById("mobileMenu").setAttribute("aria-expanded",String(open));
+  }
+  document.getElementById("mobileMenu").addEventListener("click",function(){
+    setSidebarOpen(!sidebar.classList.contains("open"));
+  });
+  overlay.addEventListener("click",function(){setSidebarOpen(false);});
+  document.addEventListener("keydown",function(ev){
+    if(ev.key==="Escape")setSidebarOpen(false);
+  });
 
   function filterNav(){
-    var nav=navs.find(function(item){return item.dataset.doc===activeDoc;});
-    if(!nav)return;
-    var q=search.value.trim().toLowerCase(),groups={};
-    var links=Array.prototype.slice.call(nav.querySelectorAll(".nav-link"));
-    links.forEach(function(a){
-      var ok=(a.getAttribute("data-keywords")||a.textContent).toLowerCase().indexOf(q)!==-1;
-      a.hidden=!ok;
-      if(ok)groups[a.getAttribute("data-group")]=true;
+    var current=navs.find(function(nav){return nav.dataset.doc===activeDoc;});
+    if(!current)return;
+    var keyword=search.value.trim().toLowerCase();
+    var groups={};
+    var links=Array.prototype.slice.call(current.querySelectorAll(".nav-link"));
+    links.forEach(function(link){
+      var text=(link.getAttribute("data-keywords")||link.textContent).toLowerCase();
+      var matched=text.indexOf(keyword)!==-1;
+      link.hidden=!matched;
+      if(matched)groups[link.getAttribute("data-group")]=true;
     });
-    Array.prototype.forEach.call(nav.querySelectorAll(".side-title"),function(heading){
+    Array.prototype.forEach.call(current.querySelectorAll(".side-title"),function(heading){
       heading.hidden=!groups[heading.getAttribute("data-group")];
     });
-    document.getElementById("noResults").hidden=links.some(function(a){return !a.hidden;});
+    document.getElementById("noResults").hidden=links.some(function(link){return !link.hidden;});
+  }
+  search.addEventListener("input",filterNav);
+
+  function targetFromHash(){
+    var id;
+    try{id=decodeURIComponent(location.hash.substring(1));}catch(_){return null;}
+    var section=document.getElementById(id);
+    return section&&section.classList.contains("section")?section:null;
   }
 
-  function highlightAnchor(hash){
-    navs.forEach(function(nav){
-      Array.prototype.forEach.call(nav.querySelectorAll(".nav-link"),function(a){
-        a.classList.toggle("active",nav.dataset.doc===activeDoc&&a.getAttribute("href")===hash);
-      });
-    });
-  }
-
-  function showDoc(doc){
-    if(!tabs.some(function(tab){return tab.dataset.doc===doc;}))return;
-    if(activeDoc!==doc){search.value="";side.classList.remove("open");}
+  function activate(section){
+    if(!section)return;
+    var panel=section.closest(".doc-panel");
+    var doc=panel.dataset.doc;
+    if(activeDoc!==doc){
+      search.value="";
+      setSidebarOpen(false);
+    }
     activeDoc=doc;
-    panels.forEach(function(panel){panel.hidden=panel.dataset.doc!==doc;});
-    navs.forEach(function(nav){nav.hidden=nav.dataset.doc!==doc;});
+    panels.forEach(function(item){item.hidden=item!==panel;});
+    navs.forEach(function(item){item.hidden=item.dataset.doc!==doc;});
     tabs.forEach(function(tab){
       var selected=tab.dataset.doc===doc;
       tab.setAttribute("aria-selected",String(selected));
       tab.tabIndex=selected?0:-1;
     });
+    sections.forEach(function(item){
+      var selected=item===section;
+      item.classList.toggle("is-active",selected);
+      item.setAttribute("aria-hidden",String(!selected));
+    });
+    navs.forEach(function(nav){
+      Array.prototype.forEach.call(nav.querySelectorAll(".nav-link"),function(link){
+        var selected=nav.dataset.doc===doc&&link.getAttribute("href")==="#"+section.id;
+        link.classList.toggle("active",selected);
+        if(selected)link.setAttribute("aria-current","location");
+        else link.removeAttribute("aria-current");
+      });
+    });
     filterNav();
-    highlightAnchor(window.location.hash);
   }
 
-  function docFromHash(){
-    var id;
-    try{id=decodeURIComponent(window.location.hash.slice(1));}catch(_){return null;}
-    var section=document.getElementById(id);
-    var panel=section&&section.closest(".doc-panel");
-    return panel?panel.dataset.doc:null;
+  function navigate(section){
+    activate(section);
+    if(location.hash!=="#"+section.id){
+      location.hash=section.id;
+    }else{
+      section.scrollIntoView({block:"start"});
+    }
   }
 
-  function syncHash(){
-    var doc=docFromHash();
-    if(doc)showDoc(doc);
-    highlightAnchor(window.location.hash);
-  }
+  navs.forEach(function(nav){
+    Array.prototype.forEach.call(nav.querySelectorAll(".nav-link"),function(link){
+      link.addEventListener("click",function(ev){
+        var target=document.getElementById(link.getAttribute("href").slice(1));
+        if(!target)return;
+        ev.preventDefault();
+        setSidebarOpen(false);
+        navigate(target);
+      });
+    });
+  });
 
   tabs.forEach(function(tab){
     tab.addEventListener("click",function(){
-      var doc=tab.dataset.doc;
-      showDoc(doc);
-      var first=navs.find(function(nav){return nav.dataset.doc===doc;}).querySelector(".nav-link");
-      if(first)window.location.hash=first.getAttribute("href");
+      var panel=document.getElementById("panel-"+tab.dataset.doc);
+      var first=panel&&panel.querySelector(".section");
+      if(first)navigate(first);
     });
     tab.addEventListener("keydown",function(ev){
       if(ev.key!=="ArrowLeft"&&ev.key!=="ArrowRight"&&ev.key!=="Home"&&ev.key!=="End")return;
@@ -374,45 +506,50 @@ Content-Type: application/json
     });
   });
 
-  navs.forEach(function(nav){
-    Array.prototype.forEach.call(nav.querySelectorAll(".nav-link"),function(a){
-      a.addEventListener("click",function(){side.classList.remove("open");});
-    });
-  });
-  search.addEventListener("input",filterNav);
-  window.addEventListener("hashchange",syncHash);
-
-  showDoc(docFromHash()||"game");
-  if(window.location.hash&&docFromHash()){
-    window.requestAnimationFrame(function(){
-      var target=document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
-      if(target)target.scrollIntoView();
-    });
+  function syncHistory(){
+    var target=targetFromHash();
+    if(!target)return;
+    activate(target);
+    window.requestAnimationFrame(function(){target.scrollIntoView({block:"start"});});
   }
+  window.addEventListener("hashchange",syncHistory);
+  window.addEventListener("popstate",syncHistory);
 
-  if("IntersectionObserver" in window){
-    var observer=new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        if(entry.isIntersecting&&entry.target.closest(".doc-panel").dataset.doc===activeDoc){
-          highlightAnchor("#"+entry.target.id);
-        }
-      });
-    },{rootMargin:"-150px 0px -65% 0px",threshold:0});
-    document.querySelectorAll(".section").forEach(function(section){observer.observe(section);});
+  activate(targetFromHash()||document.getElementById("g-start"));
+  if(targetFromHash()){
+    window.requestAnimationFrame(function(){
+      var target=targetFromHash();
+      if(target)target.scrollIntoView({block:"start"});
+    });
   }
 
   document.querySelectorAll(".copy").forEach(function(button){
     button.addEventListener("click",async function(){
-      var value=button.closest(".codebox").querySelector("code").textContent,ok=false;
-      try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(value);ok=true;}}catch(_){}
+      var code=button.closest(".codebox").querySelector("code");
+      if(!code)return;
+      var value=code.textContent,ok=false;
+      try{
+        if(navigator.clipboard&&navigator.clipboard.writeText){
+          await navigator.clipboard.writeText(value);
+          ok=true;
+        }
+      }catch(_){}
       if(!ok){
-        var ta=document.createElement("textarea");ta.value=value;ta.style.position="fixed";ta.style.opacity="0";
-        document.body.appendChild(ta);ta.select();
+        var textarea=document.createElement("textarea");
+        textarea.value=value;
+        textarea.style.position="fixed";
+        textarea.style.opacity="0";
+        document.body.appendChild(textarea);
+        textarea.select();
         try{ok=document.execCommand("copy");}catch(_){}
-        ta.remove();
+        textarea.remove();
       }
-      if(!ok){window.prompt("请复制以下内容：",value);return;}
-      var old=button.textContent;button.textContent="已复制";
+      if(!ok){
+        window.prompt("请复制以下内容：",value);
+        return;
+      }
+      var old=button.textContent;
+      button.textContent="已复制";
       window.setTimeout(function(){button.textContent=old;},1200);
     });
   });
