@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 配置工作区负责展示懒加载目录树、直属子项列表和节点编辑抽屉。
 // 数据加载、并发控制及表单状态集中交由 useNodeWorkspace 管理。
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { LoadFunction } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { nodeApi } from './api/nodeApi'
@@ -21,12 +21,14 @@ import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
 import BusinessConfigEditor from './features/nodes/components/BusinessConfigEditor.vue'
 import GroupBindings from './features/nodes/components/GroupBindings.vue'
+import ServiceBindingPanel from './features/services/ServiceBindingPanel.vue'
 
 const props = defineProps<{ gameId: number | null }>()
 const emit = defineEmits<{ changed: [] }>()
 const { selectById, labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
 
-const activeTab = ref<'list' | 'config' | 'info'>('list')
+const activeTab = ref<'list' | 'config' | 'services' | 'info'>('list')
+const groupEnv = computed(() => breadcrumbs.value.find(node => node.nodeType === 'region')?.envType ?? null)
 const nodeDetail = ref<NodeRecord | null>(null)
 const nodeDetailLoading = ref(false)
 let nodeDetailSequence = 0
@@ -165,6 +167,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
         <el-tabs v-model="activeTab" class="node-detail-tabs">
           <el-tab-pane :label="selected.nodeType === 'game' ? '大区列表' : selected.nodeType === 'region' ? '区服组列表' : '渠道绑定'" name="list" />
           <el-tab-pane label="业务配置" name="config" />
+          <el-tab-pane v-if="selected.nodeType === 'server_group'" label="服务配置" name="services" />
           <el-tab-pane label="基本信息" name="info" />
         </el-tabs>
         <div v-if="activeTab === 'list'" class="node-child-pane">
@@ -216,6 +219,11 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
                          layout="total, prev, pager, next" @current-change="onPageChange" />
         </template>
 
+        </div>
+        <div v-else-if="activeTab === 'services' && selected.nodeType === 'server_group'" class="node-detail-content">
+          <ServiceBindingPanel v-if="groupEnv" :key="selected.id" :target-id="selected.id"
+                               scope-type="server_group" :fixed-env="groupEnv" />
+          <el-alert v-else type="warning" title="请先为所属大区设置正式、测试或提审环境" :closable="false" />
         </div>
         <div v-else-if="activeTab === 'config'" class="node-detail-content" v-loading="nodeDetailLoading">
           <div class="section-heading"><div><h3>当前节点业务配置</h3>
