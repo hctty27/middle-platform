@@ -2,7 +2,7 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="游戏服务端接入文档，适用于研发中台 middle-platform。"><title>游戏服务端接入文档 | 研发中台</title><style>
 :root{color-scheme:light;--bg:#f6f8fb;--surface:#fff;--subtle:#f0f4fa;--text:#1c2636;--muted:#617187;--border:#e2e8f0;--accent:#2563eb;--accent-bg:#eaf1ff;--code:#111827;--codeText:#e5eaf2;--shadow:0 8px 28px rgba(26,44,76,.055)}
 html[data-theme="dark"]{color-scheme:dark;--bg:#0c111b;--surface:#151d2b;--subtle:#1d293a;--text:#e5eaf2;--muted:#9aa9bc;--border:#293649;--accent:#83adff;--accent-bg:#20375a;--code:#0a111e;--codeText:#d7e5f3;--shadow:0 8px 30px rgba(0,0,0,.16)}
-*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:98px}body{margin:0;font:15px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+*{box-sizing:border-box}[hidden]{display:none!important}html{scroll-behavior:smooth;scroll-padding-top:98px}body{margin:0;font:15px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
 button,input{font:inherit}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .top{height:70px;position:sticky;top:0;z-index:15;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;gap:12px}
 .brand{display:flex;align-items:center;gap:13px;min-width:0}.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#3762d8,#568be8);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;letter-spacing:-.5px;flex:none}.brand-name{font-size:15px;font-weight:750;letter-spacing:.2px}.brand-sub{font-size:12px;color:var(--muted);line-height:1.3}.actions{display:flex;gap:10px;align-items:center}.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;padding:7px 12px;cursor:pointer;white-space:nowrap}.btn:hover,.copy:hover{background:var(--subtle)}.menuBtn{display:none}
@@ -117,13 +117,12 @@ public final class SdkSignature {
                 .digest(plain.getBytes(StandardCharsets.UTF_8));
         return HexFormat.of().formatHex(digest);
     }
-}
-
-// 订单登记示例：attach 为空，故不参与签名
-String signature = SdkSignature.sign(
-        gameSecret, &quot;110006&quot;, timestamp, nonce, List.of(&quot;G100&quot;, &quot;600&quot;)
-);
-// 通知验签：用收到的 Body 顶层非空值重新计算，并以常量时间方式比较签名。</code></pre></div><div class="notice warn">这是为兼容现有平台协议采用的 SHA-1 拼接签名，不是 HMAC。生产应使用 HTTPS、高强度密钥，并独立校验环境、订单归属、权限与业务幂等。</div></section><section id="g-errors" class="section"><div class="section-title"><h2>错误处理与联调</h2></div><div class="summary">常见 HTTP 错误和接入检查</div><div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>一般含义</th></tr></thead><tbody><tr><td><code>400</code></td><td>请求格式、字段或路径参数不合法</td></tr><tr><td><code>401</code></td><td>签名或鉴权失败</td></tr><tr><td><code>403</code></td><td>功能未启用或无权访问</td></tr><tr><td><code>404</code></td><td>AppID 不存在、环境未绑定或路由无效</td></tr><tr><td><code>409</code></td><td>订单重复登记但参数不一致等业务冲突</td></tr><tr><td><code>422</code></td><td>密钥或业务配置不合法（适用于部分接口）</td></tr><tr><td><code>502/504</code></td><td>调用上游失败或超时</td></tr><tr><td><code>503</code></td><td>依赖服务或必要配置不可用</td></tr></tbody></table></div><h3>最小联调检查</h3><ul class="points"><li>配置查询：分别测试有效 AppID、未绑定环境与不存在的 AppID。</li><li>订单登记：测试首次成功、完全相同重复登记、金额冲突，以及签名错误。</li><li>充值回调：测试正确验签、精确 nonce 应答、重复通知仅发货一次。</li><li>事件上报：测试功能开关、平台返回错误、网络超时。</li><li>用户核验：测试 exists=true/false，及上游异常不能误判为不存在。</li></ul><div class="notice info">不保证所有服务的错误响应都使用相同业务 code；应先处理 HTTP 状态，再解析具体响应。</div></section>
+    // 调用示例：attach 为空，不参与签名
+    public static String example(String gameSecret, String timestamp, String nonce)
+            throws Exception {
+        return sign(gameSecret, &quot;110006&quot;, timestamp, nonce, List.of(&quot;G100&quot;, &quot;600&quot;));
+    }
+}</code></pre></div><div class="notice warn">这是为兼容现有平台协议采用的 SHA-1 拼接签名，不是 HMAC。生产应使用 HTTPS、高强度密钥，并独立校验环境、订单归属、权限与业务幂等。</div></section><section id="g-errors" class="section"><div class="section-title"><h2>错误处理与联调</h2></div><div class="summary">常见 HTTP 错误和接入检查</div><div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>一般含义</th></tr></thead><tbody><tr><td><code>400</code></td><td>请求格式、字段或路径参数不合法</td></tr><tr><td><code>401</code></td><td>签名或鉴权失败</td></tr><tr><td><code>403</code></td><td>功能未启用或无权访问</td></tr><tr><td><code>404</code></td><td>AppID 不存在、环境未绑定或路由无效</td></tr><tr><td><code>409</code></td><td>订单重复登记但参数不一致等业务冲突</td></tr><tr><td><code>422</code></td><td>密钥或业务配置不合法（适用于部分接口）</td></tr><tr><td><code>502/504</code></td><td>调用上游失败或超时</td></tr><tr><td><code>503</code></td><td>依赖服务或必要配置不可用</td></tr></tbody></table></div><h3>最小联调检查</h3><ul class="points"><li>配置查询：分别测试有效 AppID、未绑定环境与不存在的 AppID。</li><li>订单登记：测试首次成功、完全相同重复登记、金额冲突，以及签名错误。</li><li>充值回调：测试正确验签、精确 nonce 应答、重复通知仅发货一次。</li><li>事件上报：测试功能开关、平台返回错误、网络超时。</li><li>用户核验：测试 exists=true/false，及上游异常不能误判为不存在。</li></ul><div class="notice info">不保证所有服务的错误响应都使用相同业务 code；应先处理 HTTP 状态，再解析具体响应。</div></section>
 <div class="footnote">研发中台 middle-platform · 协议核对日期 2026-11-04。示例地址为占位值；对外发布前需确认实际域名与密钥。<a href="#g-start">返回接入说明</a></div></main></div><button class="backTop" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ 顶部</button><script>
 (function(){
   var root=document.documentElement, key="mp-api-theme";
