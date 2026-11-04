@@ -103,10 +103,8 @@ func (s *Store) DeleteChannelApp(ctx context.Context,id int64) error {
     if count==0 { return sql.ErrNoRows }
     if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE id=? AND (prod_server_group_id IS NOT NULL OR test_server_group_id IS NOT NULL OR review_server_group_id IS NOT NULL)",id).Scan(&count);err!=nil { return err }
     if count!=0 { return ErrConflict }
-	// target_id 没有跨表外键；删除渠道包时必须同步清理其服务绑定。
-    if _,err=tx.ExecContext(ctx,`DELETE b FROM sdk_service_binding b
-JOIN sdk_service sv ON sv.id=b.service_id AND sv.scope_type='channel_app'
-WHERE b.target_id=?`,id);err!=nil{return databaseError(err)}
+	// 删除渠道包时同步清理服务绑定。
+	if _,err=tx.ExecContext(ctx,"DELETE FROM sdk_service_channel WHERE channel_app_id=?",id);err!=nil{return databaseError(err)}
 	if _,err=tx.ExecContext(ctx,"DELETE FROM config_channel_app WHERE id=?",id); err!=nil { return databaseError(err) }
 	return tx.Commit()
 }
