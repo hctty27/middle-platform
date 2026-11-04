@@ -10,6 +10,7 @@ import (
     "net/url"
     "strings"
 
+    "github.com/hctty27/middle-platform/sdk-service/internal/adapter"
     "github.com/hctty27/middle-platform/sdk-service/internal/model"
 )
 
@@ -70,18 +71,17 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, er
         json.Unmarshal(regionJSON, &region) != nil {
         return model.Target{}, model.ErrInvalidConfig
     }
-    adapter := strings.TrimSpace(game.ServiceAdapters["user_check"])
+    adapterName := adapter.NameForService(game.ServiceAdapters, "user_check")
     targetURL := strings.TrimSpace(region.UserCheckURL)
     u, err := url.Parse(targetURL)
     if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
         u.Hostname() == "" || u.User != nil || u.Fragment != "" ||
-        strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" ||
-        adapter == "" {
+        strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" {
         return model.Target{}, model.ErrInvalidConfig
     }
     return model.Target{
         AppID: appID, Env: env, GameCode: gameCode,
-        UserCheckURL: targetURL, AdapterName: adapter,
+        UserCheckURL: targetURL, AdapterName: adapterName,
         AppSecret: app.AppSecret, GameSecret: game.GameSecret,
     }, nil
 }
