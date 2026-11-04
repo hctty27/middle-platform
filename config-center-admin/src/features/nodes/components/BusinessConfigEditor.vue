@@ -42,7 +42,7 @@ function changeField(key: string, value: string) {
 
 function displayValue(field: BusinessConfigField): string {
   const value = valueOf(field.key)
-  if (!value) return '未配置'
+  if (!value) return field.defaultValue ? `默认：${field.defaultValue}` : '未配置'
   return field.secret ? '已配置（隐藏）' : value
 }
 </script>
