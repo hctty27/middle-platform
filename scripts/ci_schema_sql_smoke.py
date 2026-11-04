@@ -115,7 +115,7 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok
     mysql(database="manual_service_legacy", script=migration)
     assert_sql("""SELECT id,service_id,channel_app_id,env,enabled,
 JSON_UNQUOTE(JSON_EXTRACT(config,'$.retained'))
-FROM manual_service_legacy.sdk_service_channel""", "77\\t11\\t900\\ttest\\t1\\ttrue")
+FROM manual_service_legacy.sdk_service_channel""", "77\t11\t900\ttest\t1\ttrue")
     assert_sql("""SELECT code FROM manual_service_legacy.sdk_service""", "event_report")
     assert_sql("""SELECT COUNT(*) FROM manual_service_legacy.sdk_service_channel_legacy""", "2")
     assert_sql("""SELECT COUNT(*) FROM information_schema.columns
