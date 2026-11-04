@@ -316,6 +316,7 @@ exit $code
         self.assertIn("ssh|-p|2222|deploy@10.9.8.7", calls[0])
         self.assertIn("/srv/app/.publish-", calls[2])
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows-only .NET Framework password helper')
     def test_configured_password_is_given_to_ssh_without_being_logged(self):
         self.write_config(password="s3cret-value")
         result, calls = self.invoke("password")
