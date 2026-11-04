@@ -38,8 +38,11 @@ func writeArchive(source, output string) (err error) {
 		if errors.Is(statErr, os.ErrNotExist) {
 			continue
 		}
-		if statErr != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("可执行文件 %s 不存在或格式不合法: %w", name, statErr)
+		if statErr != nil {
+			return fmt.Errorf("读取可执行文件 %s 失败: %w", name, statErr)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("可执行文件 %s 不是普通文件", name)
 		}
 		hasExecutable = true
 	}
