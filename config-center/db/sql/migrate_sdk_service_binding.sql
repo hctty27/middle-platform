@@ -31,6 +31,10 @@ INSERT INTO sdk_service_binding (id,service_id,target_id,env,enabled,config,crea
 SELECT id,service_id,channel_app_id,env,enabled,config,created_at,updated_at
 FROM sdk_service_channel;
 
+-- 仅新增未实现的区服组服务目录占位，默认关闭。
+INSERT INTO sdk_service (code,name,scope_type,description,enabled)
+VALUES ('server_status','区服状态上报','server_group','预留区服组状态上报能力，尚未实现业务接口',0);
+
 -- 核对：以下计数应为 0，且新旧记录数相同；未通过不得部署新版。
 SELECT (SELECT COUNT(*) FROM sdk_service_channel) AS legacy_count,
        (SELECT COUNT(*) FROM sdk_service_binding) AS binding_count;
