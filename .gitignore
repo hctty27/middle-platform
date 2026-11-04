@@ -15,3 +15,6 @@
 
 # 本地环境变量文件和实际生产凭据不提交到仓库
 .env.*
+
+# 本机发布目标。复制 publish/publish.config.example.json 后填写，勿提交
+publish/publish.config.json
