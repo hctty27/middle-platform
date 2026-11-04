@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="研发中台统一接口文档：游戏服务端、平台服务端和第三方配置同步接入。"><title>研发中台 · 接口文档</title><style>
+:root{color-scheme:light;--bg:#f6f8fb;--surface:#fff;--subtle:#f0f4fa;--text:#1c2636;--muted:#617187;--border:#e2e8f0;--accent:#2563eb;--accent-bg:#eaf1ff;--code:#111827;--codeText:#e5eaf2;--shadow:0 8px 28px rgba(26,44,76,.055)}
+html[data-theme="dark"]{color-scheme:dark;--bg:#0c111b;--surface:#151d2b;--subtle:#1d293a;--text:#e5eaf2;--muted:#9aa9bc;--border:#293649;--accent:#83adff;--accent-bg:#20375a;--code:#0a111e;--codeText:#d7e5f3;--shadow:0 8px 30px rgba(0,0,0,.16)}
+*{box-sizing:border-box}[hidden]{display:none!important}html{scroll-behavior:smooth;scroll-padding-top:98px}body{margin:0;font:15px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+button,input{font:inherit}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.top{height:70px;position:sticky;top:0;z-index:15;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;gap:12px}
+.brand{display:flex;align-items:center;gap:13px;min-width:0}.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#3762d8,#568be8);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;letter-spacing:-.5px;flex:none}.brand-name{font-size:15px;font-weight:750;letter-spacing:.2px}.brand-sub{font-size:12px;color:var(--muted);line-height:1.3}.actions{display:flex;gap:10px;align-items:center}.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;padding:7px 12px;cursor:pointer;white-space:nowrap}.btn:hover,.copy:hover{background:var(--subtle)}.menuBtn{display:none}
+.shell{max-width:1600px;margin:auto;display:grid;grid-template-columns:258px minmax(0,1fr);min-height:calc(100vh - 70px)}
+.side{background:var(--surface);border-right:1px solid var(--border);padding:23px 16px;position:sticky;top:70px;height:calc(100vh - 70px);overflow:auto}.side-title{font-size:12px;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted);font-weight:700;margin:20px 10px 8px}.side-title:first-of-type{margin-top:10px}
+.search{width:100%;height:38px;border:1px solid var(--border);border-radius:9px;background:var(--subtle);color:var(--text);padding:8px 12px;outline:none}.search:focus{border-color:var(--accent)}
+.nav-link{display:block;padding:7px 11px;color:var(--muted);border-radius:8px;font-size:13px;margin:2px 0;line-height:1.5;overflow-wrap:anywhere}.nav-link:hover{text-decoration:none;background:var(--subtle);color:var(--text)}.nav-link.active{background:var(--accent-bg);color:var(--accent);font-weight:650}.nav-link .method{font-size:10px;font-weight:800;margin-right:6px}.method.get{color:#0a9364}.method.post{color:#db8a29}
+.side-foot{margin:26px 10px 0;color:var(--muted);font-size:11px}.empty{font-size:13px;color:var(--muted);padding:10px}
+.main{min-width:0;padding:42px clamp(20px,5vw,80px) 100px;max-width:1150px;width:100%;margin:auto}.eyebrow{font-size:12px;color:var(--accent);font-weight:750;letter-spacing:.8px;text-transform:uppercase}.hero h1{font-size:clamp(30px,3vw,43px);line-height:1.23;margin:12px 0}.hero p{max-width:800px;color:var(--muted);margin:8px 0 23px;font-size:15px}.pills{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:34px}.pill{background:var(--accent-bg);color:var(--accent);border-radius:999px;padding:3px 11px;font-size:12px;font-weight:650}.pill.gray{background:var(--subtle);color:var(--muted)}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:29px 32px;margin:0 0 24px;box-shadow:var(--shadow);scroll-margin-top:95px}.section-title{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:5px}.section h2{font-size:23px;line-height:1.4;margin:0;letter-spacing:-.4px}.section h3{font-size:15px;font-weight:750;margin:26px 0 12px}.summary{color:var(--muted);margin:5px 0 20px}.section p{margin:12px 0;color:var(--text)}.section code:not(pre code){background:var(--subtle);color:var(--text);border:1px solid var(--border);padding:1px 5px;border-radius:5px;font-size:12px;overflow-wrap:anywhere}.route{background:var(--subtle);border:1px solid var(--border);padding:11px 14px;border-radius:10px;display:flex;gap:10px;align-items:center;margin:15px 0 22px;overflow-wrap:anywhere}.route code{font-size:12px;color:var(--text);word-break:break-all}.verb{font-size:11px;font-weight:800;letter-spacing:.3px;border-radius:6px;padding:2px 7px;background:var(--accent-bg);color:var(--accent);flex:none}.verb.get{color:#0b9b70;background:#e4f7ee}.verb.post{color:#a96a0b;background:#fff0d9}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin:14px 0 19px}table{border-collapse:collapse;width:100%;font-size:13px;min-width:470px}th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--border)}th{background:var(--subtle);color:var(--muted);font-size:12px;font-weight:750}tr:last-child td{border-bottom:0}td:first-child{white-space:normal}.points{padding-left:20px;margin:13px 0}.points li{padding-left:3px;margin:8px 0}.points li::marker{color:var(--accent)}
+.codebox{border:1px solid var(--border);border-radius:11px;overflow:hidden;margin:13px 0 22px}.codehead{display:flex;align-items:center;justify-content:space-between;background:var(--subtle);padding:6px 10px 6px 15px;font-size:12px;color:var(--muted);font-weight:650}.copy{border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;padding:3px 12px}.codebox pre{margin:0;padding:16px 18px;background:var(--code);color:var(--codeText);overflow-x:auto;font-size:12.5px;line-height:1.65;tab-size:4}.codebox pre code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;white-space:pre}
+.notice{background:var(--accent-bg);border-left:3px solid var(--accent);padding:12px 15px;border-radius:0 8px 8px 0;margin:17px 0;font-size:13px}.notice.warn{background:rgba(229,156,46,.095);border-left-color:#e19a35}.footnote{color:var(--muted);font-size:12px;padding:22px 5px}.footnote a{margin-right:12px}
+.backTop{position:fixed;right:26px;bottom:25px;z-index:5;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:7px 12px;border-radius:10px;box-shadow:var(--shadow);cursor:pointer}.backTop:hover{background:var(--subtle)}
+@media(max-width:840px){.top{padding:0 15px}.menuBtn{display:inline-flex}.shell{display:block}.side{position:fixed;top:70px;bottom:0;left:0;height:auto;width:280px;z-index:14;box-shadow:var(--shadow);transform:translateX(-110%);transition:transform .18s ease}.side.open{transform:translateX(0)}.main{padding:28px 16px 100px}.section{padding:24px 19px}.backTop{right:12px;bottom:12px}.brand-sub{display:none}}@media print{.top,.side,.backTop,.copy{display:none!important}.shell{display:block}.main{max-width:none;padding:0}.section{box-shadow:none;break-inside:avoid;border-color:#bbb}.codebox pre{white-space:pre-wrap;color:#111;background:#eee}.hero h1{font-size:27px}body{background:#fff;color:#111}}
+
+/* 三类协议共用一套导航和布局，切换不触发页面重新加载。 */
+html{scroll-padding-top:146px}
+.doc-tabs{position:sticky;top:70px;z-index:15;display:flex;justify-content:center;align-items:stretch;gap:3px;height:48px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto}
+.doc-tab{appearance:none;border:0;border-bottom:3px solid transparent;padding:0 22px;background:transparent;color:var(--muted);font-size:13px;font-weight:650;white-space:nowrap;cursor:pointer}
+.doc-tab:hover{color:var(--text);background:var(--subtle)}
+.doc-tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.doc-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+.shell{min-height:calc(100vh - 118px)}
+.side{top:118px;height:calc(100vh - 118px)}
+.doc-content{min-width:0}
+.section{scroll-margin-top:146px}
+@media(max-width:840px){.doc-tabs{justify-content:flex-start;gap:0;padding:0 8px}.doc-tab{padding:0 14px}.side{top:118px;bottom:0;height:auto}}
+@media print{.doc-tabs{display:none!important}}
+</style></head><body>
+<header class="top"><div class="brand"><button class="btn menuBtn" id="mobileMenu" type="button" aria-label="打开或收起目录">☰</button><div class="logo">MP</div><div><div class="brand-name">研发中台 · 接口文档</div><div class="brand-sub">游戏服务端 · 平台服务端 · 配置同步</div></div></div><div class="actions"><span class="pill gray">2026-11-04</span><button class="btn" type="button" id="theme">☾ 深色</button></div></header>
+<div class="doc-tabs" role="tablist" aria-label="文档类型"><button class="doc-tab" type="button" role="tab" id="tab-game" data-doc="game" aria-controls="panel-game" aria-selected="true">游戏服务端</button><button class="doc-tab" type="button" role="tab" id="tab-platform" data-doc="platform" aria-controls="panel-platform" aria-selected="false">平台服务端</button><button class="doc-tab" type="button" role="tab" id="tab-sync" data-doc="sync" aria-controls="panel-sync" aria-selected="false">配置同步</button></div>
+<div class="shell"><aside class="side" id="sidebar"><input class="search" id="search" type="search" aria-label="搜索当前分类接口" placeholder="搜索接口 / 关键字"><nav class="doc-nav" data-doc="game" aria-label="游戏服务端目录"><div class="side-title" data-group="开始使用">开始使用</div><a class="nav-link" data-group="开始使用" data-keywords="接入准备 游戏方所需参数、环境与职责   开始使用" href="#g-start">接入准备</a><div class="side-title" data-group="接口">接口</div><a class="nav-link" data-group="接口" data-keywords="查询 SDK 配置 根据环境和渠道包获取映射后的配置 GET /api/core/config/{env}/{appid} 接口" href="#g-config"><span class="method get">GET</span>查询 SDK 配置</a><a class="nav-link" data-group="接口" data-keywords="登记充值订单 支付前登记游戏订单，支持幂等 POST /api/core/orders/{env}/{appid} 接口" href="#g-orders"><span class="method post">POST</span>登记充值订单</a><a class="nav-link" data-group="接口" data-keywords="上报渠道事件 游戏统一上报 Core，再转发至渠道平台 POST /api/core/events/{env} 接口" href="#g-events"><span class="method post">POST</span>上报渠道事件</a><div class="side-title" data-group="回调">回调</div><a class="nav-link" data-group="回调" data-keywords="接收充值发货通知 SDK Core 向游戏的固定通知地址 POST POST {region.config.payNotifyUrl} 回调" href="#g-delivery"><span class="method post">POST</span>接收充值发货通知</a><a class="nav-link" data-group="回调" data-keywords="实现用户核验接口 SDK Service 主动调用游戏侧标准适配器协议 POST {region.config.userCheckUrl} 回调" href="#g-user-check"><span class="method post">POST</span>实现用户核验接口</a><div class="side-title" data-group="规范">规范</div><a class="nav-link" data-group="规范" data-keywords="游戏侧签名规则 订单、事件和游戏接收回调采用统一 SHA-1   规范" href="#g-sign">游戏侧签名规则</a><a class="nav-link" data-group="规范" data-keywords="错误处理与联调 常见 HTTP 错误和接入检查   规范" href="#g-errors">错误处理与联调</a></nav><nav class="doc-nav" data-doc="platform" aria-label="平台服务端目录" hidden><div class="side-title" data-group="开始使用">开始使用</div><a class="nav-link" data-group="开始使用" data-keywords="平台对接准备 中台对平台开放的请求与中台主动上报接口   开始使用" href="#p-start">平台对接准备</a><div class="side-title" data-group="平台 → 中台">平台 → 中台</div><a class="nav-link" data-group="平台 → 中台" data-keywords="支付成功回调 平台支付成功后通知 SDK Core POST /api/core/pay/notify/{appid} 平台 → 中台" href="#p-payment"><span class="method post">POST</span>支付成功回调</a><a class="nav-link" data-group="平台 → 中台" data-keywords="用户核验 平台验证 open_id 对应的游戏用户是否存在 POST /api/service/user/check/{env} 平台 → 中台" href="#p-user"><span class="method post">POST</span>用户核验</a><div class="side-title" data-group="中台 → 平台">中台 → 平台</div><a class="nav-link" data-group="中台 → 平台" data-keywords="接收事件上报 Core 同步转发游戏的渠道包事件 POST {platform.eventReportURL} 中台 → 平台" href="#p-events"><span class="method post">POST</span>接收事件上报</a><div class="side-title" data-group="规范">规范</div><a class="nav-link" data-group="规范" data-keywords="签名算法对照 三种平台交互采用不同的参与字段   规范" href="#p-sign">签名算法对照</a><a class="nav-link" data-group="规范" data-keywords="响应与联调检查 平台对接常见状态及验收条件   规范" href="#p-errors">响应与联调检查</a></nav><nav class="doc-nav" data-doc="sync" aria-label="配置同步目录" hidden><div class="side-title" data-group="开始使用">开始使用</div><a class="nav-link" data-group="开始使用" data-keywords="接入流程 开始使用 Webhook 通知 + 主动拉取；优先采用全量快照  " href="#s-intro">接入流程</a><a class="nav-link" data-group="开始使用" data-keywords="接入参数 开始使用 双方交换的最小配置项  " href="#s-config">接入参数</a><div class="side-title" data-group="Webhook">Webhook</div><a class="nav-link" data-group="Webhook" data-keywords="接收 Webhook 回调 Webhook 配置变更通知；签名通过后尽快返回 2xx {callbackUrl} POST" href="#s-webhook"><span class="method post">POST</span>接收 Webhook 回调</a><div class="side-title" data-group="同步接口">同步接口</div><a class="nav-link" data-group="同步接口" data-keywords="查询当前版本 同步接口 按 epoch + revision 判断是否需要更新 /api/config/sync/revision GET" href="#s-revision"><span class="method get">GET</span>查询当前版本</a><a class="nav-link" data-group="同步接口" data-keywords="拉取全量快照 同步接口 第三方推荐的主要同步方式 /api/config/sync/snapshot GET" href="#s-snapshot"><span class="method get">GET</span>拉取全量快照</a><div class="side-title" data-group="增量同步">增量同步</div><a class="nav-link" data-group="增量同步" data-keywords="查询增量变更 增量同步 获取本地游标之后的修改/删除事件 /api/config/sync/changes GET" href="#s-changes"><span class="method get">GET</span>查询增量变更</a><a class="nav-link" data-group="增量同步" data-keywords="批量查询节点 增量同步 为增量事件取回节点最新值 /api/config/nodes/batch-get POST" href="#s-batch"><span class="method post">POST</span>批量查询节点</a><div class="side-title" data-group="最佳实践">最佳实践</div><a class="nav-link" data-group="最佳实践" data-keywords="同步策略与边界 最佳实践 全量优先、版本一致、异常补偿  " href="#s-strategy">同步策略与边界</a><a class="nav-link" data-group="最佳实践" data-keywords="错误处理与联调 最佳实践 最低接入清单、状态码与安全说明  " href="#s-check">错误处理与联调</a></nav><div id="noResults" class="empty" hidden>未找到匹配内容</div><div class="side-foot">统一 HTML · 离线可用<br>路由不包含 /sdk 前缀</div></aside>
+<div class="doc-content"><main class="main doc-panel" id="panel-game" data-doc="game" role="tabpanel" aria-labelledby="tab-game">
+<div class="hero"><div class="eyebrow">GAME SERVER API</div><h1>游戏服务端接入文档</h1><p>提供给游戏开发者的接入协议，覆盖配置查询、充值登记与发货、渠道事件上报及用户核验。</p><div class="pills"><span class="pill">纯 HTML · 无外部依赖</span><span class="pill gray">基于当前 main 协议整理</span><span class="pill gray">8 个章节</span></div></div>
+<section id="g-start" class="section"><div class="section-title"><h2>接入准备</h2></div><div class="summary">游戏方所需参数、环境与职责</div><p>游戏通过 <code>SDK Core</code> 查询配置、登记订单和上报事件；支付成功后由中台向游戏发送发货通知。启用用户核验时，中台 <code>SDK Service</code> 会主动调用游戏提供的用户核验地址。</p><div class="table-wrap"><table><thead><tr><th>参数</th><th>说明</th></tr></thead><tbody><tr><td><code>env</code></td><td><code>prod</code> 正式、<code>test</code> 测试、<code>review</code> 提审</td></tr><tr><td><code>appid</code></td><td>渠道包的全局唯一编码，例如 <code>110006</code></td></tr><tr><td><code>gameSecret</code></td><td>游戏侧与中台共用签名密钥；仅服务端保存</td></tr><tr><td><code>appSecret</code></td><td>平台与中台共用签名密钥；由中台维护，游戏侧不使用</td></tr></tbody></table></div><h3>接入配置</h3><ul class="points"><li>中台管理员为游戏配置 <code>game.config.gameSecret</code>，并为渠道包绑定对应环境的区服组。</li><li>在大区配置 <code>region.config.payNotifyUrl</code>（支付发货通知地址）和 <code>region.config.userCheckUrl</code>（用户核验地址）。</li><li>事件上报、用户核验分别需要启用对应全局开关和渠道包环境开关；未绑定默认关闭。</li><li>除特殊游戏协议外，不需要配置适配器；用户核验默认使用 <code>standard</code>。</li><li>本文所有中台路由从 <code>/api/</code> 开始，不含 <code>/sdk</code>。实际域名由部署网关提供。</li></ul><div class="notice info">示例中的域名、AppID、订单号和签名都是演示值；请使用自己的环境和密钥生成真实签名。</div></section><section id="g-config" class="section"><div class="section-title"><h2>查询 SDK 配置</h2></div><div class="summary">根据环境和渠道包获取映射后的配置</div><div class="route"><span class="verb get">GET</span><code>/api/core/config/{env}/{appid}</code></div><p>该接口只读，无需请求签名。仅返回当前映射规则配置的公开字段，不会直接下发游戏密钥或平台密钥。</p><h3>路径参数</h3><div class="table-wrap"><table><thead><tr><th>参数</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>env</code></td><td>是</td><td>prod/test/review</td></tr><tr><td><code>appid</code></td><td>是</td><td>渠道包 AppID</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>GET /api/core/config/test/110006 HTTP/1.1
+Host: api.example.com</code></pre></div><h3>成功响应</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 0,
+  &quot;message&quot;: &quot;success&quot;,
+  &quot;data&quot;: {
+    &quot;snKey&quot;: &quot;110006&quot;,
+    &quot;zoneKey&quot;: &quot;s1001&quot;,
+    &quot;tsKey&quot;: &quot;example-key&quot;
+  }
+}</code></pre></div><p>实际 <code>data</code> 键名来自编译进 SDK Core 的响应映射；路径不存在或值为 null 时可能省略字段。<code>false</code>、<code>0</code> 和空字符串仍保留。</p><div class="notice warn">AppID 不存在、环境未绑定，或相关配置节点已停用时通常返回 HTTP 404；参数非法为 400。</div></section><section id="g-orders" class="section"><div class="section-title"><h2>登记充值订单</h2></div><div class="summary">支付前登记游戏订单，支持幂等</div><div class="route"><span class="verb post">POST</span><code>/api/core/orders/{env}/{appid}</code></div><p>游戏在支付流程中先向 Core 登记订单；登记成功不表示玩家已经付款。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>格式/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code>，仅 JSON POST 请求</td></tr><tr><td><code>x-app-id</code></td><td>渠道包 AppID（与 URL 中 AppID 必须匹配，若 URL 含 AppID）</td></tr><tr><td><code>x-timestamp</code></td><td>Unix 秒时间戳，允许前后 5 分钟</td></tr><tr><td><code>x-nonce</code></td><td>8 字节随机数的小写十六进制，恰好 16 位</td></tr><tr><td><code>x-signature</code></td><td>SHA-1 小写十六进制，恰好 40 位</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>game_order_id</code></td><td>string</td><td>是</td><td>游戏订单号，同 AppID 下跨环境唯一</td></tr><tr><td><code>amount</code></td><td>integer</td><td>是</td><td>金额，单位分，必须大于 0</td></tr><tr><td><code>attach</code></td><td>string</td><td>是</td><td>透传数据，可以为空字符串</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /api/core/orders/test/110006 HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+x-app-id: 110006
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: &lt;使用 gameSecret 计算的 SHA-1 小写签名&gt;
+
+{&quot;game_order_id&quot;:&quot;G100&quot;,&quot;amount&quot;:600,&quot;attach&quot;:&quot;roleId=1&quot;}</code></pre></div><h3>成功响应</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 0,
+  &quot;message&quot;: &quot;success&quot;,
+  &quot;data&quot;: {
+    &quot;game_order_id&quot;: &quot;G100&quot;,
+    &quot;registration_status&quot;: &quot;REGISTERED&quot;
+  }
+}</code></pre></div><ul class="points"><li>签名包含 <code>gameSecret</code>、AppID、时间戳、nonce 和 Body 所有顶层非空值；不包含 <code>env</code> 或 <code>operation</code>。</li><li>同一 AppID 下相同参数重复登记为幂等成功；若环境、金额或 attach 不一致，则返回 HTTP 409。</li><li>平台支付回调由 Core 接收，游戏端不要直接请求平台支付回调路由。</li></ul><div class="notice warn">订单号必须能稳定关联游戏内的角色、区服和订单记录；不能把 REGISTERED 当成发货依据。</div></section><section id="g-delivery" class="section"><div class="section-title"><h2>接收充值发货通知</h2></div><div class="summary">SDK Core 向游戏的固定通知地址 POST</div><div class="route"><span class="verb post">POST</span><code>{region.config.payNotifyUrl}</code></div><p>支付平台通知 Core 成功且订单校验通过后，Core 异步向登记时保存的 <code>payNotifyUrl</code> 发货。此地址由游戏方提供，不是中台固定 API 路径。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>格式/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code>，仅 JSON POST 请求</td></tr><tr><td><code>x-app-id</code></td><td>渠道包 AppID（与 URL 中 AppID 必须匹配，若 URL 含 AppID）</td></tr><tr><td><code>x-timestamp</code></td><td>Unix 秒时间戳，允许前后 5 分钟</td></tr><tr><td><code>x-nonce</code></td><td>8 字节随机数的小写十六进制，恰好 16 位</td></tr><tr><td><code>x-signature</code></td><td>SHA-1 小写十六进制，恰好 40 位</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>order_no</code></td><td>string</td><td>平台订单号</td></tr><tr><td><code>game_order_id</code></td><td>string</td><td>游戏订单号</td></tr><tr><td><code>amount</code></td><td>integer</td><td>支付金额，单位分</td></tr><tr><td><code>attach</code></td><td>string</td><td>登记时的透传数据</td></tr><tr><td><code>paid_at</code></td><td>string</td><td>支付完成时间</td></tr></tbody></table></div><h3>通知示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /pay/notify HTTP/1.1
+Host: game.example.com
+Content-Type: application/json
+x-app-id: 110006
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: &lt;使用 gameSecret 计算的 SHA-1 小写签名&gt;
+
+{&quot;order_no&quot;:&quot;P100&quot;,&quot;game_order_id&quot;:&quot;G100&quot;,&quot;amount&quot;:600,&quot;attach&quot;:&quot;roleId=1&quot;,&quot;paid_at&quot;:&quot;2026-11-03T00:00:00Z&quot;}</code></pre></div><h3>成功响应（必须严格一致）</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>HTTP/1.1 200 OK
+Content-Type: text/plain
+
+0123456789abcdef</code></pre></div><ul class="points"><li>先验签并检查请求时间戳、AppID、订单号、金额、支付状态以及本地订单环境，再在事务中完成幂等发货。</li><li>只有 HTTP 200 且响应体为本次 <code>x-nonce</code> 原始字符串才视为成功；不能添加 JSON、引号、空格或换行。</li><li>HTTP 非 200、超时或 nonce 不匹配会触发 Core 持久化重试；通知可能重复到达。</li><li>签名中包含 Body 所有顶层非空值，不签 env、operation。</li></ul><div class="notice warn">发货必须幂等：建议基于 game_order_id 建唯一约束，订单状态与道具/货币发放在同一事务中完成。</div></section><section id="g-events" class="section"><div class="section-title"><h2>上报渠道事件</h2></div><div class="summary">游戏统一上报 Core，再转发至渠道平台</div><div class="route"><span class="verb post">POST</span><code>/api/core/events/{env}</code></div><p>仅支持已绑定环境的渠道包事件，AppID 放在 <code>x-app-id</code> Header，而不是 URL 中。不支持无 AppID 的区服事件。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>格式/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code>，仅 JSON POST 请求</td></tr><tr><td><code>x-app-id</code></td><td>渠道包 AppID（与 URL 中 AppID 必须匹配，若 URL 含 AppID）</td></tr><tr><td><code>x-timestamp</code></td><td>Unix 秒时间戳，允许前后 5 分钟</td></tr><tr><td><code>x-nonce</code></td><td>8 字节随机数的小写十六进制，恰好 16 位</td></tr><tr><td><code>x-signature</code></td><td>SHA-1 小写十六进制，恰好 40 位</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>event</code></td><td>string</td><td>是</td><td>事件名；非空，最长 128 字节</td></tr><tr><td><code>ext</code></td><td>object</td><td>是</td><td>非空 JSON 对象，存放渠道业务字段</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /api/core/events/test HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+x-app-id: 110006
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: &lt;使用 gameSecret 计算的 SHA-1 小写签名&gt;
+
+{&quot;event&quot;:&quot;login&quot;,&quot;ext&quot;:{&quot;areaId&quot;:&quot;1&quot;,&quot;openId&quot;:&quot;user123&quot;,&quot;roleId&quot;:&quot;45940775&quot;,&quot;roleLevel&quot;:80}}</code></pre></div><h3>成功响应</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 0,
+  &quot;message&quot;: &quot;success&quot;,
+  &quot;data&quot;: true
+}</code></pre></div><ul class="points"><li>请求体只允许 <code>event</code>、<code>ext</code> 两个顶层字段；最大 64 KiB，不允许重复键。</li><li>签名包含 Body 的 <code>event</code> 字符串及 <code>ext</code> 紧凑 JSON 文本，序列化时要保持字段顺序与格式一致。</li><li>全局 <code>event_report</code> 和渠道环境开关必须均为启用；未绑定时默认关闭。</li><li>Core 同步转发平台，超时 5 秒；现阶段不持久化事件、不自动重试，失败可由游戏侧决定重试。</li></ul><div class="notice warn">事件上报请求失败并不一定代表平台未处理；重试可能导致重复事件，重要事件应建立业务幂等键。</div></section><section id="g-user-check" class="section"><div class="section-title"><h2>实现用户核验接口</h2></div><div class="summary">SDK Service 主动调用游戏侧标准适配器协议</div><div class="route"><span class="verb post">POST</span><code>{region.config.userCheckUrl}</code></div><p>游戏方提供 <code>region.config.userCheckUrl</code>，由 SDK Service 发起 POST。默认适配器 <code>standard</code> 无需设置，只有特殊游戏协议才设置自定义适配器。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>格式/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code>，仅 JSON POST 请求</td></tr><tr><td><code>x-app-id</code></td><td>渠道包 AppID（与 URL 中 AppID 必须匹配，若 URL 含 AppID）</td></tr><tr><td><code>x-timestamp</code></td><td>Unix 秒时间戳，允许前后 5 分钟</td></tr><tr><td><code>x-nonce</code></td><td>8 字节随机数的小写十六进制，恰好 16 位</td></tr><tr><td><code>x-signature</code></td><td>SHA-1 小写十六进制，恰好 40 位</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>open_id</code></td><td>string</td><td>是</td><td>待核验的平台用户标识</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /internal/user/check HTTP/1.1
+Host: game.example.com
+Content-Type: application/json
+x-app-id: 110006
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: &lt;使用 gameSecret 计算的 SHA-1 小写签名&gt;
+
+{&quot;open_id&quot;:&quot;user123&quot;}</code></pre></div><h3>用户存在</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 0,
+  &quot;data&quot;: {
+    &quot;exists&quot;: true
+  }
+}</code></pre></div><h3>用户不存在</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 0,
+  &quot;data&quot;: {
+    &quot;exists&quot;: false
+  }
+}</code></pre></div><ul class="points"><li>签名包含 <code>gameSecret + appId + timestamp + nonce + open_id</code>，按字符串值排序、下划线拼接后 SHA-1 小写。</li><li>严格要求游戏返回 HTTP 200、<code>code=0</code>、<code>data.exists</code> 为布尔值。</li><li>网络故障、超时或无效响应属于调用失败，不能用 <code>exists=false</code> 代替。</li></ul><div class="notice info">这里的用户核验是 Core/Service → 游戏；平台 → Service 的调用规则见平台文档。</div></section><section id="g-sign" class="section"><div class="section-title"><h2>游戏侧签名规则</h2></div><div class="summary">订单、事件和游戏接收回调采用统一 SHA-1</div><h3>参与签名的值</h3><div class="table-wrap"><table><thead><tr><th>来源</th><th>值</th></tr></thead><tbody><tr><td>服务端密钥</td><td><code>gameSecret</code> 原始 UTF-8 字符串</td></tr><tr><td>Header</td><td><code>x-app-id</code>、<code>x-timestamp</code>、<code>x-nonce</code></td></tr><tr><td>Body</td><td>JSON 顶层全部非空值；对象或数组整体转成紧凑 JSON 文本</td></tr></tbody></table></div><ul class="points"><li>过滤 <code>null</code> 和空字符串；数字 0、布尔 false 仍参加。</li><li>把所有参与签名的值转成字符串，按值进行字典序升序排序，用下划线 <code>_</code> 拼接。</li><li>对拼接结果计算 SHA-1，输出 40 位小写 hex；不额外加前后缀。</li><li>不签字段名、URL、HTTP 方法、环境 <code>env</code> 或操作名 <code>operation</code>。</li></ul><h3>已校验的签名样本</h3><div class="codebox"><div class="codehead"><span>签名前字符串</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>0123456789abcdef_110006_1793700000_600_G100_测试-密钥!</code></pre></div><div class="codebox"><div class="codehead"><span>SHA-1 输出</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>a8c30a586539b1d9cd7c5429421e3e88b6a02f6e</code></pre></div><h3>Java 17+ 签名工具</h3><div class="codebox"><div class="codehead"><span>Java</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HexFormat;
+import java.util.List;
+
+public final class SdkSignature {
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private SdkSignature() {}
+
+    public static String nonce() {
+        byte[] bytes = new byte[8];
+        RANDOM.nextBytes(bytes);
+        return HexFormat.of().formatHex(bytes);
+    }
+
+    public static String sign(
+            String secret, String appId, String timestamp, String nonce,
+            Collection&lt;String&gt; bodyValues) throws Exception {
+        List&lt;String&gt; values = new ArrayList&lt;&gt;(List.of(secret, appId, timestamp, nonce));
+        values.addAll(bodyValues);
+        values.removeIf(value -&gt; value == null || value.isEmpty());
+        values.sort(String::compareTo);
+        String plain = String.join(&quot;_&quot;, values);
+        byte[] digest = MessageDigest.getInstance(&quot;SHA-1&quot;)
+                .digest(plain.getBytes(StandardCharsets.UTF_8));
+        return HexFormat.of().formatHex(digest);
+    }
+    // 调用示例：attach 为空，不参与签名
+    public static String example(String gameSecret, String timestamp, String nonce)
+            throws Exception {
+        return sign(gameSecret, &quot;110006&quot;, timestamp, nonce, List.of(&quot;G100&quot;, &quot;600&quot;));
+    }
+}</code></pre></div><div class="notice warn">这是为兼容现有平台协议采用的 SHA-1 拼接签名，不是 HMAC。生产应使用 HTTPS、高强度密钥，并独立校验环境、订单归属、权限与业务幂等。</div></section><section id="g-errors" class="section"><div class="section-title"><h2>错误处理与联调</h2></div><div class="summary">常见 HTTP 错误和接入检查</div><div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>一般含义</th></tr></thead><tbody><tr><td><code>400</code></td><td>请求格式、字段或路径参数不合法</td></tr><tr><td><code>401</code></td><td>签名或鉴权失败</td></tr><tr><td><code>403</code></td><td>功能未启用或无权访问</td></tr><tr><td><code>404</code></td><td>AppID 不存在、环境未绑定或路由无效</td></tr><tr><td><code>409</code></td><td>订单重复登记但参数不一致等业务冲突</td></tr><tr><td><code>422</code></td><td>密钥或业务配置不合法（适用于部分接口）</td></tr><tr><td><code>502/504</code></td><td>调用上游失败或超时</td></tr><tr><td><code>503</code></td><td>依赖服务或必要配置不可用</td></tr></tbody></table></div><h3>最小联调检查</h3><ul class="points"><li>配置查询：分别测试有效 AppID、未绑定环境与不存在的 AppID。</li><li>订单登记：测试首次成功、完全相同重复登记、金额冲突，以及签名错误。</li><li>充值回调：测试正确验签、精确 nonce 应答、重复通知仅发货一次。</li><li>事件上报：测试功能开关、平台返回错误、网络超时。</li><li>用户核验：测试 exists=true/false，及上游异常不能误判为不存在。</li></ul><div class="notice info">不保证所有服务的错误响应都使用相同业务 code；应先处理 HTTP 状态，再解析具体响应。</div></section>
+<div class="footnote">研发中台 middle-platform · 协议核对日期 2026-11-04。示例地址为占位值；对外发布前需确认实际域名与密钥。<a href="#g-start">返回接入说明</a></div></main>
+<main class="main doc-panel" id="panel-platform" data-doc="platform" role="tabpanel" aria-labelledby="tab-platform" hidden>
+<div class="hero"><div class="eyebrow">PLATFORM API</div><h1>平台服务端对接文档</h1><p>提供给第三方发行平台的协议，覆盖支付成功通知、用户核验，以及接收游戏事件转发。</p><div class="pills"><span class="pill">纯 HTML · 无外部依赖</span><span class="pill gray">基于当前 main 协议整理</span><span class="pill gray">6 个章节</span></div></div>
+<section id="p-start" class="section"><div class="section-title"><h2>平台对接准备</h2></div><div class="summary">中台对平台开放的请求与中台主动上报接口</div><p>平台与中台对接主要有三项：<strong>支付成功回调</strong>、<strong>主动发起用户核验</strong>、<strong>接收中台上报事件</strong>。用户核验由独立 SDK Service 处理，支付回调和事件转发由 SDK Core 处理。</p><div class="table-wrap"><table><thead><tr><th>参数</th><th>说明</th></tr></thead><tbody><tr><td><code>env</code></td><td><code>prod</code> 正式、<code>test</code> 测试、<code>review</code> 提审</td></tr><tr><td><code>appid</code></td><td>渠道包的全局唯一编码，例如 <code>110006</code></td></tr><tr><td><code>gameSecret</code></td><td>游戏侧与中台共用签名密钥；仅服务端保存</td></tr><tr><td><code>appSecret</code></td><td>平台与中台共用签名密钥；由中台维护，游戏侧不使用</td></tr></tbody></table></div><h3>双方需要确认</h3><ul class="points"><li>平台分配的 AppID 及对应 <code>appSecret</code>；渠道包在中台配置中维护相同密钥。</li><li>支付回调地址 <code>/api/core/pay/notify/{appid}</code>，不包含 env。</li><li>用户核验按环境分别提供 <code>/api/service/user/check/{env}</code>，环境值由双方约定。</li><li>平台的事件接收完整 URL，由中台配置 <code>platform.eventReportURL</code>。</li><li>平台回调采用自己的原生 SHA-1 协议，不能和游戏侧请求签名混用。</li></ul><div class="notice warn">用户核验签名当前实现包含 open_id，但平台原文档未单独明确该字段；正式接入前必须核对一组真实签名样本。</div></section><section id="p-payment" class="section"><div class="section-title"><h2>支付成功回调</h2></div><div class="summary">平台支付成功后通知 SDK Core</div><div class="route"><span class="verb post">POST</span><code>/api/core/pay/notify/{appid}</code></div><p>平台向中台发送支付成功通知，Core 校验签名和已登记的游戏订单，确认后由中台异步通知游戏发货。<strong>平台不需要直接调用游戏服。</strong></p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>格式/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code>，仅 JSON POST 请求</td></tr><tr><td><code>x-timestamp</code></td><td>Unix 秒时间戳，允许前后 5 分钟</td></tr><tr><td><code>x-nonce</code></td><td>8 字节随机数的小写十六进制，恰好 16 位</td></tr><tr><td><code>x-signature</code></td><td>SHA-1 小写十六进制，恰好 40 位</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>order_no</code></td><td>string</td><td>是</td><td>平台订单号</td></tr><tr><td><code>game_order_id</code></td><td>string</td><td>是</td><td>游戏订单号</td></tr><tr><td><code>amount</code></td><td>integer</td><td>是</td><td>实付金额，单位分</td></tr><tr><td><code>attach</code></td><td>string</td><td>是</td><td>游戏登记透传参数，无内容传空字符串</td></tr><tr><td><code>paid_at</code></td><td>string</td><td>是</td><td>支付完成时间</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /api/core/pay/notify/110006 HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: &lt;使用 appSecret 生成的 V1 签名&gt;
+
+{&quot;order_no&quot;:&quot;P100&quot;,&quot;game_order_id&quot;:&quot;G100&quot;,&quot;amount&quot;:600,&quot;attach&quot;:&quot;roleId=1&quot;,&quot;paid_at&quot;:&quot;2026-11-03T00:00:00Z&quot;}</code></pre></div><h3>成功响应</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>HTTP/1.1 200 OK
+Content-Type: text/plain
+
+0123456789abcdef</code></pre></div><h3>平台原生 V1 验签</h3><ul class="points"><li>参与签名：<code>order_no</code>、<code>game_order_id</code>、<code>appSecret</code>、Header 的 <code>x-nonce</code> 与 <code>x-timestamp</code>。</li><li>将这五个值转字符串、按字典序升序排序，以 <code>_</code> 拼接后 SHA-1，输出小写 40 位 hex。</li><li><code>amount</code>、<code>attach</code>、<code>paid_at</code> <strong>不参与平台 V1 签名</strong>；中台会核对订单金额与 attach，但不额外向平台查单。</li><li>仅 HTTP 200 且响应体精确等于请求 nonce 才算 Core 已确认接收；其他情况平台按其重试策略处理。</li></ul><div class="notice warn">回调 URL 无 env，Header 的 x-app-id 并非本回调签名的必需字段；AppID 由 URL 给出。请勿把游戏侧的“Body 顶层全部值参与签名”规则套用到此处。</div></section><section id="p-user" class="section"><div class="section-title"><h2>用户核验</h2></div><div class="summary">平台验证 open_id 对应的游戏用户是否存在</div><div class="route"><span class="verb post">POST</span><code>/api/service/user/check/{env}</code></div><p>平台请求 SDK Service，由 Service 根据渠道包、环境和中台配置找到游戏对应的核验地址，调用游戏并将结果转换为平台约定的格式。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>格式/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code>，仅 JSON POST 请求</td></tr><tr><td><code>x-app-id</code></td><td>渠道包 AppID（与 URL 中 AppID 必须匹配，若 URL 含 AppID）</td></tr><tr><td><code>x-timestamp</code></td><td>Unix 秒时间戳，允许前后 5 分钟</td></tr><tr><td><code>x-nonce</code></td><td>8 字节随机数的小写十六进制，恰好 16 位</td></tr><tr><td><code>x-signature</code></td><td>SHA-1 小写十六进制，恰好 40 位</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>open_id</code></td><td>string</td><td>是</td><td>登录后获取的平台用户标识</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /api/service/user/check/test HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+x-app-id: 110006
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: &lt;使用 appSecret 计算的 SHA-1 小写签名&gt;
+
+{&quot;open_id&quot;:&quot;user123&quot;}</code></pre></div><h3>用户存在</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 0,
+  &quot;message&quot;: &quot;ok&quot;,
+  &quot;data&quot;: true
+}</code></pre></div><h3>用户不存在</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 1021003,
+  &quot;message&quot;: &quot;用户信息不存在&quot;,
+  &quot;data&quot;: null
+}</code></pre></div><ul class="points"><li><code>env</code> 仅可为 <code>prod/test/review</code>；AppID 由 <code>x-app-id</code> 提供。</li><li>需要启用 <code>user_check</code> 的全局和对应渠道环境开关；无绑定默认关闭。</li><li>当前 Service 按 <code>appSecret、AppID、timestamp、nonce、open_id</code> 五个值参与 SHA-1 签名校验。</li><li>游戏请求失败不应被解释成“用户不存在”：超时、网络故障和错误响应分别处理。</li></ul><div class="notice warn">待平台联调确认：平台原文档未明确用户核验是否签 open_id，以及同一 AppID 能否分别配置 prod/test/review 回调地址。未确认前不应开放正式流量。</div></section><section id="p-events" class="section"><div class="section-title"><h2>接收事件上报</h2></div><div class="summary">Core 同步转发游戏的渠道包事件</div><div class="route"><span class="verb post">POST</span><code>{platform.eventReportURL}</code></div><p>游戏向 SDK Core 上报事件，通过双层功能开关和游戏验签后，Core 将 <code>event</code> 与 <code>ext</code> 原样传给平台。平台只需要提供事件接收地址，不需要向 Core 反向推送此类事件。</p><h3>请求地址</h3><p><code>POST {platform.eventReportURL}</code>。例如测试地址为 <code>https://openapiv3.qk6.top/report/event</code>；正式地址请按实际环境约定。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>格式/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code>，仅 JSON POST 请求</td></tr><tr><td><code>x-app-id</code></td><td>渠道包 AppID（与 URL 中 AppID 必须匹配，若 URL 含 AppID）</td></tr><tr><td><code>x-timestamp</code></td><td>Unix 秒时间戳，允许前后 5 分钟</td></tr><tr><td><code>x-nonce</code></td><td>8 字节随机数的小写十六进制，恰好 16 位</td></tr><tr><td><code>x-signature</code></td><td>SHA-1 小写十六进制，恰好 40 位</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>event</code></td><td>string</td><td>是</td><td>事件名</td></tr><tr><td><code>ext</code></td><td>object</td><td>是</td><td>渠道协议对应的业务数据对象</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /report/event HTTP/1.1
+Host: openapiv3.qk6.top
+Content-Type: application/json
+x-app-id: 110006
+x-timestamp: 1793700000
+x-nonce: 0123456789abcdef
+x-signature: &lt;使用 appSecret 计算的 SHA-1 小写签名&gt;
+
+{&quot;event&quot;:&quot;login&quot;,&quot;ext&quot;:{&quot;areaId&quot;:&quot;1&quot;,&quot;openId&quot;:&quot;user123&quot;,&quot;roleId&quot;:&quot;45940775&quot;,&quot;roleLevel&quot;:80}}</code></pre></div><h3>平台成功响应</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;code&quot;: 0,
+  &quot;message&quot;: &quot;ok&quot;,
+  &quot;data&quot;: true
+}</code></pre></div><ul class="points"><li>平台入站验签只使用 <code>appSecret、x-app-id、x-timestamp、x-nonce</code>，<strong>Body 不参与签名</strong>。</li><li>中台要求平台返回 HTTP 200、<code>code=0</code> 且 <code>data=true</code>，才把本次转发视为成功。</li><li>Core 对平台请求超时为 5 秒、不跟随重定向；当前不保存事件、不自动重试。</li><li>不同渠道的 <code>event/ext</code> 业务含义由平台的渠道协议约定，中台不修改字段名或结构。</li></ul><div class="notice info">这是中台主动转发平台的接口，不是第三方平台调用中台的接口。</div></section><section id="p-sign" class="section"><div class="section-title"><h2>签名算法对照</h2></div><div class="summary">三种平台交互采用不同的参与字段</div><div class="table-wrap"><table><thead><tr><th>调用方向</th><th>签名参与值</th><th>Body 参与情况</th></tr></thead><tbody><tr><td>平台 → Core：支付回调</td><td>appSecret、order_no、game_order_id、nonce、timestamp</td><td>只使用两个指定订单字段</td></tr><tr><td>平台 → Service：用户核验</td><td>appSecret、appid、timestamp、nonce、open_id</td><td>当前实现包含 open_id；待联调确认</td></tr><tr><td>Core → 平台：事件上报</td><td>appSecret、appid、timestamp、nonce</td><td>不包含 Body</td></tr></tbody></table></div><h3>统一计算步骤</h3><ul class="points"><li>把参与值全部按字符串处理（空值按接口协议过滤）。</li><li>按字符串值字典序升序排序；用 <code>_</code> 拼接。</li><li>对 UTF-8 拼接结果计算 SHA-1，输出 <strong>40 位小写十六进制</strong>。</li><li>平台交易密钥 <code>appSecret</code> 只保存在平台与中台的可信服务端，不下发给游戏客户端。</li></ul><h3>伪代码</h3><div class="codebox"><div class="codehead"><span>Text</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>values = [本接口定义的参与值...]
+plain = values.filter(非空).map(String).sort().join(&quot;_&quot;)
+x-signature = lower_hex(sha1(UTF8(plain)))</code></pre></div><div class="notice warn">请勿只根据“同样是 SHA-1”判断协议相同；签名字段集合不同，会直接导致 401。平台出站用户核验还需用真实向量锁定。</div></section><section id="p-errors" class="section"><div class="section-title"><h2>响应与联调检查</h2></div><div class="summary">平台对接常见状态及验收条件</div><div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>一般含义</th></tr></thead><tbody><tr><td><code>400</code></td><td>请求格式、字段或路径参数不合法</td></tr><tr><td><code>401</code></td><td>签名或鉴权失败</td></tr><tr><td><code>403</code></td><td>功能未启用或无权访问</td></tr><tr><td><code>404</code></td><td>AppID 不存在、环境未绑定或路由无效</td></tr><tr><td><code>409</code></td><td>订单重复登记但参数不一致等业务冲突</td></tr><tr><td><code>422</code></td><td>密钥或业务配置不合法（适用于部分接口）</td></tr><tr><td><code>502/504</code></td><td>调用上游失败或超时</td></tr><tr><td><code>503</code></td><td>依赖服务或必要配置不可用</td></tr></tbody></table></div><h3>推荐联调清单</h3><ul class="points"><li>支付回调：验签正确、错误签名、未知订单、金额不一致、重复回调、精确 nonce 应答。</li><li>用户核验：存在/不存在、功能关闭、目标环境未绑定、游戏上游超时；先确认真实签名样本。</li><li>事件接收：平台按 Header 验签、不把 Body 加入签名；正常返回 <code>{code:0,data:true}</code>。</li><li>检查两端时间同步与 nonce 格式，确认 HTTP 失败后的重试和幂等策略。</li></ul><div class="notice info">中台内部管理 API、配置同步 API 不属于平台的公开对接范围。</div></section>
+<div class="footnote">研发中台 middle-platform · 协议核对日期 2026-11-04。示例地址为占位值；对外发布前需确认实际域名与密钥。<a href="#p-start">返回接入说明</a></div></main>
+<main class="main doc-panel" id="panel-sync" data-doc="sync" role="tabpanel" aria-labelledby="tab-sync" hidden>
+<div class="hero"><div class="eyebrow">CONFIGURATION SYNC API</div><h1>第三方配置同步接入文档</h1><p>面向第三方游戏服务端与业务系统的配置同步协议。通过 HMAC-SHA256 Webhook 获知变更，主动拉取三级节点配置，支持全量快照和可选增量同步。</p><div class="pills"><span class="pill">纯 HTML · 无外部依赖</span><span class="pill gray">基于 main 路由及数据模型</span><span class="pill gray">9 个章节</span></div></div>
+<section id="s-intro" class="section"><div class="section-title"><h2>接入流程</h2></div><div class="summary">Webhook 通知 + 主动拉取；优先采用全量快照</div><p>第三方系统提供可接收通知的回调地址，由中台管理员注册订阅者。配置中心的游戏、大区或区服组发生变更时会发送签名 Webhook。第三方收到通知后快速应答，在后台主动拉取配置并更新自己的缓存或数据库。</p><h3>推荐的最简接入流程</h3><ul class="points"><li>第三方准备 <code>callbackUrl</code>，与中台管理员安全交换 <code>secret</code> 和配置中心 API 地址。</li><li>管理员在配置中心创建订阅者（第三方不需要自行调用管理 API）。</li><li>中台变更配置后 POST Webhook；第三方校验签名和时间戳，立即返回 HTTP 2xx。</li><li>第三方在后台调用 <code>GET /api/config/sync/snapshot</code> 获取一致性全量快照，将节点与 <code>epoch/revision</code> 同时保存。</li><li>建议每 5 分钟主动调用版本接口，补偿通知丢失；配置量很大时才考虑增量同步。</li></ul><h3>同步范围</h3><div class="table-wrap"><table><thead><tr><th>节点类型</th><th>含义</th><th>是否同步</th></tr></thead><tbody><tr><td><code>game</code></td><td>游戏</td><td>是</td></tr><tr><td><code>region</code></td><td>大区（测试/正式/提审）</td><td>是</td></tr><tr><td><code>server_group</code></td><td>区服组</td><td>是</td></tr><tr><td><code>channel_app</code></td><td>渠道应用、渠道绑定、AppID 配置</td><td>否</td></tr><tr><td><code>game_order</code></td><td>充值订单</td><td>否</td></tr></tbody></table></div><div class="notice info"><strong>推荐：</strong>第三方优先实现 Webhook + 全量快照 + 周期版本校对。无需使用中台的 MySQL 副本，也不需要对接管理写 API。</div></section>
+<section id="s-config" class="section"><div class="section-title"><h2>接入参数</h2></div><div class="summary">双方交换的最小配置项</div><div class="table-wrap"><table><thead><tr><th>参数</th><th>提供方</th><th>含义 / 示例</th></tr></thead><tbody><tr><td><code>code</code></td><td>第三方</td><td>订阅者唯一标识，例如 <code>game-service-a</code></td></tr><tr><td><code>callbackUrl</code></td><td>第三方</td><td>中台可访问的回调，例如 <code>https://game.example.com/internal/config/callback</code></td></tr><tr><td><code>secret</code></td><td>双方安全交换</td><td>HMAC-SHA256 共享密钥，建议使用高强度随机字符串</td></tr><tr><td><code>configCenterBaseUrl</code></td><td>中台</td><td>配置中心 API 根地址，例如 <code>https://config.example.com</code></td></tr></tbody></table></div><p>文档接口路径均不包含 <code>/sdk</code> 前缀。实际部署若使用公网 <code>/sdk/api/...</code>，应以管理员提供的网关地址为准。</p><div class="notice warn">Webhook 回调地址可为公网或内网 HTTP/HTTPS 域名或 IP；生产优先 HTTPS。平台拒绝元数据服务及部分特殊网络地址，不代表任意地址都能直接访问。</div></section>
+<section id="s-webhook" class="section"><div class="section-title"><h2>接收 Webhook 回调</h2></div><div class="summary">配置变更通知；签名通过后尽快返回 2xx</div><div class="route"><span class="verb post">POST</span><code>{callbackUrl}</code></div><p>配置中心向第三方预先提供的 <code>callbackUrl</code> 发起请求，Body 只包含 <code>epoch</code>、<code>revision</code>，不包含完整配置。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>类型/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr><tr><td><code>X-Config-Timestamp</code></td><td>Unix 秒级时间戳</td></tr><tr><td><code>X-Config-Signature</code></td><td><code>sha256=</code> + 64 位小写十六进制 HMAC-SHA256</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>epoch</code></td><td>string</td><td>是</td><td>数据集标识，发生变化需重新全量同步</td></tr><tr><td><code>revision</code></td><td>integer</td><td>是</td><td>该 epoch 内的版本游标</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /internal/config/callback HTTP/1.1
+Host: game.example.com
+Content-Type: application/json
+X-Config-Timestamp: 1793800000
+X-Config-Signature: sha256=&lt;64位小写十六进制 HMAC 签名&gt;
+
+{&quot;epoch&quot;:&quot;550e8400-e29b-41d4-a716-446655440000&quot;,&quot;revision&quot;:12}</code></pre></div><h3>签名规则</h3><div class="codebox"><div class="codehead"><span>TEXT</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>plain = timestamp + &quot;.&quot; + epoch + &quot;.&quot; + revision
+signature = &quot;sha256=&quot; + hex_lower(HMAC_SHA256(secret, UTF8(plain)))</code></pre></div><ul class="points"><li>使用原始的 <code>X-Config-Timestamp</code> 字符串参与签名，<code>revision</code> 转成十进制字符串。</li><li>验证签名前缀、十六进制长度、HMAC（建议常量时间比较）与时间戳：允许当前时间前后 300 秒。</li><li>非法 JSON 返回 400；验签或时间窗口失败返回 401。</li><li>合法通知尽快返回 HTTP 200 或 202，然后异步启动同步任务。中台自带接入端采用 HTTP 202 空响应体。</li><li>通知可能重复或乱序，使用 <code>epoch + revision</code> 判断新旧，不应直接把通知版本当成已完成同步的版本。</li></ul><h3>回调成功示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>HTTP/1.1 202 Accepted</code></pre></div><div class="notice warn">HTTP 2xx 只表示已收到有效通知，<strong>不代表配置已经同步完成</strong>。不得在 Webhook 请求内等待完整拉取，以免触发超时和重复投递。</div></section>
+<section id="s-revision" class="section"><div class="section-title"><h2>查询当前版本</h2></div><div class="summary">按 epoch + revision 判断是否需要更新</div><div class="route"><span class="verb get">GET</span><code>/api/config/sync/revision</code></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>GET /api/config/sync/revision HTTP/1.1
+Host: config.example.com</code></pre></div><h3>响应字段</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>epoch</code></td><td>string</td><td>配置数据集标识。发生变化立即重新全量同步</td></tr><tr><td><code>revision</code></td><td>integer</td><td>同一 epoch 内的单调递增版本号</td></tr></tbody></table></div><h3>HTTP 200 响应</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;epoch&quot;: &quot;550e8400-e29b-41d4-a716-446655440000&quot;,
+  &quot;revision&quot;: 12
+}</code></pre></div><ul class="points"><li>本地无配置或本地 epoch 为空：全量拉取。</li><li>本地 epoch 与远端不同：全量拉取。</li><li>同一 epoch 且版本相同：无需更新。</li><li>远端 revision 更大：直接拉取全量快照，或按增量接口追平。</li><li>本地 revision 大于远端：视为状态不一致，重新全量同步。</li></ul><div class="notice info">本接口直接返回 JSON 对象，没有 <code>code/message/data</code> 响应外壳。</div></section>
+<section id="s-snapshot" class="section"><div class="section-title"><h2>拉取全量快照</h2></div><div class="summary">第三方推荐的主要同步方式</div><div class="route"><span class="verb get">GET</span><code>/api/config/sync/snapshot</code></div><p>该接口返回同一数据库一致性视图下的 <code>epoch</code>、<code>revision</code> 和全部三级配置节点，适用于初次接入、epoch 变化或增量断档的恢复。</p><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>GET /api/config/sync/snapshot HTTP/1.1
+Host: config.example.com</code></pre></div><h3>响应结构</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>epoch</code></td><td>string</td><td>该快照所属的数据集标识</td></tr><tr><td><code>revision</code></td><td>integer</td><td>快照对应版本</td></tr><tr><td><code>nodes</code></td><td>array</td><td>游戏/大区/区服组节点数组；可能为空</td></tr></tbody></table></div><h3>HTTP 200 响应（节选）</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
+  &quot;epoch&quot;: &quot;550e8400-e29b-41d4-a716-446655440000&quot;,
+  &quot;revision&quot;: 12,
+  &quot;nodes&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;nodeType&quot;: &quot;game&quot;,
+      &quot;envType&quot;: null,
+      &quot;gameId&quot;: null,
+      &quot;regionId&quot;: null,
+      &quot;code&quot;: &quot;game_a&quot;,
+      &quot;name&quot;: &quot;示例游戏&quot;,
+      &quot;status&quot;: 1,
+      &quot;config&quot;: &quot;{\&quot;featureEnabled\&quot;:true}&quot;,
+      &quot;remark&quot;: null,
+      &quot;createdAt&quot;: &quot;2026-11-04T10:00:00&quot;,
+      &quot;updatedAt&quot;: &quot;2026-11-04T10:00:00&quot;,
+      &quot;parentId&quot;: 0
+    }
+  ]
+}</code></pre></div><h3>节点关键字段</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>说明</th></tr></thead><tbody><tr><td><code>id</code></td><td>节点数字 ID</td></tr><tr><td><code>nodeType</code></td><td><code>game</code>、<code>region</code> 或 <code>server_group</code></td></tr><tr><td><code>envType</code></td><td>大区环境：<code>test</code>、<code>prod</code>、<code>review</code>；其他节点一般为 null</td></tr><tr><td><code>gameId / regionId / parentId</code></td><td>节点归属与父节点 ID</td></tr><tr><td><code>code / name / status</code></td><td>编码、名称和状态</td></tr><tr><td><code>config</code></td><td><strong>JSON 格式的字符串</strong>，按需再次解析，不能当作已解码对象</td></tr><tr><td><code>remark / createdAt / updatedAt</code></td><td>备注和时间字段，实际完整响应中可能存在</td></tr></tbody></table></div><ul class="points"><li>可以把配置保存到内存、文件或第三方自有数据库；无需复用中台存储结构。</li><li>先验证返回的字段、节点唯一性与 JSON 内容，再构建新配置；不要更新一半就暴露给业务。</li><li>节点集合与 <code>epoch/revision</code> 必须作为一个一致性版本同时生效，不得先提交游标。</li><li>全量拉取期间源配置可能继续变化；应用快照后可再查询版本，落后时继续同步。</li></ul><div class="notice warn">安全提示：<code>nodes[].config</code> 可能包含服务端敏感值。同步接口应仅在可信网络或经过授权的网关开放，不能直接暴露到网页客户端。</div></section>
+<section id="s-changes" class="section"><div class="section-title"><h2>查询增量变更</h2></div><div class="summary">获取本地游标之后的修改/删除事件</div><div class="route"><span class="verb get">GET</span><code>/api/config/sync/changes</code></div><p>配置量较大时，才需要增量模式。以本地已成功应用的 <code>revision</code> 作为 <code>afterRevision</code>，按版本顺序拉取事件。</p><h3>查询参数</h3><div class="table-wrap"><table><thead><tr><th>参数</th><th>必填</th><th>约束</th></tr></thead><tbody><tr><td><code>afterRevision</code></td><td>否</td><td>起始游标，默认 0，必须 ≥ 0</td></tr><tr><td><code>limit</code></td><td>否</td><td>默认 200，范围 1–500</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>GET /api/config/sync/changes?afterRevision=12&amp;limit=200 HTTP/1.1
+Host: config.example.com</code></pre></div><h3>HTTP 200 响应示例</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>[
+  {
+    &quot;revision&quot;: 13,
+    &quot;nodeId&quot;: 7,
+    &quot;operation&quot;: &quot;UPSERT&quot;,
+    &quot;createdAt&quot;: &quot;2026-11-04T17:00:00&quot;
+  },
+  {
+    &quot;revision&quot;: 14,
+    &quot;nodeId&quot;: 8,
+    &quot;operation&quot;: &quot;DELETE&quot;,
+    &quot;createdAt&quot;: &quot;2026-11-04T17:02:00&quot;
+  }
+]</code></pre></div><h3>事件字段</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>含义</th></tr></thead><tbody><tr><td><code>revision</code></td><td>本事件版本，必须与前一条连续</td></tr><tr><td><code>nodeId</code></td><td>发生变化的节点 ID</td></tr><tr><td><code>operation</code></td><td><code>UPSERT</code> 创建/更新；<code>DELETE</code> 删除</td></tr><tr><td><code>createdAt</code></td><td>变更产生时间</td></tr></tbody></table></div><ul class="points"><li>接口返回 <strong>JSON 数组</strong>，不包含统一响应外壳。</li><li>按 revision 升序验证连续性，不能直接跳过版本或只以最后一个版本成功作结。</li><li>收集变更涉及的节点 ID，再通过批量接口获取节点最新状态；重复的 ID 可以去重。</li><li>若事件缺失、顺序不连续或 epoch 已变化，必须回退全量快照。</li><li>返回数量可能达到 limit；持续拉取后续分页，直到本地版本追平远端。</li></ul></section>
+<section id="s-batch" class="section"><div class="section-title"><h2>批量查询节点</h2></div><div class="summary">为增量事件取回节点最新值</div><div class="route"><span class="verb post">POST</span><code>/api/config/nodes/batch-get</code></div><p>增量事件只携带节点 ID 和操作类型，不携带完整配置内容。使用批量查询获取最新节点对象。</p><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>ids</code></td><td>integer[]</td><td>是</td><td>节点 ID 数组，一次最多 500 个</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /api/config/nodes/batch-get HTTP/1.1
+Host: config.example.com
+Content-Type: application/json
+
+{&quot;ids&quot;:[7,8]}</code></pre></div><h3>HTTP 200 响应（节选）</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>[
+  {
+    &quot;id&quot;: 7,
+    &quot;nodeType&quot;: &quot;game&quot;,
+    &quot;envType&quot;: null,
+    &quot;gameId&quot;: null,
+    &quot;regionId&quot;: null,
+    &quot;code&quot;: &quot;game_b&quot;,
+    &quot;name&quot;: &quot;示例游戏&quot;,
+    &quot;status&quot;: 1,
+    &quot;config&quot;: &quot;{\&quot;featureEnabled\&quot;:true}&quot;,
+    &quot;remark&quot;: null,
+    &quot;createdAt&quot;: &quot;2026-11-04T10:00:00&quot;,
+    &quot;updatedAt&quot;: &quot;2026-11-04T10:00:00&quot;,
+    &quot;parentId&quot;: 0
+  }
+]</code></pre></div><ul class="points"><li>接口响应为 <strong>节点数组</strong>，缺失的 ID 表示该节点当前已不存在，应在本地删除。</li><li>不要仅凭 UPSERT / DELETE 事件操作来决定最终存储；同一 ID 在多次变更后以批量读取的当前状态为准。</li><li>将批量节点更新、缺失节点删除与同步版本在同一原子操作中提交。</li><li>若批量读取与源配置变化发生竞态，继续追赶新版本；无法确认一致性时改用全量快照。</li></ul></section>
+<section id="s-strategy" class="section"><div class="section-title"><h2>同步策略与边界</h2></div><div class="summary">全量优先、版本一致、异常补偿</div><h3>推荐处理逻辑</h3><div class="codebox"><div class="codehead"><span>伪代码</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>收到 Webhook:
+    校验 HMAC 与时间戳
+    快速返回 HTTP 202
+    异步触发同步（合并并发触发）
+
+后台同步:
+    head = GET /api/config/sync/revision
+    如果本地无 epoch 或 epoch 发生变化:
+        snapshot = GET /api/config/sync/snapshot
+        原子替换节点集合及 epoch/revision
+    否则如果远端 revision &gt; 本地 revision:
+        # 最简单做法：仍然直接获取全量快照
+        snapshot = GET /api/config/sync/snapshot
+        原子替换节点集合及 epoch/revision
+    定期检查最新版本，直到追平</code></pre></div><h3>必须注意</h3><ul class="points"><li>Webhook 是加速通知，不是唯一同步来源；定时校对建议每 5 分钟执行一次。</li><li>Webhook 可能重复、乱序；异常和网络错误后继续等待下次通知或周期重试。</li><li>只有已落地并可供业务读取的配置版本才能推进本地游标。</li><li>大规模配置才开启增量路径，并正确处理分批、删除、并发配置变更及 epoch 重建。</li><li>只需要按 AppID 获取 SDK 配置时，请使用 <code>GET /api/core/config/{env}/{appid}</code>，而不是三级节点同步协议。</li></ul></section>
+<section id="s-check" class="section"><div class="section-title"><h2>错误处理与联调</h2></div><div class="summary">最低接入清单、状态码与安全说明</div><h3>常见状态</h3><div class="table-wrap"><table><thead><tr><th>状态</th><th>可能原因</th><th>建议处理</th></tr></thead><tbody><tr><td><code>202</code></td><td>中台自带接入端的 Webhook 验签成功</td><td>立即应答，后台拉取</td></tr><tr><td><code>400</code></td><td>Webhook JSON 不合法 / 同步请求参数错误</td><td>校正请求格式</td></tr><tr><td><code>401</code></td><td>Webhook 签名错误或超出时间窗口</td><td>检查 secret、时钟、签名输入</td></tr><tr><td><code>404</code></td><td>节点不存在等</td><td>核对节点状态；批量读取缺项按删除处理</td></tr><tr><td><code>500</code></td><td>配置中心读取失败等</td><td>保留原游标，后续重试</td></tr></tbody></table></div><h3>联调检查表</h3><ul class="points"><li>修改游戏、大区或区服组，第三方收到签名 Webhook，并能成功更新本地配置。</li><li>使用错误密钥或篡改 revision，WebHook 返回 401，且不会推进游标。</li><li>重复通知不会导致配置回退或重复执行破坏性操作。</li><li>临时关闭回调后，定期版本检查仍然能补齐配置。</li><li>修改渠道应用不会触发三级配置节点的版本增量。</li><li>本地配置与 epoch/revision 同步提交；异常中断不会造成游标领先配置。</li></ul><div class="notice info">最低接入工作量：<strong>一个验签回调接口、一条全量拉取流程、一份本地配置存储、一个定期版本校对任务</strong>。服务端密钥仅存于受控系统。</div></section>
+<div class="footnote">研发中台 middle-platform · 协议核对日期 2026-11-04。示例域名和标识均为演示值；上线前请确认实际网关与密钥。<a href="#s-intro">返回接入说明</a></div></main></div></div>
+<button class="backTop" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ 顶部</button><script>
+(function(){
+  var root=document.documentElement, key="mp-api-theme";
+  try{
+    var saved=localStorage.getItem(key);
+    if(saved==="dark"||saved==="light")root.setAttribute("data-theme",saved);
+    else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)root.setAttribute("data-theme","dark");
+  }catch(_){}
+  var theme=document.getElementById("theme");
+  function syncTheme(){theme.textContent=root.getAttribute("data-theme")==="dark"?"☀ 浅色":"☾ 深色";}
+  syncTheme();
+  theme.addEventListener("click",function(){
+    var val=root.getAttribute("data-theme")==="dark"?"light":"dark";
+    root.setAttribute("data-theme",val);
+    try{localStorage.setItem(key,val);}catch(_){}
+    syncTheme();
+  });
+
+  var side=document.getElementById("sidebar");
+  var search=document.getElementById("search");
+  var tabs=Array.prototype.slice.call(document.querySelectorAll(".doc-tab"));
+  var panels=Array.prototype.slice.call(document.querySelectorAll(".doc-panel"));
+  var navs=Array.prototype.slice.call(document.querySelectorAll(".doc-nav"));
+  var activeDoc=null;
+
+  document.getElementById("mobileMenu").addEventListener("click",function(){side.classList.toggle("open");});
+
+  function filterNav(){
+    var nav=navs.find(function(item){return item.dataset.doc===activeDoc;});
+    if(!nav)return;
+    var q=search.value.trim().toLowerCase(),groups={};
+    var links=Array.prototype.slice.call(nav.querySelectorAll(".nav-link"));
+    links.forEach(function(a){
+      var ok=(a.getAttribute("data-keywords")||a.textContent).toLowerCase().indexOf(q)!==-1;
+      a.hidden=!ok;
+      if(ok)groups[a.getAttribute("data-group")]=true;
+    });
+    Array.prototype.forEach.call(nav.querySelectorAll(".side-title"),function(heading){
+      heading.hidden=!groups[heading.getAttribute("data-group")];
+    });
+    document.getElementById("noResults").hidden=links.some(function(a){return !a.hidden;});
+  }
+
+  function highlightAnchor(hash){
+    navs.forEach(function(nav){
+      Array.prototype.forEach.call(nav.querySelectorAll(".nav-link"),function(a){
+        a.classList.toggle("active",nav.dataset.doc===activeDoc&&a.getAttribute("href")===hash);
+      });
+    });
+  }
+
+  function showDoc(doc){
+    if(!tabs.some(function(tab){return tab.dataset.doc===doc;}))return;
+    if(activeDoc!==doc){search.value="";side.classList.remove("open");}
+    activeDoc=doc;
+    panels.forEach(function(panel){panel.hidden=panel.dataset.doc!==doc;});
+    navs.forEach(function(nav){nav.hidden=nav.dataset.doc!==doc;});
+    tabs.forEach(function(tab){
+      var selected=tab.dataset.doc===doc;
+      tab.setAttribute("aria-selected",String(selected));
+      tab.tabIndex=selected?0:-1;
+    });
+    filterNav();
+    highlightAnchor(window.location.hash);
+  }
+
+  function docFromHash(){
+    var id;
+    try{id=decodeURIComponent(window.location.hash.slice(1));}catch(_){return null;}
+    var section=document.getElementById(id);
+    var panel=section&&section.closest(".doc-panel");
+    return panel?panel.dataset.doc:null;
+  }
+
+  function syncHash(){
+    var doc=docFromHash();
+    if(doc)showDoc(doc);
+    highlightAnchor(window.location.hash);
+  }
+
+  tabs.forEach(function(tab){
+    tab.addEventListener("click",function(){
+      var doc=tab.dataset.doc;
+      showDoc(doc);
+      var first=navs.find(function(nav){return nav.dataset.doc===doc;}).querySelector(".nav-link");
+      if(first)window.location.hash=first.getAttribute("href");
+    });
+    tab.addEventListener("keydown",function(ev){
+      if(ev.key!=="ArrowLeft"&&ev.key!=="ArrowRight"&&ev.key!=="Home"&&ev.key!=="End")return;
+      ev.preventDefault();
+      var index=tabs.indexOf(tab);
+      var next=ev.key==="Home"?0:ev.key==="End"?tabs.length-1:(index+(ev.key==="ArrowRight"?1:tabs.length-1))%tabs.length;
+      tabs[next].focus();
+      tabs[next].click();
+    });
+  });
+
+  navs.forEach(function(nav){
+    Array.prototype.forEach.call(nav.querySelectorAll(".nav-link"),function(a){
+      a.addEventListener("click",function(){side.classList.remove("open");});
+    });
+  });
+  search.addEventListener("input",filterNav);
+  window.addEventListener("hashchange",syncHash);
+
+  showDoc(docFromHash()||"game");
+  if(window.location.hash&&docFromHash()){
+    window.requestAnimationFrame(function(){
+      var target=document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
+      if(target)target.scrollIntoView();
+    });
+  }
+
+  if("IntersectionObserver" in window){
+    var observer=new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting&&entry.target.closest(".doc-panel").dataset.doc===activeDoc){
+          highlightAnchor("#"+entry.target.id);
+        }
+      });
+    },{rootMargin:"-150px 0px -65% 0px",threshold:0});
+    document.querySelectorAll(".section").forEach(function(section){observer.observe(section);});
+  }
+
+  document.querySelectorAll(".copy").forEach(function(button){
+    button.addEventListener("click",async function(){
+      var value=button.closest(".codebox").querySelector("code").textContent,ok=false;
+      try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(value);ok=true;}}catch(_){}
+      if(!ok){
+        var ta=document.createElement("textarea");ta.value=value;ta.style.position="fixed";ta.style.opacity="0";
+        document.body.appendChild(ta);ta.select();
+        try{ok=document.execCommand("copy");}catch(_){}
+        ta.remove();
+      }
+      if(!ok){window.prompt("请复制以下内容：",value);return;}
+      var old=button.textContent;button.textContent="已复制";
+      window.setTimeout(function(){button.textContent=old;},1200);
+    });
+  });
+})();
+</script></body></html>
