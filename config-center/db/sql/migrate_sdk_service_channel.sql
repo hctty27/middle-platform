@@ -48,7 +48,7 @@ SELECT id,code,name,enabled FROM sdk_service ORDER BY id;
 SELECT COUNT(*) AS channel_binding_count FROM sdk_service_channel;
 SELECT COUNT(*) AS orphan_binding_count
 FROM sdk_service_channel ch
-LEFT JOIN config_channel_app app ON app.id=ch.channel_app_id
+LEFT JOIN sdk_channel_app app ON app.id=ch.channel_app_id
 WHERE app.id IS NULL;
 
 SHOW CREATE TABLE sdk_service;
