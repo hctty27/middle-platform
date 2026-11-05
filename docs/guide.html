@@ -506,10 +506,10 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
   menu.addEventListener("click",()=>toggleMenu(!sidebar.classList.contains("open")));
   overlay.addEventListener("click",()=>toggleMenu(false));
   document.addEventListener("keydown",e=>{if(e.key==="Escape")toggleMenu(false);});
-  let saved="light";try{saved=localStorage.getItem("mp-guide-theme")||localStorage.getItem("mp-docs-theme")||"light";}catch(e){}
+  let saved="light";try{saved=localStorage.getItem("mp-api-theme")|| (window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");}catch(e){}
   document.documentElement.dataset.theme=saved==="dark"?"dark":"light";
   function refreshTheme(){theme.textContent=document.documentElement.dataset.theme==="dark"?"☀":"☾";}
-  theme.addEventListener("click",()=>{const next=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=next;try{localStorage.setItem("mp-guide-theme",next);}catch(e){}refreshTheme();});
+  theme.addEventListener("click",()=>{const next=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=next;try{localStorage.setItem("mp-api-theme",next);}catch(e){}refreshTheme();});
   refreshTheme();
   document.querySelectorAll(".copy-btn").forEach(btn=>btn.addEventListener("click",async()=>{
     const content=btn.closest(".code-card").querySelector("pre code").textContent;
