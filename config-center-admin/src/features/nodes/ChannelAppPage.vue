@@ -51,7 +51,7 @@ async function loadApps() {
   if (!props.gameId) { apps.value = []; active.value = null; return }
   loading.value = true
   try {
-    const { data } = await api.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: props.gameId } })
+    const { data } = await sdkApi.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: props.gameId } })
     if (request !== sequence) return
     apps.value = data
     active.value = data.find(item => item.id === active.value?.id) ?? data[0] ?? null
@@ -67,7 +67,7 @@ async function loadOptions(env: RegionEnvType, keyword = '') {
   const request = ++groupSequences[env]
   groupLoading[env] = true
   try {
-    const { data } = await api.get<GroupOption[]>('/admin/channel-apps/server-groups', {
+    const { data } = await sdkApi.get<GroupOption[]>('/admin/channel-apps/server-groups', {
       params: { gameId: props.gameId, envType: env, keyword }
     })
     if (request === groupSequences[env]) groupOptions[env] = data
