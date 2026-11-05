@@ -37,7 +37,7 @@ func TestEventAndSubscribeRoutes(t *testing.T) {
         {"事件非法字段", "/api/service/events/test", `{"event":"a","ext":{},"unexpected":1}`, 400, 0, 0},
         {"事件 ext 字符串", "/api/service/events/test", `{"event":"a","ext":"x"}`, 400, 0, 0},
         {"订阅只填必填", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl"}`, 200, 0, 1},
-        {"订阅带微信模板", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":"{\\"thing1\\":{\\"value\\":\\"礼包\\"}}"}`, 200, 0, 1},
+        {"订阅带微信模板", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":"{\"thing1\":{\"value\":\"礼包\"}}"}`, 200, 0, 1},
         {"订阅缺模板", "/api/service/subscribe/test", `{"open_id":"u1"}`, 400, 0, 0},
         {"订阅 data 非字符串", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":{"x":1}}`, 400, 0, 0},
         {"订阅 data 无效 JSON", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":"not-json"}`, 400, 0, 0},

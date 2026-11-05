@@ -41,7 +41,7 @@ func TestGameRequestSignature(t *testing.T) {
 }
 
 func TestSubscribeGameSignature(t *testing.T) {
-    body := []byte(`{"open_id":"u1","tpl_id":"tpl","data":"{\\"thing1\\":{\\"value\\":\\"礼包\\"}}"}`)
+    body := []byte(`{"open_id":"u1","tpl_id":"tpl","data":"{\"thing1\":{\"value\":\"礼包\"}}"}`)
     ts := "1793800000"
     nonce := "0011223344556677"
     got, err := SignGame("secret", "110006", ts, nonce, body)
