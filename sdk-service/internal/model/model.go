@@ -1,7 +1,10 @@
 // Package model 定义 SDK Service 的统一业务模型。
 package model
 
-import "errors"
+import (
+    "errors"
+    "strconv"
+)
 
 var (
     ErrNotFound = errors.New("渠道包不存在或未绑定环境")
@@ -17,6 +20,7 @@ type Target struct {
     GameCode string
     UserCheckURL string
     RoleQueryURL string
+    ServerQueryURL string
     AdapterName string
     AppSecret string
     GameSecret string
@@ -75,4 +79,69 @@ func (r Role) Valid() bool {
         r.CurrentServerID != "" && r.CurrentServerName != "" &&
         r.CreatedAt != nil && r.LevelUpdatedAt != nil &&
         r.LastOfflineAt != nil && r.LastLoginAt != nil
+}
+
+type ServerQueryRequest struct {
+    OriginalServerID string `json:"original_server_id,omitempty"`
+    CurrentServerID  string `json:"current_server_id,omitempty"`
+    Page             int    `json:"page"`
+    PageSize         int    `json:"page_size"`
+    Zonekey          string `json:"zonekey,omitempty"`
+    PageSizeProvided bool   `json:"-"`
+}
+
+// SignatureValues 用于校验平台实际发来的请求，未提交的可选字段不参与签名。
+func (r ServerQueryRequest) SignatureValues() []string {
+    values := []string{r.OriginalServerID, r.CurrentServerID, strconv.Itoa(r.Page)}
+    if r.PageSizeProvided {
+        values = append(values, strconv.Itoa(r.PageSize))
+    }
+    return append(values, r.Zonekey)
+}
+
+// ForwardSignatureValues 用于中台发送给游戏，page_size 会显式发送默认值。
+func (r ServerQueryRequest) ForwardSignatureValues() []string {
+    return []string{r.OriginalServerID, r.CurrentServerID, strconv.Itoa(r.Page), strconv.Itoa(r.PageSize), r.Zonekey}
+}
+
+type ServerInfo struct {
+    OriginalServerID   string `json:"original_server_id"`
+    OriginalServerName string `json:"original_server_name"`
+    CurrentServerID    string `json:"current_server_id"`
+    CurrentServerName  string `json:"current_server_name"`
+    MasterServerID     string `json:"master_server_id"`
+    MasterServerName   string `json:"master_server_name"`
+    Status             string `json:"status"`
+    OpenedAt           *int64 `json:"opened_at"`
+    OpenDays           *int64 `json:"open_days"`
+    MergeAt            *int64 `json:"merge_at,omitempty"`
+    MergeDays          *int64 `json:"merge_days,omitempty"`
+    MergeCount         *int64 `json:"merge_count,omitempty"`
+    CloseAt            *int64 `json:"close_at"`
+    RoleTotal          *int64 `json:"role_total"`
+    RoleOnlineTotal    *int64 `json:"role_online_total"`
+}
+
+func (s ServerInfo) Valid() bool {
+    switch s.Status {
+    case "0", "1", "3", "4":
+    default:
+        return false
+    }
+    return s.OriginalServerID != "" && s.OriginalServerName != "" &&
+        s.CurrentServerID != "" && s.CurrentServerName != "" &&
+        s.MasterServerID != "" && s.MasterServerName != "" &&
+        s.OpenedAt != nil && *s.OpenedAt >= 0 &&
+        s.OpenDays != nil && *s.OpenDays >= 0 &&
+        s.CloseAt != nil && *s.CloseAt >= 0 &&
+        s.RoleTotal != nil && *s.RoleTotal >= 0 &&
+        s.RoleOnlineTotal != nil && *s.RoleOnlineTotal >= 0 &&
+        (s.MergeAt == nil || *s.MergeAt >= 0) &&
+        (s.MergeDays == nil || *s.MergeDays >= 0) &&
+        (s.MergeCount == nil || *s.MergeCount >= 0)
+}
+
+type ServerQueryResult struct {
+    Total int64        `json:"total"`
+    List  []ServerInfo `json:"list"`
 }

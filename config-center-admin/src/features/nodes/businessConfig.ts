@@ -1,13 +1,14 @@
 /** 业务字段的表单模型。底层仍使用原有 config JSON 字符串。 */
 export interface GameConfig {
   gameSecret?: string
-  serviceAdapters?: { user_check?: string; role_query?: string; [key: string]: unknown }
+  serviceAdapters?: { user_check?: string; role_query?: string; server_query?: string; [key: string]: unknown }
 }
 
 export interface RegionConfig {
   payNotifyUrl?: string
   userCheckUrl?: string
   roleQueryUrl?: string
+  serverQueryUrl?: string
 }
 
 export interface ServerGroupConfig {
@@ -34,12 +35,14 @@ export const businessConfigFields: Record<BusinessConfigType, readonly BusinessC
   game: [
     { key: 'gameSecret', label: '游戏主密钥', description: '游戏服与 SDK Core/Service 共用的服务端签名密钥，所有环境共享', placeholder: '请输入游戏主密钥', secret: true },
     { key: 'serviceAdapters.user_check', label: '用户核验适配器', description: '可选。留空自动使用标准适配器，只有特殊游戏才需要填写', placeholder: '留空默认 standard', defaultValue: 'standard' },
-    { key: 'serviceAdapters.role_query', label: '角色查询适配器', description: '可选。留空自动使用标准适配器，特殊游戏可以配置已注册的实现', placeholder: '留空默认 standard', defaultValue: 'standard' }
+    { key: 'serviceAdapters.role_query', label: '角色查询适配器', description: '可选。留空自动使用标准适配器，特殊游戏可以配置已注册的实现', placeholder: '留空默认 standard', defaultValue: 'standard' },
+    { key: 'serviceAdapters.server_query', label: '区服查询适配器', description: '可选。留空自动使用标准适配器，特殊游戏可选择已注册实现', placeholder: '留空默认 standard', defaultValue: 'standard' }
   ],
   region: [
     { key: 'payNotifyUrl', label: '支付发货通知地址', description: 'SDK Core 支付成功后通知游戏服的 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/pay/notify' },
     { key: 'userCheckUrl', label: '用户核验地址', description: 'SDK Service 核验玩家时请求的完整游戏服 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/user/check' },
-    { key: 'roleQueryUrl', label: '角色查询地址', description: 'SDK Service 查询游戏角色时请求的完整 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/role/query' }
+    { key: 'roleQueryUrl', label: '角色查询地址', description: 'SDK Service 查询游戏角色时请求的完整 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/role/query' },
+    { key: 'serverQueryUrl', label: '区服查询地址', description: 'SDK Service 实时分页查询游戏区服的完整 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/server/query' }
   ],
   server_group: [],
   channel_app: [

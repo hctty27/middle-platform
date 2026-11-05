@@ -34,4 +34,5 @@ CREATE TABLE sdk_service_channel (
 INSERT INTO sdk_service (code,name,description,enabled) VALUES
 ('event_report','事件上报','游戏事件向发行平台上报',1),
 ('user_check','核验用户信息','平台核验用户信息并转发至游戏',1),
-('role_query','角色查询','平台实时查询游戏角色信息',1);
+('role_query','角色查询','平台实时查询游戏角色信息',1),
+('server_query','区服查询','平台实时分页查询游戏区服信息',1);

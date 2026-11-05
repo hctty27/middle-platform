@@ -46,6 +46,7 @@ func (s *Store) VerifySchema(ctx context.Context) error {
     for _, entry := range []struct{ code, script string }{
         {"user_check", "add_sdk_user_check.sql"},
         {"role_query", "add_sdk_role_query.sql"},
+        {"server_query", "add_sdk_server_query.sql"},
     } {
         var id int64
         err = s.db.QueryRowContext(ctx, "SELECT id FROM sdk_service WHERE code=?", entry.code).Scan(&id)
@@ -62,7 +63,7 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, er
 }
 
 func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode string) (model.Target, error) {
-    if serviceCode != "user_check" && serviceCode != "role_query" {
+    if serviceCode != "user_check" && serviceCode != "role_query" && serviceCode != "server_query" {
         return model.Target{}, model.ErrInvalidConfig
     }
     if env != "prod" && env != "test" && env != "review" { return model.Target{}, model.ErrNotFound }
@@ -84,6 +85,7 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
     var region struct {
         UserCheckURL string `json:"userCheckUrl"`
         RoleQueryURL string `json:"roleQueryUrl"`
+        ServerQueryURL string `json:"serverQueryUrl"`
     }
     if json.Unmarshal(appJSON, &app) != nil || json.Unmarshal(gameJSON, &game) != nil ||
         json.Unmarshal(regionJSON, &region) != nil {
@@ -91,8 +93,11 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
     }
     adapterName := adapter.NameForService(game.ServiceAdapters, serviceCode)
     targetURL := strings.TrimSpace(region.UserCheckURL)
-    if serviceCode == "role_query" {
+    switch serviceCode {
+    case "role_query":
         targetURL = strings.TrimSpace(region.RoleQueryURL)
+    case "server_query":
+        targetURL = strings.TrimSpace(region.ServerQueryURL)
     }
     u, err := url.Parse(targetURL)
     if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
@@ -105,10 +110,13 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
         AdapterName: adapterName,
         AppSecret: app.AppSecret, GameSecret: game.GameSecret,
     }
-    if serviceCode == "user_check" {
+    switch serviceCode {
+    case "user_check":
         result.UserCheckURL = targetURL
-    } else {
+    case "role_query":
         result.RoleQueryURL = targetURL
+    case "server_query":
+        result.ServerQueryURL = targetURL
     }
     return result, nil
 }

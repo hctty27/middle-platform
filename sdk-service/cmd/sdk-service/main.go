@@ -16,6 +16,7 @@ import (
     "github.com/go-sql-driver/mysql"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/usercheck"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolequery"
+    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/serverquery"
     "github.com/hctty27/middle-platform/sdk-service/internal/api"
     "github.com/hctty27/middle-platform/sdk-service/internal/service"
     "github.com/hctty27/middle-platform/sdk-service/internal/settings"
@@ -65,19 +66,25 @@ func run(path string) error {
     if err := routes.VerifySchema(initCtx); err != nil { return err }
 
     timeout, _ := time.ParseDuration(cfg.Game.Timeout)
+    gameClient := usercheck.NewHTTPClient(timeout)
     registry, err := usercheck.NewRegistry(map[string]usercheck.Adapter{
-        "standard": &usercheck.Standard{Client: usercheck.NewHTTPClient(timeout)},
+        "standard": &usercheck.Standard{Client: gameClient},
     })
     if err != nil { return err }
     checker := &service.UserCheckService{Routes: routes, Adapters: registry}
     roleRegistry, err := rolequery.NewRegistry(map[string]rolequery.Adapter{
-        "standard": &rolequery.Standard{Client: usercheck.NewHTTPClient(timeout)},
+        "standard": &rolequery.Standard{Client: gameClient},
     })
     if err != nil { return err }
     roleQuerier := &service.RoleQueryService{Routes: routes, Adapters: roleRegistry}
+    serverRegistry, err := serverquery.NewRegistry(map[string]serverquery.Adapter{
+        "standard": &serverquery.Standard{Client: gameClient},
+    })
+    if err != nil { return err }
+    serverQuerier := &service.ServerQueryService{Routes: routes, Adapters: serverRegistry}
     srv := &http.Server{
         Addr: cfg.Server.Address,
-        Handler: logging.HTTP(cfg.Log, api.Router(checker, db, roleQuerier)),
+        Handler: logging.HTTP(cfg.Log, api.RouterWithServices(checker, db, roleQuerier, serverQuerier)),
         ReadHeaderTimeout: 5*time.Second,
         ReadTimeout: 10*time.Second,
         WriteTimeout: timeout + 5*time.Second,
