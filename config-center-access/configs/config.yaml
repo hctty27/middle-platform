@@ -1,4 +1,4 @@
-# 配置接入端：使用独立的 config_access 副本库，不写权威库。
+# 配置接入端：完整配置模板，使用独立 config_access 副本库；复制后的 YAML 不继承本文件。
 server:
   address: ":8081"
 

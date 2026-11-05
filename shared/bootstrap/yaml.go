@@ -7,7 +7,6 @@ import (
  "fmt"
  "io"
  "os"
- "path/filepath"
  "gopkg.in/yaml.v3"
 )
 
@@ -20,18 +19,6 @@ func ReadYAML(path string, target any) error {
  var extra any
  if err:=decoder.Decode(&extra);!errors.Is(err,io.EOF){return fmt.Errorf("YAML %s 必须只包含一份文档",path)}
  return nil
-}
-
-// ReadLayeredYAML 保留 config.yaml -> 指定环境 YAML 的覆盖顺序。
-func ReadLayeredYAML(path string,target any)error{
- if path==""{return nil}
- base:=filepath.Join(filepath.Dir(path),"config.yaml")
- if filepath.Clean(path)!=filepath.Clean(base){
-  if _,err:=os.Stat(base);err==nil{
-   if err:=ReadYAML(base,target);err!=nil{return err}
-  }else if !errors.Is(err,os.ErrNotExist){return err}
- }
- return ReadYAML(path,target)
 }
 
 func OverrideString(key string,target *string){

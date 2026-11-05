@@ -41,10 +41,12 @@ type configFile struct {
 // Load 保留纯环境变量启动方式。
 func Load() (Config,error) { return LoadFile("") }
 
-// LoadFile 依次加载共享 YAML、环境 YAML，再用环境变量覆盖。
+// LoadFile 仅加载指定 YAML 并应用环境变量覆盖；空路径保留纯环境变量模式。
 func LoadFile(path string) (Config,error) {
  data:=configFile{Log:logging.Default()}
- if err:=bootstrap.ReadLayeredYAML(path,&data);err!=nil{return Config{},err}
+ if path!="" {
+  if err:=bootstrap.ReadYAML(path,&data);err!=nil{return Config{},err}
+ }
 
  cfg:=Config{
   Address:":8081",

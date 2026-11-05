@@ -23,16 +23,11 @@ func TestStrictYAML(t *testing.T){
  }
 }
 
-func TestLayeredYAML(t *testing.T){
- dir:=t.TempDir()
- base:=filepath.Join(dir,"config.yaml")
- env:=filepath.Join(dir,"config-dev.yaml")
- _=os.WriteFile(base,[]byte("name: base\nvalue: keep\n"),0600)
- _=os.WriteFile(env,[]byte("name: env\n"),0600)
- var c struct{Name string `yaml:"name"`;Value string `yaml:"value"`}
- if err:=ReadLayeredYAML(env,&c);err!=nil{t.Fatal(err)}
- if c.Name!="env"||c.Value!="keep"{t.Fatal(c)}
- t.Setenv("BOOTSTRAP_TEST_NAME","")
- OverrideString("BOOTSTRAP_TEST_NAME",&c.Name)
- if c.Name!=""{t.Fatal("empty environment value must override")}
+func TestOverrideString(t *testing.T) {
+ t.Setenv("BOOTSTRAP_TEST_NAME", "")
+ name := "default"
+ OverrideString("BOOTSTRAP_TEST_NAME", &name)
+ if name != "" { t.Fatal("环境变量空值应覆盖原配置") }
+ OverrideString("BOOTSTRAP_TEST_NOT_SET", &name)
+ if name != "" { t.Fatal("不存在的环境变量不应修改值") }
 }
