@@ -9,8 +9,8 @@ func TestValidateBusinessConfig(t *testing.T) {
 		config   string
 		wantErr  bool
 	}{
-		{"game", "game", `{"gameSecret":"中文密钥 !","custom":{"enabled":true}}`, false},
-		{"region", "region", `{"payNotifyUrl":"http://127.0.0.1:8080/notify"}`, false},
+		{"game", "game", `{"gameSecret":"中文密钥 !","custom":{"enabled":true}}`, true},
+		{"region", "region", `{"payNotifyUrl":"http://127.0.0.1:8080/notify"}`, true},
 		{"server group", "server_group", `{"extra":123}`, false},
 		{"app", "channel_app", `{"tsKey":"","appSecret":"secret","extra":false}`, false},
 		{"unset", "game", `{}`, false},

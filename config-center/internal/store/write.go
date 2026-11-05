@@ -139,11 +139,11 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 	}
 	// 不能删除仍有渠道应用的游戏或仍有绑定的区服组。
 	if current.NodeType == "game" {
-		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE game_id=?",id).Scan(&count); err != nil { return err }
+		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_channel_app WHERE game_id=?",id).Scan(&count); err != nil { return err }
 		if count>0 { return ErrConflict }
 	}
 	if current.NodeType == "server_group" {
-		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE prod_server_group_id=? OR test_server_group_id=? OR review_server_group_id=?",id,id,id).Scan(&count); err != nil { return err }
+		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_channel_app WHERE prod_server_group_id=? OR test_server_group_id=? OR review_server_group_id=?",id,id,id).Scan(&count); err != nil { return err }
         if count>0 { return ErrConflict }
     }
     if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil { return databaseError(err) }

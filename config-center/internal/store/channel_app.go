@@ -35,7 +35,7 @@ func validObject(config string) bool {
 
 // apps 按所属游戏查询应用；管理员列表不查询已删除的绑定表。
 func apps(ctx context.Context, db queryer, gameID int64) ([]model.ChannelApp,error) {
-    statement := "SELECT "+appColumns+" FROM config_channel_app"
+    statement := "SELECT "+appColumns+" FROM sdk_channel_app"
     var args []any
     if gameID>0 { statement+=" WHERE game_id=?"; args=append(args,gameID) }
     rows,err:=db.QueryContext(ctx,statement+" ORDER BY id",args...)
@@ -70,10 +70,10 @@ func (s *Store) CreateChannelApp(ctx context.Context, input model.CreateChannelA
 	var kind string
 	if err=tx.QueryRowContext(ctx,"SELECT node_type FROM config_node WHERE id=?",input.GameID).Scan(&kind); err!=nil || kind!="game" { return model.ChannelApp{},ErrInvalid }
 	if err := validateAppGroups(ctx,tx,input.GameID,input.ProdServerGroupID,input.TestServerGroupID,input.ReviewServerGroupID); err!=nil { return model.ChannelApp{},err }
-    res,err := tx.ExecContext(ctx,"INSERT INTO config_channel_app(game_id,code,name,status,config,remark,prod_server_group_id,test_server_group_id,review_server_group_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",input.GameID,input.Code,input.Name,*input.Status,input.Config,input.Remark,input.ProdServerGroupID,input.TestServerGroupID,input.ReviewServerGroupID)
+    res,err := tx.ExecContext(ctx,"INSERT INTO sdk_channel_app(game_id,code,name,status,config,remark,prod_server_group_id,test_server_group_id,review_server_group_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",input.GameID,input.Code,input.Name,*input.Status,input.Config,input.Remark,input.ProdServerGroupID,input.TestServerGroupID,input.ReviewServerGroupID)
 	if err!=nil { return model.ChannelApp{},databaseError(err) }
 	id,err:=res.LastInsertId(); if err!=nil { return model.ChannelApp{},err }
-	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",id))
+	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM sdk_channel_app WHERE id=?",id))
 	if err!=nil { return model.ChannelApp{},err }
 	return a,tx.Commit()
 }
@@ -83,12 +83,12 @@ func (s *Store) UpdateChannelApp(ctx context.Context,id int64,input model.Update
 	if id<=0 || validApp(input.Name,input.Status,input.Config,input.Remark)!=nil { return model.ChannelApp{},ErrInvalid }
 	tx,err:=s.DB.BeginTx(ctx,nil); if err!=nil { return model.ChannelApp{},err }; defer tx.Rollback()
 	if err=lockRevision(ctx,tx); err!=nil { return model.ChannelApp{},err }
-	existing,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",id))
+	existing,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM sdk_channel_app WHERE id=?",id))
     if err!=nil { return model.ChannelApp{},err }
     if err:=validateAppGroups(ctx,tx,existing.GameID,input.ProdServerGroupID,input.TestServerGroupID,input.ReviewServerGroupID);err!=nil { return model.ChannelApp{},err }
-    _,err=tx.ExecContext(ctx,"UPDATE config_channel_app SET name=?,status=?,config=?,remark=?,prod_server_group_id=?,test_server_group_id=?,review_server_group_id=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?",input.Name,*input.Status,input.Config,input.Remark,input.ProdServerGroupID,input.TestServerGroupID,input.ReviewServerGroupID,id)
+    _,err=tx.ExecContext(ctx,"UPDATE sdk_channel_app SET name=?,status=?,config=?,remark=?,prod_server_group_id=?,test_server_group_id=?,review_server_group_id=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?",input.Name,*input.Status,input.Config,input.Remark,input.ProdServerGroupID,input.TestServerGroupID,input.ReviewServerGroupID,id)
 	if err!=nil { return model.ChannelApp{},databaseError(err) }
-	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM config_channel_app WHERE id=?",id))
+	a,err:=scanApp(tx.QueryRowContext(ctx,"SELECT "+appColumns+" FROM sdk_channel_app WHERE id=?",id))
 	if err!=nil { return model.ChannelApp{},err }
 	return a,tx.Commit()
 }
@@ -99,13 +99,13 @@ func (s *Store) DeleteChannelApp(ctx context.Context,id int64) error {
 	tx,err:=s.DB.BeginTx(ctx,nil); if err!=nil { return err }; defer tx.Rollback()
 	if err=lockRevision(ctx,tx); err!=nil { return err }
 	var count int
-    if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE id=?",id).Scan(&count);err!=nil { return err }
+    if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_channel_app WHERE id=?",id).Scan(&count);err!=nil { return err }
     if count==0 { return sql.ErrNoRows }
-    if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM config_channel_app WHERE id=? AND (prod_server_group_id IS NOT NULL OR test_server_group_id IS NOT NULL OR review_server_group_id IS NOT NULL)",id).Scan(&count);err!=nil { return err }
+    if err=tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_channel_app WHERE id=? AND (prod_server_group_id IS NOT NULL OR test_server_group_id IS NOT NULL OR review_server_group_id IS NOT NULL)",id).Scan(&count);err!=nil { return err }
     if count!=0 { return ErrConflict }
 	// 删除渠道包时同步清理服务绑定。
 	if _,err=tx.ExecContext(ctx,"DELETE FROM sdk_service_channel WHERE channel_app_id=?",id);err!=nil{return databaseError(err)}
-	if _,err=tx.ExecContext(ctx,"DELETE FROM config_channel_app WHERE id=?",id); err!=nil { return databaseError(err) }
+	if _,err=tx.ExecContext(ctx,"DELETE FROM sdk_channel_app WHERE id=?",id); err!=nil { return databaseError(err) }
 	return tx.Commit()
 }
 
@@ -145,7 +145,7 @@ func (s *Store) ServerGroupOptions(ctx context.Context, gameID int64, envType, k
 // ServerGroupBindings 从应用的三个环境外键计算区服组下的应用，只提供只读查看。
 func (s *Store) ServerGroupBindings(ctx context.Context,groupID int64) ([]model.ServerGroupBinding,error) {
     if groupID<=0 { return nil,ErrInvalid }
-    rows,err:=s.DB.QueryContext(ctx, "SELECT a.id,a.name,a.code,a.status,a.config FROM config_channel_app a WHERE a.prod_server_group_id=? OR a.test_server_group_id=? OR a.review_server_group_id=? ORDER BY a.name,a.id",groupID,groupID,groupID)
+    rows,err:=s.DB.QueryContext(ctx, "SELECT a.id,a.name,a.code,a.status,a.config FROM sdk_channel_app a WHERE a.prod_server_group_id=? OR a.test_server_group_id=? OR a.review_server_group_id=? ORDER BY a.name,a.id",groupID,groupID,groupID)
     if err!=nil { return nil,err }
     defer rows.Close()
     out:=make([]model.ServerGroupBinding,0)

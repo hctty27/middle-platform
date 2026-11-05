@@ -27,7 +27,8 @@ func TestLookupMySQL(t *testing.T) {
     if err := db.PingContext(ctx); err != nil { t.Fatal(err) }
 
     schema := []string{
-        "DROP TABLE IF EXISTS config_channel_app",
+        "DROP TABLE IF EXISTS sdk_node_config",
+        "DROP TABLE IF EXISTS sdk_channel_app",
         "DROP TABLE IF EXISTS config_node",
         `CREATE TABLE config_node (
             id BIGINT PRIMARY KEY,
@@ -39,7 +40,8 @@ func TestLookupMySQL(t *testing.T) {
             region_id BIGINT NULL,
             env_type VARCHAR(16) NULL
         ) ENGINE=InnoDB`,
-        `CREATE TABLE config_channel_app (
+        `CREATE TABLE sdk_node_config (node_id BIGINT PRIMARY KEY,config JSON NOT NULL) ENGINE=InnoDB`,
+        `CREATE TABLE sdk_channel_app (
             id BIGINT PRIMARY KEY,
             game_id BIGINT NOT NULL,
             code VARCHAR(128) NOT NULL UNIQUE,
@@ -58,7 +60,8 @@ func TestLookupMySQL(t *testing.T) {
             (5,'server_group','group-prod',1,'{"groupKey":"p"}',1,2,NULL),
             (6,'server_group','group-test',1,'{"groupKey":"t"}',1,3,NULL),
             (7,'server_group','group-review',1,'{"groupKey":"r"}',1,4,NULL)`,
-        `INSERT INTO config_channel_app
+        `INSERT INTO sdk_node_config(node_id,config) VALUES (1,'{"gameKey":"main"}')`,
+        `INSERT INTO sdk_channel_app
             (id,game_id,code,name,status,config,prod_server_group_id,test_server_group_id,review_server_group_id)
           VALUES (10,1,'app1001','Demo',1,'{"tsKey":"abc"}',5,6,7)`,
     }
@@ -66,14 +69,15 @@ func TestLookupMySQL(t *testing.T) {
         if _,err := db.ExecContext(ctx,query);err!=nil { t.Fatalf("schema setup: %v; SQL: %s",err,query) }
     }
     t.Cleanup(func() {
-        db.ExecContext(context.Background(),"DROP TABLE IF EXISTS config_channel_app")
+        db.ExecContext(context.Background(),"DROP TABLE IF EXISTS sdk_node_config")
+        db.ExecContext(context.Background(),"DROP TABLE IF EXISTS sdk_channel_app")
         db.ExecContext(context.Background(),"DROP TABLE IF EXISTS config_node")
     })
 
     store := NewStore(db)
     if err := store.VerifySchema(ctx);err!=nil { t.Fatal(err) }
     const demoSecret="AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
-    _,err=db.ExecContext(ctx,"UPDATE config_node SET config=JSON_SET(config,'$.gameSecret',?) WHERE id=1",demoSecret)
+    _,err=db.ExecContext(ctx,"UPDATE sdk_node_config SET config=JSON_SET(config,'$.gameSecret',?) WHERE node_id=1",demoSecret)
     if err!=nil{t.Fatal(err)}
     rawGame,err:=store.LookupGameConfig(ctx,1)
     if err!=nil{t.Fatal(err)}
@@ -109,7 +113,7 @@ func TestLookupMySQL(t *testing.T) {
     }
 
     // 未绑定、区服组禁用、大区禁用、游戏禁用、渠道禁用均不可返回配置。
-    if _,err := db.ExecContext(ctx,"UPDATE config_channel_app SET review_server_group_id=NULL WHERE id=10");err!=nil { t.Fatal(err) }
+    if _,err := db.ExecContext(ctx,"UPDATE sdk_channel_app SET review_server_group_id=NULL WHERE id=10");err!=nil { t.Fatal(err) }
     assertLookupNotFound(t,store,"review")
     if _,err := db.ExecContext(ctx,"UPDATE config_node SET status=0 WHERE id=5");err!=nil { t.Fatal(err) }
     assertLookupNotFound(t,store,"prod")
@@ -119,16 +123,16 @@ func TestLookupMySQL(t *testing.T) {
     assertLookupNotFound(t,store,"prod")
     // 支付密钥位于渠道包顶层，独立于大区绑定和当前启用状态。
     _,err = db.ExecContext(ctx,
-        `UPDATE config_channel_app SET config='{"tsKey":"abc","appSecret":"integration-secret"}' WHERE id=10`)
+        `UPDATE sdk_channel_app SET config='{"tsKey":"abc","appSecret":"integration-secret"}' WHERE id=10`)
     if err!=nil {t.Fatal(err)}
     secret,err := store.LookupPlatformSecret(ctx,"app1001")
     if err!=nil || secret!="integration-secret" {t.Fatalf("load app secret: got %q err %v",secret,err)}
     if _,err=store.LookupPlatformSecret(ctx,"missing-app");!errors.Is(err,model.ErrNotFound){t.Fatalf("missing app: %v",err)}
-    if _,err := db.ExecContext(ctx,"UPDATE config_channel_app SET status=0 WHERE id=10");err!=nil { t.Fatal(err) }
+    if _,err := db.ExecContext(ctx,"UPDATE sdk_channel_app SET status=0 WHERE id=10");err!=nil { t.Fatal(err) }
     secret,err = store.LookupPlatformSecret(ctx,"app1001")
     if err!=nil || secret!="integration-secret" {t.Fatalf("inactive app historical callback: got %q err %v",secret,err)}
     if _,err=db.ExecContext(ctx,
-        `UPDATE config_channel_app SET config='{"tsKey":"abc"}' WHERE id=10`);err!=nil {t.Fatal(err)}
+        `UPDATE sdk_channel_app SET config='{"tsKey":"abc"}' WHERE id=10`);err!=nil {t.Fatal(err)}
     if _,err=store.LookupPlatformSecret(ctx,"app1001");!errors.Is(err,model.ErrInvalidConfig){t.Fatalf("missing appSecret: %v",err)}
     assertLookupNotFound(t,store,"prod")
 }

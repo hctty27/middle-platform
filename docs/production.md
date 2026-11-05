@@ -66,6 +66,8 @@ sql/
   config-center/
     initialize.sql
     add_game_order.sql
+    migrate_sdk_node_config.sql
+    cleanup_legacy_sdk_fields.sql
     add_sdk_services.sql
     add_sdk_user_check.sql
     add_sdk_role_query.sql
@@ -83,6 +85,7 @@ admin/                     # -SkipFrontend 时不存在
 
 备份并核对目标数据库，**只执行对应场景的 SQL**：
 
+- SDK 拆分升级：停所有旧实例并备份后执行 `sql/config-center/migrate_sdk_node_config.sql`，验证新版后单独执行 `cleanup_legacy_sdk_fields.sql`。详见 [数据库文档](database.md)。
 - 全新、空的 `config_center`：`sql/config-center/initialize.sql`。
 - 已有 `config_center` 仅缺少订单表：`sql/config-center/add_game_order.sql`。
 - 已有权威库但没有 SDK 服务表：`sql/config-center/add_sdk_services.sql`（仅表确实不存在时执行）。
@@ -147,6 +150,10 @@ upstream sdk_core {
     server 127.0.0.1:8212;
 }
 # 以下 location 仅放在对外 SDK API 对应的 server 中
+# 必须放在通用 /api/core/ 路由之前：SDK 管理接口不能通过公开 SDK 网关访问。
+location ^~ /api/core/admin/ {
+    return 403;
+}
 location ^~ /api/core/ {
     proxy_pass http://sdk_core;
 }
@@ -165,11 +172,12 @@ Nginx 不会因 `/health/ready` 自动从静态 upstream 中摘除后端；需�
 
 ```js
 window.__MIDDLE_PLATFORM_CONFIG__ = {
-  apiBaseUrl: '/api/config'
+  apiBaseUrl: '/api/config',
+  sdkApiBaseUrl: '/api/core'
 }
 ```
 
-注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。配置项是 **配置中心 API 前缀**，而不是 SDK Core 的 `/api/core`。
+注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。`apiBaseUrl` 指向配置中心，`sdkApiBaseUrl` 指向 SDK Core。管理页面只可通过内网/受认证的独立网关访问，不得通过公开 SDK 网关访问 `/api/core/admin/`。
 
 为了确保更新 `admin/` 静态资源时不覆盖生产配置，建议在正式服务器将配置长期保存于 `/data/middle-platform/config/admin.js`：
 
@@ -265,3 +273,13 @@ log:
 5. 迁移切换不是无缝兼容：游戏方未更新旧地址时上报会失败。生产发布窗口应协调上游切换，必要时由受控网关短期转发旧路径到新 Service，完成切换后移除，避免双写。
 
 发布不执行 SQL、不自动修改服务器 YAML，也不会自动变更 Nginx；必须按以上顺序人工部署。
+
+
+## SDK 管理接口的 Nginx 隔离
+
+SDK Core 进程中同时存在公开业务路由和 `/api/core/admin/` 管理路由。**管理路由没有内建用户认证**。生产环境必须使用两个受网络隔离的网关入口：
+
+- 公共 SDK server：如上所示，用 `location ^~ /api/core/admin/ { return 403; }` 拒绝管理前缀，再代理 `/api/core/` 业务。
+- 独立管理 server：仅可信内网、VPN 或带认证的网关可以访问，允许 `/api/core/admin/` 反向代理到 `sdk_core`；后台静态页面及 `/api/config/admin/` 也由该入口保护。
+
+确保配置文件中带 `/sdk` 外部前缀时，先在对应外层 location 显式拒绝 `/sdk/api/core/admin/`，不能只拦截内部路径。请验证未认证的外部请求无法访问管理接口后才开始切流；单纯隐藏管理页面不足以保障安全。

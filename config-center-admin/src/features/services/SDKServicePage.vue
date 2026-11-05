@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { api, apiErrorMessage } from '../../api/http'
+import { sdkApi, apiErrorMessage } from '../../api/http'
 
 interface SDKService {
   id: number
@@ -18,7 +18,7 @@ const savingId = ref<number | null>(null)
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get<SDKService[]>('/admin/sdk-services')
+    const { data } = await sdkApi.get<SDKService[]>('/admin/services')
     items.value = data
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '加载服务目录失败'))
@@ -32,7 +32,7 @@ async function updateService(service: SDKService, enabled: boolean | string | nu
   const next = Boolean(enabled)
   savingId.value = service.id
   try {
-    await api.put('/admin/sdk-services/' + service.id, { enabled: next })
+    await sdkApi.put('/admin/services/' + service.id, { enabled: next })
     service.enabled = next
     ElMessage.success('全局服务开关已保存')
   } catch (error) {

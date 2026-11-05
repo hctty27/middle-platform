@@ -40,6 +40,15 @@ CREATE TABLE config_node (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='游戏、大区、区服组三级配置节点';
 
+CREATE TABLE sdk_node_config (
+ node_id BIGINT NOT NULL PRIMARY KEY COMMENT '关联 config_node.id',
+ config JSON NOT NULL COMMENT 'SDK 节点专属配置',
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+ CONSTRAINT fk_sdk_node FOREIGN KEY(node_id) REFERENCES config_node(id) ON DELETE CASCADE,
+ CONSTRAINT chk_sdk_node_config CHECK(JSON_TYPE(config)='OBJECT')
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SDK 节点专属配置';
+
 CREATE TABLE config_node_change_log (
     revision BIGINT NOT NULL PRIMARY KEY,
     node_id BIGINT NOT NULL,
@@ -72,7 +81,7 @@ CREATE TABLE config_subscriber_delivery_state (
     FOREIGN KEY (subscriber_id) REFERENCES config_subscriber(id) ON DELETE CASCADE
 ) ENGINE=InnoDB COMMENT='订阅者回调投递状态、租约和失败重试';
 
-CREATE TABLE config_channel_app (
+CREATE TABLE sdk_channel_app (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     game_id BIGINT NOT NULL,
     code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,

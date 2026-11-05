@@ -48,7 +48,7 @@ func(s *OrderService) VerifyRegistration(r *http.Request,body []byte,env,appid s
     app,group,err:=s.ConfigReader.Lookup(r.Context(),appid,env)
     if err!=nil{return err}
     if group==nil{return model.ErrNotFound}
-    secret,err:=auth.ParseGameSecret(app.GameConfig)
+    secret,err:=auth.ParseGameSecret(app.GameSDKConfig)
     if err!=nil{return model.ErrInvalidConfig}
     return auth.VerifyRegistration(r,body,secret)
 }
@@ -75,7 +75,7 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
     if err!=nil{return err}
     if group==nil {return model.ErrNotFound}
     var config map[string]json.RawMessage
-    if err=json.Unmarshal(group.RegionConfig,&config);err!=nil{return model.ErrInvalidConfig}
+    if err=json.Unmarshal(group.RegionSDKConfig,&config);err!=nil{return model.ErrInvalidConfig}
     raw,ok:=config["payNotifyUrl"]
     if !ok{return model.ErrInvalidConfig}
     var url string

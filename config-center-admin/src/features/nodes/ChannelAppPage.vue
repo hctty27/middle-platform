@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { api, apiErrorMessage } from '../../api/http'
+import { sdkApi, apiErrorMessage } from '../../api/http'
 import BusinessConfigEditor from './components/BusinessConfigEditor.vue'
 import ServiceBindingPanel from '../services/ServiceBindingPanel.vue'
 import { validateBusinessConfig } from './businessConfig'
@@ -51,7 +51,7 @@ async function loadApps() {
   if (!props.gameId) { apps.value = []; active.value = null; return }
   loading.value = true
   try {
-    const { data } = await api.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: props.gameId } })
+    const { data } = await sdkApi.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: props.gameId } })
     if (request !== sequence) return
     apps.value = data
     active.value = data.find(item => item.id === active.value?.id) ?? data[0] ?? null
@@ -67,7 +67,7 @@ async function loadOptions(env: RegionEnvType, keyword = '') {
   const request = ++groupSequences[env]
   groupLoading[env] = true
   try {
-    const { data } = await api.get<GroupOption[]>('/admin/channel-apps/server-groups', {
+    const { data } = await sdkApi.get<GroupOption[]>('/admin/channel-apps/server-groups', {
       params: { gameId: props.gameId, envType: env, keyword }
     })
     if (request === groupSequences[env]) groupOptions[env] = data
@@ -92,8 +92,8 @@ async function saveApp() {
   saving.value = true
   try {
     const payload = { ...form.value, gameId: props.gameId }
-    if (editing.value) await api.put(`/admin/channel-apps/${editing.value}`, payload)
-    else await api.post('/admin/channel-apps', payload)
+    if (editing.value) await sdkApi.put(`/admin/channel-apps/${editing.value}`, payload)
+    else await sdkApi.post('/admin/channel-apps', payload)
     visible.value = false
     await loadApps()
     emit('changed')
@@ -105,7 +105,7 @@ async function deleteApp(app: ChannelApp) {
   try { await ElMessageBox.confirm(`删除「${app.name}」？请先清空三个环境的区服组绑定。`,
     '删除渠道应用', { type: 'warning' }) } catch { return }
   try {
-    await api.delete(`/admin/channel-apps/${app.id}`)
+    await sdkApi.delete(`/admin/channel-apps/${app.id}`)
     active.value = null
     await loadApps()
     emit('changed')

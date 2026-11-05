@@ -50,11 +50,27 @@ SET GLOBAL gtid_mode=ON;""")
     assert_sql("""SELECT COUNT(*) FROM information_schema.tables
 WHERE table_schema='manual_fresh' AND table_name IN
 ('config_revision','config_node','config_node_change_log','config_subscriber',
-'config_subscriber_delivery_state','config_channel_app','game_order')""", "7")
+'config_subscriber_delivery_state','sdk_channel_app','sdk_node_config','game_order')""", "8")
     assert_sql("""SELECT COUNT(*) FROM information_schema.tables
 WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", "0")
     # 人工重复执行完整初始化必须拒绝，不允许静默覆盖旧数据。
     mysql(database="manual_fresh", script=init, ok=False)
+
+    # 演练现有节点 JSON 数据复制与渠道包保留，旧字段清理由管理员另行执行。
+    mysql("""INSERT INTO manual_fresh.config_node
+      (id,node_type,code,name,status,config,created_at,updated_at)
+      VALUES(801,'game','sdk_demo','SDK Demo',1,
+      '{"gameSecret":"example-key","serviceAdapters":{"user_check":"standard"},"custom":"keep"}',
+      UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+    mysql("RENAME TABLE manual_fresh.sdk_channel_app TO manual_fresh.config_channel_app")
+    sdk_migration = source("config-center/db/sql/migrate_sdk_node_config.sql")
+    # 新库已有 sdk_node_config，只执行数据复制段和表重命名，完整 SQL 应在旧库执行。
+    sdk_copy = sdk_migration[sdk_migration.index("INSERT INTO sdk_node_config("):]
+    mysql(database="manual_fresh",script=sdk_copy)
+    assert_sql("""SELECT JSON_UNQUOTE(JSON_EXTRACT(config,'$.gameSecret'))
+      FROM manual_fresh.sdk_node_config WHERE node_id=801""", "example-key")
+    assert_sql("""SELECT JSON_UNQUOTE(JSON_EXTRACT(config,'$.custom'))
+      FROM manual_fresh.config_node WHERE id=801""", "keep")
 
     # 模拟从历史 V11 权威库升级：保留旧版本表与真实业务节点，手动添加订单表。
     mysql(database="manual_existing", script=init)
@@ -91,8 +107,8 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok
       UNIQUE KEY uk_sdk_service_code (code),
       CONSTRAINT chk_sdk_service_scope CHECK (scope_type IN ('channel_app','server_group'))
     );
-    CREATE TABLE config_channel_app (id BIGINT PRIMARY KEY);
-    INSERT INTO config_channel_app (id) VALUES (900);
+    CREATE TABLE sdk_channel_app (id BIGINT PRIMARY KEY);
+    INSERT INTO sdk_channel_app (id) VALUES (900);
     CREATE TABLE sdk_service_binding (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       service_id BIGINT NOT NULL,

@@ -94,11 +94,6 @@ func router(reader Reader, writer Writer) http.Handler {
 	r.Get("/api/config/admin/nodes/{id}/path", h.path)
 	r.Get("/api/config/admin/nodes/{id}", h.node)
 	r.Get("/api/config/admin/subscribers", h.subscribers)
-	r.Get("/api/config/admin/channel-apps",h.channelApps)
-    r.Get("/api/config/admin/sdk-services",h.sdkServices)
-    r.Get("/api/config/admin/channel-apps/{id}/services",h.sdkChannelServices)
-	r.Get("/api/config/admin/channel-apps/server-groups",h.serverGroupOptions)
-    r.Get("/api/config/admin/server-groups/{id}/channel-apps",h.serverGroupBindings)
 	r.Get("/api/config/nodes/{id}", h.node)
 	r.Post("/api/config/nodes/batch-get", h.batch)
 	r.Get("/api/config/sync/revision", h.revision)
@@ -110,11 +105,6 @@ func router(reader Reader, writer Writer) http.Handler {
 		r.Put("/api/config/admin/nodes/{id}", h.update)
 		r.Delete("/api/config/admin/nodes/{id}", h.delete)
 		r.Post("/api/config/admin/subscribers", h.createSubscriber)
-		r.Post("/api/config/admin/channel-apps",h.createChannelApp)
-		r.Put("/api/config/admin/channel-apps/{id}",h.updateChannelApp)
-		r.Delete("/api/config/admin/channel-apps/{id}",h.deleteChannelApp)
-        r.Put("/api/config/admin/sdk-services/{id}",h.updateSDKService)
-        r.Put("/api/config/admin/channel-apps/{id}/services/{serviceId}",h.upsertSDKChannelService)
 	}
 	return r
 }

@@ -15,7 +15,7 @@ CREATE TABLE sdk_service (
 CREATE TABLE sdk_service_channel (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     service_id BIGINT NOT NULL COMMENT '关联 sdk_service.id',
-    channel_app_id BIGINT NOT NULL COMMENT '关联 config_channel_app.id',
+    channel_app_id BIGINT NOT NULL COMMENT '关联 sdk_channel_app.id',
     env VARCHAR(16) COLLATE utf8mb4_bin NOT NULL COMMENT 'prod/test/review',
     enabled TINYINT NOT NULL DEFAULT 0 COMMENT '目标开关',
     config JSON NOT NULL COMMENT '服务扩展配置',

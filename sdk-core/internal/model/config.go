@@ -21,6 +21,7 @@ type ChannelApp struct {
     Name string
     GameCode string
     GameConfig json.RawMessage
+    GameSDKConfig json.RawMessage
     Config json.RawMessage
 }
 
@@ -28,6 +29,8 @@ type ChannelApp struct {
 type BoundGroup struct {
     RegionCode string
     RegionConfig json.RawMessage
+    RegionSDKConfig json.RawMessage
     ServerGroupCode string
     Config json.RawMessage
+    SDKConfig json.RawMessage
 }

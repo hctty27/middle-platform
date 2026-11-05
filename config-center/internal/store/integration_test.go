@@ -92,7 +92,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		if _, err := db.ExecContext(ctx, statement); err != nil { t.Fatalf("%s: %v", statement, err) }
 	}
 	defer func() {
-		for _, name := range []string{"sdk_service_channel","sdk_service","config_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
+		for _, name := range []string{"sdk_service_channel","sdk_service","sdk_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
 			if _, err := db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+name); err != nil { t.Log(err) }
 		}
 	}()
@@ -287,8 +287,8 @@ func errorsIs(err, target error) bool {
 var integrationSchema = []string{
 	`DROP TABLE IF EXISTS sdk_service_channel`,
 	`DROP TABLE IF EXISTS sdk_service`,
-	`DROP TABLE IF EXISTS config_channel_app_binding`,
- `DROP TABLE IF EXISTS config_channel_app`,
+	`DROP TABLE IF EXISTS sdk_channel_app_binding`,
+ `DROP TABLE IF EXISTS sdk_channel_app`,
  `DROP TABLE IF EXISTS config_subscriber_delivery_state`,
 	`DROP TABLE IF EXISTS config_subscriber`,
 	`DROP TABLE IF EXISTS config_node_change_log`,
@@ -341,7 +341,7 @@ var integrationSchema = []string{
         UNIQUE KEY uk_sdk_service_channel(service_id,channel_app_id,env),
         FOREIGN KEY(service_id) REFERENCES sdk_service(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-	`CREATE TABLE config_channel_app (
+	`CREATE TABLE sdk_channel_app (
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,game_id BIGINT NOT NULL,
 		code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,name VARCHAR(128) NOT NULL,
 		status TINYINT NOT NULL,config JSON NOT NULL,remark VARCHAR(500) NULL,
