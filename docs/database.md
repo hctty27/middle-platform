@@ -20,18 +20,18 @@
 | SDK 迁移验证完成后的旧字段清理 | [V0010__cleanup_legacy_sdk_fields.sql](../db/incremental/V0010__cleanup_legacy_sdk_fields.sql) |
 | 已有游戏节点缺少运营地区字段 | [V0011__add_game_market_type.sql](../db/incremental/V0011__add_game_market_type.sql) |
 
-不得对已有配置数据的库再次执行 `initialize.sql`。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 `DROP TABLE`。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。
+不得对已有配置数据的库再次执行 `db/full/` 中的全量 SQL。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 `DROP TABLE`。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。
 
 ## SQL 目录与增量编号
 
-- 根目录 \`db/full/\`：\`config_center.sql\` 与 \`config_access.sql\` 是**当前完整结构快照**，仅用于新建对应空库，不包含生产业务数据。
-- 根目录 \`db/incremental/\`：文件命名为 \`V0001__description.sql\`，序号全局连续递增，历史存量脚本为 **V0001～V0011**；下一份增量是 **V0012**。跨数据库时在文件名中注明 \`config_center\` 或 \`config_access\`。
+- 根目录 `db/full/`：`config_center.sql` 与 `config_access.sql` 是**当前完整结构快照**，仅用于新建对应空库，不包含生产业务数据。
+- 根目录 `db/incremental/`：文件命名为 `V0001__description.sql`，序号全局连续递增，历史存量脚本为 **V0001～V0011**；下一份增量是 **V0012**。跨数据库时在文件名中注明 `config_center` 或 `config_access`。
 - **新增数据库变更时，创建新编号的增量 SQL，并同步更新对应的全量 SQL**，以及本文和 CI、发布相关检查。已经发布的增量 SQL 不允许修改、删除或重新编号。
 - 新增增量 SQL 头部注明目标数据库、适用旧结构与前置条件；所有 SQL 仍由管理员手工检查并执行。
-- **注意：V0001～V0011 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。** 例如 \`V0003\` 只适用于仍有旧 \`sdk_service_binding\` / \`scope_type\` 的库，\`V0009\` 仅适用于旧渠道表结构。已升级的库不得重跑。
+- **注意：V0001～V0011 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。** 例如 `V0003` 只适用于仍有旧 `sdk_service_binding` / `scope_type` 的库，`V0009` 仅适用于旧渠道表结构。已升级的库不得重跑。
 - 当前不引入 Flyway、自动执行或迁移版本记录表。**编号本身不能证明数据库已经应用过该变更**，执行前需检查真实表结构、数据和历史操作记录。
 
-源码目录 \`db/full/\`、\`db/incremental/\` 在发布包中分别对应 \`sql/full/\`、\`sql/incremental/\`。原有 \`config-center/internal/sqlc/\` SQL 仅用于代码生成，不属于手动数据库部署脚本。
+源码目录 `db/full/`、`db/incremental/` 在发布包中分别对应 `sql/full/`、`sql/incremental/`。原有 `config-center/internal/sqlc/` SQL 仅用于代码生成，不属于手动数据库部署脚本。
 
 ## 本地 MySQL 示例
 
