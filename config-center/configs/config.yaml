@@ -8,9 +8,11 @@ database:
 
 # 仅管理接口使用此密钥签名；生产使用至少 32 字节随机密钥，不要提交真实密钥。
 adminAuth:
+  enabled: true
   secret: ""
 
-# 未配置或过短时，管理接口拒绝请求；同步和业务接口不受影响。
+# 默认启用验签。仅在可信开发环境明确设置 enabled: false 才允许免签。
+# 开启时密钥未配置或过短，管理接口拒绝请求；同步和业务接口不受影响。
 log:
   level: info
   format: json
