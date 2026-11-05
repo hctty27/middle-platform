@@ -54,7 +54,7 @@ func (s *Store) UpdateSDKService(ctx context.Context, id int64, enabled bool) er
 func channelAppState(ctx context.Context, db queryer, appID int64, env string) (bool, error) {
 	var statuses [4]sql.NullInt64
 	err := db.QueryRowContext(ctx, `
-SELECT app.status,g.status,sg.status,r.status FROM config_channel_app app
+SELECT app.status,g.status,sg.status,r.status FROM sdk_channel_app app
 LEFT JOIN config_node g ON g.id=app.game_id AND g.node_type='game'
 LEFT JOIN config_node sg ON sg.id=CASE ?
   WHEN 'prod' THEN app.prod_server_group_id
