@@ -11,7 +11,7 @@ import (
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/transport"
 )
 
-type HTTPDoer interface { Do(*http.Request) (*http.Response, error) }
+type HTTPDoer = transport.HTTPDoer
 type Standard struct { Client HTTPDoer }
 
 func (a *Standard) Check(ctx context.Context, target model.Target, in model.UserCheckRequest) (model.UserCheckResult, error) {
@@ -20,7 +20,7 @@ func (a *Standard) Check(ctx context.Context, target model.Target, in model.User
     if err != nil { return model.UserCheckResult{}, err }
     raw, err := transport.PostJSON(ctx, a.Client, target.UserCheckURL, target, payload, []string{in.OpenID}, 64*1024)
     if err != nil { return model.UserCheckResult{}, err }
-        var out struct {
+    var out struct {
         Code *int `json:"code"`
         Data *struct { Exists *bool `json:"exists"` } `json:"data"`
     }

@@ -11,9 +11,7 @@ import (
 
 const maxControlResponseBytes = 16 * 1024
 
-type HTTPDoer interface {
-    Do(*http.Request) (*http.Response, error)
-}
+type HTTPDoer = transport.HTTPDoer
 
 type Standard struct {
     Client HTTPDoer
@@ -29,7 +27,7 @@ func (a *Standard) Execute(ctx context.Context, target model.Target, input model
     }
     raw, err := transport.PostJSON(ctx, a.Client, target.RoleControlURL, target, payload, input.SignatureValues(), maxControlResponseBytes)
     if err != nil { return err }
-        var output struct {
+    var output struct {
         Code *int `json:"code"`
         Message *string `json:"message"`
         Data json.RawMessage `json:"data"`

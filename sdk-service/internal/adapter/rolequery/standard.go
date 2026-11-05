@@ -12,9 +12,7 @@ import (
 const maxRoleResponseBytes = 2 * 1024 * 1024
 const maxRoleCount = 1000
 
-type HTTPDoer interface {
-    Do(*http.Request) (*http.Response, error)
-}
+type HTTPDoer = transport.HTTPDoer
 
 type Standard struct {
     Client HTTPDoer
@@ -30,7 +28,7 @@ func (a *Standard) Query(ctx context.Context, target model.Target, in model.Role
     }
     raw, err := transport.PostJSON(ctx, a.Client, target.RoleQueryURL, target, payload, in.SignatureValues(), maxRoleResponseBytes)
     if err != nil { return nil, err }
-        var output struct {
+    var output struct {
         Code *int `json:"code"`
         Data *[]model.Role `json:"data"`
     }
