@@ -42,7 +42,7 @@ async function load() {
 async function save(item: EditableEntry) {
   if (savingId.value !== null) return
   let config: Record<string, unknown>
-  if (item.code === 'event_report') {
+  if ((item.code === 'event_report' || item.code === 'subscribe_message')) {
     config = {}
   } else {
     try {
@@ -105,8 +105,8 @@ watch(() => [props.targetId, env.value], () => {
                        :disabled="savingId !== null || !item.globalEnabled" @click="save(item)">保存</el-button>
           </div>
         </div>
-        <p v-if="item.code === 'event_report'" class="muted">
-          事件上报仅使用当前渠道及环境开关；开启后同步转发平台，不配置事件规则，也不保存事件数据。
+        <p v-if="item.code === 'event_report' || item.code === 'subscribe_message'" class="muted">
+          事件上报和订阅消息仅使用当前渠道环境开关；开启后同步转发平台，不保存业务数据。
         </p>
         <el-input v-else v-model="item.configText" type="textarea" :rows="3" spellcheck="false"
                   :disabled="!item.globalEnabled || savingId !== null"

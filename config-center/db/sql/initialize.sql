@@ -164,4 +164,5 @@ INSERT INTO sdk_service (code,name,description,enabled) VALUES
 ('user_check','核验用户信息','平台核验用户信息并转发至游戏',1),
 ('role_query','角色查询','平台实时查询游戏角色信息',1),
 ('server_query','区服查询','平台实时分页查询游戏区服信息',1),
-('role_control','封禁与解禁','平台封号、解封、禁言、解禁言统一操作',1);
+('role_control','封禁与解禁','平台封号、解封、禁言、解禁言统一操作',1),
+('subscribe_message','订阅消息推送','游戏经 SDK Service 向平台发送订阅消息',1);
