@@ -58,8 +58,11 @@ func parseBody(w http.ResponseWriter, r *http.Request) (model.UserCheckRequest, 
     return model.UserCheckRequest{OpenID: openID}, nil
 }
 
-func Router(checker UserChecker, db Pinger) http.Handler {
+func Router(checker UserChecker, db Pinger, roleQueriers ...RoleQuerier) http.Handler {
     mux := http.NewServeMux()
+    if len(roleQueriers) > 0 && roleQueriers[0] != nil {
+        mux.HandleFunc("POST /api/service/role/query/{env}", roleQueryHandler(roleQueriers[0]))
+    }
     mux.HandleFunc("POST /api/service/user/check/{env}", func(w http.ResponseWriter, r *http.Request) {
         env := r.PathValue("env")
         appID := r.Header.Get("x-app-id")
