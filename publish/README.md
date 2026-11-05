@@ -59,16 +59,9 @@
 
 ## 生产发布行为
 
-1. 本地构建并输出各阶段耗时，生成 `dist/middle-platform-<版本>-linux-<架构>.tar.gz`；成功后清理匹配命名规则的其他旧本地归档。
-2. 上传到服务器 `.publish-* ` 临时目录，校验 SHA-256、文件类型、架构和全部必需文件。
-3. 在**已有的** `bin/`、`admin/`、`sql/` 内逐文件以同目录临时文件和 rename 更新，不使用 `releases/`。
-4. `config/`、`logs/` 不更新；已有 `admin/config.js` 始终保留。数据库 SQL 只传输、不执行。
-5. 默认按 `services` 中的进程名顺序逐个重启对应 Supervisor 程序，轮询其配置端口的 `/health/ready`。使用 `-SkipRestart` 可只更新文件。
-6. 服务健康检查成功后，归档保存到服务器 `packages/`，临时目录清理；失败时立即报错，保留暂存目录供人工排查。
+本地完成构建和归档校验后上传到服务器临时目录，验证 SHA-256、文件类型、架构与选定服务，再直接更新固定的 `bin/`、`admin/`、`sql/`。生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；SQL 仅分发，不会自动执行。
 
-Supervisor 进程名及端口**只由本地 `publish.config.json` 的 `services` 指定**，不再写死在发布脚本里。新增 `config-center-3` 或 `sdk-core-4` 只需添加一行映射；未配置的进程不会被自动重启。发布账号仍需要执行 `supervisorctl restart` 的权限。
-
-**不提供回滚：** 多文件逐一替换不具备全量事务性。替换中途失败可能留下部分新文件；进程验活失败时也不会恢复旧版本。发布前请确保服务与数据库结构兼容；需要手工恢复时自行处理。普通 Nginx 静态 upstream 不会因健康接口不可用就主动摘流量，因此顺序重启两个 Core 实例也**不保证零中断**。
+默认按 `publish.config.json` 中的 `services` 逐实例执行 Supervisor 重启与 `/health/ready` 验活；未列出的实例不会被重启。本发布流程**不提供自动回滚或零中断保证**，失败时需人工处置。完整的部署目录、Nginx、数据库升级与故障处理以 [生产运维](../docs/production.md) 为准。
 
 ## CI 和自测
 
