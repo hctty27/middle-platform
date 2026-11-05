@@ -6,7 +6,7 @@
 
 - 配置中心：`/api/config/admin` 及其子路径。
 - SDK Core：`/api/core/admin` 及其子路径。
-- GET、POST、PUT、DELETE 均须签名。
+- `adminAuth.enabled: true`（默认）时 GET、POST、PUT、DELETE 均须签名；只有明确关闭开关才允许免签。
 - `/api/config/sync/**`、`/api/config/nodes/**`、`/api/core/config/**`、订单、支付回调、`/api/service/**` 和健康检查不受本管理签名中间件影响；它们各自保持原有访问约束。
 
 ## 配置
@@ -15,12 +15,32 @@
 
 ```yaml
 adminAuth:
+  enabled: true
   secret: ""
 ```
 
 正式环境两个进程应填写**相同的至少 32 字节随机密钥**，或设置环境变量 `ADMIN_AUTH_SECRET` 覆盖 YAML。推荐优先通过 Supervisor 单进程环境变量下发密钥；不要把生产密钥提交到仓库，也不要交给浏览器。
 
-未配置、长度不足 32 字节时，所有管理请求返回 HTTP 503（拒绝访问），其他接口不受影响。
+### 验签开关
+
+| YAML 配置 | 管理接口行为 |
+|---|---|
+| 未配置 `adminAuth` | 默认开启验签，因密钥缺失返回 HTTP 503 |
+| `enabled: true` 且密钥有效 | 管理 GET/POST/PUT/DELETE 均需要签名 |
+| `enabled: true` 且密钥为空或不足 32 字节 | 返回 HTTP 503（拒绝访问） |
+| `enabled: false` | 管理接口直接放行，无需签名；`secret` 可以为空 |
+
+**仅在本地或受控网络中关闭验签**，此时 Vue 管理页面无需修改即可继续使用。只要关闭验签，任何能够访问管理 API 的客户端都可以调用管理读写接口；不能把它暴露到公网。
+
+本地开发可在对应的 `config-dev.yaml` 中显式覆盖：
+
+```yaml
+adminAuth:
+  enabled: false
+  secret: ""
+```
+
+两个服务分别读取自己的配置文件，因此需要分别设置开关；其他业务与同步接口不受此管理签名开关影响。
 
 ## 请求 Header
 
@@ -108,7 +128,7 @@ String signature = AdminSigner.sign(secret, "PUT", "/api/core/admin/services/1",
 - `401`：签名缺失、过期、格式错误或校验失败。
 - `409`：相同 nonce 在当前进程中已使用，或本进程 nonce 缓存达到容量上限。
 - `413`：管理请求体超过 1 MiB。
-- `503`：管理密钥未配置或不足 32 字节。
+- `503`：启用验签时管理密钥未配置或不足 32 字节。
 
 **防重放边界**：当前实现使用每个进程独立的过期 nonce 缓存，防止同实例内的重复请求；**不能提供跨实例全局去重**。例如 sdk-core-1 和 sdk-core-2 各自会接受同一条合法请求一次。需要严格的跨实例“至多一次”时，应增加共享的原子 nonce 存储（例如 MySQL 唯一键或 Redis），并为高风险写入接口做业务幂等。
 
