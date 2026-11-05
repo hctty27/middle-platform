@@ -60,3 +60,30 @@ func TestAdminSecretConfiguration(t *testing.T) {
  if err != nil { t.Fatal(err) }
  if cfg.AdminAuth.Secret != "env-secret-0123456789abcdef0123456789" { t.Fatal("管理密钥环境变量覆盖失败") }
 }
+
+
+func TestAdminAuthEnabledDefaultsToTrue(t *testing.T) {
+    cases := []struct {
+        name string
+        admin string
+        expected bool
+    }{
+        {"omitted", "", true},
+        {"explicit true", "adminAuth:\n  enabled: true\n", true},
+        {"explicit false", "adminAuth:\n  enabled: false\n", false},
+        {"empty configuration", "adminAuth:\n  secret: ''\n", true},
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            path := filepath.Join(t.TempDir(), "config.yaml")
+            data := "database:\n  dsn: test-dsn\n" + tc.admin
+            if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
+            cfg, err := Load(path)
+            if err != nil { t.Fatal(err) }
+            enabled := cfg.AdminAuth.Enabled == nil || *cfg.AdminAuth.Enabled
+            if enabled != tc.expected {
+                t.Fatalf("enabled = %v, want %v", enabled, tc.expected)
+            }
+        })
+    }
+}
