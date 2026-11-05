@@ -65,7 +65,7 @@ func Run(configPath string) error {
 
 	address := cfg.Address
 	repository := &store.Store{DB: db}
-	// 管理读写接口始终注册；必须通过私有网络/网关鉴权保护所有管理接口。
+	// 管理读写接口始终注册，内建管理验签，并由网关限制外部可访问范围。
 	var handler http.Handler = signature.AdminMiddleware(api.RouterWithWrites(repository, repository), "/api/config/admin", cfg.AdminSecret)
 	var ready atomic.Bool
 	ready.Store(true)
