@@ -150,25 +150,13 @@ def main():
                            "X-Config-Signature": "sha256=" + signature})
     print("通过：拒绝无效回调并异步确认有效回调", flush=True)
 
-    # 三层配置树 + 同一个游戏级渠道应用绑定到区服组。
+    # 三层配置树与跨实例的同步。
     parent = 0
     ids = []
     for kind in ("game", "region", "server_group"):
         node = create_node(kind, parent, f"ci-{kind}")
         ids.append(node["id"])
         parent = node["id"]
-    app = request(8080, "/api/config/admin/channel-apps", "POST", {
-        "gameId": ids[0], "code": "ci-huawei", "name": "Huawei",
-        "status": 1, "config": '{"appId":"10001"}', "remark": "shared",
-        "testServerGroupId": ids[2], "prodServerGroupId": None, "reviewServerGroupId": None
-    }, 201)
-    assert app["testServerGroupId"] == ids[2]
-    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "PUT", {
-        "name": "Huawei", "status": 1, "config": '{"appId":"10001"}',
-        "prodServerGroupId": ids[2], "testServerGroupId": ids[2]
-    }, expected=400)
-    assert len(request(8080, f'/api/config/admin/channel-apps?gameId={ids[0]}')) == 1
-
     expected = [
         (None, None),
         (ids[0], None),
@@ -183,20 +171,10 @@ def main():
     assert head["revision"] == 3, head
     history = request(8082, "/api/config/sync/changes?afterRevision=0&limit=100")
     assert [event["revision"] for event in history] == list(range(1,4)), history
-    # 渠道应用、绑定 CRUD 不产生节点 revision，也不进入节点快照。
+    # 基础节点快照不包含 SDK 配置数据。
     snapshot = request(8080, "/api/config/sync/snapshot")
     assert set(snapshot) == {"epoch", "revision", "nodes"}, snapshot
     assert len(snapshot["nodes"]) == 3 and snapshot["revision"] == 3
-    updated_app = request(8080, f'/api/config/admin/channel-apps/{app["id"]}', "PUT", {
-        "name": "Huawei Updated", "status": 1, "config": '{"appId":"10001","enabled":true}', "remark": "shared",
-        "testServerGroupId": ids[2]
-    })
-    assert updated_app["name"] == "Huawei Updated"
-    assert updated_app["testServerGroupId"] == ids[2]
-    assert json.loads(updated_app["config"]) == {"appId": "10001", "enabled": True}
-    assert len(request(8082, f'/api/config/admin/server-groups/{ids[2]}/channel-apps')) == 1
-    assert request(8080, "/api/config/sync/revision") == head
-    print("通过：渠道增删改查不影响节点同步", flush=True)
     # 旧版版本化路由应彻底失效（404），统一无版本路径仍正常工作。
     legacy_prefix = "/api/" + "v1"
     request(8080, legacy_prefix + "/sync/revision", expected=404)
@@ -208,7 +186,7 @@ def main():
     request(8080, legacy_prefix + "/config/nodes/batch-get", "POST", {"ids": ids}, 404)
     print("通过：无版本 API 路由及旧别名清理", flush=True)
 
-    print("通过：三级目录、共享渠道包与集群版本", flush=True)
+    print("通过：三级目录与集群版本", flush=True)
     # Navigation endpoints must return small summaries without any JSON configuration.
     roots = request(8080, "/api/config/admin/nodes/tree?parentId=0")
     assert len(roots) == 1 and roots[0]["id"] == ids[0], roots
@@ -281,14 +259,6 @@ def main():
         }, 400)
     assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
     print("通过：拒绝旧版节点类型", flush=True)
-    # 渠道应用编码全局唯一，同游戏重复同样会被拒绝。
-    request(8080, "/api/config/admin/channel-apps", "POST", {
-        "gameId": ids[0], "code": "ci-huawei", "name": "Duplicated",
-        "status": 1, "config": "{}"
-    }, 409)
-    assert request(8080, "/api/config/sync/revision")["revision"] == before_bad
-    print("通过：同级节点编码唯一性", flush=True)
-
     # Offline client must be retried and must recover without losing changes.
     stop(access)
     request(8082, f"/api/config/admin/nodes/{ids[0]}", "PUT", {
@@ -327,29 +297,9 @@ def main():
                lambda: request(8081, "/api/access/revision")["epoch"] == changed_head["epoch"], seconds=75)
     print("通过：仅 epoch 变更触发通知与全量快照", flush=True)
 
-    # 删除时必须先解除绑定，避免区服组和应用出现孤儿引用。
-    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=409)
-    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "PUT", {
-        "name": "Huawei Updated", "status": 1,
-        "config": '{"appId":"10001","enabled":true}'
-    })
-    request(8082, f'/api/config/admin/channel-apps/{app["id"]}', "DELETE", expected=204)
-    assert request(8080, "/api/config/sync/revision") == changed_head
     request(8082, f"/api/config/admin/nodes/{ids[-1]}", "DELETE", expected=204)
     wait_until("delete propagated to local replica",
                lambda: len(replica()) == 2 and all(row["id"] != ids[-1] for row in replica()))
-
-    # 两个不同游戏不能共用同一渠道 Code，确保 sdk-core 可只用 appId 唯一定位。
-    second_game = create_node("game", 0, "ci-global-game")
-    request(8080, "/api/config/admin/channel-apps", "POST", {
-        "gameId": ids[0], "code": "ci-globally-unique", "name": "First",
-        "status": 1, "config": "{}"
-    }, 201)
-    request(8082, "/api/config/admin/channel-apps", "POST", {
-        "gameId": second_game["id"], "code": "ci-globally-unique", "name": "Duplicate",
-        "status": 1, "config": "{}"
-    }, 409)
-    print("通过：跨游戏渠道编码全局唯一", flush=True)
 
     print("所有端到端冒烟测试通过", flush=True)
 
