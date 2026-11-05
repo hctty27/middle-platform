@@ -3,7 +3,6 @@ package settings
 
 import (
     "errors"
-    "fmt"
     "os"
     "strings"
     "time"
