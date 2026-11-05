@@ -4,6 +4,7 @@ import (
  "os"
  "path/filepath"
  "testing"
+ "strings"
 )
 
 func TestYAMLAndEnvironmentOverride(t *testing.T) {
@@ -100,4 +101,26 @@ func TestConfigFileDoesNotInheritBaseConfig(t *testing.T) {
     if !cfg.AdminAuthEnabled || cfg.Address != "127.0.0.1:8080" {
         t.Fatalf("指定文件不应继承同目录的 config.yaml: %+v", cfg)
     }
+}
+
+func TestLoadReadsDefaultYAML(t *testing.T) {
+ dir:=t.TempDir()
+ t.Chdir(dir)
+ if err:=os.MkdirAll("configs",0700);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join("configs","config.yaml"),[]byte("server:\n  address: ':8095'\ndatabase:\n  dsn: file-dsn\n"),0600);err!=nil{t.Fatal(err)}
+ cfg,err:=Load()
+ if err!=nil{t.Fatal(err)}
+ if cfg.Address!=":8095"||cfg.DSN!="file-dsn"{t.Fatalf("未读取默认配置文件: %+v",cfg)}
+ t.Setenv("CONFIG_GO_ADDR","127.0.0.1:8255")
+ cfg,err=LoadFile("")
+ if err!=nil{t.Fatal(err)}
+ if cfg.Address!="127.0.0.1:8255"{t.Fatal("环境变量必须优先于 YAML")}
+}
+
+func TestLoadRequiresDefaultYAML(t *testing.T) {
+ t.Chdir(t.TempDir())
+ t.Setenv("CONFIG_DB_DSN","test-dsn")
+ if _,err:=LoadFile("");err==nil||!strings.Contains(err.Error(),"configs/config.yaml"){
+  t.Fatalf("缺少默认 YAML 时不应退回纯环境变量启动: %v",err)
+ }
 }

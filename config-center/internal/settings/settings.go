@@ -27,15 +27,14 @@ type configFile struct {
  } `yaml:"adminAuth"`
 }
 
-// Load 兼容旧版环境变量启动方式。
+// Load 使用默认 YAML 文件启动。
 func Load() (Settings,error) { return LoadFile("") }
 
-// LoadFile 仅加载明确指定的 YAML，然后应用环境变量覆盖；空路径保留纯环境变量模式。
+// LoadFile 只读取指定 YAML（空路径使用 configs/config.yaml），再应用环境变量覆盖。
 func LoadFile(path string) (Settings,error) {
  data:=configFile{Log:logging.Default()}
- if path!="" {
-  if err:=bootstrap.ReadYAML(path,&data);err!=nil{return Settings{},err}
- }
+ if path=="" { path="configs/config.yaml" }
+ if err:=bootstrap.ReadYAML(path,&data);err!=nil{return Settings{},err}
 
  cfg:=Settings{Address:"127.0.0.1:8080",DSN:data.Database.DSN,Log:data.Log,AdminSecret:data.AdminAuth.Secret,AdminAuthEnabled:data.AdminAuth.Enabled==nil||*data.AdminAuth.Enabled}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
