@@ -6,6 +6,8 @@ import hmac
 import json
 import os
 import pathlib
+import secrets
+import urllib.parse
 import subprocess
 import sys
 import time
@@ -21,6 +23,22 @@ def request(port, path, method="GET", data=None, expected=200, extra_headers=Non
     payload = None if data is None else json.dumps(data).encode("utf-8")
     headers = {"Content-Type": "application/json"} if payload is not None else {}
     headers.update(extra_headers or {})
+    if path == "/api/config/admin" or path.startswith("/api/config/admin/"):
+        secret = os.environ["ADMIN_AUTH_SECRET"]
+        stamp = str(int(time.time()))
+        nonce = secrets.token_hex(8)
+        parsed = urllib.parse.urlsplit(path)
+        query = urllib.parse.urlencode(sorted(
+            urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+        ))
+        values = [
+            "admin-v1", secret, "method:" + method.upper(),
+            "path:" + parsed.path, "query:" + query,
+            "body:" + hashlib.sha256(payload or b"").hexdigest(),
+            "timestamp:" + stamp, "nonce:" + nonce,
+        ]
+        signature = hashlib.sha1("_".join(sorted(values)).encode("utf-8")).hexdigest()
+        headers.update({"X-Timestamp": stamp, "X-Nonce": nonce, "X-Signature": signature})
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}", data=payload, headers=headers, method=method
     )
