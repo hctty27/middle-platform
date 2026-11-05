@@ -1,7 +1,6 @@
 package api
 
 import (
-    "context"
     "encoding/json"
     "errors"
     "io"
@@ -9,7 +8,6 @@ import (
     "strings"
 
     "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
@@ -95,22 +93,7 @@ func roleQueryHandler(query RoleQuerier) http.HandlerFunc {
         }
         roles, err := query.Query(r, env, appID, input)
         if err != nil {
-            status, message := http.StatusServiceUnavailable, "角色查询服务暂不可用"
-            switch {
-            case errors.Is(err, model.ErrNotFound):
-                status, message = http.StatusNotFound, "渠道包不存在或未绑定该环境"
-            case errors.Is(err, model.ErrDisabled):
-                status, message = http.StatusForbidden, "当前渠道环境未开启角色查询"
-            case errors.Is(err, platform.ErrUnauthorized):
-                status, message = http.StatusUnauthorized, "平台请求签名验证失败"
-            case errors.Is(err, model.ErrUpstream):
-                status, message = http.StatusBadGateway, "游戏角色查询接口调用失败"
-                if errors.Is(err, context.DeadlineExceeded) {
-                    status, message = http.StatusGatewayTimeout, "游戏角色查询接口请求超时"
-                }
-            case errors.Is(err, model.ErrInvalidConfig), errors.Is(err, model.ErrAdapterMissing):
-                status, message = http.StatusInternalServerError, "角色查询服务配置不合法"
-            }
+            status, message := mapServiceError(err, "角色查询")
             logging.FromContext(r.Context()).WarnContext(r.Context(),
                 "角色查询失败", "app_id", appID, "env", env, "status", status, "error", err)
             writeJSON(w, status, response{Code: status, Message: message})
