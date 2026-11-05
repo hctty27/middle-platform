@@ -50,6 +50,8 @@ jobs:
           git diff --exit-code -- internal/sqlcgen
       - name: Verify shared logging module
         run: (cd ../shared/logging && go test -race -count=1 ./... && go vet ./...)
+      - name: Verify shared signature module
+        run: (cd ../shared/signature && go test -race -count=1 ./... && go vet ./...)
       - run: go test -race -count=1 ./...
       - run: go vet ./...
       - run: go build ./cmd/config-center
@@ -96,6 +98,7 @@ jobs:
       ACCESS_DB_DSN: root:integration-test@tcp(127.0.0.1:3306)/config_access?parseTime=true&loc=UTC
       CONFIG_CENTER_URL: http://127.0.0.1:8080
       CONFIG_WEBHOOK_SECRET: ci-signed-webhook-secret
+      ADMIN_AUTH_SECRET: ci-admin-signing-secret-0123456789abcdef
     steps:
       - uses: actions/checkout@v4
       # SQL 回归用例会开启 GTID；确保运行实例启用了二进制日志。
