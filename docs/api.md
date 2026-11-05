@@ -71,7 +71,6 @@ Webhook JSON 只包括 `epoch`、`revision`；请求必须携带 `X-Config-Times
 | GET | `/api/core/config/{env}/{appid}` | 查询 SDK 配置 |
 | POST | `/api/core/orders/{env}/{appid}` | 游戏登记订单 |
 | POST | `/api/core/pay/notify/{appid}` | 第三方平台支付回调（无 env） |
-| POST | `/api/core/events/{env}` | 渠道包事件上报（AppID 在 x-app-id Header） |
 
 ```http
 GET /api/core/config/{env}/{appid}
@@ -97,10 +96,10 @@ GET /api/core/config/{env}/{appid}
 
 SDK Core 错误外壳同样带 `code` 与 `message`；典型 HTTP 状态：400 参数无效、404 配置不存在、409 AppID 冲突、500 映射引用的配置无效、503 数据库服务不可用。具体契约及安全限制见 [SDK Core 模块说明](../sdk-core/README.md)。
 
-## 4. 渠道包事件上报（SDK Core）
+## 4. SDK Service 事件上报与订阅消息推送
 
 ```http
-POST /api/core/events/{env}
+POST /api/service/events/{env}
 Content-Type: application/json
 x-app-id: 110006
 x-timestamp: <Unix 秒>
@@ -112,7 +111,11 @@ x-signature: <40 位小写 SHA-1>
 {"event":"login","ext":{"roleId":"10001"}}
 ```
 
-只支持已绑定环境的渠道包。Core 从 Header 读取 AppID，使用所属游戏密钥验签；只有全局和渠道环境的 `event_report` 服务开关同时开启才同步转发至平台。平台请求使用渠道包 `appSecret` 重新签名。当前不保存或自动重试事件。对外协议见 [游戏接口 HTML](index.html#g-start)。
+只支持已绑定环境的渠道包。SDK Service 从 Header 读取 AppID，使用所属游戏密钥验签；全局与渠道环境的 `event_report` 开关同时开启后才转发平台。平台请求使用渠道包 `appSecret` 重新签名，签名不包含 Body。当前不落库也不自动重试事件。旧的 `/api/core/events/{env}` 已删除。
+
+订阅消息推送接口：`POST /api/service/subscribe/{env}`，Body：`{"open_id":"u1","tpl_id":"template","data":"{}"}`；`open_id`、`tpl_id` 必填字符串，`data`、`ext` 可选字符串（`data` 非空时必须是 JSON 对象文本）。使用相同的游戏请求验签与平台 Header 签名机制，功能编码为 `subscribe_message`，平台调用地址来自 `sdk-service` 的 `platform.subscribeMessageURL`。
+
+事件和订阅成功均返回 `{"code":0,"message":"ok","data":true}`，表示平台已接收；失败返回对应 HTTP 4xx/5xx。不开启重试、异步处理或数据存储。
 
 ## 5. SDK 功能管理（config-center）
 
@@ -123,7 +126,7 @@ x-signature: <40 位小写 SHA-1>
 | GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查看渠道包指定环境的服务配置 |
 | PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包指定环境的服务配置 |
 
-目前实现了 `event_report`、`user_check`、`role_query`、`server_query`、`role_control`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
+目前实现了 `event_report`、`user_check`、`role_query`、`server_query`、`role_control`、`subscribe_message`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
 
 ## 6. SDK Service 用户核验
 
