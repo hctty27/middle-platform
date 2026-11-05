@@ -8,6 +8,7 @@ on:
       - 'config-center/db/sql/**'
       - 'shared/logging/**'
       - 'shared/signature/**'
+      - 'shared/bootstrap/**'
       - '.github/workflows/sdk-core.yml'
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - 'config-center/db/sql/**'
       - 'shared/logging/**'
       - 'shared/signature/**'
+      - 'shared/bootstrap/**'
       - '.github/workflows/sdk-core.yml'
   workflow_dispatch:
 

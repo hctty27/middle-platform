@@ -50,6 +50,8 @@ jobs:
           git diff --exit-code -- internal/sqlcgen
       - name: Verify shared logging module
         run: (cd ../shared/logging && go test -race -count=1 ./... && go vet ./...)
+      - name: Verify shared bootstrap module
+        run: (cd ../shared/bootstrap && go mod tidy && git diff --exit-code -- go.mod go.sum && go test -race -count=1 ./... && go vet ./...)
       - name: Verify shared signature module
         run: (cd ../shared/signature && go test -race -count=1 ./... && go vet ./...)
       - run: go test -race -count=1 ./...
