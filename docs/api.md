@@ -58,7 +58,7 @@ GET /api/config/sync/revision
 | GET | `/api/access/revision` | 查询本地同步游标 |
 | POST | `/internal/config/callback` | 接收签名通知并异步触发同步 |
 
-Webhook JSON 只包括 `epoch`、`revision`；请求必须携带 `X-Config-Timestamp`（Unix 秒）与 `X-Config-Signature`（`sha256=<hex>`）。签名输入为 `timestamp + "." + epoch + "." + revision`，密钥为订阅者配置的 HMAC secret。服务端要求时间戳在前后五分钟内。验签成功返回 HTTP 202，失败返回 401；**不要直接将回调接口暴露公网**。
+Webhook JSON 只包括 `epoch`、`revision`；请求必须携带 `X-Timestamp`（Unix 秒）、`X-Nonce`（16 位小写 hex）、`X-Signature`（40 位小写 SHA-1）。签名为 `SignValues(subscriberSecret, timestamp, nonce, epoch, decimal(revision))`，字符串值排序后 `_` 拼接。时间戳允许前后五分钟；有效通知返回 HTTP 202，签名失败返回 401，同进程重复 nonce 返回 409。**不兼容旧版 HMAC-SHA256；配置中心及第三方接入端须同步升级，回调接口不可直接暴露公网。**
 
 接入端只存储 `game`、`region`、`server_group`，不包含 `channel_app`，不承诺渠道应用配置的同步。
 

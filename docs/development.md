@@ -61,7 +61,7 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/config/admin/subscribers" -ContentType "application/json" -Body $body
 ```
 
-检查 `http://127.0.0.1:8081/api/access/revision`。回调签名验证成功只代表已接受异步同步，真正的节点更新以副本游标和节点结果为准。
+检查 `http://127.0.0.1:8081/api/access/revision`。Webhook 使用 `X-Timestamp`、`X-Nonce`、`X-Signature`，将订阅者密钥、时间戳、nonce、epoch、revision 按值排序计算 SHA-1。签名验证成功只代表已接受异步同步，真正的节点更新以副本游标和节点结果为准。旧 HMAC-SHA256 接入端不再兼容，新旧服务端必须同步升级。
 
 ## 3. SDK Core
 

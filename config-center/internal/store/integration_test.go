@@ -2,12 +2,9 @@ package store
 
 import (
 	"context"
-	"crypto/hmac"
 	"errors"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +17,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/hctty27/middle-platform/config-center/internal/webhook"
 	"github.com/hctty27/middle-platform/config-center/internal/service"
+	"github.com/hctty27/middle-platform/shared/signature"
  "github.com/hctty27/middle-platform/config-center/internal/model"
 )
 
@@ -44,7 +42,7 @@ func TestWriteValidation(t *testing.T) {
 	}
 }
 
-// TestWebhookSignature 验证回调消息签名遵循约定的 HMAC 协议。
+// TestWebhookSignature 验证回调消息复用 SHA-1 排序签名协议。
 func TestWebhookSignature(t *testing.T) {
 	const secret = "integration-secret"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,11 +51,11 @@ func TestWebhookSignature(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		mac := hmac.New(sha256.New, []byte(secret))
-		fmt.Fprintf(mac, "%s.test-epoch.17", r.Header.Get("X-Config-Timestamp"))
-		expected := mac.Sum(nil)
-		actual, err := hex.DecodeString(strings.TrimPrefix(r.Header.Get("X-Config-Signature"), "sha256="))
-		if err != nil || !hmac.Equal(expected, actual) {
+		timestamp := r.Header.Get("X-Timestamp")
+		nonce := r.Header.Get("X-Nonce")
+		provided := r.Header.Get("X-Signature")
+		if !signature.ValidHeaders(timestamp, nonce, provided, time.Now()) ||
+			!signature.EqualHex(signature.SignValues(secret, timestamp, nonce, "test-epoch", "17"), provided) {
 			t.Errorf("invalid signature")
 			w.WriteHeader(http.StatusUnauthorized)
 			return

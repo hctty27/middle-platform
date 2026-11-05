@@ -3,9 +3,7 @@ package webhook
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -14,8 +12,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/hctty27/middle-platform/shared/signature"
 )
 
 // Delivery 描述一次待发送的签名回调及其数据库租约。
@@ -91,16 +92,18 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	return delivery, nil
 }
 
-// send 计算 HMAC 签名并发出回调通知。
+// send 使用共享 SHA-1 排序签名并发出回调通知。
 // send 校验回调目标并发送签名通知，不把配置内容直接传给接入端。
 func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err := ValidateCallback(job.URL); err != nil {
 		return fmt.Errorf("Webhook 通知目标不安全: %w", err)
 	}
-	timestamp := time.Now().Unix()
-	message := fmt.Sprintf("%d.%s.%d", timestamp, job.Epoch, job.Revision)
-	sign := hmac.New(sha256.New, []byte(job.Secret))
-	_, _ = io.WriteString(sign, message)
+	if job.Secret == "" { return errors.New("Webhook 订阅者密钥不能为空") }
+	var random [8]byte
+	if _, err := rand.Read(random[:]); err != nil { return fmt.Errorf("生成 Webhook nonce 失败: %w", err) }
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := hex.EncodeToString(random[:])
+	signed := signature.SignValues(job.Secret, timestamp, nonce, job.Epoch, strconv.FormatInt(job.Revision, 10))
 	body, err := json.Marshal(struct {
 		Epoch string `json:"epoch"`
 		Revision int64 `json:"revision"`
@@ -109,8 +112,9 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, job.URL, bytes.NewReader(body))
 	if err != nil { return err }
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Config-Timestamp", fmt.Sprint(timestamp))
-	req.Header.Set("X-Config-Signature", "sha256="+hex.EncodeToString(sign.Sum(nil)))
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Nonce", nonce)
+	req.Header.Set("X-Signature", signed)
 	response, err := d.Client.Do(req)
 	if err != nil { return err }
 	defer response.Body.Close()

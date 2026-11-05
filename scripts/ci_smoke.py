@@ -2,7 +2,6 @@
 """Go 配置中心双实例、Webhook 与 Go 接入端 MySQL 端到端回归。"""
 
 import hashlib
-import hmac
 import json
 import os
 import pathlib
@@ -153,20 +152,24 @@ def main():
         "secret": os.environ["CONFIG_WEBHOOK_SECRET"]
     }, 201)
 
-    # Webhook must return 202 after HMAC validation, without waiting for sync.
+    # Webhook 使用共享 SHA-1 排序签名；同一个 nonce 不允许重放。
     initial = request(8080, "/api/config/sync/revision")
     timestamp = str(int(time.time()))
-    message = f'{timestamp}.{initial["epoch"]}.{initial["revision"]}'
-    signature = hmac.new(os.environ["CONFIG_WEBHOOK_SECRET"].encode("utf-8"),
-                         message.encode("utf-8"), hashlib.sha256).hexdigest()
+    nonce = secrets.token_hex(8)
+    values = [os.environ["CONFIG_WEBHOOK_SECRET"], timestamp, nonce,
+              initial["epoch"], str(initial["revision"])]
+    signed = hashlib.sha1("_".join(sorted(values)).encode("utf-8")).hexdigest()
     notification = {"epoch": initial["epoch"], "revision": initial["revision"]}
     request(8081, "/internal/config/callback", "POST", notification, 401,
-            extra_headers={"X-Config-Timestamp": timestamp,
-                           "X-Config-Signature": "sha256=invalid"})
+            extra_headers={"X-Timestamp": timestamp, "X-Nonce": nonce,
+                           "X-Signature": "invalid"})
     request(8081, "/internal/config/callback", "POST", notification, 202,
-            extra_headers={"X-Config-Timestamp": timestamp,
-                           "X-Config-Signature": "sha256=" + signature})
-    print("通过：拒绝无效回调并异步确认有效回调", flush=True)
+            extra_headers={"X-Timestamp": timestamp, "X-Nonce": nonce,
+                           "X-Signature": signed})
+    request(8081, "/internal/config/callback", "POST", notification, 409,
+            extra_headers={"X-Timestamp": timestamp, "X-Nonce": nonce,
+                           "X-Signature": signed})
+    print("通过：拒绝无效签名与 nonce 重放，并确认有效回调", flush=True)
 
     # 三层配置树与跨实例的同步。
     parent = 0

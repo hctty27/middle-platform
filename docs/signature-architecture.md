@@ -13,6 +13,7 @@
 | 平台 → SDK Service 用户、角色、区服查询 | appSecret、AppID、时间戳、Nonce、接口指定的业务值 | `SignValues` |
 | SDK Service → 平台事件、订阅 | appSecret、AppID、时间戳、Nonce（不签 Body） | `SignValues` |
 | 第三方 → 管理 API | admin-v1、管理密钥、方法、路径、查询串、请求体摘要、时间戳、Nonce | `SignAdmin` |
+| 配置中心 → 订阅者 Webhook | subscriberSecret、时间戳、Nonce、epoch、revision（十进制字符串） | `SignValues` + `ValidHeaders` + `EqualHex` |
 
 ## 共享工具
 
@@ -27,7 +28,7 @@
 
 - `sdk-core/internal/auth`、`sdk-core/internal/payment`、`sdk-service/internal/auth`、`sdk-service/internal/platform` 继续负责业务字段组装、密钥查找、AppID 归属、环境与权限校验。
 - `shared/signature` 不查数据库，也不判断订单金额、渠道、业务操作权限。
-- 不改变已有 SHA-1 算法、字段集合、API 路径、Header、环境配置或日志格式。
+- 游戏、平台和管理接口的既有 SHA-1 算法、字段、路径和 Header 不变；配置同步 Webhook 从 HMAC-SHA256 改为共享排序签名，第三方接入端必须同步升级。
 - SHA-1 是平台兼容的既有协议，不是现代新协议的安全建议；生产必须使用 HTTPS、保护密钥。
 - 时间戳/Nonce 格式校验不等于跨实例的 Nonce 原子去重；业务层必须处理必要的幂等性。
 - 回归测试中保留已知签名向量，重点检查空字符串、null、嵌套 JSON、时间偏差、支付回调 V1 特例。
