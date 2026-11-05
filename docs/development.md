@@ -26,7 +26,7 @@ cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml
 ```
 
-修改 `configs/config-dev.yaml` 中的 `database.dsn`，例如 `root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC`。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口没有内建鉴权，必须仅通过可信内网或受保护网关访问，后续新增订阅者无需重启。回调支持公网/内网的域名与 IP（HTTP/HTTPS），无需配置域名白名单。
+修改 `configs/config-dev.yaml` 中的 `database.dsn`，例如 `root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC`。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口默认启用 `adminAuth` 签名，开发机可显式关闭；生产必须通过可信内网或受保护的 HTTPS 网关访问，后续新增订阅者无需重启。回调支持公网/内网的域名与 IP（HTTP/HTTPS），无需配置域名白名单。
 
 对**新空库先手动执行 SQL，再启动**：
 
@@ -82,7 +82,7 @@ SDK Core **直接查询权威库**，不连接 `config_access`，也不执行迁
 Invoke-RestMethod "http://127.0.0.1:8082/api/core/config/prod/your-appid"
 ```
 
-`your-appid` 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口映射见 [API 文档](api.md) 与 [SDK Core 说明](../sdk-core/README.md)。
+`your-appid` 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口与签名见 [统一接口文档](index.html)；模块说明见 [SDK Core](../sdk-core/README.md)。
 
 ## 4. SDK Service（平台查询与游戏消息转发）
 
