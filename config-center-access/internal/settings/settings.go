@@ -2,17 +2,14 @@
 package settings
 
 import (
- "bytes"
  "fmt"
- "io"
  "net/url"
  "os"
- "path/filepath"
  "strconv"
  "strings"
  "time"
 
- "gopkg.in/yaml.v3"
+ "github.com/hctty27/middle-platform/shared/bootstrap"
  "github.com/hctty27/middle-platform/shared/logging"
 )
 
@@ -47,15 +44,8 @@ func Load() (Config,error) { return LoadFile("") }
 // LoadFile 依次加载共享 YAML、环境 YAML，再用环境变量覆盖。
 func LoadFile(path string) (Config,error) {
  data:=configFile{Log:logging.Default()}
- if path!="" {
-  base:=filepath.Join(filepath.Dir(path),"config.yaml")
-  if filepath.Clean(path)!=filepath.Clean(base) {
-   if _,err:=os.Stat(base);err==nil {
-    if err:=readYAML(base,&data);err!=nil{return Config{},err}
-   } else if !os.IsNotExist(err) {return Config{},err}
-  }
-  if err:=readYAML(path,&data);err!=nil{return Config{},err}
- }
+ if err:=bootstrap.ReadLayeredYAML(path,&data);err!=nil{return Config{},err}
+
  cfg:=Config{
   Address:":8081",
   DSN:data.Database.DSN,
@@ -81,10 +71,10 @@ func LoadFile(path string) (Config,error) {
   *item.target=parsed
  }
  // 环境变量可以覆盖 YAML 的数据库和连接参数。
- overrideString("CONFIG_ACCESS_ADDR",&cfg.Address)
- overrideString("ACCESS_DB_DSN",&cfg.DSN)
- overrideString("CONFIG_CENTER_URL",&cfg.CenterURL)
- overrideString("CONFIG_WEBHOOK_SECRET",&cfg.WebhookSecret)
+ bootstrap.OverrideString("CONFIG_ACCESS_ADDR",&cfg.Address)
+ bootstrap.OverrideString("ACCESS_DB_DSN",&cfg.DSN)
+ bootstrap.OverrideString("CONFIG_CENTER_URL",&cfg.CenterURL)
+ bootstrap.OverrideString("CONFIG_WEBHOOK_SECRET",&cfg.WebhookSecret)
  for _,item:=range []struct{name string; target *time.Duration}{
   {"CONFIG_CLIENT_CONNECT_TIMEOUT_MS",&cfg.ConnectTimeout},
   {"CONFIG_CLIENT_READ_TIMEOUT_MS",&cfg.RequestTimeout},
@@ -111,19 +101,4 @@ func LoadFile(path string) (Config,error) {
   return Config{},fmt.Errorf("configCenter.url 必须是没有路径的 HTTP(S) 地址")
  }
  return cfg,nil
-}
-
-func readYAML(path string,target *configFile) error {
- raw,err:=os.ReadFile(path)
- if err!=nil{return fmt.Errorf("读取 YAML %s 失败: %w",path,err)}
- decoder:=yaml.NewDecoder(bytes.NewReader(raw))
- decoder.KnownFields(true)
- if err:=decoder.Decode(target);err!=nil{return fmt.Errorf("解析 YAML %s 失败: %w",path,err)}
- var extra any
- if err:=decoder.Decode(&extra);err!=io.EOF{return fmt.Errorf("YAML %s 必须只包含一份文档",path)}
- return nil
-}
-
-func overrideString(key string,target *string) {
- if value,ok:=os.LookupEnv(key);ok {*target=value}
 }
