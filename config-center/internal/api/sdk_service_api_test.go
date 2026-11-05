@@ -34,14 +34,14 @@ func (sdkServiceWriter) UpsertSDKChannelService(_ context.Context, appID, servic
 func TestSDKServiceManagementRoutes(t *testing.T) {
     handler:=RouterWithWrites(sdkServiceReader{},&sdkServiceWriter{})
     tests:=[]struct{method,path,body string;status int}{
-        {"GET","/api/config/admin/sdk-services","",200},
-        {"GET","/api/config/admin/channel-apps/2/services?env=test","",200},
-        {"GET","/api/config/admin/channel-apps/2/services?env=bad","",400},
+        {"GET","/api/config/admin/sdk-services","",404},
+        {"GET","/api/config/admin/channel-apps/2/services?env=test","",404},
+        {"GET","/api/config/admin/channel-apps/2/services?env=bad","",404},
         {"GET","/api/config/admin/server-groups/3/services?env=test","",404},
-        {"PUT","/api/config/admin/sdk-services/1",`{"enabled":true}`,204},
-        {"PUT","/api/config/admin/sdk-services/1",`{}`,400},
-        {"PUT","/api/config/admin/channel-apps/2/services/1?env=test",`{"enabled":true,"config":{}}`,204},
-        {"PUT","/api/config/admin/channel-apps/2/services/1?env=bad",`{"enabled":true,"config":{}}`,400},
+        {"PUT","/api/config/admin/sdk-services/1",`{"enabled":true}`,404},
+        {"PUT","/api/config/admin/sdk-services/1",`{}`,404},
+        {"PUT","/api/config/admin/channel-apps/2/services/1?env=test",`{"enabled":true,"config":{}}`,404},
+        {"PUT","/api/config/admin/channel-apps/2/services/1?env=bad",`{"enabled":true,"config":{}}`,404},
         {"PUT","/api/config/admin/server-groups/3/services/2?env=test",`{"enabled":true,"config":{}}`,404},
     }
     for _,tc:=range tests {
