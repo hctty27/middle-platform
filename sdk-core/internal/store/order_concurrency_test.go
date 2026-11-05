@@ -31,7 +31,7 @@ func TestConcurrentNotifyClaims(t *testing.T) {
     defer cancel()
     if _,err=first.ExecContext(ctx,"DROP TABLE IF EXISTS game_order");err!=nil{t.Fatal(err)}
     defer first.ExecContext(context.Background(),"DROP TABLE IF EXISTS game_order")
-    schema,err:=os.ReadFile(filepath.Join("..","..","..","config-center","db","sql","add_game_order.sql"))
+    schema,err:=os.ReadFile(filepath.Join("..","..","..","db","incremental","V0001__add_game_order.sql"))
     if err!=nil{t.Fatal(err)}
     if _,err=first.ExecContext(ctx,string(schema));err!=nil{t.Fatal(err)}
 

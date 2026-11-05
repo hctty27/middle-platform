@@ -63,19 +63,13 @@ bin/
   sdk-core
   sdk-service
 sql/
-  config-center/
-    initialize.sql
-    add_game_order.sql
-    migrate_sdk_node_config.sql
-    cleanup_legacy_sdk_fields.sql
-    add_sdk_services.sql
-    add_sdk_user_check.sql
-    add_sdk_role_query.sql
-    add_sdk_server_query.sql
-    add_sdk_role_control.sql
-    add_sdk_subscribe_message.sql
-  config-center-access/
-    initialize.sql
+  full/
+    config_center.sql
+    config_access.sql
+  incremental/
+    V0001__add_game_order.sql
+    ...
+    V0011__add_game_market_type.sql
 admin/                     # -SkipFrontend 时不存在
 ```
 
@@ -83,21 +77,21 @@ admin/                     # -SkipFrontend 时不存在
 
 ## 3. 手动 SQL 先于启动
 
-备份并核对目标数据库，**只执行对应场景的 SQL**：
+备份并核对目标数据库，**只执行对应场景的 SQL**。现有 V0001～V0011 为不同历史场景的编号归档，不可以不经检查而依次执行：
 
-- SDK 拆分升级：停所有旧实例并备份后执行 `sql/config-center/migrate_sdk_node_config.sql`，验证新版后单独执行 `cleanup_legacy_sdk_fields.sql`。详见 [数据库文档](database.md)。
-- 全新、空的 `config_center`：`sql/config-center/initialize.sql`。
-- 已有 `config_center` 仅缺少订单表：`sql/config-center/add_game_order.sql`。
-- 已有权威库但没有 SDK 服务表：`sql/config-center/add_sdk_services.sql`（仅表确实不存在时执行）。
-- 已有功能表但缺少 `user_check` 服务目录：`sql/config-center/add_sdk_user_check.sql`。
-- 已有服务表但缺少角色查询、区服查询或封解禁目录：分别手工执行 `sql/config-center/add_sdk_role_query.sql`、`add_sdk_server_query.sql`、`add_sdk_role_control.sql`，在部署新版 sdk-service 前完成。
-- 已有服务表但缺少订阅消息目录：手动执行 `sql/config-center/add_sdk_subscribe_message.sql`，在部署新版 sdk-service 前完成。
-- 全新、空的 `config_access`：`sql/config-center-access/initialize.sql`。
+- SDK 拆分升级：停所有旧实例并备份后执行 `sql/incremental/V0009__migrate_sdk_node_config.sql`，验证新版后单独执行 `sql/incremental/V0010__cleanup_legacy_sdk_fields.sql`。详见 [数据库文档](database.md)。
+- 全新、空的 `config_center`：`sql/full/config_center.sql`。
+- 已有 `config_center` 仅缺少订单表：`sql/incremental/V0001__add_game_order.sql`。
+- 已有权威库但没有 SDK 服务表：`sql/incremental/V0002__add_sdk_services.sql`（仅表确实不存在时执行）。
+- 已有功能表但缺少 `user_check` 服务目录：`sql/incremental/V0004__add_sdk_user_check.sql`。
+- 已有服务表但缺少角色查询、区服查询或封解禁目录：分别手工执行 `sql/incremental/V0005__add_sdk_role_query.sql`、`sql/incremental/V0006__add_sdk_server_query.sql`、`sql/incremental/V0007__add_sdk_role_control.sql`，在部署新版 sdk-service 前完成。
+- 已有服务表但缺少订阅消息目录：手动执行 `sql/incremental/V0008__add_sdk_subscribe_message.sql`，在部署新版 sdk-service 前完成。
+- 全新、空的 `config_access`：`sql/full/config_access.sql`。
 
 例如在 Linux 发布包解压目录（已有库补建订单表）：
 
 ```bash
-mysql -u <管理账号> -p config_center < sql/config-center/add_game_order.sql
+mysql -u <管理账号> -p config_center < sql/incremental/V0001__add_game_order.sql
 ```
 
 如果目标表已经存在，不要反复执行初始化 SQL；应检查实际表定义与索引。
@@ -266,7 +260,7 @@ log:
 
 ## 8. 事件上报迁移发布顺序（重要）
 
-1. 先在存量权威库执行 `add_sdk_subscribe_message.sql`，确认 `event_report`、`subscribe_message` 已注册且渠道环境功能开关配置正确。
+1. 先在存量权威库执行 `sql/incremental/V0008__add_sdk_subscribe_message.sql`，确认 `event_report`、`subscribe_message` 已注册且渠道环境功能开关配置正确。
 2. 把原 `/data/middle-platform/config/sdk-core.yaml` 中的 `platform.eventReportURL` 移到 `sdk-service.yaml` 的同名配置；为订阅消息填写 `platform.subscribeMessageURL`。Core YAML 中必须删除旧 `platform`，否则严格 YAML 解码将拒绝启动。
 3. 先验证 Nginx `/api/service/` 转发正确，再部署 SDK Service 和 SDK Core 新程序。旧 Core 的 `POST /api/core/events/{env}` 删除后返回 404。
 4. 同步更新游戏端或调用 SDK 的事件上报 URL 到 `POST /api/service/events/{env}`，新增订阅消息使用 `POST /api/service/subscribe/{env}`。

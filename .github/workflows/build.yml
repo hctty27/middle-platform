@@ -127,8 +127,8 @@ jobs:
         env:
           MYSQL_PWD: integration-test
         run: |
-          mysql --protocol=tcp -h 127.0.0.1 -uroot config_center < config-center/db/sql/initialize.sql
-          mysql --protocol=tcp -h 127.0.0.1 -uroot config_access < config-center-access/db/sql/initialize.sql
+          mysql --protocol=tcp -h 127.0.0.1 -uroot config_center < db/full/config_center.sql
+          mysql --protocol=tcp -h 127.0.0.1 -uroot config_access < db/full/config_access.sql
       - name: Test Go cluster and signed callbacks
         run: python3 scripts/ci_smoke.py
 

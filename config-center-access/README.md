@@ -12,7 +12,7 @@
 go run ./cmd/config-center-access -config configs/config-dev.yaml
 ```
 
-首次使用**空库**时请先手工执行 `db/sql/initialize.sql` 创建 `config_node`、`config_sync_state`；接入端启动只校验，再全量拉取快照。已有副本只做结构校验；若表结构不兼容，先备份并核对后制定升级方案，不能在非空副本上执行初始化 SQL。
+首次使用**空库**时请先手工执行 `../db/full/config_access.sql` 创建 `config_node`、`config_sync_state`；接入端启动只校验，再全量拉取快照。已有副本只做结构校验；若表结构不兼容，先备份并核对后制定升级方案，不能在非空副本上执行初始化 SQL。
 
 ## 同步协议
 

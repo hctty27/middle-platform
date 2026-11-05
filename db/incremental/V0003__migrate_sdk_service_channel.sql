@@ -1,3 +1,4 @@
+-- 目标数据库：config_center。历史条件增量；先核对前置表结构和数据，切勿按编号全部顺序执行。
 -- 从当前通用绑定表迁移到渠道包专用绑定表，仅保留事件上报功能。
 -- 适用：sdk_service_binding 和 sdk_service.scope_type 存在的当前版本。
 -- 必须先备份 config_center、停止 config-center 与 sdk-core，再人工执行。

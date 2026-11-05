@@ -1,3 +1,4 @@
+-- 目标数据库：config_center。历史条件增量；先核对前置表结构和数据，切勿按编号全部顺序执行。
 -- 已有 config_center 库缺少 game_order 时，在备份并确认表不存在后人工执行。
 -- 不会修改旧业务表，也不更新已废弃的迁移版本记录。
 CREATE TABLE game_order (

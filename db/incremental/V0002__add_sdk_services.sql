@@ -1,3 +1,4 @@
+-- 目标数据库：config_center。历史条件增量；先核对前置表结构和数据，切勿按编号全部顺序执行。
 -- 现有 config_center 数据库手动执行一次；请先备份并确认两张表不存在。
 -- SDK Core 不会自动建表，现有订单和配置表不受影响。
 CREATE TABLE sdk_service (

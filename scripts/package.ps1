@@ -147,20 +147,30 @@ try {
 
     # 发布包携带人工审核的 SQL，不会在安装或运行服务时执行。
     $sqlDir = Join-Path $stageDir 'sql'
-    $authorityDir = Join-Path $sqlDir 'config-center'
-    $accessDir = Join-Path $sqlDir 'config-center-access'
-    New-Item -ItemType Directory -Force -Path $authorityDir, $accessDir | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/initialize.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_game_order.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/migrate_sdk_node_config.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/cleanup_legacy_sdk_fields.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_services.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_user_check.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_role_query.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_server_query.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_role_control.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_subscribe_message.sql') -Destination $authorityDir
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center-access/db/sql/initialize.sql') -Destination $accessDir
+    $fullDir = Join-Path $sqlDir 'full'
+    $incrementalDir = Join-Path $sqlDir 'incremental'
+    New-Item -ItemType Directory -Force -Path $fullDir, $incrementalDir | Out-Null
+
+    $fullSource = Join-Path $repoRoot 'db/full'
+    $incrementalSource = Join-Path $repoRoot 'db/incremental'
+    foreach ($filename in @('config_center.sql', 'config_access.sql')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $fullSource $filename) -PathType Leaf)) {
+            throw "缺少全量 SQL: $filename"
+        }
+    }
+    Get-ChildItem -LiteralPath $fullSource -File -Filter '*.sql' | Copy-Item -Destination $fullDir
+
+    $incrementalFiles = @(Get-ChildItem -LiteralPath $incrementalSource -File | Sort-Object Name)
+    $expectedVersion = 1
+    foreach ($sqlFile in $incrementalFiles) {
+        $match = [regex]::Match($sqlFile.Name, '^V([0-9]{4})__[a-z0-9_]+\.sql$')
+        if (-not $match.Success -or [int]$match.Groups[1].Value -ne $expectedVersion) {
+            throw "增量 SQL 编号不合法或不连续: $($sqlFile.Name)，预期 V$($expectedVersion.ToString('0000'))"
+        }
+        Copy-Item -LiteralPath $sqlFile.FullName -Destination $incrementalDir
+        $expectedVersion++
+    }
+    if ($incrementalFiles.Count -eq 0) { throw '未找到增量 SQL' }
 
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。
     if ($buildFrontend) {

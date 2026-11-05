@@ -64,15 +64,20 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/config-center/ sql/config-center/initialize.sql sql/config-center/add_game_order.sql sql/config-center/add_sdk_user_check.sql sql/config-center-access/ sql/config-center-access/initialize.sql admin/ admin/index.html admin/config.js; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ admin/ admin/index.html admin/config.js; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do
             case "$item" in
-              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|bin/sdk-service|sql/|sql/config-center/|sql/config-center/*|sql/config-center-access/|sql/config-center-access/*|admin/|admin/*) ;;
+              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|bin/sdk-service|sql/|sql/full/|sql/full/*|sql/incremental/|sql/incremental/*|admin/|admin/*) ;;
               *) echo "Unexpected archive entry: $item" >&2; exit 1 ;;
             esac
           done <<< "$entries"
+          # 新增 SQL 自动校验归档完整性，避免遗漏增量文件。
+          for path in db/full/*.sql db/incremental/*.sql; do
+            test -f "$path"
+            grep -Fx "sql/${path#db/}" <<< "$entries"
+          done
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
           tar -xzf "$tarball" -C "$tmpdir"
@@ -120,8 +125,12 @@ jobs:
           if (-not (Test-Path $archive)) { throw "Missing archive: $archive" }
           $names = @(& tar -tzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
-          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/config-center/initialize.sql', 'sql/config-center/add_game_order.sql', 'sql/config-center/add_sdk_user_check.sql', 'sql/config-center-access/initialize.sql')) {
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql')) {
             if ($name -notin $names) { throw "Missing binary: $name" }
+          }
+          foreach ($sqlFile in @(Get-ChildItem -LiteralPath 'db/full', 'db/incremental' -File -Filter '*.sql')) {
+            $sqlEntry = "sql/$($sqlFile.Directory.Name)/$($sqlFile.Name)"
+            if ($sqlEntry -notin $names) { throw "Missing SQL: $sqlEntry" }
           }
           if (@(Get-ChildItem dist -File).Count -ne 1) { throw 'Unexpected dist files' }
           if (@(Get-ChildItem dist -Directory).Count -ne 0) { throw 'Unexpected dist directories' }

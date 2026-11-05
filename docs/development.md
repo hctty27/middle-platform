@@ -31,7 +31,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 对**新空库先手动执行 SQL，再启动**：
 
 ```powershell
-# 先在数据库工具中执行 config-center/db/sql/initialize.sql（仅新库）
+# 先在数据库工具中执行 db/full/config_center.sql（仅新库）
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
@@ -48,7 +48,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/config-center-access -config configs/config-dev.yaml
 ```
 
-`database.dsn` 指向 `config_access`，`configCenter.url` 通常是 `http://127.0.0.1:8080`，`webhook.secret` 必须是足够长的随机密钥。首次启动前须对空 `config_access` 执行 `config-center-access/db/sql/initialize.sql`，随后全量拉取节点，随后增量同步；旧副本库参见 [数据库文档](database.md)。
+`database.dsn` 指向 `config_access`，`configCenter.url` 通常是 `http://127.0.0.1:8080`，`webhook.secret` 必须是足够长的随机密钥。首次启动前须对空 `config_access` 执行 `db/full/config_access.sql`，随后全量拉取节点，随后增量同步；旧副本库参见 [数据库文档](database.md)。
 
 在运行中的配置中心注册订阅者（示例密钥需与接入端一致，且管理写接口必须在受保护的网络上启用）；无需重启 Worker：
 
@@ -71,7 +71,7 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/config/admin/subs
 cd sdk-core
 Copy-Item configs/config.yaml configs/config-dev.yaml
 # 只需要 database.dsn，连接 config_center；订单路由随服务启动。
-# 已有权威库先人工执行 config-center/db/sql/add_game_order.sql，
+# 已有权威库先人工执行 db/incremental/V0001__add_game_order.sql，
 # 同一数据库账号应具备 game_order 表读写权限。
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
@@ -94,7 +94,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-service -config configs/config-dev.yaml
 ```
 
-首次部署应确认功能开关表已建立并包含 `user_check`、`event_report`、`subscribe_message` 等已实现服务；已有库缺少订阅消息服务时先手动执行 `config-center/db/sql/add_sdk_subscribe_message.sql`。游戏 `gameSecret`、渠道包 `appSecret`、大区 `userCheckUrl` 已配置，且相应全局与渠道环境的功能开关已开启。**默认 `standard` 适配器无需配置**。本地健康检查：`http://127.0.0.1:8221/health/ready`。
+首次部署应确认功能开关表已建立并包含 `user_check`、`event_report`、`subscribe_message` 等已实现服务；已有库缺少订阅消息服务时先手动执行 `db/incremental/V0008__add_sdk_subscribe_message.sql`。游戏 `gameSecret`、渠道包 `appSecret`、大区 `userCheckUrl` 已配置，且相应全局与渠道环境的功能开关已开启。**默认 `standard` 适配器无需配置**。本地健康检查：`http://127.0.0.1:8221/health/ready`。
 
 游戏上报事件使用 `POST /api/service/events/{env}`，订阅消息使用 `POST /api/service/subscribe/{env}`，AppID 放 `x-app-id`。平台两个目标地址由 `sdk-service/configs/config-dev.yaml` 的 `platform.eventReportURL` 与 `platform.subscribeMessageURL` 指定，未启用相应业务时可留空。旧 Core 事件路由已移除；不要继续请求 `/api/core/events/{env}`。
 

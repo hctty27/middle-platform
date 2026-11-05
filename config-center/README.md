@@ -6,7 +6,7 @@
 
 1. 创建空 `config_center` 库，复制 `configs/config.yaml` 为 `configs/config-dev.yaml`。
 2. 填写 `database.dsn`；管理读写接口与 Webhook Worker 均随服务启动。**管理 API 无内建鉴权，必须限制到可信内网或受认证的管理网关**。
-3. 先通过数据库客户端执行 `db/sql/initialize.sql`（仅新空库）；已有权威库缺订单表时仅执行 `db/sql/add_game_order.sql`。然后在本目录运行：
+3. 先通过数据库客户端执行 `../db/full/config_center.sql`（仅新空库）；已有权威库缺订单表时仅执行 `../db/incremental/V0001__add_game_order.sql`。然后在本目录运行：
 
 ```powershell
 go run ./cmd/config-center -config configs/config-dev.yaml
