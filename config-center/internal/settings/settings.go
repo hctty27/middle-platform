@@ -45,7 +45,7 @@ func LoadFile(path string) (Settings,error) {
  }
  cfg:=Settings{Address:"127.0.0.1:8080",DSN:data.Database.DSN,Log:data.Log,AdminSecret:data.AdminAuth.Secret}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
- // 环境变量优先级最高；管理接口的安全边界由受保护的网关负责。
+ // 环境变量优先级最高；管理 API 内建签名验签，网关仍负责限制访问范围。
  overrideString("CONFIG_DB_DSN",&cfg.DSN)
  overrideString("CONFIG_GO_ADDR",&cfg.Address)
  overrideString("ADMIN_AUTH_SECRET",&cfg.AdminSecret)
