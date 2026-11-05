@@ -24,6 +24,7 @@ type SubscribeSender interface {
 }
 
 var errInvalidOutbound = errors.New("上报或订阅消息参数不合法")
+var errOutboundTooLarge = errors.New("事件或订阅消息请求体超过 64KiB")
 
 func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte, error) {
     if r.URL.RawQuery != "" ||
@@ -32,6 +33,10 @@ func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte,
     }
     raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64*1024))
     if err != nil {
+        var sizeError *http.MaxBytesError
+        if errors.As(err, &sizeError) {
+            return nil, errOutboundTooLarge
+        }
         return nil, errInvalidOutbound
     }
     fields := map[string]json.RawMessage{}
@@ -133,7 +138,11 @@ func serveOutbound(w http.ResponseWriter, r *http.Request, code string,
     }
     body, err := parseOutbound(w, r, code)
     if err != nil {
-        writeJSON(w, 400, response{Code: 400, Message: "事件上报或订阅消息参数不合法"})
+        if errors.Is(err, errOutboundTooLarge) {
+            writeJSON(w, 413, response{Code: 413, Message: "请求体超过 64KiB"})
+        } else {
+            writeJSON(w, 400, response{Code: 400, Message: "事件上报或订阅消息参数不合法"})
+        }
         return
     }
     if err := send(r, env, appID, body); err != nil {
@@ -146,7 +155,7 @@ func serveOutbound(w http.ResponseWriter, r *http.Request, code string,
         case errors.Is(err, auth.ErrUnauthorized):
             status, message = 401, "游戏请求签名校验失败"
         case errors.Is(err, model.ErrInvalidConfig):
-            status, message = 500, "渠道服务配置不合法"
+            status, message = 422, "渠道服务配置不合法"
         case errors.Is(err, platform.ErrPublishEndpointMissing):
             status, message = 503, "未配置平台接收地址"
         case errors.Is(err, platform.ErrPublishRejected):
@@ -161,5 +170,9 @@ func serveOutbound(w http.ResponseWriter, r *http.Request, code string,
         writeJSON(w, status, response{Code: status, Message: message})
         return
     }
-    writeJSON(w, 200, response{Code: 0, Message: "ok", Data: true})
+    message := "ok"
+    if code == "event_report" {
+        message = "success"
+    }
+    writeJSON(w, 200, response{Code: 0, Message: message, Data: true})
 }

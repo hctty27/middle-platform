@@ -63,6 +63,17 @@ func TestEventAndSubscribeRoutes(t *testing.T) {
             }
         })
     }
+    oversized := &fakeOutbound{}
+    oversizedHandler := RouterWithPublishers(&fakeChecker{}, fakeDB{}, nil, nil, nil, oversized, oversized)
+    huge := `{"event":"login","ext":{"value":"` + strings.Repeat("x", 65536) + `"}}`
+    request := httptest.NewRequest(http.MethodPost, "/api/service/events/test", strings.NewReader(huge))
+    request.Header.Set("Content-Type", "application/json")
+    request.Header.Set("x-app-id", "110006")
+    response := httptest.NewRecorder()
+    oversizedHandler.ServeHTTP(response, request)
+    if response.Code != http.StatusRequestEntityTooLarge || oversized.events != 0 {
+        t.Fatalf("超长事件请求未拒绝: HTTP=%d calls=%d", response.Code, oversized.events)
+    }
     legacy := RouterWithServices(&fakeChecker{}, fakeDB{}, nil, nil)
     for _, path := range []string{"/api/service/events/test", "/api/service/subscribe/test"} {
         rec := httptest.NewRecorder()
