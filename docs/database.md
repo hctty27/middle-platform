@@ -7,6 +7,8 @@
 | 场景 | 手工执行的 SQL |
 | --- | --- |
 | 新建空的 `config_center` | [config-center/db/sql/initialize.sql](../config-center/db/sql/initialize.sql) |
+| SDK 专属配置迁移 | [migrate_sdk_node_config.sql](../config-center/db/sql/migrate_sdk_node_config.sql)（仅升级旧库，先停旧实例并备份） |
+| SDK 迁移完成后的单独清理 | [cleanup_legacy_sdk_fields.sql](../config-center/db/sql/cleanup_legacy_sdk_fields.sql)（必须核对新旧配置一致后执行） |
 | 已有权威库，只缺 `game_order` | [config-center/db/sql/add_game_order.sql](../config-center/db/sql/add_game_order.sql) |
 | 已有权威库但尚无 SDK 服务表 | [config-center/db/sql/add_sdk_services.sql](../config-center/db/sql/add_sdk_services.sql) |
 | 已有服务表但缺少用户核验功能目录 | [config-center/db/sql/add_sdk_user_check.sql](../config-center/db/sql/add_sdk_user_check.sql) |
@@ -55,7 +57,8 @@ SELECT COUNT(*) FROM config_center.config_node;
 ## 权威库的业务表
 
 - `config_node`：游戏、大区、区服组三级节点；`region.env_type` 为 `prod/test/review`
-- `config_channel_app`：全局唯一 AppID、共享 JSON 配置、三环境绑定
+- `sdk_channel_app`：SDK Core 管理，全局唯一 AppID、共享 JSON 配置、三环境绑定
+- `sdk_node_config`：SDK Core 管理，node_id 引用 `config_node.id`，游戏/大区/区服组的 SDK 专属 JSON
 - `config_revision`、`config_node_change_log`：同步游标和变更日志
 - `config_subscriber`、`config_subscriber_delivery_state`：Webhook 订阅者和投递状态
 - `game_order`：SDK Core 充值订单、支付状态、通知租约和补偿
@@ -69,10 +72,21 @@ SELECT COUNT(*) FROM config_center.config_node;
 - `sdk_service_channel` 使用 `(service_id, channel_app_id, env)` 唯一约束，`env` 只能是 `prod/test/review`。
 - `event_report`、`subscribe_message`、`user_check`、`role_query`、`server_query` 与 `role_control` 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。
 - `sdk_service_channel.config` 为 JSON 对象；当前事件上报不使用事件级规则，不持久化和自动重试。
-- 配置中心的管理接口为 `GET /api/config/admin/sdk-services`、`PUT /api/config/admin/sdk-services/{id}` 和渠道包 `/api/config/admin/channel-apps/{id}/services` 系列，详见 [内部 API](api.md)。
+- SDK Core 的管理接口为 `GET /api/core/admin/services`、`PUT /api/core/admin/services/{id}` 和渠道包 `/api/core/admin/channel-apps/{id}/services` 系列，详见 [内部 API](api.md)。
 - 充值订单和发货通知不依赖功能开关。
 
 
 - MySQL DDL 会隐式提交，失败时不能假定事务回滚。应检查实际执行到哪一条 SQL，再制定恢复步骤。
 - 接入端副本 `config_access` 独立于权威库，只保存三级节点及同步游标。首次全量拉取由接入服务在表结构就绪后完成，不再自动建表。
 - 生产环境继续控制 `/api/config/**` 的访问权限，保护 `gameSecret` 和其他原始配置密钥。
+
+
+## SDK 配置拆分上线顺序
+
+1. 在维护窗口停止旧版本 `config-center`、所有 `sdk-core-*`、`sdk-service` 与管理端写操作；备份 `config_center` 并核对真实字段。
+2. **已有库**执行 `migrate_sdk_node_config.sql`。该脚本创建 `sdk_node_config`、复制已知的游戏/大区 SDK 字段，并将 `config_channel_app` 改名为 `sdk_channel_app`。保留旧 `config_node.config` JSON 供比较，禁止对已经迁移的库重复执行。
+3. 对比游戏密钥、适配器、五类回调地址、渠道包数量/ID、环境绑定及功能开关，检查是否存在未归类的自定义 SDK 字段。确认没有遗漏后再升级二进制与前端。
+4. 同时切换 `config-center`、全部 `sdk-core`、`sdk-service`，不能保留混合新旧版本；Nginx 新增对 `/api/core/admin/` 的保护。验证配置查询、订单登记/回调/发货、角色与区服查询、封解禁、事件与订阅消息。
+5. 验证通过后，在单独维护窗口人工执行 `cleanup_legacy_sdk_fields.sql`。清理后校验配置快照和日志不再包含 SDK 密钥。不得通过自动启动逻辑执行 DDL。
+
+**注意**：MySQL DDL 隐式提交，迁移脚本不是单事务；重命名表前应确认目标表不存在，失败时人工核对已执行步骤。仅对已知 SDK 字段自动搬迁，未知自定义键需人工识别及处理。密钥迁移不可输出明文到 CI 或审计日志。
