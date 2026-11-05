@@ -23,8 +23,8 @@ type ChannelAppConfig struct {
 }
 
 var businessConfigKeys = map[string][]string{
-	"game":         {"gameSecret"},
-	"region":       {"payNotifyUrl"},
+	"game":         {},
+	"region":       {},
 	"server_group": {},
 	"channel_app":  {"tsKey", "appSecret"},
 }
@@ -40,7 +40,18 @@ func ValidateBusinessConfig(nodeType, config string) error {
 	if err := json.Unmarshal([]byte(config), &object); err != nil || object == nil {
 		return fmt.Errorf("%w: 配置必须是 JSON 对象", ErrInvalid)
 	}
-	for _, key := range keys {
+	// SDK 专属字段只能由 SDK Core 写入，防止从基础配置重新泄露到同步快照。
+    reserved := map[string]string{
+        "gameSecret":"game", "serviceAdapters":"game",
+        "payNotifyUrl":"region", "userCheckUrl":"region",
+        "roleQueryUrl":"region", "serverQueryUrl":"region", "roleControlUrl":"region",
+    }
+    for key := range object {
+        if owner, exists := reserved[key]; exists && owner == nodeType {
+            return fmt.Errorf("%w: %s 已迁移到 SDK 专属配置", ErrInvalid, key)
+        }
+    }
+    for _, key := range keys {
 		value, exists := object[key]
 		if !exists {
 			continue
