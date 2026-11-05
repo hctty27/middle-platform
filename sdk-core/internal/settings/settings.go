@@ -27,7 +27,10 @@ type Config struct {
     Log logging.Config `yaml:"log"`
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
     Database Database `yaml:"database"`
-    AdminAuth struct { Secret string `yaml:"secret"` } `yaml:"adminAuth"`
+    AdminAuth struct {
+        Enabled *bool `yaml:"enabled"`
+        Secret string `yaml:"secret"`
+    } `yaml:"adminAuth"`
 }
 
 func defaultDB() Database{
