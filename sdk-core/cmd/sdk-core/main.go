@@ -93,7 +93,7 @@ func run(configPath string)error{
     ready.Store(true)
     server:=&http.Server{
         Addr:cfg.Server.Address,
-        Handler:logging.HTTP(cfg.Log,withDrainReadiness(api.Router(service.NewConfigService(repository,resolver),db,orders),&ready)),
+        Handler:logging.HTTP(cfg.Log,withDrainReadiness(api.RouterWithAdmin(service.NewConfigService(repository,resolver),db,orders),&ready)),
         ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,
         WriteTimeout:15*time.Second,IdleTimeout:60*time.Second,
     }
