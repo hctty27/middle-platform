@@ -38,6 +38,7 @@ async function loadNodes() {
       }))
     ]
     currentID.value = props.gameId
+    loading.value = false
     await loadConfig()
   } catch (error) {
     if (request === sequence) ElMessage.error(apiErrorMessage(error, '加载 SDK 节点失败'))
