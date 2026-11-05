@@ -2,7 +2,7 @@
 server:
   address: "127.0.0.1:8080"
 
-# 权威 MySQL 库；首次部署需先手动执行 db/sql/initialize.sql。
+# 权威 MySQL 库；首次部署空库需先手动执行 db/full/config_center.sql。
 database:
   dsn: ""
 
