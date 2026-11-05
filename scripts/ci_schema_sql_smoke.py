@@ -32,7 +32,20 @@ def assert_sql(query, expected):
         raise AssertionError(f"{query}: {actual!r} != {expected!r}")
 
 
+def verify_sql_layout():
+    for name in ("config_center.sql", "config_access.sql"):
+        if not (ROOT / "db" / "full" / name).is_file():
+            raise AssertionError(f"缺少全量 SQL: {name}")
+    files = sorted((ROOT / "db" / "incremental").iterdir())
+    if not files:
+        raise AssertionError("增量 SQL 目录为空")
+    for expected, path in enumerate(files, 1):
+        if not path.is_file() or not path.name.startswith(f"V{expected:04d}__") or not path.name.endswith(".sql"):
+            raise AssertionError(f"增量 SQL 编号不合法或不连续: {path.name}")
+
+
 def main():
+    verify_sql_layout()
     mysql("""CREATE DATABASE manual_fresh CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE DATABASE manual_existing CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE DATABASE manual_replica CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;""")
@@ -42,9 +55,9 @@ SET GLOBAL gtid_mode=ON_PERMISSIVE;
 SET GLOBAL gtid_mode=ON;""")
     assert_sql("SELECT @@GLOBAL.gtid_mode,@@GLOBAL.enforce_gtid_consistency", "ON\tON")
 
-    init = source("config-center/db/sql/initialize.sql")
-    order = source("config-center/db/sql/add_game_order.sql")
-    replica = source("config-center-access/db/sql/initialize.sql")
+    init = source("db/full/config_center.sql")
+    order = source("db/incremental/V0001__add_game_order.sql")
+    replica = source("db/full/config_access.sql")
 
     mysql(database="manual_fresh", script=init)
     assert_sql("""SELECT COUNT(*) FROM information_schema.tables
@@ -63,7 +76,7 @@ WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", 
       '{"gameSecret":"example-key","serviceAdapters":{"user_check":"standard"},"custom":"keep"}',
       UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
     mysql("RENAME TABLE manual_fresh.sdk_channel_app TO manual_fresh.config_channel_app")
-    sdk_migration = source("config-center/db/sql/migrate_sdk_node_config.sql")
+    sdk_migration = source("db/incremental/V0009__migrate_sdk_node_config.sql")
     # 新库已有 sdk_node_config，只执行数据复制段和表重命名，完整 SQL 应在旧库执行。
     sdk_copy = sdk_migration[sdk_migration.index("INSERT INTO sdk_node_config("):]
     mysql(database="manual_fresh",script=sdk_copy)
@@ -80,7 +93,7 @@ ALTER TABLE manual_market_upgrade.config_node DROP COLUMN market_type;
 INSERT INTO manual_market_upgrade.config_node
 (id,node_type,code,name,status,config,created_at,updated_at)
 VALUES(901,'game','legacy','Legacy',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
-    market_migration = source("config-center/db/sql/add_game_market_type.sql")
+    market_migration = source("db/incremental/V0011__add_game_market_type.sql")
     mysql(database="manual_market_upgrade", script=market_migration)
     assert_sql("SELECT market_type FROM manual_market_upgrade.config_node WHERE id=901", "domestic")
     mysql(database="manual_market_upgrade", script=market_migration, ok=False)
@@ -147,7 +160,7 @@ VALUES ('app1',101,'test','g1',600,'','https://game.example.com/notify');""", ok
              (78,12,900,'test',1,'{}');
     """)
 
-    migration = source("config-center/db/sql/migrate_sdk_service_channel.sql")
+    migration = source("db/incremental/V0003__migrate_sdk_service_channel.sql")
     mysql(database="manual_service_current", script=migration)
     assert_sql("""SELECT id,service_id,channel_app_id,env,enabled,
 JSON_UNQUOTE(JSON_EXTRACT(config,'$.retained'))

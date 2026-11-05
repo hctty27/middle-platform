@@ -51,7 +51,7 @@ class RemotePublishTests(unittest.TestCase):
     def make_package(self, frontend=True, extra=None, omit=None, only=None):
         files = {f"bin/{name}": b"#!/bin/sh\nexit 0\n" for name in BINARIES
                  if name != omit and (only is None or name == only)}
-        files["sql/config-center/initialize.sql"] = b"DO NOT EXECUTE"
+        files["sql/full/config_center.sql"] = b"DO NOT EXECUTE"
         if frontend:
             files.update({"admin/index.html": b"new-index", "admin/config.js": b"default-config"})
         with tarfile.open(self.archive, "w:gz") as archive:
