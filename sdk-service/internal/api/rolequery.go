@@ -41,8 +41,12 @@ func parseRoleBody(w http.ResponseWriter, r *http.Request) (model.RoleQueryReque
             return input, errInvalidRoleBody
         }
         seen[key] = true
+        var raw json.RawMessage
+        if err := dec.Decode(&raw); err != nil || len(raw) < 2 || raw[0] != '"' {
+            return input, errInvalidRoleBody
+        }
         var value string
-        if err := dec.Decode(&value); err != nil {
+        if err := json.Unmarshal(raw, &value); err != nil {
             return input, errInvalidRoleBody
         }
         if len(value) > 256 && key != "extension" || len(value) > 2048 {
