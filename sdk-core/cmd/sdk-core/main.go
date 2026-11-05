@@ -14,13 +14,13 @@ import (
     "syscall"
     "time"
 
-    "github.com/go-sql-driver/mysql"
     "github.com/hctty27/middle-platform/sdk-core/internal/api"
     "github.com/hctty27/middle-platform/sdk-core/internal/mapping"
     "github.com/hctty27/middle-platform/sdk-core/internal/notify"
     "github.com/hctty27/middle-platform/sdk-core/internal/service"
     "github.com/hctty27/middle-platform/sdk-core/internal/settings"
     "github.com/hctty27/middle-platform/sdk-core/internal/store"
+    "github.com/hctty27/middle-platform/shared/bootstrap"
     "github.com/hctty27/middle-platform/shared/logging"
     "github.com/hctty27/middle-platform/shared/signature"
 )
@@ -31,23 +31,11 @@ func main(){
     if err:=run(*path);err!=nil{slog.Error("SDK Core 启动或运行失败","error",err);os.Exit(1)}
 }
 
-func openDB(cfg settings.Database)(*sql.DB,error){
-    parsed,err:=mysql.ParseDSN(cfg.DSN)
-    if err!=nil{return nil,fmt.Errorf("数据库 DSN 不合法: %w",err)}
-    parsed.ParseTime=true
-    parsed.Loc=time.UTC
-    parsed.Timeout=5*time.Second
-    parsed.ReadTimeout=10*time.Second
-    parsed.WriteTimeout=10*time.Second
-    if parsed.Params==nil{parsed.Params=make(map[string]string)}
-    parsed.Params["time_zone"]="'+00:00'"
-    db,err:=sql.Open("mysql",parsed.FormatDSN())
-    if err!=nil{return nil,err}
-    db.SetMaxOpenConns(cfg.MaxOpenConns)
-    db.SetMaxIdleConns(cfg.MaxIdleConns)
-    lifetime,_:=time.ParseDuration(cfg.ConnMaxLifetime)
-    db.SetConnMaxLifetime(lifetime)
-    return db,nil
+func openDB(cfg settings.Database) (*sql.DB,error){
+ return bootstrap.OpenMySQL(bootstrap.MySQLConfig{
+  DSN:cfg.DSN,MaxOpenConns:cfg.MaxOpenConns,
+  MaxIdleConns:cfg.MaxIdleConns,ConnMaxLifetime:cfg.ConnMaxLifetime,
+ })
 }
 
 func run(configPath string)error{
@@ -94,7 +82,7 @@ func run(configPath string)error{
     ready.Store(true)
     server:=&http.Server{
         Addr:cfg.Server.Address,
-        Handler:logging.HTTP(cfg.Log,withDrainReadiness(signature.AdminMiddleware(api.RouterWithAdmin(service.NewConfigService(repository,resolver),db,orders), "/api/core/admin", cfg.AdminAuth.Secret, cfg.AdminAuth.Enabled == nil || *cfg.AdminAuth.Enabled),&ready)),
+        Handler:logging.HTTP(cfg.Log,bootstrap.ReadinessMiddleware(signature.AdminMiddleware(api.RouterWithAdmin(service.NewConfigService(repository,resolver),db,orders), "/api/core/admin", cfg.AdminAuth.Secret, cfg.AdminAuth.Enabled == nil || *cfg.AdminAuth.Enabled),&ready)),
         ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,
         WriteTimeout:15*time.Second,IdleTimeout:60*time.Second,
     }
@@ -124,15 +112,3 @@ func run(configPath string)error{
     return nil
 }
 
-func withDrainReadiness(next http.Handler,ready *atomic.Bool)http.Handler{
-    return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
-        if r.URL.Path=="/health/ready"&&!ready.Load(){
-            w.Header().Set("Content-Type","application/json; charset=utf-8")
-            w.Header().Set("Cache-Control","no-store")
-            w.WriteHeader(http.StatusServiceUnavailable)
-            _,_=w.Write([]byte("{\"status\":\"DOWN\"}\n"))
-            return
-        }
-        next.ServeHTTP(w,r)
-    })
-}
