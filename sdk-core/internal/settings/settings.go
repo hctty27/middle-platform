@@ -54,13 +54,13 @@ func Load(path string)(Config,error){
     if v,ok:=os.LookupEnv("SDK_CORE_DB_DSN");ok{cfg.Database.DSN=v}
     if v,ok:=os.LookupEnv("SDK_CORE_ADDR");ok{cfg.Server.Address=v}
     if v,ok:=os.LookupEnv("ADMIN_AUTH_SECRET");ok{cfg.AdminAuth.Secret=v}
-    if err=cfg.Log.ApplyEnv();err!=nil{return Config{},err}
+    if err:=cfg.Log.ApplyEnv();err!=nil{return Config{},err}
     if strings.TrimSpace(cfg.Database.DSN)==""{
         return Config{},errors.New("必须配置 database.dsn 或 SDK_CORE_DB_DSN")
     }
     if strings.TrimSpace(cfg.Server.Address)==""{
         return Config{},errors.New("必须配置 server.address")
     }
-    if err=validateDB(cfg.Database);err!=nil{return Config{},err}
+    if err:=validateDB(cfg.Database);err!=nil{return Config{},err}
     return cfg,nil
 }
