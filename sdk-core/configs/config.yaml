@@ -9,6 +9,10 @@ database:
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
+# 管理接口单独验签；与配置中心填写同一密钥。未配置或过短时管理接口拒绝请求。
+adminAuth:
+  secret: ""
+
 # 平台密钥来自 channel_app.config.appSecret，游戏密钥来自 game.config.gameSecret。
 # 平台 v1 未签名金额字段；SDK Core 不做二次查单，仅校验回调与登记金额一致。
 log:
