@@ -5,12 +5,21 @@ declare global {
   interface Window {
     __MIDDLE_PLATFORM_CONFIG__?: {
       apiBaseUrl?: string
+      sdkApiBaseUrl?: string
     }
   }
 }
 
 const configuredApiBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.apiBaseUrl?.trim()
 const apiBaseUrl = configuredApiBaseUrl || '/api/config'
+
+const sdkBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.sdkApiBaseUrl?.trim()
+  || apiBaseUrl.replace(/\/api\/config\/?$/, '/api/core')
+
+export const sdkApi = axios.create({
+  baseURL: sdkBaseUrl.replace(/\/+$/, ''),
+  timeout: 10000
+})
 
 export const api = axios.create({
   baseURL: apiBaseUrl.replace(/\/+$/, ''),
