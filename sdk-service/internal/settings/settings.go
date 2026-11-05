@@ -25,6 +25,10 @@ type Config struct {
     Server struct { Address string `yaml:"address"` } `yaml:"server"`
     Database Database `yaml:"database"`
     Game struct { Timeout string `yaml:"timeout"` } `yaml:"game"`
+    Platform struct {
+        EventReportURL string `yaml:"eventReportURL"`
+        SubscribeMessageURL string `yaml:"subscribeMessageURL"`
+    } `yaml:"platform"`
     Log logging.Config `yaml:"log"`
 }
 

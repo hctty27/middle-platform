@@ -19,6 +19,7 @@ import (
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolecontrol"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/serverquery"
     "github.com/hctty27/middle-platform/sdk-service/internal/api"
+    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
     "github.com/hctty27/middle-platform/sdk-service/internal/service"
     "github.com/hctty27/middle-platform/sdk-service/internal/settings"
     "github.com/hctty27/middle-platform/sdk-service/internal/store"
@@ -88,9 +89,12 @@ func run(path string) error {
     })
     if err != nil { return err }
     controller := &service.RoleControlService{Routes: routes, Adapters: controlRegistry}
+    publisher, err := platform.NewPublisher(cfg.Platform.EventReportURL, cfg.Platform.SubscribeMessageURL)
+    if err != nil { return fmt.Errorf("初始化平台上报客户端失败: %w", err) }
+    outbound := &service.OutboundService{Routes: routes, Sender: publisher}
     srv := &http.Server{
         Addr: cfg.Server.Address,
-        Handler: logging.HTTP(cfg.Log, api.RouterWithServices(checker, db, roleQuerier, serverQuerier, controller)),
+        Handler: logging.HTTP(cfg.Log, api.RouterWithPublishers(checker, db, roleQuerier, serverQuerier, controller, outbound, outbound)),
         ReadHeaderTimeout: 5*time.Second,
         ReadTimeout: 10*time.Second,
         WriteTimeout: timeout + 5*time.Second,

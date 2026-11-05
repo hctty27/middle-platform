@@ -35,9 +35,8 @@ func (f *fakeOrderRoutes) Receive(_ context.Context, appID string, _ http.Header
 
 func TestBusinessRoutesUseTrailingParameters(t *testing.T) {
 	fetcher := &fakeFetcher{result: map[string]any{"snKey": "110006"}}
-	events := &fakeEventAPI{}
 	orders := &fakeOrderRoutes{}
-	router := RouterWithEvents(fetcher, fakePinger{}, events, orders)
+	router := Router(fetcher, fakePinger{}, orders)
 
 	tests := []struct {
 		name, method, path, body string
@@ -45,7 +44,6 @@ func TestBusinessRoutesUseTrailingParameters(t *testing.T) {
 		{"config", http.MethodGet, "/api/core/config/test/110006", ""},
 		{"register", http.MethodPost, "/api/core/orders/test/110006", `{"game_order_id":"G100","amount":600,"attach":""}`},
 		{"payment", http.MethodPost, "/api/core/pay/notify/110006", `{"order_no":"P100","game_order_id":"G100","amount":600,"attach":"","paid_at":"2026-11-04T00:00:00Z"}`},
-		{"event", http.MethodPost, "/api/core/events/test", `{"event":"login","ext":{"roleId":"1"}}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -72,18 +70,16 @@ func TestBusinessRoutesUseTrailingParameters(t *testing.T) {
 	if orders.callbackAppID != "110006" || orders.callback.OrderNo != "P100" {
 		t.Fatalf("平台回调参数错误: %+v", orders)
 	}
-	if events.called != 1 || events.env != "test" || events.appID != "110006" {
-		t.Fatalf("事件上报参数错误: %+v", events)
-	}
 }
 
 func TestOldBusinessRoutesReturnNotFound(t *testing.T) {
-	router := RouterWithEvents(&fakeFetcher{}, fakePinger{}, &fakeEventAPI{}, &fakeOrderRoutes{})
+	router := Router(&fakeFetcher{}, fakePinger{}, &fakeOrderRoutes{})
 	for _, tc := range []struct { method, path string }{
 		{http.MethodGet, "/api/core/test/110006"},
 		{http.MethodPost, "/api/core/test/110006/orders"},
 		{http.MethodPost, "/api/core/110006/pay/notify"},
 		{http.MethodPost, "/api/core/test/events"},
+		{http.MethodPost, "/api/core/events/test"},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			rec := httptest.NewRecorder()

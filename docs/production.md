@@ -2,7 +2,7 @@
 
 部署模型：**Linux 二进制 + 独立 MySQL 8.0+ + Nginx + Supervisor**。`systemd` 可选，但本文以当前采用的 Supervisor 为主要方案。服务管理配置不放入仓库，也不包含在发布包中；生产机无需安装 Go、Node.js。
 
-> 当前配置中心管理 API 未内建认证。管理、同步、接入回调需通过可信内网或具备认证、白名单和 TLS 的专用网关暴露。`/api/core/**` 才是面向 SDK 客户端的业务 API。
+> 当前配置中心管理 API 未内建认证。管理、同步、接入回调需通过可信内网或具备认证、白名单和 TLS 的专用网关暴露。对外开放的业务 API 包括必要的 `/api/core/**` 与 `/api/service/**`，其他管理与同步路径仍需保护。
 
 ## 1. 部署目录与端口
 
@@ -71,6 +71,7 @@ sql/
     add_sdk_role_query.sql
     add_sdk_server_query.sql
     add_sdk_role_control.sql
+    add_sdk_subscribe_message.sql
   config-center-access/
     initialize.sql
 admin/                     # -SkipFrontend 时不存在
@@ -87,6 +88,7 @@ admin/                     # -SkipFrontend 时不存在
 - 已有权威库但没有 SDK 服务表：`sql/config-center/add_sdk_services.sql`（仅表确实不存在时执行）。
 - 已有功能表但缺少 `user_check` 服务目录：`sql/config-center/add_sdk_user_check.sql`。
 - 已有服务表但缺少角色查询、区服查询或封解禁目录：分别手工执行 `sql/config-center/add_sdk_role_query.sql`、`add_sdk_server_query.sql`、`add_sdk_role_control.sql`，在部署新版 sdk-service 前完成。
+- 已有服务表但缺少订阅消息目录：手动执行 `sql/config-center/add_sdk_subscribe_message.sql`，在部署新版 sdk-service 前完成。
 - 全新、空的 `config_access`：`sql/config-center-access/initialize.sql`。
 
 例如在 Linux 发布包解压目录（已有库补建订单表）：
@@ -135,7 +137,7 @@ sudo supervisorctl tail -f config-center
 
 以下示例按后端内部路由 `/api/...` 转发。若公网使用 `/sdk/api/...`，需在 Nginx 明确移除 `/sdk` 前缀后再交给后端，避免出现双重前缀。
 
-- 对外业务域名：`/api/core/` 转发到 SDK Core 多实例；`/api/service/` 转发到 SDK Service（平台用户核验）。
+- 对外业务域名：`/api/core/` 转发到 SDK Core 多实例；`/api/service/` 转发到 SDK Service（平台核验/查询/封解禁和游戏事件/订阅消息）。
 - 管理域名或受保护内网：`/api/config/` 转发到配置中心，后台静态页来自 `admin/`；对管理和同步路径设置白名单/认证。
 - `/internal/config/callback` 只允许配置中心从可信网络访问接入端；验证 HMAC 和时间窗口并不能替代网络边界。
 
@@ -253,3 +255,13 @@ log:
 - SDK Core 订单接口和补偿 Worker 始终加载，数据库必须已有 `game_order` 表，账号需配置表 SELECT 与订单表 SELECT/INSERT/UPDATE；SDK Service 还需服务开关表与游戏、大区、渠道包的只读权限。
 - 平台 v1 缺少实付金额字段的签名完整性认证；SDK Core 不做二次查单，按签名和登记金额一致性执行支付确认。上线前须核实平台服务端可信定价、支付成功回调保障和游戏幂等发货，并接受现有回调协议的残余风险。
 - 部署前按各模块当前 YAML 模板更新私有配置，删除废弃开关及环境变量；代码合并不代表已经更新 Nginx ACL、线上配置或数据库。
+
+## 8. 事件上报迁移发布顺序（重要）
+
+1. 先在存量权威库执行 `add_sdk_subscribe_message.sql`，确认 `event_report`、`subscribe_message` 已注册且渠道环境功能开关配置正确。
+2. 把原 `/data/middle-platform/config/sdk-core.yaml` 中的 `platform.eventReportURL` 移到 `sdk-service.yaml` 的同名配置；为订阅消息填写 `platform.subscribeMessageURL`。Core YAML 中必须删除旧 `platform`，否则严格 YAML 解码将拒绝启动。
+3. 先验证 Nginx `/api/service/` 转发正确，再部署 SDK Service 和 SDK Core 新程序。旧 Core 的 `POST /api/core/events/{env}` 删除后返回 404。
+4. 同步更新游戏端或调用 SDK 的事件上报 URL 到 `POST /api/service/events/{env}`，新增订阅消息使用 `POST /api/service/subscribe/{env}`。
+5. 迁移切换不是无缝兼容：游戏方未更新旧地址时上报会失败。生产发布窗口应协调上游切换，必要时由受控网关短期转发旧路径到新 Service，完成切换后移除，避免双写。
+
+发布不执行 SQL、不自动修改服务器 YAML，也不会自动变更 Nginx；必须按以上顺序人工部署。

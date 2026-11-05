@@ -57,7 +57,14 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
 
 ## SDK 业务与密钥边界
 
-- `sdk_service` 管理已实现功能的全局开关，`sdk_service_channel` 按服务、渠道包、环境唯一绑定；当前功能为 `event_report` 和 `user_check`。
+- `sdk_service` 管理已实现功能的全局开关，`sdk_service_channel` 按服务、渠道包、环境唯一绑定；当前功能包括 `event_report`、`subscribe_message`、`user_check`、`role_query`、`server_query` 和 `role_control`。
 - 游戏侧用 `game.config.gameSecret` 验签，平台侧用 `channel_app.config.appSecret` 验签；两套签名密钥不能混用。
 - 订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。
 - 对外协议及签名细节以 [游戏 HTML](index.html#g-start) 和 [平台 HTML](index.html#p-start) 为准，避免维护多份相同字段表。
+
+## SDK Core 与 SDK Service 职责
+
+- `sdk-core`：仅承担配置查询、订单登记、支付回调和游戏发货通知。
+- `sdk-service`：承担平台 → 游戏的核验/查询/封解禁，以及游戏 → 平台的事件上报/订阅消息推送。
+- 事件上报迁移后统一入口为 `POST /api/service/events/{env}`，订阅消息为 `POST /api/service/subscribe/{env}`；不保留 Core 旧事件入口。
+- 两类平台上报均沿用 `sdk_service` 全局开关和 `sdk_service_channel` 渠道环境开关，无新建业务数据表。

@@ -18,7 +18,6 @@ import (
     "github.com/hctty27/middle-platform/sdk-core/internal/api"
     "github.com/hctty27/middle-platform/sdk-core/internal/mapping"
     "github.com/hctty27/middle-platform/sdk-core/internal/notify"
-    "github.com/hctty27/middle-platform/sdk-core/internal/platform"
     "github.com/hctty27/middle-platform/sdk-core/internal/service"
     "github.com/hctty27/middle-platform/sdk-core/internal/settings"
     "github.com/hctty27/middle-platform/sdk-core/internal/store"
@@ -62,7 +61,6 @@ func run(configPath string)error{
     if err=db.PingContext(initCtx);err!=nil{return fmt.Errorf("连接配置中心数据库失败: %w",err)}
     repository:=store.NewStore(db)
     if err=repository.VerifySchema(initCtx);err!=nil{return err}
-    if err=repository.VerifySDKServiceSchema(initCtx);err!=nil{return err}
     resolver,err:=mapping.LoadDefault()
     if err!=nil{return fmt.Errorf("加载响应字段映射失败: %w",err)}
     if err=resolver.Require(mapping.RouteCoreConfig);err!=nil{return err}
@@ -91,21 +89,11 @@ func run(configPath string)error{
         go func(){defer close(workerDone);orders.RunWorker(workerCtx)}()
         defer func(){stopWorker();<-workerDone}()
 
-    eventClient,err:=platform.NewEventClient(cfg.Platform.EventReportURL)
-    if err!=nil{return fmt.Errorf("初始化平台事件客户端失败: %w",err)}
-    events:=&service.EventService{
-        ConfigReader:repository,
-        SwitchReader:repository,
-        Sender:eventClient,
-    }
-    if err=events.Validate();err!=nil{return err}
-
     var ready atomic.Bool
     ready.Store(true)
     server:=&http.Server{
         Addr:cfg.Server.Address,
-        Handler:logging.HTTP(cfg.Log,withDrainReadiness(api.RouterWithEvents(
-            service.NewConfigService(repository,resolver),db,events,orders),&ready)),
+        Handler:logging.HTTP(cfg.Log,withDrainReadiness(api.Router(service.NewConfigService(repository,resolver),db,orders),&ready)),
         ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,
         WriteTimeout:15*time.Second,IdleTimeout:60*time.Second,
     }

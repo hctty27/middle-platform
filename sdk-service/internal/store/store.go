@@ -48,6 +48,8 @@ func (s *Store) VerifySchema(ctx context.Context) error {
         {"role_query", "add_sdk_role_query.sql"},
         {"server_query", "add_sdk_server_query.sql"},
         {"role_control", "add_sdk_role_control.sql"},
+        {"event_report", "add_sdk_services.sql"},
+        {"subscribe_message", "add_sdk_subscribe_message.sql"},
     } {
         var id int64
         err = s.db.QueryRowContext(ctx, "SELECT id FROM sdk_service WHERE code=?", entry.code).Scan(&id)
@@ -64,7 +66,8 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, er
 }
 
 func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode string) (model.Target, error) {
-    if serviceCode != "user_check" && serviceCode != "role_query" && serviceCode != "server_query" && serviceCode != "role_control" {
+    if serviceCode != "user_check" && serviceCode != "role_query" && serviceCode != "server_query" && serviceCode != "role_control" &&
+        serviceCode != "event_report" && serviceCode != "subscribe_message" {
         return model.Target{}, model.ErrInvalidConfig
     }
     if env != "prod" && env != "test" && env != "review" { return model.Target{}, model.ErrNotFound }
@@ -93,7 +96,18 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
         json.Unmarshal(regionJSON, &region) != nil {
         return model.Target{}, model.ErrInvalidConfig
     }
+    if strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" {
+        return model.Target{}, model.ErrInvalidConfig
+    }
     adapterName := adapter.NameForService(game.ServiceAdapters, serviceCode)
+    result := model.Target{
+        AppID: appID, Env: env, GameCode: gameCode,
+        AdapterName: adapterName, AppSecret: app.AppSecret, GameSecret: game.GameSecret,
+    }
+    // 游戏向平台发起的业务无需配置 region 游戏回调地址。
+    if serviceCode == "event_report" || serviceCode == "subscribe_message" {
+        return result, nil
+    }
     targetURL := strings.TrimSpace(region.UserCheckURL)
     switch serviceCode {
     case "role_query":
@@ -105,14 +119,8 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
     }
     u, err := url.Parse(targetURL)
     if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
-        u.Hostname() == "" || u.User != nil || u.Fragment != "" ||
-        strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" {
+        u.Hostname() == "" || u.User != nil || u.Fragment != "" {
         return model.Target{}, model.ErrInvalidConfig
-    }
-    result := model.Target{
-        AppID: appID, Env: env, GameCode: gameCode,
-        AdapterName: adapterName,
-        AppSecret: app.AppSecret, GameSecret: game.GameSecret,
     }
     switch serviceCode {
     case "user_check":
