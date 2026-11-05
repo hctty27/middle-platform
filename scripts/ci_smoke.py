@@ -88,7 +88,11 @@ def start(name, module, port, extra=None):
     path = f"/tmp/middle-platform-{name}.log"
     log = open(path, "w", encoding="utf-8")
     LOGS.append((name, path, log))
-    command = ["/tmp/config-center-access-ci"] if name.startswith("access") else ["/tmp/config-center-ci"]
+    is_access = name.startswith("access")
+    command = ["/tmp/config-center-access-ci"] if is_access else ["/tmp/config-center-ci"]
+    service = "config-center-access" if is_access else "config-center"
+    config_path = pathlib.Path(__file__).resolve().parent.parent / service / "configs" / "config.yaml"
+    command.extend(["-config", str(config_path)])
     proc = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
     PROCESSES.append(proc)
     print(f"正在启动 {name}（进程号={proc.pid}）", flush=True)

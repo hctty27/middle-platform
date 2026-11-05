@@ -5,7 +5,7 @@
 ## 本地启动
 
 1. 新建空库时手工执行 `../db/full/config_center.sql`；已有库按 [数据库文档](../docs/guide.html#database) 核对后选择增量 SQL，禁止重新执行全量初始化。
-2. 将 `configs/config.yaml` 复制为**完整独立**的 `configs/config-dev.yaml` 并填写 `database.dsn`。启动时只读取指定文件，不再自动读取 `configs/config.yaml`；环境变量仍可覆盖指定字段。
+2. 将 `configs/config.yaml` 复制为**完整独立**的 `configs/config-dev.yaml` 并填写 `database.dsn`。启动时只读取指定文件；不传 `-config` 时默认读取当前工作目录下的 `configs/config.yaml`。环境变量仍可覆盖指定字段。
 3. 在本目录运行：
 
 ```powershell

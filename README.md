@@ -21,7 +21,7 @@
 依赖 **Go 1.27.3、MySQL 8.0+**，管理端另需 Node.js 22/npm。
 
 1. 创建空 `config_center`，手工执行 `db/full/config_center.sql`；已有库禁止重新执行初始化 SQL。
-2. 在各服务目录复制 `configs/config.yaml` 为 `configs/config-dev.yaml`，填写数据库 DSN 等必要配置。四个 Go 服务启动时均只读取 `-config` 指定的**一份完整 YAML**（不继承同目录的 `config.yaml`），随后应用各自支持的环境变量覆盖；切勿提交真实密码。
+2. 在各服务目录复制 `configs/config.yaml` 为 `configs/config-dev.yaml`，填写数据库 DSN 等必要配置。四个 Go 服务启动时均只读取**一份完整 YAML**（不传 `-config` 时读取当前工作目录下的 `configs/config.yaml`，指定时只读取该文件，不叠加其他 YAML），随后应用各自支持的环境变量覆盖；切勿提交真实密码。
 3. 在各模块目录执行 `go run ./cmd/<模块名> -config configs/config-dev.yaml`。
 4. 在 `config-center-admin/` 执行 `npm ci`、`npm run dev`。
 

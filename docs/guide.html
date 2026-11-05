@@ -195,7 +195,7 @@ SELECT COUNT(*) FROM config_center.config_node;</code></pre></div>
 </ol>
 <p><strong>注意</strong>：MySQL DDL 隐式提交，迁移脚本不是单事务；重命名表前应确认目标表不存在，失败时人工核对已执行步骤。仅对已知 SDK 字段自动搬迁，未知自定义键需人工识别及处理。密钥迁移不可输出明文到 CI 或审计日志。</p></article>
 <article class="doc-pane" id="development" data-pane="development" aria-labelledby="tab-development" hidden><div class="eyebrow">DEVELOPER GUIDE / DEVELOPMENT</div><p class="pane-subtitle">本地启动、联调测试与 CI</p><h1>本地开发与联调</h1>
-<p>本文以 <strong>Windows PowerShell</strong> 为例；四个 Go 服务使用各自的 <code>configs/config.yaml</code> 作为公开模板，复制为未提交且<strong>完整独立</strong>的 <code>configs/config-dev.yaml</code> 并填写凭据。启动只读取 <code>-config</code> 指定的单个 YAML，<strong>不继承同目录的 config.yaml</strong>；环境变量可以覆盖支持的字段。不要将包含真实密码的 YAML 提交 Git。</p>
+<p>本文以 <strong>Windows PowerShell</strong> 为例；四个 Go 服务使用各自的 <code>configs/config.yaml</code> 作为公开模板，复制为未提交且<strong>完整独立</strong>的 <code>configs/config-dev.yaml</code> 并填写凭据。启动只读取一个 YAML；不传 <code>-config</code> 时默认读取当前工作目录下的 <code>configs/config.yaml</code>，显式指定时只读取该文件，<strong>不继承同目录的 config.yaml</strong>；环境变量可以覆盖支持的字段。不要将包含真实密码的 YAML 提交 Git。</p>
 <h2 id="development-1">环境</h2>
 <ul>
 <li>Go 1.27.3、MySQL 8.0+；运行 Vue 管理端另需 Node.js 22 / npm。</li>
@@ -257,7 +257,7 @@ npm run dev</code></pre></div>
 <p>按 Vite 控制台显示的地址打开管理端。需要其他局域网设备访问时可运行 <code>npm run dev -- --host 0.0.0.0</code>，并配置相应防火墙与后端访问策略；切勿将无认证的管理端直接开放公网。</p>
 <h2 id="development-7">6. 检查与排障</h2>
 <div class="table-scroll"><table><thead><tr><th scope="col">现象</th><th scope="col">检查项</th></tr></thead><tbody><tr><td><code>database.dsn ... is required</code></td><td>指定 YAML 中是否填 DSN；也可使用对应环境变量</td></tr><tr><td><code>database structure invalid</code></td><td>检查表、关键索引以及手动 SQL 是否执行</td></tr><tr><td><code>obsolete replica schema</code></td><td>接入端表结构不兼容；先备份并确认真实结构，禁止对非空库直接初始化</td></tr><tr><td>SDK Core 返回 404</td><td>AppID、<code>env</code>、三个绑定字段、节点启用状态</td></tr><tr><td>Webhook 不生效</td><td>订阅者密钥、回调 URL 可达性、反向代理访问和同步游标</td></tr><tr><td>前端接口失败</td><td>Vite 代理、配置中心端口及网关允许访问管理接口的规则</td></tr></tbody></table></div>
-<p>配置优先级为：<strong>程序默认值 &lt; 指定的单个 YAML &lt; 该服务支持的环境变量</strong>。不再合并公共 YAML 与环境 YAML；配置中心和接入端在未指定 <code>-config</code> 时仍兼容原有纯环境变量模式。线上发布请转到 <a href="#production">生产运维</a>。</p>
+<p>配置优先级为：<strong>程序默认值 &lt; 指定的单个 YAML &lt; 该服务支持的环境变量</strong>。不再合并公共 YAML 与环境 YAML；四个 Go 服务未指定 <code>-config</code> 时统一读取 <code>configs/config.yaml</code>；环境变量可以覆盖 YAML 中支持的字段，但无法代替缺失的 YAML 文件。线上发布请转到 <a href="#production">生产运维</a>。</p>
 <p>旧版 YAML 可能包含已废弃字段，必须以当前各服务 <code>configs/config.yaml</code> 模板为准更新，避免严格解析失败；不要在生产库运行开发或模拟支付脚本。</p>
 <h2 id="development-8">7. 测试与 CI</h2>
 <p>四个 Go 服务各自运行（<code>shared/logging</code> 与 <code>shared/signature</code> 为独立 Go Module，也应单独验证）：</p>

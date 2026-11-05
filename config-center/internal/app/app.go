@@ -24,7 +24,7 @@ import (
 	"github.com/hctty27/middle-platform/config-center/internal/webhook"
 )
 
-// Run 支持 YAML 文件和旧版环境变量模式。
+// Run 加载指定的 YAML 配置文件，未指定时使用 configs/config.yaml。
 func Run(configPath string) error {
     cfg, err := settings.LoadFile(configPath)
 	if err != nil { return err }

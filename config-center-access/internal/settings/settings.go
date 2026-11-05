@@ -38,15 +38,14 @@ type configFile struct {
  Log logging.Config `yaml:"log"`
 }
 
-// Load 保留纯环境变量启动方式。
+// Load 使用默认 YAML 文件启动。
 func Load() (Config,error) { return LoadFile("") }
 
-// LoadFile 仅加载指定 YAML 并应用环境变量覆盖；空路径保留纯环境变量模式。
+// LoadFile 只读取指定 YAML（空路径使用 configs/config.yaml），再应用环境变量覆盖。
 func LoadFile(path string) (Config,error) {
  data:=configFile{Log:logging.Default()}
- if path!="" {
-  if err:=bootstrap.ReadYAML(path,&data);err!=nil{return Config{},err}
- }
+ if path=="" { path="configs/config.yaml" }
+ if err:=bootstrap.ReadYAML(path,&data);err!=nil{return Config{},err}
 
  cfg:=Config{
   Address:":8081",

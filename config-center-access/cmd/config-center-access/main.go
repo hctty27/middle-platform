@@ -27,7 +27,7 @@ import (
 
 // main 统一处理启动与运行失败。
 func main() {
-    configPath := flag.String("config", "", "YAML configuration file")
+    configPath := flag.String("config", "configs/config.yaml", "YAML 配置文件")
     flag.Parse()
     if err := run(*configPath); err != nil {
 		slog.Error("配置接入服务已停止", "error", err)
