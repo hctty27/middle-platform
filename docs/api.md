@@ -15,10 +15,10 @@
 | GET | `/api/config/admin/nodes/{id}` | 单节点查询 |
 | POST / PUT / DELETE | `/api/config/admin/nodes`、`/api/config/admin/nodes/{id}` | 创建 / 修改 / 删除节点 |
 | GET / POST | `/api/config/admin/subscribers` | 查询 / 注册 Webhook 订阅者 |
-| GET / POST | `/api/config/admin/channel-apps` | 按 `gameId` 查询 / 创建渠道应用 |
+| GET / POST | `/api/core/admin/channel-apps` | 按 `gameId` 查询 / 创建渠道应用 |
 | PUT / DELETE | `/api/config/admin/channel-apps/{id}` | 修改 / 删除渠道应用 |
 | GET | `/api/config/admin/channel-apps/server-groups?gameId=...&envType=...&keyword=...` | 绑定区服组候选项 |
-| GET | `/api/config/admin/server-groups/{id}/channel-apps` | 查询绑定到区服组的应用 |
+| GET | `/api/core/admin/server-groups/{id}/channel-apps` | 查询绑定到区服组的应用 |
 | GET | `/api/config/nodes/{id}` | 同步侧单节点查询 |
 | POST | `/api/config/nodes/batch-get` | 批量查询节点，JSON 请求 `{"ids":[1,2]}`，最多 500 个 |
 | GET | `/api/config/sync/revision` | 当前 `epoch` 与 `revision` |
@@ -121,7 +121,7 @@ x-signature: <40 位小写 SHA-1>
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | `/api/config/admin/sdk-services` | 功能目录及全局开关 |
+| GET | `/api/core/admin/services` | 功能目录及全局开关 |
 | PUT | `/api/config/admin/sdk-services/{id}` | 修改全局开关 |
 | GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查看渠道包指定环境的服务配置 |
 | PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包指定环境的服务配置 |
@@ -169,3 +169,10 @@ x-signature: <40 位小写 SHA-1>
 **公开范围：** 仅按实际业务需要开放 `/api/core/**`；管理、配置同步、接入查询及回调必须部署在可信网络或有独立鉴权的网关之后。
 
 > 维护约定：本文仅保留路由、内部权限和实现索引。游戏和平台的字段、错误码与验签说明不在本文件重复维护。
+
+
+## SDK 专属节点配置管理
+
+新增 `GET /api/core/admin/node-configs/{id}` 与 `PUT /api/core/admin/node-configs/{id}`，请求体 `{"config":"{...}"}`；响应包含 `nodeId`、`nodeType`、`config`。SDK Core 持有管理写权限，SDK Service 仅使用只读数据。渠道包、功能开关管理统一归 `/api/core/admin/**`。旧 `/api/config/admin/channel-apps/**` 与 `/api/config/admin/sdk-services/**` 不再提供。
+
+`/api/core/admin/**` 必须由受认证的管理网关或可信内网保护，不得经过面向公众的 SDK 网关开放。
