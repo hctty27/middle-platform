@@ -48,3 +48,17 @@ func TestRemovedWebhookWhitelistRejected(t *testing.T) {
         t.Fatal("obsolete webhook.allowedHosts should be rejected")
     }
 }
+
+
+func TestAdminSecretConfiguration(t *testing.T) {
+ path := filepath.Join(t.TempDir(), "config.yaml")
+ data := "database:\n  dsn: test\nadminAuth:\n  secret: file-secret-0123456789abcdef0123456789\n"
+ if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
+ cfg, err := LoadFile(path)
+ if err != nil { t.Fatal(err) }
+ if cfg.AdminSecret != "file-secret-0123456789abcdef0123456789" { t.Fatal("YAML 管理密钥加载失败") }
+ t.Setenv("ADMIN_AUTH_SECRET", "env-secret-0123456789abcdef0123456789")
+ cfg, err = LoadFile(path)
+ if err != nil { t.Fatal(err) }
+ if cfg.AdminSecret != "env-secret-0123456789abcdef0123456789" { t.Fatal("管理密钥环境变量覆盖失败") }
+}
