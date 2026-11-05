@@ -1,42 +1,31 @@
 # config-center · 权威配置中心
 
-本工程提供三级配置节点（`game → region → server_group`）、独立 `channel_app`、订阅者管理、增量同步与 Webhook 投递。权威 MySQL 数据库为 `config_center`；运行时不依赖接入端副本。
+负责游戏、大区、区服组基础节点及其同步版本、订阅者管理、增量/快照接口和 Webhook 投递。使用共享权威库 `config_center`；SDK 专属节点配置、渠道包及功能开关由 `sdk-core` 管理，不在这里重复维护。
 
 ## 本地启动
 
-1. 创建空 `config_center` 库，复制 `configs/config.yaml` 为 `configs/config-dev.yaml`。
-2. 填写 `database.dsn`；管理读写接口与 Webhook Worker 均随服务启动。**管理 API 无内建鉴权，必须限制到可信内网或受认证的管理网关**。
-3. 先通过数据库客户端执行 `../db/full/config_center.sql`（仅新空库）；已有权威库缺订单表时仅执行 `../db/incremental/V0001__add_game_order.sql`。然后在本目录运行：
+1. 新建空库时手工执行 `../db/full/config_center.sql`；已有库按 [数据库文档](../docs/database.md) 核对后选择增量 SQL，禁止重新执行全量初始化。
+2. 将 `configs/config.yaml` 复制为 `configs/config-dev.yaml` 并填写 `database.dsn`。
+3. 在本目录运行：
 
 ```powershell
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
-启动后检查 `GET /health/ready`；Webhook 每 3 秒查询待投递订阅者，运行中新增无需重启。回调支持公网 IP、内网 IP、域名和 localhost 的 HTTP/HTTPS 地址，无需维护白名单；元数据及特殊网络地址仍被禁止。管理写路由始终注册，部署时必须先完成网关访问控制。
+检查 `GET /health/ready`。服务启动不自动执行 DDL，节点变更推进 `epoch/revision`；Webhook 只发版本通知，接入方根据修订号异步拉取。渠道包不参与三级节点同步。
 
-## 关键约束
+## 安全与参考
 
-- `config_node` 只有三级节点，不保存 `parent_id`；`region.env_type` 为 `test`、`review`、`prod`。
-- `config_channel_app.code` 全局唯一；每个 AppID 各环境最多绑定一个区服组，共用一份 `config` JSON。
-- 仅三级节点增删改会推进 `epoch/revision`；渠道应用变更不参与节点同步。
-- SQL 由人工审核和执行；运行时只检查表、字段与必要索引，不根据旧 V11/V12 版本记录判断。
-- 历史 `config_schema_migrations` 表不再使用，也不会更新；保留旧数据，切勿为修复问题直接删表。
+`/api/config/admin/**` 默认启用 `adminAuth` 管理签名。两服务的管理密钥应一致；即使启用签名，生产也必须限制网关访问范围并使用 HTTPS。同步快照和原始节点接口同样不得无防护地公开。
 
-## 常用配置
-
-| YAML | 对应环境变量 | 说明 |
-| --- | --- | --- |
-| `database.dsn` | `CONFIG_DB_DSN` | 权威库连接 |
-| `server.address` | `CONFIG_GO_ADDR` | HTTP 监听地址 |
-
-## 测试与详细文档
+- [统一接口与签名规范](../docs/index.html)
+- [架构与内部路由](../docs/architecture.md)
+- [数据库与手动 SQL](../docs/database.md)
+- [本地开发](../docs/development.md)
+- [生产运维](../docs/production.md)
 
 ```bash
 go test -race ./...
 go vet ./...
 go build ./cmd/config-center
 ```
-
-[接口文档](../docs/api.md) · [数据库与手动 SQL](../docs/database.md) · [本地开发](../docs/development.md) · [生产部署](../docs/production.md)
-
-当前配置模板只保留生效字段。管理写接口始终存在，必须在 Nginx、网关或私网层面限制访问 `/api/config/`，避免暴露原始密钥与管理写接口。
