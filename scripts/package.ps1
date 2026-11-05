@@ -154,6 +154,9 @@ try {
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_game_order.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_services.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_user_check.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_role_query.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_server_query.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_role_control.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center-access/db/sql/initialize.sql') -Destination $accessDir
 
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。

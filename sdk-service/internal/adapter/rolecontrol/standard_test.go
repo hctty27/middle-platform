@@ -5,7 +5,6 @@ import (
     "encoding/json"
     "net/http"
     "net/http/httptest"
-    "strings"
     "testing"
     "time"
 
@@ -49,9 +48,6 @@ func TestStandardExecute(t *testing.T) {
                     r.Header.Get("x-nonce")}, in.SignatureValues()...)
                 if signature.SignValues(values...) != r.Header.Get("x-signature") {
                     t.Error("游戏请求签名错误")
-                }
-                if tc.duration == nil && strings.Contains(r.Header.Get("x-signature"), "duration") {
-                    t.Error("未提供 duration 不应参与签名")
                 }
                 w.WriteHeader(tc.status)
                 _, _ = w.Write([]byte(tc.reply))
