@@ -59,9 +59,20 @@ func parseBody(w http.ResponseWriter, r *http.Request) (model.UserCheckRequest, 
 }
 
 func Router(checker UserChecker, db Pinger, roleQueriers ...RoleQuerier) http.Handler {
+    var role RoleQuerier
+    if len(roleQueriers) > 0 {
+        role = roleQueriers[0]
+    }
+    return RouterWithServices(checker, db, role, nil)
+}
+
+func RouterWithServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier) http.Handler {
     mux := http.NewServeMux()
-    if len(roleQueriers) > 0 && roleQueriers[0] != nil {
-        mux.HandleFunc("POST /api/service/role/query/{env}", roleQueryHandler(roleQueriers[0]))
+    if role != nil {
+        mux.HandleFunc("POST /api/service/role/query/{env}", roleQueryHandler(role))
+    }
+    if server != nil {
+        mux.HandleFunc("POST /api/service/server/query/{env}", serverQueryHandler(server))
     }
     mux.HandleFunc("POST /api/service/user/check/{env}", func(w http.ResponseWriter, r *http.Request) {
         env := r.PathValue("env")
