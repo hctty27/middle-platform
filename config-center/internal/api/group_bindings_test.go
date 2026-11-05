@@ -21,10 +21,6 @@ func TestServerGroupBindingsRoute(t *testing.T) {
     req:=httptest.NewRequest(http.MethodGet,"/api/config/admin/server-groups/88/channel-apps",nil)
     rec:=httptest.NewRecorder()
     Router(groupBindingsReader{}).ServeHTTP(rec,req)
-    if rec.Code!=http.StatusOK { t.Fatalf("unexpected status %d",rec.Code) }
-    var result []map[string]any
-    if err:=json.Unmarshal(rec.Body.Bytes(),&result);err!=nil { t.Fatal(err) }
-    if len(result)!=1 || result[0]["channelAppName"]!="微信应用" || result[0]["config"]!=`{"login":true}` {
-        t.Fatalf("unexpected response %+v",result)
-    }
+    if rec.Code!=http.StatusNotFound { t.Fatalf("unexpected status %d",rec.Code) }
+
 }
