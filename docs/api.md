@@ -123,7 +123,7 @@ x-signature: <40 位小写 SHA-1>
 | GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查看渠道包指定环境的服务配置 |
 | PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包指定环境的服务配置 |
 
-目前仅有已实现的 `event_report` 和 `user_check`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
+目前实现了 `event_report`、`user_check`、`role_query`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
 
 ## 6. SDK Service 用户核验
 
@@ -132,7 +132,14 @@ x-signature: <40 位小写 SHA-1>
 成功 `{"code":0,"message":"ok","data":true}`；用户不存在 `{"code":1021003,"message":"用户信息不存在","data":null}`。
 游戏端与平台端请求详见 [游戏接口 HTML](index.html#g-start)、[平台接口 HTML](index.html#p-start)。平台核验接口签名样本与环境回调能力仍需联调确认。
 
-## 7. 健康检查与响应约定
+## 7. SDK Service 角色查询
+
+`POST /api/service/role/query/{env}`，AppID 来自 `x-app-id`，Body 可包含 `open_id`、`role_id`、`original_server_id`、`current_server_id`、`extension`，至少提供一项身份查询条件。
+游戏接口 URL 从大区 `roleQueryUrl` 获取；未指定 `serviceAdapters.role_query` 时使用标准适配器。
+成功返回 `{"code":0,"message":"ok","data":[...]}`，无角色返回空数组。
+该服务要求全局和渠道环境开关同时开启，签名使用 Header 四项加 Body 顶层非空值。
+
+## 8. 健康检查与响应约定
 
 四个服务均有：
 

@@ -15,6 +15,7 @@ import (
 
     "github.com/go-sql-driver/mysql"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/usercheck"
+    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolequery"
     "github.com/hctty27/middle-platform/sdk-service/internal/api"
     "github.com/hctty27/middle-platform/sdk-service/internal/service"
     "github.com/hctty27/middle-platform/sdk-service/internal/settings"
@@ -69,9 +70,14 @@ func run(path string) error {
     })
     if err != nil { return err }
     checker := &service.UserCheckService{Routes: routes, Adapters: registry}
+    roleRegistry, err := rolequery.NewRegistry(map[string]rolequery.Adapter{
+        "standard": &rolequery.Standard{Client: usercheck.NewHTTPClient(timeout)},
+    })
+    if err != nil { return err }
+    roleQuerier := &service.RoleQueryService{Routes: routes, Adapters: roleRegistry}
     srv := &http.Server{
         Addr: cfg.Server.Address,
-        Handler: logging.HTTP(cfg.Log, api.Router(checker, db)),
+        Handler: logging.HTTP(cfg.Log, api.Router(checker, db, roleQuerier)),
         ReadHeaderTimeout: 5*time.Second,
         ReadTimeout: 10*time.Second,
         WriteTimeout: timeout + 5*time.Second,

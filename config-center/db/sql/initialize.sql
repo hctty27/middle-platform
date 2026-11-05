@@ -158,7 +158,8 @@ CREATE TABLE sdk_service_channel (
     CONSTRAINT chk_sdk_channel_config CHECK (JSON_TYPE(config)='OBJECT')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SDK 渠道包功能绑定';
 
--- 只初始化已实现的事件上报；充值不受此开关影响。
+-- 预置已实现的服务，充值不受此开关影响。
 INSERT INTO sdk_service (code,name,description,enabled) VALUES
 ('event_report','事件上报','游戏事件向发行平台上报',1),
-('user_check','核验用户信息','平台核验用户信息并转发至游戏',1);
+('user_check','核验用户信息','平台核验用户信息并转发至游戏',1),
+('role_query','角色查询','平台实时查询游戏角色信息',1);

@@ -34,31 +34,46 @@ JOIN config_node sg ON sg.id=CASE ?
 JOIN config_node r ON r.id=sg.region_id
     AND r.node_type='region' AND r.game_id=a.game_id
     AND r.status=1 AND r.env_type=?
-LEFT JOIN sdk_service sv ON sv.code='user_check'
+LEFT JOIN sdk_service sv ON sv.code=?
 LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id
     AND ch.channel_app_id=a.id AND ch.env=?
 WHERE a.code=? AND a.status=1`
 
 func (s *Store) VerifySchema(ctx context.Context) error {
-    rows, err := s.db.QueryContext(ctx, routeQuery+" LIMIT 0", "prod", "prod", "prod", "__probe__")
+    rows, err := s.db.QueryContext(ctx, routeQuery+" LIMIT 0", "prod", "prod", "user_check", "prod", "__probe__")
     if err != nil { return fmt.Errorf("核验功能依赖的数据库结构不完整: %w", err) }
     if err := rows.Close(); err != nil { return err }
-    var id int64
-    err = s.db.QueryRowContext(ctx, "SELECT id FROM sdk_service WHERE code='user_check'").Scan(&id)
-    if errors.Is(err, sql.ErrNoRows) { return errors.New("未安装 user_check 服务目录，请先手动执行 add_sdk_user_check.sql") }
-    return err
+    for _, entry := range []struct{ code, script string }{
+        {"user_check", "add_sdk_user_check.sql"},
+        {"role_query", "add_sdk_role_query.sql"},
+    } {
+        var id int64
+        err = s.db.QueryRowContext(ctx, "SELECT id FROM sdk_service WHERE code=?", entry.code).Scan(&id)
+        if errors.Is(err, sql.ErrNoRows) {
+            return fmt.Errorf("未安装 %s 服务目录，请先手动执行 %s", entry.code, entry.script)
+        }
+        if err != nil { return err }
+    }
+    return nil
 }
 
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, error) {
+    return s.LookupService(ctx, appID, env, "user_check")
+}
+
+func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode string) (model.Target, error) {
+    if serviceCode != "user_check" && serviceCode != "role_query" {
+        return model.Target{}, model.ErrInvalidConfig
+    }
     if env != "prod" && env != "test" && env != "review" { return model.Target{}, model.ErrNotFound }
     var appJSON, gameJSON, regionJSON []byte
     var gameCode string
     var globalEnabled, channelEnabled int
-    err := s.db.QueryRowContext(ctx, routeQuery, env, env, env, appID).Scan(
+    err := s.db.QueryRowContext(ctx, routeQuery, env, env, serviceCode, env, appID).Scan(
         &appJSON, &gameCode, &gameJSON, &regionJSON, &globalEnabled, &channelEnabled,
     )
     if errors.Is(err, sql.ErrNoRows) { return model.Target{}, model.ErrNotFound }
-    if err != nil { return model.Target{}, fmt.Errorf("查询用户核验路由失败: %w", err) }
+    if err != nil { return model.Target{}, fmt.Errorf("查询 SDK 服务路由失败: %w", err) }
     if globalEnabled != 1 || channelEnabled != 1 { return model.Target{}, model.ErrDisabled }
 
     var app struct { AppSecret string `json:"appSecret"` }
@@ -66,22 +81,34 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, er
         GameSecret string `json:"gameSecret"`
         ServiceAdapters map[string]string `json:"serviceAdapters"`
     }
-    var region struct { UserCheckURL string `json:"userCheckUrl"` }
+    var region struct {
+        UserCheckURL string `json:"userCheckUrl"`
+        RoleQueryURL string `json:"roleQueryUrl"`
+    }
     if json.Unmarshal(appJSON, &app) != nil || json.Unmarshal(gameJSON, &game) != nil ||
         json.Unmarshal(regionJSON, &region) != nil {
         return model.Target{}, model.ErrInvalidConfig
     }
-    adapterName := adapter.NameForService(game.ServiceAdapters, "user_check")
+    adapterName := adapter.NameForService(game.ServiceAdapters, serviceCode)
     targetURL := strings.TrimSpace(region.UserCheckURL)
+    if serviceCode == "role_query" {
+        targetURL = strings.TrimSpace(region.RoleQueryURL)
+    }
     u, err := url.Parse(targetURL)
     if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
         u.Hostname() == "" || u.User != nil || u.Fragment != "" ||
         strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" {
         return model.Target{}, model.ErrInvalidConfig
     }
-    return model.Target{
+    result := model.Target{
         AppID: appID, Env: env, GameCode: gameCode,
-        UserCheckURL: targetURL, AdapterName: adapterName,
+        AdapterName: adapterName,
         AppSecret: app.AppSecret, GameSecret: game.GameSecret,
-    }, nil
+    }
+    if serviceCode == "user_check" {
+        result.UserCheckURL = targetURL
+    } else {
+        result.RoleQueryURL = targetURL
+    }
+    return result, nil
 }
