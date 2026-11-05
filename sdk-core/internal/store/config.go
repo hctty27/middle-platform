@@ -32,15 +32,19 @@ SELECT
     a.config,
     g.code,
     g.config,
+    COALESCE(gs.config, JSON_OBJECT()),
     r.code,
     r.config,
+    COALESCE(rs.config, JSON_OBJECT()),
     sg.code,
-    sg.config
-FROM config_channel_app a
+    sg.config,
+    COALESCE(ss.config, JSON_OBJECT())
+FROM sdk_channel_app a
 JOIN config_node g
     ON g.id = a.game_id
     AND g.node_type = 'game'
     AND g.status = 1
+LEFT JOIN sdk_node_config gs ON gs.node_id=g.id
 JOIN config_node sg
     ON sg.id = CASE ?
         WHEN 'prod' THEN a.prod_server_group_id
@@ -57,6 +61,8 @@ JOIN config_node r
     AND r.status = 1
     AND r.game_id = a.game_id
     AND r.env_type = ?
+LEFT JOIN sdk_node_config rs ON rs.node_id=r.id
+LEFT JOIN sdk_node_config ss ON ss.node_id=sg.id
 WHERE a.code = ?
     AND a.status = 1
 LIMIT 1`
@@ -64,7 +70,7 @@ LIMIT 1`
 // Lookup 使用单条 SELECT 获取一致的应用、大区、区服组数据，避免二次查询和显式事务开销。
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp, *model.BoundGroup, error) {
     var app model.ChannelApp
-    var appJSON, gameJSON, regionJSON, groupJSON []byte
+    var appJSON, gameJSON, gameSDKJSON, regionJSON, regionSDKJSON, groupJSON, groupSDKJSON []byte
     group := &model.BoundGroup{}
 
     err := s.db.QueryRowContext(ctx, configQuery, env, env, appID).Scan(
@@ -75,10 +81,13 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
         &appJSON,
         &app.GameCode,
         &gameJSON,
+        &gameSDKJSON,
         &group.RegionCode,
         &regionJSON,
+        &regionSDKJSON,
         &group.ServerGroupCode,
         &groupJSON,
+        &groupSDKJSON,
     )
     if errors.Is(err, sql.ErrNoRows) {
         return model.ChannelApp{}, nil, model.ErrNotFound
@@ -89,8 +98,11 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
 
     app.Config = append(json.RawMessage(nil), appJSON...)
     app.GameConfig = append(json.RawMessage(nil), gameJSON...)
+    app.GameSDKConfig = append(json.RawMessage(nil), gameSDKJSON...)
     group.RegionConfig = append(json.RawMessage(nil), regionJSON...)
+    group.RegionSDKConfig = append(json.RawMessage(nil), regionSDKJSON...)
     group.Config = append(json.RawMessage(nil), groupJSON...)
+    group.SDKConfig = append(json.RawMessage(nil), groupSDKJSON...)
     return app, group, nil
 }
 
@@ -110,7 +122,7 @@ func (s *Store) VerifySchema(ctx context.Context) error {
 func (s *Store) LookupPlatformSecret(ctx context.Context, appID string) (string, error) {
     var raw []byte
     err := s.db.QueryRowContext(ctx,
-        "SELECT config FROM config_channel_app WHERE code = ? LIMIT 1", appID).Scan(&raw)
+        "SELECT config FROM sdk_channel_app WHERE code = ? LIMIT 1", appID).Scan(&raw)
     if errors.Is(err, sql.ErrNoRows) {
         return "", model.ErrNotFound
     }
@@ -132,7 +144,7 @@ func(s *Store) LookupGameConfig(ctx context.Context,gameID int64)(json.RawMessag
     if gameID<=0{return nil,model.ErrNotFound}
     var raw []byte
     err:=s.db.QueryRowContext(ctx,
-        "SELECT config FROM config_node WHERE id=? AND node_type='game' LIMIT 1",gameID).Scan(&raw)
+        "SELECT sc.config FROM sdk_node_config sc JOIN config_node n ON n.id=sc.node_id WHERE n.id=? AND n.node_type='game' LIMIT 1",gameID).Scan(&raw)
     if errors.Is(err,sql.ErrNoRows){return nil,model.ErrNotFound}
     if err!=nil{return nil,fmt.Errorf("查询游戏订单签名密钥失败: %w",err)}
     return json.RawMessage(raw),nil
