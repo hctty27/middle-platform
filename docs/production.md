@@ -209,7 +209,7 @@ curl -i https://zk.skybluek.com/admin/config.js
 
 改动 `admin.js` 后强制刷新浏览器即可生效，不需要重启 Supervisor。原项目使用 hash 路由，子路径刷新不会要求额外的前端路由配置。
 
-**安全提醒：** 现在配置中心管理 API 尚无完整认证，`/admin/` 和 `/api/config/admin/` 必须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。
+**安全提醒：** 配置中心管理 API 默认启用 `adminAuth` 请求签名，`/admin/` 和 `/api/config/admin/` 仍须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。
 
 ## 6. 直接发布与失败排查
 
