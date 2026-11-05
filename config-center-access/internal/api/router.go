@@ -3,18 +3,16 @@ package api
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/hctty27/middle-platform/config-center-access/internal/store"
+	"github.com/hctty27/middle-platform/shared/signature"
 )
 
 // SyncTrigger 由后台单飞任务实现。
@@ -23,6 +21,7 @@ type SyncTrigger interface{ Request() }
 // Router 同时提供本地只读查询和仅限可信网络的内部 Webhook。
 func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handler {
 	mux := http.NewServeMux()
+	nonces := &nonceCache{used: make(map[string]time.Time)}
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status":"UP"})
 	})
@@ -62,8 +61,15 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error":"JSON 格式不合法"})
 			return
 		}
-		if !verify(r.Header.Get("X-Config-Timestamp"), r.Header.Get("X-Config-Signature"), payload.Epoch, payload.Revision, secret) {
+		timestamp := r.Header.Get("X-Timestamp")
+		nonce := r.Header.Get("X-Nonce")
+		signed := r.Header.Get("X-Signature")
+		if !verify(timestamp, nonce, signed, payload.Epoch, payload.Revision, secret) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error":"同步回调签名验证失败"})
+			return
+		}
+		if !nonces.accept(nonce, time.Now()) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error":"同步回调 nonce 已使用或请求过于频繁"})
 			return
 		}
 		trigger.Request()
@@ -72,18 +78,35 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 	return mux
 }
 
-// verify 校验签名和五分钟时间窗口，拒绝篡改或重放的同步通知。
-func verify(timestamp, signature, epoch string, revision int64, secret string) bool {
-	ts, err := strconv.ParseInt(timestamp, 10, 64)
-	if err != nil || secret == "" || epoch == "" || revision < 0 { return false }
-	now := time.Now().Unix()
-	if ts < now-300 || ts > now+300 { return false }
-	if !strings.HasPrefix(signature, "sha256=") { return false }
-	digest, err := hex.DecodeString(strings.TrimPrefix(signature, "sha256="))
-	if err != nil || len(digest) != sha256.Size { return false }
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = io.WriteString(mac, timestamp+"."+epoch+"."+strconv.FormatInt(revision, 10))
-	return hmac.Equal(digest, mac.Sum(nil))
+// nonceCache 仅对当前进程中的签名请求进行去重。
+// epoch/revision 仍由同步逻辑幂等处理；多实例全局去重需共享存储。
+type nonceCache struct {
+	mu sync.Mutex
+	used map[string]time.Time
+}
+
+func (c *nonceCache) accept(nonce string, now time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if until, ok := c.used[nonce]; ok && until.After(now) { return false }
+	if len(c.used) >= 10000 {
+		for key, until := range c.used {
+			if !until.After(now) { delete(c.used, key) }
+		}
+	}
+	if len(c.used) >= 10000 { return false }
+	c.used[nonce] = now.Add(10*time.Minute)
+	return true
+}
+
+// verify 复用共享 SHA-1 签名，校验前后五分钟时间窗口与 nonce 格式。
+func verify(timestamp, nonce, signed, epoch string, revision int64, secret string) bool {
+	if secret == "" || epoch == "" || revision < 0 ||
+		!signature.ValidHeaders(timestamp, nonce, signed, time.Now()) {
+		return false
+	}
+	want := signature.SignValues(secret, timestamp, nonce, epoch, strconv.FormatInt(revision, 10))
+	return signature.EqualHex(want, signed)
 }
 
 // writeJSON 统一接入侧的 JSON 返回格式。
