@@ -7,12 +7,14 @@ on:
       - 'sdk-core/**'
       - 'config-center/db/sql/**'
       - 'shared/logging/**'
+      - 'shared/signature/**'
       - '.github/workflows/sdk-core.yml'
   pull_request:
     paths:
       - 'sdk-core/**'
       - 'config-center/db/sql/**'
       - 'shared/logging/**'
+      - 'shared/signature/**'
       - '.github/workflows/sdk-core.yml'
   workflow_dispatch:
 

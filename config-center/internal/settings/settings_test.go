@@ -48,3 +48,54 @@ func TestRemovedWebhookWhitelistRejected(t *testing.T) {
         t.Fatal("obsolete webhook.allowedHosts should be rejected")
     }
 }
+
+
+func TestAdminSecretConfiguration(t *testing.T) {
+ path := filepath.Join(t.TempDir(), "config.yaml")
+ data := "database:\n  dsn: test\nadminAuth:\n  secret: file-secret-0123456789abcdef0123456789\n"
+ if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
+ cfg, err := LoadFile(path)
+ if err != nil { t.Fatal(err) }
+ if cfg.AdminSecret != "file-secret-0123456789abcdef0123456789" { t.Fatal("YAML 管理密钥加载失败") }
+ t.Setenv("ADMIN_AUTH_SECRET", "env-secret-0123456789abcdef0123456789")
+ cfg, err = LoadFile(path)
+ if err != nil { t.Fatal(err) }
+ if cfg.AdminSecret != "env-secret-0123456789abcdef0123456789" { t.Fatal("管理密钥环境变量覆盖失败") }
+}
+
+
+func TestAdminAuthEnabledDefaultsToTrue(t *testing.T) {
+    cases := []struct {
+        name string
+        admin string
+        expected bool
+    }{
+        {"omitted", "", true},
+        {"explicit true", "adminAuth:\n  enabled: true\n", true},
+        {"explicit false", "adminAuth:\n  enabled: false\n", false},
+        {"empty configuration", "adminAuth:\n  secret: ''\n", true},
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            path := filepath.Join(t.TempDir(), "config.yaml")
+            data := "database:\n  dsn: test-dsn\n" + tc.admin
+            if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
+            cfg, err := LoadFile(path)
+            if err != nil { t.Fatal(err) }
+            if cfg.AdminAuthEnabled != tc.expected {
+                t.Fatalf("enabled = %v, want %v", cfg.AdminAuthEnabled, tc.expected)
+            }
+        })
+    }
+}
+
+func TestAdminAuthDevOverridesBaseConfig(t *testing.T) {
+    dir := t.TempDir()
+    base := filepath.Join(dir, "config.yaml")
+    dev := filepath.Join(dir, "config-dev.yaml")
+    if err := os.WriteFile(base, []byte("database:\n  dsn: test\nadminAuth:\n  enabled: true\n"), 0600); err != nil { t.Fatal(err) }
+    if err := os.WriteFile(dev, []byte("adminAuth:\n  enabled: false\n"), 0600); err != nil { t.Fatal(err) }
+    cfg, err := LoadFile(dev)
+    if err != nil { t.Fatal(err) }
+    if cfg.AdminAuthEnabled { t.Fatal("development config must disable admin signing when explicitly requested") }
+}

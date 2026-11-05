@@ -15,6 +15,7 @@ import (
 	"time"
 	"github.com/go-sql-driver/mysql"
 	"github.com/hctty27/middle-platform/shared/logging"
+	"github.com/hctty27/middle-platform/shared/signature"
 	"github.com/hctty27/middle-platform/config-center/internal/api"
 	"github.com/hctty27/middle-platform/config-center/internal/schema"
 	"github.com/hctty27/middle-platform/config-center/internal/settings"
@@ -64,8 +65,8 @@ func Run(configPath string) error {
 
 	address := cfg.Address
 	repository := &store.Store{DB: db}
-	// 管理读写接口始终注册；必须通过私有网络/网关鉴权保护所有管理接口。
-	var handler http.Handler = api.RouterWithWrites(repository, repository)
+	// 管理读写接口始终注册，内建管理验签，并由网关限制外部可访问范围。
+	var handler http.Handler = signature.AdminMiddleware(api.RouterWithWrites(repository, repository), "/api/config/admin", cfg.AdminSecret, cfg.AdminAuthEnabled)
 	var ready atomic.Bool
 	ready.Store(true)
 	handler = withDrainReadiness(handler, &ready)
