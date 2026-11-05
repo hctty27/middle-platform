@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getRevision } from './api/syncApi'
 import { currentGameId, focusNodeId, games, gamesLoading, loadGames } from './app/gameContext'
+import { gameMarketLabels } from './features/nodes/types'
 import ConfigWorkspace from './ConfigWorkspace.vue'
 import GameOverview from './features/dashboard/GameOverview.vue'
 import ChannelAppPage from './features/nodes/ChannelAppPage.vue'
@@ -109,8 +110,10 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
           <span class="topbar-game-label">当前游戏</span>
           <el-select v-model="currentGameId" :loading="gamesLoading" filterable placeholder="选择游戏"
                      class="topbar-game-switcher">
-            <el-option v-for="game in games" :key="game.id" :value="game.id" :label="game.name" />
+            <el-option v-for="game in games" :key="game.id" :value="game.id"
+                       :label="game.name + (game.marketType ? ' · ' + gameMarketLabels[game.marketType] : '')" />
           </el-select>
+          <el-tag v-if="activeGame?.marketType" type="info" effect="plain">{{ gameMarketLabels[activeGame.marketType] }}</el-tag>
           <el-tag type="success" effect="plain">Revision {{ revision }}</el-tag>
           <el-button :loading="updating" @click="refreshAll">刷新</el-button>
         </div>

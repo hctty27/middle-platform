@@ -2,6 +2,8 @@
 export type NodeType = 'game' | 'region' | 'server_group' | 'channel_app'
 /** RegionEnvType 表示大区的运行用途，不是独立的配置节点层级。 */
 export type RegionEnvType = 'test' | 'review' | 'prod'
+export type GameMarketType = 'domestic' | 'overseas'
+export const gameMarketLabels: Record<GameMarketType, string> = { domestic: '国内', overseas: '海外' }
 export const regionEnvLabels: Record<RegionEnvType, string> = {
   test: '测试服', review: '提审服', prod: '正式服'
 }
@@ -12,6 +14,7 @@ export interface NodeSummary {
   parentId: number
   nodeType: NodeType
   envType: RegionEnvType | null
+  marketType: GameMarketType | null
   code: string
   name: string
   status: number
@@ -41,6 +44,7 @@ export interface NodeForm {
   parentId: number
   nodeType: NodeType
   envType: RegionEnvType | null
+  marketType: GameMarketType | null
   code: string
   name: string
   status: number

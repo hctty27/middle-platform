@@ -35,6 +35,12 @@ const emit = defineEmits<{
             <el-form-item label="业务编码"><el-input v-model="form.code" :disabled="!creating" maxlength="128" /></el-form-item>
             <el-form-item label="节点名称"><el-input v-model="form.name" maxlength="128" show-word-limit /></el-form-item>
           </div>
+          <el-form-item v-if="form.nodeType === 'game'" label="运营地区" required>
+            <el-radio-group v-model="form.marketType">
+              <el-radio value="domestic">国内</el-radio>
+              <el-radio value="overseas">海外</el-radio>
+            </el-radio-group>
+          </el-form-item>
           <el-form-item v-if="form.nodeType === 'region'" label="大区类型" required>
             <el-select v-model="form.envType" placeholder="请选择大区类型" :disabled="envTypeLocked" clearable>
               <el-option v-for="(label, key) in regionEnvLabels" :key="key" :label="label" :value="key" />

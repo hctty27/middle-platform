@@ -98,8 +98,9 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	}()
 	store := &Store{DB: db}
 	enabled := 1
-	game, err := store.Create(ctx, CreateNodeRequest{NodeType: "game", Code: "g1", Name: "Game", Status: &enabled, Config: `{"x":1}`})
+	game, err := store.Create(ctx, CreateNodeRequest{NodeType: "game", MarketType: func() *string { v := "overseas"; return &v }(), Code: "g1", Name: "Game", Status: &enabled, Config: `{"x":1}`})
 	if err != nil { t.Fatal(err) }
+	if game.MarketType == nil || *game.MarketType != "overseas" { t.Fatalf("game market not persisted: %+v", game) }
 	regionEnv := "test"
 	region, err := store.Create(ctx, CreateNodeRequest{ParentID: game.ID, NodeType: "region", EnvType: &regionEnv, Code: "r1", Name: "Region", Status: &enabled, Config: "{}"})
 	if err != nil { t.Fatal(err) }
@@ -302,7 +303,7 @@ var integrationSchema = []string{
 	`CREATE TABLE config_node (
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		game_id BIGINT NULL,region_id BIGINT NULL,
-		node_type VARCHAR(20) NOT NULL,env_type VARCHAR(16) NULL,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+		node_type VARCHAR(20) NOT NULL,env_type VARCHAR(16) NULL,market_type VARCHAR(16) NULL,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
 		name VARCHAR(128) NOT NULL,status TINYINT NOT NULL DEFAULT 1,config JSON NOT NULL,
 		remark VARCHAR(500),created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
 		CONSTRAINT chk_config_node_type CHECK(node_type IN ('game','region','server_group')),
@@ -310,6 +311,10 @@ var integrationSchema = []string{
         CONSTRAINT chk_config_node_env_type CHECK(
             (node_type='region' AND (env_type IS NULL OR env_type IN ('test','review','prod')))
             OR (node_type<>'region' AND env_type IS NULL)
+        ),
+        CONSTRAINT chk_config_node_market_type CHECK(
+            (node_type='game' AND market_type IS NOT NULL AND market_type IN ('domestic','overseas'))
+            OR (node_type<>'game' AND market_type IS NULL)
         ),
 		CONSTRAINT chk_config_node_ancestry CHECK(
 			(node_type='game' AND game_id IS NULL AND region_id IS NULL)

@@ -2,7 +2,7 @@ import { nextTick, onBeforeUnmount, reactive, ref, computed } from 'vue'
 import axios from 'axios'
 import { nodeApi } from '../../../api/nodeApi'
 import { apiErrorMessage } from '../../../api/http'
-import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch, RegionEnvType } from '../types'
+import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch, RegionEnvType, GameMarketType } from '../types'
 import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
 import type { LoadFunction } from 'element-plus'
 
@@ -45,7 +45,7 @@ const detailLoading = ref(false)
 const saving = ref(false)
 const form = reactive({
   parentId: 0, nodeType: 'game' as NodeType, code: '', name: '',
-  status: 1, envType: null as RegionEnvType | null, config: '{}', remark: ''
+  status: 1, envType: null as RegionEnvType | null, marketType: 'domestic' as GameMarketType | null, config: '{}', remark: ''
 })
 const nextLabel = computed(() => {
   const type = selected.value && nextType[selected.value.nodeType]
@@ -65,13 +65,13 @@ let detailController: AbortController | undefined
 
 function toSummary(node: NodeRecord): NodeSummary {
   return { id: node.id, parentId: node.parentId, nodeType: node.nodeType,
-    code: node.code, name: node.name, status: node.status, envType: node.envType,
+    code: node.code, name: node.name, status: node.status, envType: node.envType, marketType: node.marketType,
     leaf: ['server_group', 'channel_app'].includes(node.nodeType) }
 }
 
 function resetForm(parentId: number, nodeType: NodeType) {
   envTypeLocked.value = false
-  Object.assign(form, { parentId, nodeType, code: '', name: '', status: 1, envType: null,
+  Object.assign(form, { parentId, nodeType, code: '', name: '', status: 1, envType: null, marketType: nodeType === 'game' ? 'domestic' : null,
     config: '{}', remark: '' })
   originalForm = JSON.stringify(form)
 }
@@ -321,6 +321,10 @@ async function openCreate(parent: NodeSummary | null) {
 // 保存后局部刷新受影响的父目录和子项列表，不强制重新请求整棵树。
 async function save() {
   if (saving.value) return
+  if (form.nodeType === 'game' && !form.marketType) {
+    ElMessage.warning('请选择运营地区')
+    return
+  }
   if (form.nodeType === 'region' && !form.envType) {
     ElMessage.warning('请选择大区类型')
     return
@@ -342,7 +346,7 @@ async function save() {
       }
     } else if (editorNode.value) {
       const result = await nodeApi.updateNode(editorNode.value.id, {
-        name: form.name, status: form.status, config: form.config, remark: form.remark, envType: form.envType
+        name: form.name, status: form.status, config: form.config, remark: form.remark, envType: form.envType, marketType: form.marketType
       })
       const summary = toSummary(result.data)
       if (selected.value?.id === summary.id) {
@@ -350,7 +354,7 @@ async function save() {
         breadcrumbs.value = breadcrumbs.value.map(item => item.id === summary.id ? summary : item)
       }
       const cached = treeRef.value?.getNode(summary.id)
-      if (cached) Object.assign(cached.data, { name: summary.name, status: summary.status, envType: summary.envType })
+      if (cached) Object.assign(cached.data, { name: summary.name, status: summary.status, envType: summary.envType, marketType: summary.marketType })
       await refreshTreeParent(summary.parentId)
       if (selected.value?.id === summary.parentId) await loadChildren()
     }

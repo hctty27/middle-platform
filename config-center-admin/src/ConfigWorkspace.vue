@@ -7,8 +7,8 @@ import { ElMessage } from 'element-plus'
 import { nodeApi } from './api/nodeApi'
 import { apiErrorMessage } from './api/http'
 import { currentGameId, focusNodeId, focusNodeRequest } from './app/gameContext'
-import type { NodeType, NodeMatch, NodeRecord, RegionEnvType } from './features/nodes/types'
-import { regionEnvLabels } from './features/nodes/types'
+import type { NodeType, NodeMatch, NodeRecord, RegionEnvType, GameMarketType } from './features/nodes/types'
+import { regionEnvLabels, gameMarketLabels } from './features/nodes/types'
 
 function envLabel(env: RegionEnvType | null | undefined) {
   return env ? regionEnvLabels[env] : '未分类'
@@ -107,6 +107,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
                 @click="openSearchMatch(match)">
           <span class="search-result-title">{{ match.node.name }}
             <el-tag size="small" type="info">{{ labels[match.node.nodeType] }}</el-tag>
+            <el-tag v-if="match.node.nodeType === 'game' && match.node.marketType" size="small" type="info">{{ gameMarketLabels[match.node.marketType] }}</el-tag>
             <el-tag v-if="match.node.nodeType === 'region'" size="small" :type="envTagType(match.node.envType)">{{ envLabel(match.node.envType) }}</el-tag>
           </span>
           <small>{{ match.path.map(item => item.name).join(' / ') }}</small>
@@ -124,6 +125,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
             <span class="node-row">
               <span class="node-name" :title="data.name">{{ data.name }}</span>
               <el-tag size="small" effect="plain" type="info">{{ labels[data.nodeType as NodeType] }}</el-tag>
+              <el-tag v-if="data.nodeType === 'game' && data.marketType" size="small" type="info">{{ gameMarketLabels[data.marketType as GameMarketType] }}</el-tag>
               <el-tag v-if="data.nodeType === 'region'" size="small" :type="envTagType(data.envType)">{{ envLabel(data.envType) }}</el-tag>
             </span>
           </template>
@@ -153,6 +155,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
               <el-tag :type="selected.status === 1 ? 'success' : 'info'" effect="plain">
                 {{ selected.status === 1 ? '已启用' : '已停用' }}
               </el-tag>
+              <el-tag v-if="selected.nodeType === 'game' && selected.marketType" type="info">{{ gameMarketLabels[selected.marketType] }}</el-tag>
               <el-tag v-if="selected.nodeType === 'region'" :type="envTagType(selected.envType)">{{ envLabel(selected.envType) }}</el-tag>
             </div>
             <div class="node-meta">{{ labels[selected.nodeType] }} · ID {{ selected.id }} · Code {{ selected.code }}</div>
@@ -229,6 +232,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
             <el-descriptions-item label="业务编码">{{ selected.code }}</el-descriptions-item>
             <el-descriptions-item label="节点类型">{{ labels[selected.nodeType] }}</el-descriptions-item>
             <el-descriptions-item label="节点 ID">{{ selected.id }}</el-descriptions-item>
+            <el-descriptions-item label="运营地区" v-if="selected.nodeType === 'game'">{{ selected.marketType ? gameMarketLabels[selected.marketType] : '未设置' }}</el-descriptions-item>
             <el-descriptions-item label="大区环境" v-if="selected.nodeType === 'region'">{{ envLabel(selected.envType) }}</el-descriptions-item>
             <el-descriptions-item label="状态">{{ selected.status ? '已启用' : '已停用' }}</el-descriptions-item>
             <el-descriptions-item label="备注">{{ nodeDetail?.remark || '—' }}</el-descriptions-item>

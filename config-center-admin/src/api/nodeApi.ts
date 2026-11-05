@@ -25,7 +25,7 @@ export const nodeApi = {
     api.post<NodeRecord>('/admin/nodes', form),
 
   // 更新操作只提交可修改字段，不改变节点所属层级和编码。
-  updateNode: (id: number, changes: Pick<NodeForm, 'name' | 'status' | 'config' | 'remark' | 'envType'>) =>
+  updateNode: (id: number, changes: Pick<NodeForm, 'name' | 'status' | 'config' | 'remark' | 'envType' | 'marketType'>) =>
     api.put<NodeRecord>('/admin/nodes/' + id, changes),
 
   deleteNode: (id: number) =>

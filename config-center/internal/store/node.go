@@ -10,7 +10,7 @@ import (
 )
 
 // 节点查询统一列顺序，必须与 scanNode 的扫描字段严格保持一致。
-const nodeColumns = "id,node_type,game_id,region_id,env_type,code,name,status,config,remark,created_at,updated_at"
+const nodeColumns = "id,node_type,game_id,region_id,env_type,market_type,code,name,status,config,remark,created_at,updated_at"
 
 // queryer 让普通连接与事务共用同一套节点读取实现。
 type queryer interface {
@@ -30,15 +30,16 @@ func (s *Store) Ready(ctx context.Context) error { return s.DB.PingContext(ctx) 
 func scanNode(scanner interface{ Scan(...any) error }) (Node, error) {
 	var n Node
 	var game, region sql.NullInt64
-	var remark, envType sql.NullString
+	var remark, envType, marketType sql.NullString
 	var created, updated time.Time
-	err := scanner.Scan(&n.ID, &n.NodeType, &game, &region, &envType, &n.Code, &n.Name, &n.Status, &n.Config, &remark, &created, &updated)
+	err := scanner.Scan(&n.ID, &n.NodeType, &game, &region, &envType, &marketType, &n.Code, &n.Name, &n.Status, &n.Config, &remark, &created, &updated)
 	if err != nil {
 		return Node{}, err
 	}
 	if game.Valid { n.GameID = &game.Int64 }
 	if region.Valid { n.RegionID = &region.Int64 }
 	if envType.Valid { n.EnvType = &envType.String }
+	if marketType.Valid { n.MarketType = &marketType.String }
 	if remark.Valid { n.Remark = &remark.String }
 	n.CreatedAt, n.UpdatedAt = LocalDateTime(created), LocalDateTime(updated)
 	n.ParentID = n.Parent()
