@@ -23,3 +23,21 @@ func TestVerifyV1(t *testing.T){
     cb.OrderNo="different"
     if err:=VerifyV1(h,cb,secret);err==nil{t.Fatal("changed order accepted")}
 }
+
+
+func TestVerifyV1PreservesEmptyFieldSigning(t *testing.T) {
+    callback := model.PaymentCallback{OrderNo: "", GameOrderID: "g100"}
+    nonce := "0123456789abcdef"
+    timestamp := fmt.Sprint(time.Now().Unix())
+    secret := "test_secret"
+    values := []string{callback.OrderNo, callback.GameOrderID, secret, nonce, timestamp}
+    sort.Strings(values)
+    sum := sha1.Sum([]byte(strings.Join(values, "_")))
+    headers := http.Header{}
+    headers.Set("x-timestamp", timestamp)
+    headers.Set("x-nonce", nonce)
+    headers.Set("x-signature", hex.EncodeToString(sum[:]))
+    if err := VerifyV1(headers, callback, secret); err != nil {
+        t.Fatalf("V1 empty-field historical signature changed: %v", err)
+    }
+}
