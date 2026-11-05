@@ -21,7 +21,8 @@ import (
 	"github.com/hctty27/middle-platform/config-center-access/internal/store"
 	"github.com/hctty27/middle-platform/config-center-access/internal/syncer"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/shared/logging"
+	"github.com/hctty27/middle-platform/shared/bootstrap"
+    "github.com/hctty27/middle-platform/shared/logging"
 )
 
 // main 统一处理启动与运行失败。
@@ -78,7 +79,7 @@ func run(configPath string) error {
 	ready.Store(true)
 	server := &http.Server{
 		Addr: cfg.Address,
-		Handler: logging.HTTP(cfg.Log, withDrainReadiness(api.Router(replica, trigger, cfg.WebhookSecret), &ready)),
+		Handler: logging.HTTP(cfg.Log, bootstrap.ReadinessMiddleware(api.Router(replica, trigger, cfg.WebhookSecret), &ready)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)
@@ -120,15 +121,3 @@ func run(configPath string) error {
 	return nil
 }
 
-func withDrainReadiness(next http.Handler, ready *atomic.Bool) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health/ready" && !ready.Load() {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-store")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("{\"status\":\"DOWN\"}\n"))
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}

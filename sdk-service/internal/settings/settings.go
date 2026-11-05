@@ -2,16 +2,13 @@
 package settings
 
 import (
-    "bytes"
     "errors"
-    "fmt"
-    "io"
     "os"
     "strings"
     "time"
 
-    "github.com/hctty27/middle-platform/shared/logging"
-    "gopkg.in/yaml.v3"
+    "github.com/hctty27/middle-platform/shared/bootstrap"
+ "github.com/hctty27/middle-platform/shared/logging"
 )
 
 type Database struct {
@@ -39,15 +36,7 @@ func Load(path string) (Config, error) {
     cfg.Game.Timeout = "5s"
     cfg.Log = logging.Default()
     if path == "" { path = "configs/config.yaml" }
-    raw, err := os.ReadFile(path)
-    if err != nil { return Config{}, fmt.Errorf("读取配置文件失败: %w", err) }
-    decoder := yaml.NewDecoder(bytes.NewReader(raw))
-    decoder.KnownFields(true)
-    if err := decoder.Decode(&cfg); err != nil { return Config{}, fmt.Errorf("解析配置文件失败: %w", err) }
-    var extra any
-    if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-        return Config{}, errors.New("配置文件必须只有一份 YAML 文档")
-    }
+    if err:=bootstrap.ReadYAML(path,&cfg);err!=nil{return Config{},err}
     if value, ok := os.LookupEnv("SDK_SERVICE_DB_DSN"); ok { cfg.Database.DSN = value }
     if value, ok := os.LookupEnv("SDK_SERVICE_ADDR"); ok { cfg.Server.Address = value }
     if err := cfg.Log.ApplyEnv(); err != nil { return Config{}, err }

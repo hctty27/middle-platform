@@ -14,7 +14,8 @@ import (
 	"syscall"
 	"time"
 	"github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/shared/logging"
+	"github.com/hctty27/middle-platform/shared/bootstrap"
+    "github.com/hctty27/middle-platform/shared/logging"
 	"github.com/hctty27/middle-platform/shared/signature"
 	"github.com/hctty27/middle-platform/config-center/internal/api"
 	"github.com/hctty27/middle-platform/config-center/internal/schema"
@@ -69,7 +70,7 @@ func Run(configPath string) error {
 	var handler http.Handler = signature.AdminMiddleware(api.RouterWithWrites(repository, repository), "/api/config/admin", cfg.AdminSecret, cfg.AdminAuthEnabled)
 	var ready atomic.Bool
 	ready.Store(true)
-	handler = withDrainReadiness(handler, &ready)
+	handler = bootstrap.ReadinessMiddleware(handler, &ready)
 	server := &http.Server{
 		Addr:              address,
 		Handler:           logging.HTTP(cfg.Log, handler),
@@ -131,15 +132,3 @@ func Run(configPath string) error {
 	return nil
 }
 
-func withDrainReadiness(next http.Handler, ready *atomic.Bool) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health/ready" && !ready.Load() {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-store")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("{\"status\":\"DOWN\"}\n"))
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}

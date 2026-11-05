@@ -13,7 +13,6 @@ import (
     "syscall"
     "time"
 
-    "github.com/go-sql-driver/mysql"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/usercheck"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolequery"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolecontrol"
@@ -23,6 +22,7 @@ import (
     "github.com/hctty27/middle-platform/sdk-service/internal/service"
     "github.com/hctty27/middle-platform/sdk-service/internal/settings"
     "github.com/hctty27/middle-platform/sdk-service/internal/store"
+    "github.com/hctty27/middle-platform/shared/bootstrap"
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
@@ -35,23 +35,11 @@ func main() {
     }
 }
 
-func openDB(c settings.Database) (*sql.DB, error) {
-    dsn, err := mysql.ParseDSN(c.DSN)
-    if err != nil { return nil, fmt.Errorf("数据库 DSN 不合法: %w", err) }
-    dsn.ParseTime = true
-    dsn.Loc = time.UTC
-    dsn.Timeout = 5*time.Second
-    dsn.ReadTimeout = 10*time.Second
-    dsn.WriteTimeout = 10*time.Second
-    if dsn.Params == nil { dsn.Params = make(map[string]string) }
-    dsn.Params["time_zone"] = "'+00:00'"
-    db, err := sql.Open("mysql", dsn.FormatDSN())
-    if err != nil { return nil, err }
-    db.SetMaxOpenConns(c.MaxOpenConns)
-    db.SetMaxIdleConns(c.MaxIdleConns)
-    lifetime, _ := time.ParseDuration(c.ConnMaxLifetime)
-    db.SetConnMaxLifetime(lifetime)
-    return db, nil
+func openDB(cfg settings.Database) (*sql.DB,error){
+ return bootstrap.OpenMySQL(bootstrap.MySQLConfig{
+  DSN:cfg.DSN,MaxOpenConns:cfg.MaxOpenConns,
+  MaxIdleConns:cfg.MaxIdleConns,ConnMaxLifetime:cfg.ConnMaxLifetime,
+ })
 }
 
 func run(path string) error {

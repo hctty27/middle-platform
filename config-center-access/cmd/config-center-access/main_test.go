@@ -6,12 +6,14 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+    "github.com/hctty27/middle-platform/shared/bootstrap"
 )
 
 func TestWithDrainReadiness(t *testing.T) {
 	var ready atomic.Bool
 	ready.Store(true)
-	handler := withDrainReadiness(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := bootstrap.ReadinessMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}), &ready)
 
