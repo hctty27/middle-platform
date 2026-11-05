@@ -58,8 +58,8 @@ WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", 
 
     # 演练现有节点 JSON 数据复制与渠道包保留，旧字段清理由管理员另行执行。
     mysql("""INSERT INTO manual_fresh.config_node
-      (id,node_type,code,name,status,config,created_at,updated_at)
-      VALUES(801,'game','sdk_demo','SDK Demo',1,
+      (id,node_type,market_type,code,name,status,config,created_at,updated_at)
+      VALUES(801,'game','domestic','sdk_demo','SDK Demo',1,
       '{"gameSecret":"example-key","serviceAdapters":{"user_check":"standard"},"custom":"keep"}',
       UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
     mysql("RENAME TABLE manual_fresh.sdk_channel_app TO manual_fresh.config_channel_app")
@@ -72,6 +72,19 @@ WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", 
     assert_sql("""SELECT JSON_UNQUOTE(JSON_EXTRACT(config,'$.custom'))
       FROM manual_fresh.config_node WHERE id=801""", "keep")
 
+    # 运营地区新字段采用手动 SQL 升级；验证旧游戏自动回填国内且重复执行被拒绝。
+    mysql("CREATE DATABASE manual_market_upgrade CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
+    mysql(database="manual_market_upgrade", script=init)
+    mysql("""ALTER TABLE manual_market_upgrade.config_node DROP CHECK chk_config_node_market_type;
+ALTER TABLE manual_market_upgrade.config_node DROP COLUMN market_type;
+INSERT INTO manual_market_upgrade.config_node
+(id,node_type,code,name,status,config,created_at,updated_at)
+VALUES(901,'game','legacy','Legacy',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+    market_migration = source("config-center/db/sql/add_game_market_type.sql")
+    mysql(database="manual_market_upgrade", script=market_migration)
+    assert_sql("SELECT market_type FROM manual_market_upgrade.config_node WHERE id=901", "domestic")
+    mysql(database="manual_market_upgrade", script=market_migration, ok=False)
+
     # 模拟从历史 V11 权威库升级：保留旧版本表与真实业务节点，手动添加订单表。
     mysql(database="manual_existing", script=init)
     mysql("""DROP TABLE manual_existing.game_order;
@@ -79,8 +92,8 @@ CREATE TABLE manual_existing.config_schema_migrations(
 id TINYINT PRIMARY KEY,version INT NOT NULL,dirty BOOLEAN NOT NULL,updated_at DATETIME(6) NOT NULL);
 INSERT INTO manual_existing.config_schema_migrations VALUES(1,11,0,UTC_TIMESTAMP(6));
 INSERT INTO manual_existing.config_node
-(id,node_type,code,name,status,config,created_at,updated_at)
-VALUES(101,'game','demo','Demo',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+(id,node_type,market_type,code,name,status,config,created_at,updated_at)
+VALUES(101,'game','domestic','demo','Demo',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
     mysql(database="manual_existing", script=order)
     assert_sql("SELECT COUNT(*) FROM manual_existing.config_node WHERE id=101", "1")
     assert_sql("SELECT version,dirty FROM manual_existing.config_schema_migrations WHERE id=1", "11\t0")

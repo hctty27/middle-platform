@@ -7,7 +7,7 @@ import { ElMessage } from 'element-plus'
 import { nodeApi } from './api/nodeApi'
 import { apiErrorMessage } from './api/http'
 import { currentGameId, focusNodeId, focusNodeRequest } from './app/gameContext'
-import type { NodeType, NodeMatch, NodeRecord, RegionEnvType } from './features/nodes/types'
+import type { NodeType, NodeMatch, NodeRecord, RegionEnvType, GameMarketType } from './features/nodes/types'
 import { regionEnvLabels, gameMarketLabels } from './features/nodes/types'
 
 function envLabel(env: RegionEnvType | null | undefined) {
@@ -125,7 +125,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
             <span class="node-row">
               <span class="node-name" :title="data.name">{{ data.name }}</span>
               <el-tag size="small" effect="plain" type="info">{{ labels[data.nodeType as NodeType] }}</el-tag>
-              <el-tag v-if="data.nodeType === 'game' && data.marketType" size="small" type="info">{{ gameMarketLabels[data.marketType] }}</el-tag>
+              <el-tag v-if="data.nodeType === 'game' && data.marketType" size="small" type="info">{{ gameMarketLabels[data.marketType as GameMarketType] }}</el-tag>
               <el-tag v-if="data.nodeType === 'region'" size="small" :type="envTagType(data.envType)">{{ envLabel(data.envType) }}</el-tag>
             </span>
           </template>
