@@ -1,6 +1,6 @@
 # Middle Platform · 研发中台
 
-基于 **Go + MySQL 8.0+ + Vue 3** 的游戏研发中台。提供配置管理、Webhook 配置同步、SDK 配置查询、充值订单与发货通知、事件上报、平台主动用户核验。
+基于 **Go + MySQL 8.0+ + Vue 3** 的游戏研发中台。提供配置管理与同步、SDK 配置查询、订单与发货，以及核验、查询、封解禁、事件上报和订阅消息。
 
 ## 工程组成
 
@@ -8,8 +8,8 @@
 | --- | --- |
 | `config-center/` | 权威配置中心：游戏、大区、区服组、渠道应用、订阅者、服务开关 |
 | `config-center-access/` | 可选接入端：三级节点副本、Webhook 回调与快照/增量同步 |
-| `sdk-core/` | 配置查询、订单登记、支付回调、异步发货、渠道事件上报 |
-| `sdk-service/` | 平台主动调用游戏：目前实现用户核验，默认 `standard` 适配器 |
+| `sdk-core/` | SDK 配置与服务管理、订单登记、支付回调、异步发货 |
+| `sdk-service/` | 平台主动核验/查询/封解禁、游戏事件上报与订阅消息转发 |
 | `config-center-admin/` | Vue 3 管理端 |
 | `shared/` | 结构化日志和签名公共库 |
 | `scripts/` | 打包及 CI 测试辅助脚本 |
@@ -29,9 +29,9 @@
 
 ## 文档导航
 
-**对外接口**：[统一接口文档](docs/index.html)（游戏服务端 / 平台服务端 / 第三方配置同步）
+**接口协议（唯一权威文档）**：[统一接口文档](docs/index.html)（游戏 / 平台 / 配置同步 / 管理接口 / 签名规则）
 
-**内部开发**：[HTTP API 索引](docs/api.md) · [架构](docs/architecture.md) · [数据库与手动 SQL](docs/database.md) · [开发与 CI](docs/development.md) · [打包与生产运维](docs/production.md)
+**内部开发**：[架构与内部路由](docs/architecture.md) · [数据库与手动 SQL](docs/database.md) · [开发与 CI](docs/development.md) · [打包与生产运维](docs/production.md)
 
 **模块**：[配置中心](config-center/README.md) · [配置接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md) · [SDK Service](sdk-service/README.md)
 
@@ -40,6 +40,6 @@
 ## 安全与部署边界
 
 - 数据库 DDL 由管理员审核后手动执行，服务启动不建表、不自动迁移。
-- 管理写接口始终注册，`/api/config/admin/**` 和可能包含密钥的原始配置/同步接口必须通过内网或受保护的网关访问。
+- `/api/config/admin/**`、`/api/core/admin/**` 默认启用 `adminAuth` 请求签名；生产仍须使用 TLS 和受保护的管理网关，不能只依赖签名或隐藏页面。可能包含密钥的原始配置/同步接口也必须限制访问。
 - Go 业务路由不包含 `/sdk` 前缀，公网如使用 `/sdk/` 应由 Nginx 负责前缀转换。
 - 订单与发货通知必须幂等；事件上报当前不落库、不自动重试。对外请求与签名规范统一在 `docs/index.html` 中维护。
