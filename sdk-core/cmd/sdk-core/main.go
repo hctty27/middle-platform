@@ -94,7 +94,7 @@ func run(configPath string)error{
     ready.Store(true)
     server:=&http.Server{
         Addr:cfg.Server.Address,
-        Handler:logging.HTTP(cfg.Log,withDrainReadiness(signature.AdminMiddleware(api.RouterWithAdmin(service.NewConfigService(repository,resolver),db,orders), "/api/core/admin", cfg.AdminAuth.Secret),&ready)),
+        Handler:logging.HTTP(cfg.Log,withDrainReadiness(signature.AdminMiddleware(api.RouterWithAdmin(service.NewConfigService(repository,resolver),db,orders), "/api/core/admin", cfg.AdminAuth.Secret, cfg.AdminAuth.Enabled == nil || *cfg.AdminAuth.Enabled),&ready)),
         ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,
         WriteTimeout:15*time.Second,IdleTimeout:60*time.Second,
     }
