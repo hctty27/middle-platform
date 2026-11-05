@@ -84,7 +84,7 @@ Invoke-RestMethod "http://127.0.0.1:8082/api/core/config/prod/your-appid"
 
 `your-appid` 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口映射见 [API 文档](api.md) 与 [SDK Core 说明](../sdk-core/README.md)。
 
-## 4. SDK Service（用户核验）
+## 4. SDK Service（平台查询与游戏消息转发）
 
 进入 `sdk-service` 目录，复制配置文件，`database.dsn` 指向 `config_center`（只读账号）：
 
@@ -94,7 +94,9 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-service -config configs/config-dev.yaml
 ```
 
-首次部署应确认功能开关表已建立并包含 `user_check`；游戏 `gameSecret`、渠道包 `appSecret`、大区 `userCheckUrl` 已配置，且全局与当前渠道环境的用户核验开关均开启。**默认 `standard` 适配器无需配置**。本地健康检查：`http://127.0.0.1:8221/health/ready`。
+首次部署应确认功能开关表已建立并包含 `user_check`、`event_report`、`subscribe_message` 等已实现服务；已有库缺少订阅消息服务时先手动执行 `config-center/db/sql/add_sdk_subscribe_message.sql`。游戏 `gameSecret`、渠道包 `appSecret`、大区 `userCheckUrl` 已配置，且相应全局与渠道环境的功能开关已开启。**默认 `standard` 适配器无需配置**。本地健康检查：`http://127.0.0.1:8221/health/ready`。
+
+游戏上报事件使用 `POST /api/service/events/{env}`，订阅消息使用 `POST /api/service/subscribe/{env}`，AppID 放 `x-app-id`。平台两个目标地址由 `sdk-service/configs/config-dev.yaml` 的 `platform.eventReportURL` 与 `platform.subscribeMessageURL` 指定，未启用相应业务时可留空。旧 Core 事件路由已移除；不要继续请求 `/api/core/events/{env}`。
 
 平台和游戏联调报文分别见 [平台接口 HTML](index.html#p-start)、[游戏接口 HTML](index.html#g-start)。
 
