@@ -16,11 +16,12 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 
 ## 同步协议
 
-- `POST /internal/config/callback` 使用 `X-Config-Timestamp`、`X-Config-Signature` 验证 HMAC-SHA256 签名，有效回调返回 HTTP 202，后台异步触发同步。
+- `POST /internal/config/callback` 使用 `X-Timestamp`、`X-Nonce`、`X-Signature` 验证共享 SHA-1 排序签名（订阅者密钥、timestamp、nonce、epoch、revision），成功返回 HTTP 202。接入端在单进程内拒绝重复 nonce。
 - `GET /api/access/nodes` 与 `GET /api/access/revision` 查询本地副本。
 - 首次启动、epoch 变化或 revision 断档时执行完整快照；常规更新按日志增量获取节点 ID 并批量拉取。
 - 节点和游标在同一事务内写入；周期性 revision 校对补偿丢失通知。
 - 订阅者在配置中心注册，`secret` 必须和本进程一致；内部回调不可直接开放公网。
+- 旧版 HMAC-SHA256 Webhook 已移除，配置中心和第三方接入端必须同步升级；多实例场景需要共享 nonce 去重。
 
 ```bash
 go test -race ./...
