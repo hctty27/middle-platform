@@ -193,7 +193,7 @@ tr:last-child td{border-bottom:0}
 <a class="nav-link" data-group="场景协议" data-keywords="管理签名 admin-v1 管理接口 adminAuth SHA-1 Query Body 路径" href="#sig-admin">管理签名</a>
 <a class="nav-link" data-group="场景协议" data-keywords="配置同步签名 Webhook HMAC-SHA256 revision epoch" href="#sig-sync">配置同步签名</a>
 <button class="side-title" type="button" data-group="开发参考" aria-expanded="true"><span>开发参考</span><span class="group-chevron" aria-hidden="true">⌄</span></button>
-<a class="nav-link" data-group="开发参考" data-keywords="Java 17 Go 签名 实现 示例 调试 校验" href="#sig-examples">Java / Go 示例</a>
+<a class="nav-link" data-group="开发参考" data-keywords="Java 17 Go Node.js JavaScript crypto 签名 实现 示例 调试 校验" href="#sig-examples">Java / Go / Node.js 示例</a>
 </nav><nav class="doc-nav" data-doc="admin" aria-label="管理接口目录" hidden><div class="admin-switch" role="tablist" aria-label="管理接口分类">
 <button class="admin-tab" id="admin-tab-config" type="button" role="tab" data-admin="config" aria-controls="admin-config-content" aria-selected="true" tabindex="0">配置中心</button>
 <button class="admin-tab" id="admin-tab-sdk" type="button" role="tab" data-admin="sdk" aria-controls="admin-sdk-content" aria-selected="false" tabindex="-1">SDK 管理</button>
@@ -649,8 +649,8 @@ signature = &quot;sha256=&quot; + lower_hex(HMAC_SHA256(secret, UTF8(plain)))</c
 <p>上面的测试向量使用演示密钥 <code>demo-webhook-secret</code>，签名前字符串为 <code>1793865600.550e8400-e29b-41d4-a716-446655440000.12</code>。</p>
 <ul class="points"><li>时间戳使用请求 Header 的原始 Unix 秒字符串；允许前后 5 分钟。</li><li>使用恒定时间方式对比签名，并校验 <code>epoch/revision</code> 的数据有效性。</li><li>Webhook 可能重复或乱序，回调成功后仍需主动拉取并检查配置版本。</li></ul>
 <p>对应接口流程见 <a href="#s-webhook">接收 Webhook 回调</a>。</p></section>
-<section id="sig-examples" class="section"><div class="section-title"><h2>Java / Go 签名示例</h2></div><div class="summary">复用通用计算函数，但每个业务接口仍自行选择参与签名的值。</div>
-<p>Java 17 示例分别见 <a href="#sig-game">游戏签名 · SdkSignature</a> 与 <a href="#sig-admin">管理签名 · AdminSigner</a>。下面提供 Go 的等价计算示例，适合服务端接入或单元测试。</p>
+<section id="sig-examples" class="section"><div class="section-title"><h2>Java / Go / Node.js 签名示例</h2></div><div class="summary">复用通用计算函数，但每个业务接口仍自行选择参与签名的值。</div>
+<p>Java 17 示例分别见 <a href="#sig-game">游戏签名 · SdkSignature</a> 与 <a href="#sig-admin">管理签名 · AdminSigner</a>。下面提供 Go、Node.js 的等价计算示例，适合服务端接入或单元测试。</p>
 <div class="codebox"><div class="codehead"><span>Go · SHA-1 排序签名、admin-v1 与 HMAC-SHA256</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>package signature
 
 import (
@@ -692,9 +692,95 @@ func SignConfigWebhook(secret, timestamp, epoch, revision string) string {
     _, _ = mac.Write([]byte(message))
     return &quot;sha256=&quot; + hex.EncodeToString(mac.Sum(nil))
 }</code></pre></div>
+<h3>Node.js 18+ 示例（无需第三方依赖）</h3>
+<p>使用 Node.js 内置 <code>node:crypto</code>，保存为 <code>signature-example.cjs</code> 后运行 <code>node signature-example.cjs</code>。包括游戏常规签名、支付平台 V1（保留空字符串）、管理 <code>admin-v1</code> 及配置同步 Webhook；用 <code>assert</code> 校验测试向量。</p>
+<div class="codebox"><div class="codehead"><span>Node.js · SHA-1 / admin-v1 / HMAC-SHA256</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>const assert = require('node:assert/strict');
+const { createHash, createHmac, randomBytes } = require('node:crypto');
+
+function signValues(values, keepEmpty = false) {
+  const items = values
+    .filter((value) =&gt; value !== null &amp;&amp; value !== undefined)
+    .map(String)
+    .filter((value) =&gt; keepEmpty || value !== '');
+  items.sort((a, b) =&gt; Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  return createHash('sha1').update(items.join('_'), 'utf8').digest('hex');
+}
+
+function signGame(secret, appId, timestamp, nonce, bodyValues = []) {
+  return signValues([secret, appId, timestamp, nonce, ...bodyValues]);
+}
+
+function signPaymentV1(appSecret, orderNo, gameOrderId, timestamp, nonce) {
+  return signValues([appSecret, orderNo, gameOrderId, nonce, timestamp], true);
+}
+
+function goQueryEscape(value) {
+  return encodeURIComponent(value)
+    .replace(/[!'()*]/g, (char) =&gt; '%' + char.charCodeAt(0).toString(16).toUpperCase())
+    .replace(/%20/g, '+');
+}
+
+function canonicalQuery(params) {
+  const groups = new Map();
+  for (const [key, value] of params) {
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(value);
+  }
+  const keys = [...groups.keys()].sort((a, b) =&gt;
+    Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  return keys.flatMap((key) =&gt; groups.get(key).map((value) =&gt;
+    goQueryEscape(key) + '=' + goQueryEscape(value))).join('&amp;');
+}
+
+function signAdmin(secret, method, path, query, body, timestamp, nonce) {
+  const bodyBytes = Buffer.isBuffer(body) ? body : Buffer.from(body ?? '', 'utf8');
+  const bodyHash = createHash('sha256').update(bodyBytes).digest('hex');
+  return signValues([
+    'admin-v1', secret, 'method:' + method.toUpperCase(), 'path:' + path,
+    'query:' + query, 'body:' + bodyHash,
+    'timestamp:' + timestamp, 'nonce:' + nonce
+  ]);
+}
+
+function signConfigWebhook(secret, timestamp, epoch, revision) {
+  const plain = timestamp + '.' + epoch + '.' + revision;
+  return 'sha256=' + createHmac('sha256', secret).update(plain, 'utf8').digest('hex');
+}
+
+const secret = '0123456789abcdef0123456789abcdef';
+const fixedTimestamp = '1793865600';
+const fixedNonce = '0123456789abcdef';
+assert.equal(
+  signAdmin(secret, 'GET', '/api/core/admin/services', '', Buffer.alloc(0), fixedTimestamp, fixedNonce),
+  'e3d1658547baa2091827dd1700d8c74c3af8f679'
+);
+assert.equal(
+  signConfigWebhook('demo-webhook-secret', fixedTimestamp, '550e8400-e29b-41d4-a716-446655440000', 12),
+  'sha256=28bb6dfea35253f986210496819b0ce5b110ed60ebecf440f1e128fa866bf36b'
+);
+assert.equal(
+  signGame('测试-密钥!', '110006', '1793700000', fixedNonce, ['G100', '600']),
+  'a8c30a586539b1d9cd7c5429421e3e88b6a02f6e'
+);
+
+const timestamp = String(Math.floor(Date.now() / 1000));
+const nonce = randomBytes(8).toString('hex');
+const path = '/api/core/admin/services/1';
+const query = canonicalQuery(new URLSearchParams('env=test'));
+const body = Buffer.from(JSON.stringify({ enabled: true }), 'utf8');
+const headers = {
+  'Content-Type': 'application/json',
+  'X-Timestamp': timestamp,
+  'X-Nonce': nonce,
+  'X-Signature': signAdmin(secret, 'PUT', path, query, body, timestamp, nonce)
+};
+console.log('测试向量通过；请求头:', headers);
+// 调用时发送同一份 body 字节：
+// await fetch(baseUrl + path + '?' + query, { method: 'PUT', headers, body });</code></pre></div>
+<div class="notice info"><strong>Node.js 注意：</strong><code>canonicalQuery()</code> 兼容 Go <code>url.Values.Encode()</code>：对查询键排序、保留同键值顺序，空格编码为 <code>+</code>。签名使用的 <code>path</code> 必须是 Go 服务实际收到的转义路径，不能带已被 Nginx 去除的 <code>/sdk</code> 前缀。<code>body</code> 必须与 HTTP 实际请求字节完全相同。</div>
 <h3>联调核对顺序</h3>
 <ul class="points"><li>确认调用方向以及密钥来源（<code>gameSecret</code>、<code>appSecret</code>、<code>adminAuth.secret</code> 或订阅者 Secret）。</li><li>按接口收集字段，先打印脱敏后的待签名字段和最终拼接字符串，再对比摘要。</li><li>检查空字符串与 null、数字与布尔值、嵌套 JSON 紧凑编码、Query 转义规则。</li><li>确认 Header 的时间戳单位、nonce 长度及大小写，HTTP Body 实际字节与签名时一致。</li><li>签名通过不代表业务成功；还需校验权限、订单归属、幂等与平台返回值。</li></ul>
-<div class="notice info">Go 示例中的 <code>SignValues</code> 会过滤空字符串；平台支付回调 V1 必须使用<strong>不过滤空字符串</strong>的变体。生产已有共享实现请直接复用。</div></section>
+<div class="notice info">Go 示例中的 <code>SignValues</code> 会过滤空字符串；平台支付回调 V1 必须使用<strong>不过滤空字符串</strong>的变体。Node.js 示例的 <code>signPaymentV1</code> 已按此特例处理。生产已有共享实现请直接复用。</div></section>
 </main></div></div>
 <button class="side-overlay" id="sideOverlay" type="button" aria-label="关闭目录" hidden></button><button class="backTop" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ 顶部</button><script>
 (function(){
