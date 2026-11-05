@@ -27,7 +27,7 @@ async function load() {
   const request = ++sequence
   loading.value = true
   try {
-    const { data } = await api.get<ServiceEntry[]>(endpoint.value, {
+    const { data } = await sdkApi.get<ServiceEntry[]>(endpoint.value, {
       params: { env: env.value }
     })
     if (request !== sequence) return
