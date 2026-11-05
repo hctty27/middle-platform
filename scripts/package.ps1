@@ -152,6 +152,8 @@ try {
     New-Item -ItemType Directory -Force -Path $authorityDir, $accessDir | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/initialize.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_game_order.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/migrate_sdk_node_config.sql') -Destination $authorityDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/cleanup_legacy_sdk_fields.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_services.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_user_check.sql') -Destination $authorityDir
     Copy-Item -LiteralPath (Join-Path $repoRoot 'config-center/db/sql/add_sdk_role_query.sql') -Destination $authorityDir
