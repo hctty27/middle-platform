@@ -11,6 +11,11 @@ database:
 game:
   timeout: "5s"
 
+# 游戏上报至平台的地址，未开启相应功能时可留空。
+platform:
+  eventReportURL: ""
+  subscribeMessageURL: ""
+
 log:
   level: info
   format: json

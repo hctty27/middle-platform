@@ -67,6 +67,18 @@ func Router(checker UserChecker, db Pinger, roleQueriers ...RoleQuerier) http.Ha
 }
 
 func RouterWithServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier, controls ...RoleController) http.Handler {
+    var control RoleController
+    if len(controls) > 0 { control = controls[0] }
+    return routerServices(checker, db, role, server, control, nil, nil)
+}
+
+func RouterWithPublishers(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier,
+    control RoleController, events EventReporter, subscriptions SubscribeSender) http.Handler {
+    return routerServices(checker, db, role, server, control, events, subscriptions)
+}
+
+func routerServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier,
+    control RoleController, events EventReporter, subscriptions SubscribeSender) http.Handler {
     mux := http.NewServeMux()
     if role != nil {
         mux.HandleFunc("POST /api/service/role/query/{env}", roleQueryHandler(role))
@@ -74,8 +86,18 @@ func RouterWithServices(checker UserChecker, db Pinger, role RoleQuerier, server
     if server != nil {
         mux.HandleFunc("POST /api/service/server/query/{env}", serverQueryHandler(server))
     }
-    if len(controls) > 0 && controls[0] != nil {
-        mux.HandleFunc("POST /api/service/role/control/{env}", roleControlHandler(controls[0]))
+    if control != nil {
+        mux.HandleFunc("POST /api/service/role/control/{env}", roleControlHandler(control))
+    }
+    if events != nil {
+        mux.HandleFunc("POST /api/service/events/{env}", func(w http.ResponseWriter, r *http.Request) {
+            serveOutbound(w, r, "event_report", events.ReportEvent)
+        })
+    }
+    if subscriptions != nil {
+        mux.HandleFunc("POST /api/service/subscribe/{env}", func(w http.ResponseWriter, r *http.Request) {
+            serveOutbound(w, r, "subscribe_message", subscriptions.SendSubscribe)
+        })
     }
     mux.HandleFunc("POST /api/service/user/check/{env}", func(w http.ResponseWriter, r *http.Request) {
         env := r.PathValue("env")
