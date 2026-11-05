@@ -18,7 +18,7 @@ const savingId = ref<number | null>(null)
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get<SDKService[]>('/admin/services')
+    const { data } = await sdkApi.get<SDKService[]>('/admin/services')
     items.value = data
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '加载服务目录失败'))
