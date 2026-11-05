@@ -123,7 +123,7 @@ x-signature: <40 位小写 SHA-1>
 | GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查看渠道包指定环境的服务配置 |
 | PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包指定环境的服务配置 |
 
-目前实现了 `event_report`、`user_check`、`role_query`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
+目前实现了 `event_report`、`user_check`、`role_query`、`server_query`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
 
 ## 6. SDK Service 用户核验
 
@@ -139,7 +139,14 @@ x-signature: <40 位小写 SHA-1>
 成功返回 `{"code":0,"message":"ok","data":[...]}`，无角色返回空数组。
 该服务要求全局和渠道环境开关同时开启，签名使用 Header 四项加 Body 顶层非空值。
 
-## 8. 健康检查与响应约定
+## 8. SDK Service 区服查询
+
+`POST /api/service/server/query/{env}`，AppID 来自 `x-app-id`，Body 支持 `original_server_id`、`current_server_id`、`page`、`page_size`、`zonekey`。其中 `page` 必填且从 1 开始，`page_size` 默认 1000、最大 1000；数字字段必须为 JSON 整数。
+游戏区服地址配置在大区 `serverQueryUrl`；未配置 `serviceAdapters.server_query` 时使用标准适配器。
+成功响应 `{"code":0,"message":"ok","data":{"total":0,"list":[]}}`；要求全局与渠道环境的 `server_query` 开关均启用。
+签名规则为 Header 四项与 Body 顶层所有非空值，数值转换为字符串后排序计算 SHA-1；默认 `page_size` 若平台未提交，不参与平台入站签名，但转发游戏时显式携带并重新签名。
+
+## 9. 健康检查与响应约定
 
 四个服务均有：
 
