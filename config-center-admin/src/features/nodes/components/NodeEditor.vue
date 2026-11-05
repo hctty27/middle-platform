@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 编辑抽屉保持展示层职责：表单校验、保存和关闭决策由父级工作区处理。
 import type { NodeForm, NodeType } from '../types'
-import BusinessConfigEditor from './BusinessConfigEditor.vue'
+import JsonConfigEditor from '../../../components/JsonConfigEditor.vue'
 import { regionEnvLabels } from '../types'
 
 // envTypeLocked 用于限制已有大区修改环境分类，防止运行环境语义变化。
@@ -47,8 +47,9 @@ const emit = defineEmits<{
             </el-radio-group>
           </el-form-item>
           <div class="section-heading"><h3>业务配置</h3></div>
-          <BusinessConfigEditor v-model="form.config" :node-type="form.nodeType" />
-          <div class="muted form-tip">配置直接保存到本节点 config JSON；渠道包的共享配置请在「渠道应用」页面修改。</div>
+          <p class="muted form-tip">仅存储基础节点的自定义配置；SDK 密钥、适配器及回调地址请在「SDK 配置」中编辑。</p>
+          <JsonConfigEditor v-model="form.config" :rows="8" />
+          <div class="muted form-tip">此处不保存 SDK 专属配置。</div>
           <el-form-item label="备注">
             <el-input v-model="form.remark" type="textarea" maxlength="500" show-word-limit />
           </el-form-item>
