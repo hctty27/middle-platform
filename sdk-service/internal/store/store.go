@@ -20,11 +20,12 @@ func New(db *sql.DB) *Store { return &Store{db: db} }
 // 单次查询通过 AppID 与环境定位游戏、配置和渠道服务开关。
 // 对不正确的环境绑定直接返回无记录，不能通过跨环境回退查询配置。
 const routeQuery = `
-SELECT a.config, g.code, g.config, r.config,
+SELECT a.config, g.code, COALESCE(gs.config, JSON_OBJECT()), COALESCE(rs.config, JSON_OBJECT()),
     COALESCE(sv.enabled, 0), COALESCE(ch.enabled, 0)
-FROM config_channel_app a
+FROM sdk_channel_app a
 JOIN config_node g ON g.id=a.game_id
     AND g.node_type='game' AND g.status=1
+LEFT JOIN sdk_node_config gs ON gs.node_id=g.id
 JOIN config_node sg ON sg.id=CASE ?
     WHEN 'prod' THEN a.prod_server_group_id
     WHEN 'test' THEN a.test_server_group_id
@@ -34,6 +35,7 @@ JOIN config_node sg ON sg.id=CASE ?
 JOIN config_node r ON r.id=sg.region_id
     AND r.node_type='region' AND r.game_id=a.game_id
     AND r.status=1 AND r.env_type=?
+LEFT JOIN sdk_node_config rs ON rs.node_id=r.id
 LEFT JOIN sdk_service sv ON sv.code=?
 LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id
     AND ch.channel_app_id=a.id AND ch.env=?
