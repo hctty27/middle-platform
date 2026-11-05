@@ -5,7 +5,7 @@
 ## 本地启动
 
 1. 创建完全空的 `config_access` 数据库。
-2. 复制 `configs/config.yaml` 为 `configs/config-dev.yaml`；填写 `database.dsn`（副本库）、`configCenter.url`（权威配置中心地址）、`webhook.secret`（签名密钥）。
+2. 将 `configs/config.yaml` 复制为完整独立的 `configs/config-dev.yaml`；填写 `database.dsn`（副本库）、`configCenter.url`（权威配置中心地址）、`webhook.secret`（签名密钥）。启动只读取指定 YAML，不继承同目录的公共配置；环境变量仍可覆盖指定字段。
 3. 在本目录执行：
 
 ```powershell

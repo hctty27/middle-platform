@@ -1,4 +1,4 @@
-# 配置中心：复制为 config-dev.yaml 或 config-prod.yaml 后填写实际配置。
+# 配置中心：完整配置模板。复制为 config-dev.yaml 或 config-prod.yaml 后独立填写；不继承 config.yaml。
 server:
   address: "127.0.0.1:8080"
 

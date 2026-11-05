@@ -10,8 +10,8 @@ func TestYAMLAndEnvironmentOverride(t *testing.T) {
  dir:=t.TempDir()
  base:=filepath.Join(dir,"config.yaml")
  dev:=filepath.Join(dir,"config-dev.yaml")
- if err:=os.WriteFile(base,[]byte("server:\n  address: ':8080'\n"),0600);err!=nil {t.Fatal(err)}
- if err:=os.WriteFile(dev,[]byte("database:\n  dsn: from-file\n"),0600);err!=nil {t.Fatal(err)}
+ if err:=os.WriteFile(base,[]byte("server:\n  address: ':9999'\n"),0600);err!=nil {t.Fatal(err)}
+ if err:=os.WriteFile(dev,[]byte("server:\n  address: ':8080'\ndatabase:\n  dsn: from-file\n"),0600);err!=nil {t.Fatal(err)}
  t.Setenv("CONFIG_DB_DSN","from-env")
  cfg,err:=LoadFile(dev)
  if err!=nil {t.Fatal(err)}
@@ -89,13 +89,15 @@ func TestAdminAuthEnabledDefaultsToTrue(t *testing.T) {
     }
 }
 
-func TestAdminAuthDevOverridesBaseConfig(t *testing.T) {
+func TestConfigFileDoesNotInheritBaseConfig(t *testing.T) {
     dir := t.TempDir()
     base := filepath.Join(dir, "config.yaml")
     dev := filepath.Join(dir, "config-dev.yaml")
-    if err := os.WriteFile(base, []byte("database:\n  dsn: test\nadminAuth:\n  enabled: true\n"), 0600); err != nil { t.Fatal(err) }
-    if err := os.WriteFile(dev, []byte("adminAuth:\n  enabled: false\n"), 0600); err != nil { t.Fatal(err) }
+    if err := os.WriteFile(base, []byte("server:\n  address: ':9999'\nadminAuth:\n  enabled: false\n"), 0600); err != nil { t.Fatal(err) }
+    if err := os.WriteFile(dev, []byte("database:\n  dsn: test\n"), 0600); err != nil { t.Fatal(err) }
     cfg, err := LoadFile(dev)
     if err != nil { t.Fatal(err) }
-    if cfg.AdminAuthEnabled { t.Fatal("development config must disable admin signing when explicitly requested") }
+    if !cfg.AdminAuthEnabled || cfg.Address != "127.0.0.1:8080" {
+        t.Fatalf("指定文件不应继承同目录的 config.yaml: %+v", cfg)
+    }
 }

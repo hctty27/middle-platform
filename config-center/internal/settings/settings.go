@@ -30,10 +30,12 @@ type configFile struct {
 // Load 兼容旧版环境变量启动方式。
 func Load() (Settings,error) { return LoadFile("") }
 
-// LoadFile 依次加载共享 YAML、指定环境 YAML，再应用环境变量覆盖。
+// LoadFile 仅加载明确指定的 YAML，然后应用环境变量覆盖；空路径保留纯环境变量模式。
 func LoadFile(path string) (Settings,error) {
  data:=configFile{Log:logging.Default()}
- if err:=bootstrap.ReadLayeredYAML(path,&data);err!=nil{return Settings{},err}
+ if path!="" {
+  if err:=bootstrap.ReadYAML(path,&data);err!=nil{return Settings{},err}
+ }
 
  cfg:=Settings{Address:"127.0.0.1:8080",DSN:data.Database.DSN,Log:data.Log,AdminSecret:data.AdminAuth.Secret,AdminAuthEnabled:data.AdminAuth.Enabled==nil||*data.AdminAuth.Enabled}
  if data.Server.Address!="" {cfg.Address=data.Server.Address}
