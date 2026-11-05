@@ -1,4 +1,4 @@
-// Package platform 负责验证平台发出的用户核验请求。
+// Package platform 验证平台主动发起的服务请求。
 package platform
 
 import (
@@ -15,12 +15,20 @@ import (
 
 var ErrUnauthorized = errors.New("平台请求签名校验失败")
 
-// 核验接口暂按平台主动请求的 Body 顶层值签名，待平台提供实测向量后锁定。
+// VerifyRequest 保留用户核验接口的调用方式。
 func VerifyRequest(r *http.Request, appID, secret, openID string, now time.Time) error {
+    if openID == "" {
+        return ErrUnauthorized
+    }
+    return VerifyFields(r, appID, secret, now, openID)
+}
+
+// VerifyFields 按平台协议将 Header 四项与 Body 顶层所有非空值参与签名。
+func VerifyFields(r *http.Request, appID, secret string, now time.Time, bodyValues ...string) error {
     ts := r.Header.Get("x-timestamp")
     nonce := r.Header.Get("x-nonce")
     signed := r.Header.Get("x-signature")
-    if appID == "" || secret == "" || openID == "" || r.Header.Get("x-app-id") != appID ||
+    if appID == "" || secret == "" || r.Header.Get("x-app-id") != appID ||
         len(nonce) != 16 || strings.ToLower(nonce) != nonce ||
         len(signed) != 40 || strings.ToLower(signed) != signed {
         return ErrUnauthorized
@@ -33,7 +41,8 @@ func VerifyRequest(r *http.Request, appID, secret, openID string, now time.Time)
         time.Unix(stamp, 0).Sub(now) > 5*time.Minute {
         return ErrUnauthorized
     }
-    expected, _ := hex.DecodeString(signature.SignValues(secret, appID, ts, nonce, openID))
+    values := append([]string{secret, appID, ts, nonce}, bodyValues...)
+    expected, _ := hex.DecodeString(signature.SignValues(values...))
     if subtle.ConstantTimeCompare(expected, signedBytes) != 1 { return ErrUnauthorized }
     return nil
 }
