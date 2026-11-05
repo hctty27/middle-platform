@@ -6,7 +6,11 @@ server:
 database:
   dsn: ""
 
-# 管理与同步接口无内建鉴权，公网入口须通过网关或内网 ACL 保护。
+# 仅管理接口使用此密钥签名；生产使用至少 32 字节随机密钥，不要提交真实密钥。
+adminAuth:
+  secret: ""
+
+# 未配置或过短时，管理接口拒绝请求；同步和业务接口不受影响。
 log:
   level: info
   format: json
