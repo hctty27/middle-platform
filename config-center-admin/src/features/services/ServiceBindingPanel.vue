@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { api, apiErrorMessage } from '../../api/http'
+import { sdkApi, apiErrorMessage } from '../../api/http'
 
 type Env = 'prod' | 'test' | 'review'
 interface ServiceEntry {
@@ -57,7 +57,7 @@ async function save(item: EditableEntry) {
   savingId.value = item.serviceId
   const selectedEnv = env.value
   try {
-    await api.put(`${endpoint.value}/${item.serviceId}`, {
+    await sdkApi.put(`${endpoint.value}/${item.serviceId}`, {
       enabled: item.enabled, config
     }, { params: { env: selectedEnv } })
     ElMessage.success('渠道服务配置已保存')
