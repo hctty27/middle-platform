@@ -1,19 +1,12 @@
 package serverquery
 
 import (
-    "bytes"
     "context"
-    "crypto/rand"
-    "encoding/hex"
     "encoding/json"
     "fmt"
-    "io"
-    "net/http"
-    "strconv"
-    "time"
 
     "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/shared/signature"
+    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/transport"
 )
 
 const maxServerResponseBytes = 2 * 1024 * 1024
@@ -34,35 +27,9 @@ func (a *Standard) Query(ctx context.Context, target model.Target, in model.Serv
     if err != nil {
         return model.ServerQueryResult{}, fmt.Errorf("%w: 序列化区服查询请求失败: %v", model.ErrInvalidConfig, err)
     }
-    var random [8]byte
-    if _, err := rand.Read(random[:]); err != nil {
-        return model.ServerQueryResult{}, fmt.Errorf("生成区服查询 nonce 失败: %w", err)
-    }
-    nonce := hex.EncodeToString(random[:])
-    timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-    req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.ServerQueryURL, bytes.NewReader(payload))
-    if err != nil {
-        return model.ServerQueryResult{}, fmt.Errorf("%w: 创建区服查询请求失败: %v", model.ErrInvalidConfig, err)
-    }
-    req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("x-app-id", target.AppID)
-    req.Header.Set("x-timestamp", timestamp)
-    req.Header.Set("x-nonce", nonce)
-    values := append([]string{target.GameSecret, target.AppID, timestamp, nonce}, in.ForwardSignatureValues()...)
-    req.Header.Set("x-signature", signature.SignValues(values...))
-    resp, err := a.Client.Do(req)
-    if err != nil {
-        return model.ServerQueryResult{}, fmt.Errorf("%w: %w", model.ErrUpstream, err)
-    }
-    defer resp.Body.Close()
-    if resp.StatusCode != http.StatusOK {
-        return model.ServerQueryResult{}, fmt.Errorf("%w: 游戏区服查询返回 HTTP %d", model.ErrUpstream, resp.StatusCode)
-    }
-    raw, err := io.ReadAll(io.LimitReader(resp.Body, maxServerResponseBytes+1))
-    if err != nil || len(raw) > maxServerResponseBytes {
-        return model.ServerQueryResult{}, fmt.Errorf("%w: 游戏区服查询响应读取失败或超出限制", model.ErrUpstream)
-    }
-    var output struct {
+    raw, err := transport.PostJSON(ctx, a.Client, target.ServerQueryURL, target, payload, in.ForwardSignatureValues(), maxServerResponseBytes)
+    if err != nil { return model.ServerQueryResult{}, err }
+        var output struct {
         Code *int `json:"code"`
         Message *string `json:"message"`
         Data *struct {

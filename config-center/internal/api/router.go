@@ -3,7 +3,6 @@ package api
 
 import (
 	"context"
-    "encoding/json"
 	"net/http"
 	"time"
 	"github.com/go-chi/chi/v5"
@@ -39,11 +38,6 @@ type Reader interface {
 	Changes(context.Context, int64, int) ([]ChangeEvent, error)
 	Snapshot(context.Context) (Snapshot, error)
 	Subscribers(context.Context) ([]Subscriber, error)
-	ChannelApps(context.Context,int64) ([]model.ChannelApp,error)
-    SDKServices(context.Context) ([]model.SDKService,error)
-    SDKChannelServices(context.Context,int64,string) ([]model.SDKChannelService,error)
-	ServerGroupOptions(context.Context,int64,string,string) ([]model.ServerGroupOption,error)
-	ServerGroupBindings(context.Context,int64) ([]model.ServerGroupBinding,error)
 }
 
 // Writer 定义可选的管理写操作。
@@ -52,11 +46,6 @@ type Writer interface {
 	Update(context.Context, int64, UpdateNodeRequest) (Node, error)
 	Delete(context.Context, int64) error
 	CreateSubscriber(context.Context, CreateSubscriberRequest) error
-	CreateChannelApp(context.Context,model.CreateChannelAppRequest) (model.ChannelApp,error)
-	UpdateChannelApp(context.Context,int64,model.UpdateChannelAppRequest) (model.ChannelApp,error)
-	DeleteChannelApp(context.Context,int64) error
-    UpdateSDKService(context.Context,int64,bool) error
-    UpsertSDKChannelService(context.Context,int64,int64,string,bool,json.RawMessage) error
 }
 
 // api 保存 HTTP 路由处理所需的读写依赖。
