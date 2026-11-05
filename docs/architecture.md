@@ -20,7 +20,7 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
                                                └──────────────> 权威 MySQL（只读）
 ```
 
-- `config-center`：管理节点、渠道应用与订阅者，并提供同步版本、变更记录、快照查询。
+- `config-center`：管理基础节点与订阅者，并提供同步版本、变更记录、快照查询。
 - `config-center-access`：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。
 - `sdk-core`：直接查询权威库，根据环境绑定和接口映射生成配置；管理订单、支付回调、异步发货与渠道事件转发。
 - `sdk-service`：平台主动调用游戏，目前实现用户核验；通过默认或定制适配器请求大区配置的 `userCheckUrl`，不保存用户核验数据。
@@ -34,7 +34,7 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
 2. `region`：归属于游戏，`env_type` 仅支持 `test`、`prod`、`review`（旧数据可能为空）。
 3. `server_group`：归属于游戏与大区。
 
-表不再使用 `parent_id`；接口的 `parentId` 由 `game_id` / `region_id` 推导。`config_channel_app` 是独立表，`code` 全局唯一，每个 AppID 的 `prod_server_group_id`、`test_server_group_id`、`review_server_group_id` 各指向至多一个区服组。三个环境共享同一份应用 `config` JSON，不存在独立绑定配置表，也不自动向上继承 JSON。
+表不再使用 `parent_id`；接口的 `parentId` 由 `game_id` / `region_id` 推导。`sdk_channel_app` 是独立表，`code` 全局唯一，每个 AppID 的 `prod_server_group_id`、`test_server_group_id`、`review_server_group_id` 各指向至多一个区服组。三个环境共享同一份应用 `config` JSON，不存在独立绑定配置表，也不自动向上继承 JSON。
 
 ## 节点变更与同步一致性
 
@@ -58,13 +58,20 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
 ## SDK 业务与密钥边界
 
 - `sdk_service` 管理已实现功能的全局开关，`sdk_service_channel` 按服务、渠道包、环境唯一绑定；当前功能包括 `event_report`、`subscribe_message`、`user_check`、`role_query`、`server_query` 和 `role_control`。
-- 游戏侧用 `game.config.gameSecret` 验签，平台侧用 `channel_app.config.appSecret` 验签；两套签名密钥不能混用。
+- 游戏侧用 `sdk_node_config(game).config.gameSecret` 验签，平台侧用 `sdk_channel_app.config.appSecret` 验签；两套签名密钥不能混用。
 - 订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。
 - 对外协议及签名细节以 [游戏 HTML](index.html#g-start) 和 [平台 HTML](index.html#p-start) 为准，避免维护多份相同字段表。
 
 ## SDK Core 与 SDK Service 职责
 
-- `sdk-core`：仅承担配置查询、订单登记、支付回调和游戏发货通知。
+- `sdk-core`：管理 SDK 节点配置、渠道包、服务开关，并承担配置查询、订单登记、支付回调和游戏发货通知。
 - `sdk-service`：承担平台 → 游戏的核验/查询/封解禁，以及游戏 → 平台的事件上报/订阅消息推送。
 - 事件上报迁移后统一入口为 `POST /api/service/events/{env}`，订阅消息为 `POST /api/service/subscribe/{env}`；不保留 Core 旧事件入口。
 - 两类平台上报均沿用 `sdk_service` 全局开关和 `sdk_service_channel` 渠道环境开关，无新建业务数据表。
+
+
+## 统一 SDK 节点配置
+
+`config_node` 继续保存游戏、大区和区服组的基础信息与 JSON；SDK Core 独立管理 `sdk_node_config(node_id,config)`，同一节点最多一条 SDK 配置。SDK 密钥、适配器、游戏回调地址不再属于配置中心同步数据。渠道包由 `sdk_channel_app` 管理；SDK Service 直接只读 JOIN SDK 配置表，无须经 Core HTTP 查询。
+
+在共享 MySQL 中，Node 与 SDK 配置存在跨模块外键依赖。旧库迁移、服务同步切换及清理旧 JSON 分开执行，参见 [数据库文档](database.md)。
