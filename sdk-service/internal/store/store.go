@@ -43,10 +43,18 @@ func (s *Store) VerifySchema(ctx context.Context) error {
     rows, err := s.db.QueryContext(ctx, routeQuery+" LIMIT 0", "prod", "prod", "user_check", "prod", "__probe__")
     if err != nil { return fmt.Errorf("核验功能依赖的数据库结构不完整: %w", err) }
     if err := rows.Close(); err != nil { return err }
-    var id int64
-    err = s.db.QueryRowContext(ctx, "SELECT id FROM sdk_service WHERE code='user_check'").Scan(&id)
-    if errors.Is(err, sql.ErrNoRows) { return errors.New("未安装 user_check 服务目录，请先手动执行 add_sdk_user_check.sql") }
-    return err
+    for _, entry := range []struct{ code, script string }{
+        {"user_check", "add_sdk_user_check.sql"},
+        {"role_query", "add_sdk_role_query.sql"},
+    } {
+        var id int64
+        err = s.db.QueryRowContext(ctx, "SELECT id FROM sdk_service WHERE code=?", entry.code).Scan(&id)
+        if errors.Is(err, sql.ErrNoRows) {
+            return fmt.Errorf("未安装 %s 服务目录，请先手动执行 %s", entry.code, entry.script)
+        }
+        if err != nil { return err }
+    }
+    return nil
 }
 
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, error) {
