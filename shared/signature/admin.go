@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -143,5 +142,5 @@ func AdminMiddleware(next http.Handler, prefix, secret string) http.Handler {
 }
 
 func rejectAdminSignature(w http.ResponseWriter) {
-	http.Error(w, fmt.Sprintf("%s", "管理接口签名验证失败"), http.StatusUnauthorized)
+	http.Error(w, "管理接口签名验证失败", http.StatusUnauthorized)
 }
