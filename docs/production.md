@@ -68,6 +68,9 @@ sql/
     add_game_order.sql
     add_sdk_services.sql
     add_sdk_user_check.sql
+    add_sdk_role_query.sql
+    add_sdk_server_query.sql
+    add_sdk_role_control.sql
   config-center-access/
     initialize.sql
 admin/                     # -SkipFrontend 时不存在
@@ -83,6 +86,7 @@ admin/                     # -SkipFrontend 时不存在
 - 已有 `config_center` 仅缺少订单表：`sql/config-center/add_game_order.sql`。
 - 已有权威库但没有 SDK 服务表：`sql/config-center/add_sdk_services.sql`（仅表确实不存在时执行）。
 - 已有功能表但缺少 `user_check` 服务目录：`sql/config-center/add_sdk_user_check.sql`。
+- 已有服务表但缺少角色查询、区服查询或封解禁目录：分别手工执行 `sql/config-center/add_sdk_role_query.sql`、`add_sdk_server_query.sql`、`add_sdk_role_control.sql`，在部署新版 sdk-service 前完成。
 - 全新、空的 `config_access`：`sql/config-center-access/initialize.sql`。
 
 例如在 Linux 发布包解压目录（已有库补建订单表）：

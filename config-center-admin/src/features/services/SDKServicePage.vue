@@ -68,7 +68,7 @@ onMounted(() => void load())
           </template>
         </el-table-column>
       </el-table>
-      <p class="muted">服务目录包括事件上报、用户核验、角色查询和区服查询；渠道环境开关需在渠道应用页面单独开启。</p>
+      <p class="muted">服务目录包括事件上报、用户核验、角色查询、区服查询和封解禁；渠道环境开关需在渠道应用页面单独开启。</p>
     </section>
   </main>
 </template>

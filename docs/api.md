@@ -123,7 +123,7 @@ x-signature: <40 位小写 SHA-1>
 | GET | `/api/config/admin/channel-apps/{id}/services?env=test` | 查看渠道包指定环境的服务配置 |
 | PUT | `/api/config/admin/channel-apps/{id}/services/{serviceId}?env=test` | 保存渠道包指定环境的服务配置 |
 
-目前实现了 `event_report`、`user_check`、`role_query`、`server_query`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
+目前实现了 `event_report`、`user_check`、`role_query`、`server_query`、`role_control`。功能必须同时通过全局开关、渠道包环境开关，未配置的绑定默认关闭。订单登记、充值回调和发货不受上述开关控制。
 
 ## 6. SDK Service 用户核验
 
@@ -146,7 +146,15 @@ x-signature: <40 位小写 SHA-1>
 成功响应 `{"code":0,"message":"ok","data":{"total":0,"list":[]}}`；要求全局与渠道环境的 `server_query` 开关均启用。
 签名规则为 Header 四项与 Body 顶层所有非空值，数值转换为字符串后排序计算 SHA-1；默认 `page_size` 若平台未提交，不参与平台入站签名，但转发游戏时显式携带并重新签名。
 
-## 9. 健康检查与响应约定
+## 9. SDK Service 封禁与解禁
+
+`POST /api/service/role/control/{env}`，AppID 由 `x-app-id` 指定。平台使用 `appSecret` 对 Header 字段和 Body 顶层所有非空值签名，中台使用 `gameSecret` 重新签名转发到 `region.config.roleControlUrl`。默认适配器为 `standard`，特殊游戏可在 `game.config.serviceAdapters.role_control` 指定已注册实现。
+
+请求字段：`type`（`close` 封号、`unClose` 解封、`lock` 禁言、`unLock` 解禁言）、`server_id`、`open_id`、`role_id`、`role_name`、`ip`、`duration`、`describe`、`extension`。封号和禁言必须显式提供非负整数 `duration`；`0` 表示永久。至少提供一个身份目标字段（open_id/role_id/role_name/ip）。
+
+成功响应为 `{"code":0,"message":"ok","data":null}`。游戏返回失败或网络错误不能当作成功，超时可能已执行，不自动重试。需同时开启全局和渠道环境的 `role_control` 开关；存量数据库先手动执行 `add_sdk_role_control.sql`。
+
+## 10. 健康检查与响应约定
 
 四个服务均有：
 

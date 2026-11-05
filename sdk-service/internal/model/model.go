@@ -21,6 +21,7 @@ type Target struct {
     UserCheckURL string
     RoleQueryURL string
     ServerQueryURL string
+    RoleControlURL string
     AdapterName string
     AppSecret string
     GameSecret string
@@ -144,4 +145,25 @@ func (s ServerInfo) Valid() bool {
 type ServerQueryResult struct {
     Total int64        `json:"total"`
     List  []ServerInfo `json:"list"`
+}
+
+type RoleControlRequest struct {
+    Type      string `json:"type"`
+    ServerID  string `json:"server_id,omitempty"`
+    OpenID    string `json:"open_id,omitempty"`
+    RoleID    string `json:"role_id,omitempty"`
+    RoleName  string `json:"role_name,omitempty"`
+    IP        string `json:"ip,omitempty"`
+    Duration  *int64 `json:"duration,omitempty"`
+    Describe  string `json:"describe,omitempty"`
+    Extension string `json:"extension,omitempty"`
+}
+
+// SignatureValues 同时用于平台入站验签和游戏转发签名，显式的 duration=0 必须参与签名。
+func (r RoleControlRequest) SignatureValues() []string {
+    values := []string{r.Type, r.ServerID, r.OpenID, r.RoleID, r.RoleName, r.IP}
+    if r.Duration != nil {
+        values = append(values, strconv.FormatInt(*r.Duration, 10))
+    }
+    return append(values, r.Describe, r.Extension)
 }

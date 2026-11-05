@@ -66,13 +66,16 @@ func Router(checker UserChecker, db Pinger, roleQueriers ...RoleQuerier) http.Ha
     return RouterWithServices(checker, db, role, nil)
 }
 
-func RouterWithServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier) http.Handler {
+func RouterWithServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier, controls ...RoleController) http.Handler {
     mux := http.NewServeMux()
     if role != nil {
         mux.HandleFunc("POST /api/service/role/query/{env}", roleQueryHandler(role))
     }
     if server != nil {
         mux.HandleFunc("POST /api/service/server/query/{env}", serverQueryHandler(server))
+    }
+    if len(controls) > 0 && controls[0] != nil {
+        mux.HandleFunc("POST /api/service/role/control/{env}", roleControlHandler(controls[0]))
     }
     mux.HandleFunc("POST /api/service/user/check/{env}", func(w http.ResponseWriter, r *http.Request) {
         env := r.PathValue("env")

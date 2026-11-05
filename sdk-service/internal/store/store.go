@@ -47,6 +47,7 @@ func (s *Store) VerifySchema(ctx context.Context) error {
         {"user_check", "add_sdk_user_check.sql"},
         {"role_query", "add_sdk_role_query.sql"},
         {"server_query", "add_sdk_server_query.sql"},
+        {"role_control", "add_sdk_role_control.sql"},
     } {
         var id int64
         err = s.db.QueryRowContext(ctx, "SELECT id FROM sdk_service WHERE code=?", entry.code).Scan(&id)
@@ -63,7 +64,7 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, er
 }
 
 func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode string) (model.Target, error) {
-    if serviceCode != "user_check" && serviceCode != "role_query" && serviceCode != "server_query" {
+    if serviceCode != "user_check" && serviceCode != "role_query" && serviceCode != "server_query" && serviceCode != "role_control" {
         return model.Target{}, model.ErrInvalidConfig
     }
     if env != "prod" && env != "test" && env != "review" { return model.Target{}, model.ErrNotFound }
@@ -86,6 +87,7 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
         UserCheckURL string `json:"userCheckUrl"`
         RoleQueryURL string `json:"roleQueryUrl"`
         ServerQueryURL string `json:"serverQueryUrl"`
+        RoleControlURL string `json:"roleControlUrl"`
     }
     if json.Unmarshal(appJSON, &app) != nil || json.Unmarshal(gameJSON, &game) != nil ||
         json.Unmarshal(regionJSON, &region) != nil {
@@ -98,6 +100,8 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
         targetURL = strings.TrimSpace(region.RoleQueryURL)
     case "server_query":
         targetURL = strings.TrimSpace(region.ServerQueryURL)
+    case "role_control":
+        targetURL = strings.TrimSpace(region.RoleControlURL)
     }
     u, err := url.Parse(targetURL)
     if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
@@ -117,6 +121,8 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
         result.RoleQueryURL = targetURL
     case "server_query":
         result.ServerQueryURL = targetURL
+    case "role_control":
+        result.RoleControlURL = targetURL
     }
     return result, nil
 }

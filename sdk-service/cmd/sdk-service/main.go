@@ -16,6 +16,7 @@ import (
     "github.com/go-sql-driver/mysql"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/usercheck"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolequery"
+    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolecontrol"
     "github.com/hctty27/middle-platform/sdk-service/internal/adapter/serverquery"
     "github.com/hctty27/middle-platform/sdk-service/internal/api"
     "github.com/hctty27/middle-platform/sdk-service/internal/service"
@@ -82,9 +83,14 @@ func run(path string) error {
     })
     if err != nil { return err }
     serverQuerier := &service.ServerQueryService{Routes: routes, Adapters: serverRegistry}
+    controlRegistry, err := rolecontrol.NewRegistry(map[string]rolecontrol.Adapter{
+        "standard": &rolecontrol.Standard{Client: gameClient},
+    })
+    if err != nil { return err }
+    controller := &service.RoleControlService{Routes: routes, Adapters: controlRegistry}
     srv := &http.Server{
         Addr: cfg.Server.Address,
-        Handler: logging.HTTP(cfg.Log, api.RouterWithServices(checker, db, roleQuerier, serverQuerier)),
+        Handler: logging.HTTP(cfg.Log, api.RouterWithServices(checker, db, roleQuerier, serverQuerier, controller)),
         ReadHeaderTimeout: 5*time.Second,
         ReadTimeout: 10*time.Second,
         WriteTimeout: timeout + 5*time.Second,
