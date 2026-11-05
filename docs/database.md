@@ -86,7 +86,7 @@ SELECT COUNT(*) FROM config_center.config_node;
 - `sdk_service_channel` 使用 `(service_id, channel_app_id, env)` 唯一约束，`env` 只能是 `prod/test/review`。
 - `event_report`、`subscribe_message`、`user_check`、`role_query`、`server_query` 与 `role_control` 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。
 - `sdk_service_channel.config` 为 JSON 对象；当前事件上报不使用事件级规则，不持久化和自动重试。
-- SDK Core 的管理接口为 `GET /api/core/admin/services`、`PUT /api/core/admin/services/{id}` 和渠道包 `/api/core/admin/channel-apps/{id}/services` 系列，详见 [内部 API](api.md)。
+- SDK Core 的管理接口为 `GET /api/core/admin/services`、`PUT /api/core/admin/services/{id}` 和渠道包 `/api/core/admin/channel-apps/{id}/services` 系列，详见 [管理接口](index.html#a-sdk-start)。
 - 充值订单和发货通知不依赖功能开关。
 
 
