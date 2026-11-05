@@ -31,7 +31,7 @@
 
 **接口协议（唯一权威文档）**：[统一接口文档](docs/index.html)（游戏 / 平台 / 配置同步 / 管理接口 / 签名规则）
 
-**内部开发**：[架构与内部路由](docs/guide.html#architecture) · [数据库与手动 SQL](docs/guide.html#database) · [开发与 CI](docs/guide.html#development) · [打包与生产运维](docs/guide.html#production)
+**开发与运维**：[开发与运维手册](docs/guide.html)（架构 / 数据库 / 本地开发 / 生产运维）
 
 **模块**：[配置中心](config-center/README.md) · [配置接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md) · [SDK Service](sdk-service/README.md)
 
