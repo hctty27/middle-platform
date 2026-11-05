@@ -1,6 +1,6 @@
 # 研发中台架构（当前实现）
 
-本文仅描述当前系统结构；具体表结构见 [数据库文档](database.md)，接口见 [API 文档](api.md)。
+本文仅描述当前系统结构；具体表结构见 [数据库文档](database.md)，接口与签名规范见 [统一接口文档](index.html)。
 
 ## 服务与数据流
 
@@ -14,17 +14,18 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
                                             HTTP 拉取节点     本地 MySQL
                                             快照/增量日志     （config_access）
 
-游戏/客户端 ──配置、订单、渠道事件──> sdk-core ───> 权威 MySQL
+游戏/客户端 ──SDK 配置、订单─────────> sdk-core ───> 权威 MySQL
 平台 ──支付回调──────────────────────> sdk-core ───> 游戏发货通知
-平台 ──用户核验──────────────────────> sdk-service ──适配器──> 游戏核验 API
+平台 ──核验、查询、封解禁──────────────> sdk-service ──适配器──> 游戏接口
+游戏 ──事件上报、订阅消息──────────────> sdk-service ───────────> 平台
                                                └──────────────> 权威 MySQL（只读）
 ```
 
 - `config-center`：管理基础节点与订阅者，并提供同步版本、变更记录、快照查询。
 - `config-center-access`：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。
-- `sdk-core`：直接查询权威库，根据环境绑定和接口映射生成配置；管理订单、支付回调、异步发货与渠道事件转发。
-- `sdk-service`：平台主动调用游戏，目前实现用户核验；通过默认或定制适配器请求大区配置的 `userCheckUrl`，不保存用户核验数据。
-- `config-center-admin`：Vue 3 管理界面，后端管理 API 当前没有内建用户认证。
+- `sdk-core`：直接查询权威库，根据环境绑定和接口映射生成配置；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。
+- `sdk-service`：平台主动调用游戏，处理平台发起的用户核验、角色/区服查询、封解禁，以及游戏上报的事件和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。
+- `config-center-admin`：Vue 3 管理界面，管理接口默认启用 `adminAuth` 签名校验，生产仍须配置 TLS 与受保护的管理网关。
 
 ## 配置数据模型
 
@@ -39,10 +40,10 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
 ## 节点变更与同步一致性
 
 1. 配置中心写入三级节点时，在同一 MySQL 事务中更新节点、全局 `revision` 和 `config_node_change_log`，确保版本提交次序一致；无变化写入不增加 revision。
-2. Webhook 仅携带 `epoch`、`revision`，使用 HMAC-SHA256 与时间窗口验证，不在通知内传输完整配置。接入端收到有效通知后异步拉取。
+2. Webhook 仅携带 `epoch`、`revision`，使用订阅者密钥参与 SHA-1 排序签名，并校验时间窗口和 nonce，不在通知内传输完整配置。接入端收到有效通知后异步拉取。
 3. 接入端按 `revision` 获取变更节点 ID，再批量查询最新节点；节点内容与游标在本地同一事务提交。初始化、epoch 变化或变更日志断档时使用一致性快照。
 4. 接入端定时校对版本（默认 5 分钟）补偿丢失的 Webhook；HTTP 202 表示通知已受理，**不等于节点已完成同步**。
-5. `config_channel_app` 的增删改及三环境绑定不推进三级节点的 `revision`，SDK Core 直接从权威库读取，不依赖接入副本同步。
+5. `sdk_channel_app` 的增删改及三环境绑定不推进三级节点的 `revision`，SDK Core 直接从权威库读取，不依赖接入副本同步。
 
 配置中心多实例可共享权威 MySQL；投递进度由数据库租约与重试协调。单个 MySQL 仍是单点，生产需要独立的备份与故障恢复机制。
 
@@ -51,7 +52,7 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
 - 当前数据库由管理员手动执行 SQL 建表或升级；各服务启动只校验表结构，不执行 DDL、也不维护历史迁移版本。
 - 服务内部业务路由不包含 `/sdk` 或 `/v1`；Nginx 可分别转发 `/api/config/`、`/api/core/`、`/api/service/`，公网若使用 `/sdk/` 前缀由网关负责转换。
 - 接口级字段映射编译进 `sdk-core`，新增映射字段不必修改 SQL，但需要重新构建并滚动部署。
-- 管理接口、同步接口、回调地址只允许可信内网或受保护的网关访问。生产环境不能将管理 API 与公开 SDK API 无差别暴露。
+- 管理接口默认使用 `adminAuth` 签名，仍须通过可信内网或受保护的 HTTPS 网关访问；同步接口和回调地址也需限制访问。生产环境不能将管理 API 与公开 SDK API 无差别暴露。
 
 部署方案见 [生产运维](production.md)。
 
@@ -75,3 +76,10 @@ Vue 3 管理端 ──HTTP──> config-center ────────> 权威
 `config_node` 继续保存游戏、大区和区服组的基础信息与 JSON；SDK Core 独立管理 `sdk_node_config(node_id,config)`，同一节点最多一条 SDK 配置。SDK 密钥、适配器、游戏回调地址不再属于配置中心同步数据。渠道包由 `sdk_channel_app` 管理；SDK Service 直接只读 JOIN SDK 配置表，无须经 Core HTTP 查询。
 
 在共享 MySQL 中，Node 与 SDK 配置存在跨模块外键依赖。旧库迁移、服务同步切换及清理旧 JSON 分开执行，参见 [数据库文档](database.md)。
+
+## 内部路由与健康检查
+
+- 业务接口、管理接口、请求字段与签名规则统一维护于 [接口文档](index.html)；本文件不重复完整 HTTP 契约。
+- 配置中心的节点读取与同步内部入口包括 `GET /api/config/nodes/{id}`、`POST /api/config/nodes/batch-get`、`GET /api/config/sync/revision`、`GET /api/config/sync/changes`、`GET /api/config/sync/snapshot`。
+- 接入端提供 `GET /api/access/nodes`、`GET /api/access/revision`，通过 `POST /internal/config/callback` 接受 Webhook 后异步同步。
+- 各 Go 服务提供 `GET /health/live`（进程存活）和 `GET /health/ready`（依赖就绪）；本地验证方式见 [开发指南](development.md)，生产探针见 [运维指南](production.md)。
