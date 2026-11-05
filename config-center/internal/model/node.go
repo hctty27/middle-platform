@@ -26,6 +26,8 @@ type Node struct {
 	NodeType      string        `json:"nodeType"`
 	// EnvType 仅大区节点使用：test 测试、review 提审、prod 正式。
 	EnvType       *string       `json:"envType"`
+	// MarketType 仅游戏节点使用：domestic 国内、overseas 海外。
+	MarketType    *string       `json:"marketType"`
 	GameID        *int64        `json:"gameId"`
 	RegionID      *int64        `json:"regionId"`
 	Code          string        `json:"code"`
@@ -65,6 +67,7 @@ type NodeSummary struct {
 	ParentID int64  `json:"parentId"`
 	NodeType string `json:"nodeType"`
 	EnvType  *string `json:"envType"`
+	MarketType *string `json:"marketType"`
 	Code     string `json:"code"`
 	Name     string `json:"name"`
 	Status   int    `json:"status"`
@@ -74,7 +77,7 @@ type NodeSummary struct {
 
 // Summary 将节点转换为树列表摘要。
 func Summary(n Node) NodeSummary {
-	return NodeSummary{ID: n.ID, ParentID: n.Parent(), NodeType: n.NodeType, EnvType: n.EnvType, Code: n.Code, Name: n.Name, Status: n.Status, Leaf: n.NodeType == "server_group"}
+	return NodeSummary{ID: n.ID, ParentID: n.Parent(), NodeType: n.NodeType, EnvType: n.EnvType, MarketType: n.MarketType, Code: n.Code, Name: n.Name, Status: n.Status, Leaf: n.NodeType == "server_group"}
 }
 
 // NodePage 定义分页节点结果。

@@ -26,6 +26,7 @@ func ValidateCreate(n model.CreateNodeRequest) error {
 	if err := ValidateNode(n.Name, n.Status, n.Config, n.Remark); err != nil { return err }
 	if strings.TrimSpace(n.Code) == "" || len([]rune(n.Code)) > 128 { return ErrInvalid }
 	if err := ValidateEnvType(n.NodeType, n.EnvType); err != nil { return err }
+	if err := ValidateMarketType(n.NodeType, n.MarketType); err != nil { return err }
 	switch n.NodeType {
 	case "game":
 		if n.ParentID != 0 { return ErrInvalid }
@@ -50,4 +51,17 @@ func ValidateEnvType(nodeType string, envType *string) error {
     case "test", "review", "prod": return nil
     default: return ErrInvalid
     }
+}
+
+// ValidateMarketType 校验游戏运营地区。空值由存储层兼容旧调用并补为国内。
+func ValidateMarketType(nodeType string, marketType *string) error {
+	if nodeType != "game" {
+		if marketType != nil { return ErrInvalid }
+		return nil
+	}
+	if marketType == nil { return nil }
+	switch *marketType {
+	case "domestic", "overseas": return nil
+	default: return ErrInvalid
+	}
 }

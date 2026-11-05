@@ -6,6 +6,8 @@ type CreateNodeRequest struct {
 	NodeType string  `json:"nodeType"`
 	// 只有创建大区时允许设置环境类型，其他层级必须为空。
 	EnvType  *string `json:"envType"`
+	// 未传时创建游戏默认国内；其他节点不能设置。
+	MarketType *string `json:"marketType"`
 	Code     string  `json:"code"`
 	Name     string  `json:"name"`
 	Status   *int    `json:"status"`
@@ -17,6 +19,8 @@ type CreateNodeRequest struct {
 type UpdateNodeRequest struct {
 	// 环境分类由服务端执行节点类型与修改约束校验。
 	EnvType *string `json:"envType"`
+	// 未传时保留游戏当前运营地区。
+	MarketType *string `json:"marketType"`
 	Name   string  `json:"name"`
 	Status *int    `json:"status"`
 	Config string  `json:"config"`
