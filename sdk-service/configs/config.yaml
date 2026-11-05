@@ -1,4 +1,4 @@
-# SDK Service：同库只读，游戏地址与适配器来自配置中心节点。
+# SDK Service：同库只读，游戏地址与适配器来自 sdk_node_config（SDK Core 管理）。
 server:
   address: ":8221"
 
