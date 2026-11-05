@@ -1,3 +1,4 @@
+-- 目标数据库：config_center。历史条件增量；先核对前置表结构和数据，切勿按编号全部顺序执行。
 -- 已有 config_center 库升级：部署新版前备份，并手工执行一次。
 -- 全新安装使用 initialize.sql，不需要执行此脚本。
 ALTER TABLE config_node

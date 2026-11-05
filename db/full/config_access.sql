@@ -1,3 +1,4 @@
+-- 目标数据库：config_access。仅在全新空库中手动执行，不适用于存量数据库。
 -- 仅用于新建空的 config_access 库；接入端启动不会自动建表。
 -- 接入端只存储 game / region / server_group 与同步游标。
 CREATE TABLE config_node (

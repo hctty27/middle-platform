@@ -1,3 +1,4 @@
+-- 目标数据库：config_center。历史条件增量；先核对前置表结构和数据，切勿按编号全部顺序执行。
 -- 已有库专用：停掉所有服务并备份数据库后执行，不可对新库重复执行。
 CREATE TABLE sdk_node_config (
  node_id BIGINT NOT NULL PRIMARY KEY COMMENT '关联 config_node.id',
