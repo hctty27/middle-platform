@@ -10,6 +10,7 @@
 | 已有权威库，只缺 `game_order` | [config-center/db/sql/add_game_order.sql](../config-center/db/sql/add_game_order.sql) |
 | 已有权威库但尚无 SDK 服务表 | [config-center/db/sql/add_sdk_services.sql](../config-center/db/sql/add_sdk_services.sql) |
 | 已有服务表但缺少用户核验功能目录 | [config-center/db/sql/add_sdk_user_check.sql](../config-center/db/sql/add_sdk_user_check.sql) |
+| 已有服务表但缺少角色查询功能目录 | [config-center/db/sql/add_sdk_role_query.sql](../config-center/db/sql/add_sdk_role_query.sql) |
 | 新建空的 `config_access` | [config-center-access/db/sql/initialize.sql](../config-center-access/db/sql/initialize.sql) |
 
 不得对已有配置数据的库再次执行 `initialize.sql`。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 `DROP TABLE`。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。
@@ -56,7 +57,7 @@ SELECT COUNT(*) FROM config_center.config_node;
 - `config_revision`、`config_node_change_log`：同步游标和变更日志
 - `config_subscriber`、`config_subscriber_delivery_state`：Webhook 订阅者和投递状态
 - `game_order`：SDK Core 充值订单、支付状态、通知租约和补偿
-- `sdk_service`：SDK 功能目录与全局开关，新库初始化预置已实现的 `event_report`、`user_check`，不包含 `scope_type`、`sort_order`
+- `sdk_service`：SDK 功能目录与全局开关，新库初始化预置已实现的 `event_report`、`user_check`、`role_query`，不包含 `scope_type`、`sort_order`
 - `sdk_service_channel`：按 `service_id + channel_app_id + env` 唯一的渠道包服务绑定
 
 `config_center` 的配置表与订单表使用同一个数据库。SDK Core 只使用一个 `database.dsn` 连接池；建议配置表只授予 SELECT、订单表授予 SELECT/INSERT/UPDATE，运行账号不授予 DDL。
@@ -64,7 +65,7 @@ SELECT COUNT(*) FROM config_center.config_node;
 ## SDK 功能配置与数据安全
 
 - `sdk_service_channel` 使用 `(service_id, channel_app_id, env)` 唯一约束，`env` 只能是 `prod/test/review`。
-- `event_report` 与 `user_check` 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。
+- `event_report`、`user_check` 与 `role_query` 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。
 - `sdk_service_channel.config` 为 JSON 对象；当前事件上报不使用事件级规则，不持久化和自动重试。
 - 配置中心的管理接口为 `GET /api/config/admin/sdk-services`、`PUT /api/config/admin/sdk-services/{id}` 和渠道包 `/api/config/admin/channel-apps/{id}/services` 系列，详见 [内部 API](api.md)。
 - 充值订单和发货通知不依赖功能开关。
