@@ -1,33 +1,31 @@
 # sdk-core · SDK 核心服务
 
-SDK Core 直接访问 `config_center` 权威数据库，负责 SDK 配置查询、游戏订单登记、平台支付回调及异步发货通知；不使用 `config-center-access` 副本。
+直接访问共享权威库 `config_center`，负责 SDK 节点配置、渠道包与功能开关管理，以及配置查询、订单登记、平台支付回调和异步游戏发货。事件上报与订阅消息已归 `sdk-service` 处理。
 
-## 当前路由
+## 主要入口
 
-| 方法 | 路径 | 方向 |
+| 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | `/api/core/config/{env}/{appid}` | 游戏/客户端 → Core |
-| POST | `/api/core/orders/{env}/{appid}` | 游戏 → Core |
-| POST | `/api/core/pay/notify/{appid}` | 平台 → Core（不含 env） |
+| GET | `/api/core/config/{env}/{appid}` | 获取 SDK 配置 |
+| POST | `/api/core/orders/{env}/{appid}` | 登记游戏订单 |
+| POST | `/api/core/pay/notify/{appid}` | 平台支付回调 |
+| GET/PUT | `/api/core/admin/node-configs/{id}` | SDK 节点配置管理 |
+| GET/POST | `/api/core/admin/channel-apps` | 渠道包查询与新增 |
+| GET/PUT | `/api/core/admin/services[/{id}]` | 服务开关查询与更新 |
 
-**对外协议权威文档**：[游戏 HTML](../docs/index.html#g-start) · [平台 HTML](../docs/index.html#p-start)。字段、签名、请求示例统一在此文档维护，模块 README 不再重复协议细节。
-
-## 配置和业务约束
-
-- `database.dsn` 指向 `config_center`；配置表只读、`game_order` 表允许 SELECT/INSERT/UPDATE，数据库结构需管理员事先手动执行 SQL。
-- `sdk_node_config` 中游戏节点的 `gameSecret` 是游戏侧签名密钥；`sdk_channel_app.config.appSecret` 是平台侧密钥。
-- 配置响应映射在 `internal/mapping/response-mapping.json` 编译进服务，修改需重新编译发布。禁止下发服务端密钥。
-- 订单登记和异步发货 Worker 常驻。平台 V1 回调的签名未覆盖金额，Core 对比登记金额，但不额外查单。
-- 事件上报和订阅消息已移交 `sdk-service`，旧路由 `/api/core/events/{env}` 不再注册。此服务承担 SDK 配置/渠道包/服务开关管理、核心配置查询、订单、充值和发货。
-- 游戏侧只使用当前 SHA-1 协议，不兼容旧 V2 签名。
+上述表格仅用于快速定位；完整字段、全部管理路由、签名、错误码和请求示例统一以 [接口文档](../docs/index.html) 为准。
 
 ## 本地启动
 
 ```powershell
 Copy-Item configs/config.yaml configs/config-dev.yaml
-# 配置 database.dsn
+# 设置 database.dsn 指向 config_center
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
+
+新库按 [数据库文档](../docs/database.md) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。接口字段映射编译在 `internal/mapping/response-mapping.json`，修改后需要重新构建。
+
+`/api/core/admin/**` 默认使用 `adminAuth` 签名，与配置中心使用相同管理密钥；生产仍需网关隔离并启用 HTTPS，不应公开暴露管理路由。
 
 ```bash
 go test -race ./...
@@ -35,16 +33,4 @@ go vet ./...
 go build ./cmd/sdk-core
 ```
 
-详见 [数据库与手动 SQL](../docs/database.md)、[开发联调](../docs/development.md)、[生产运维](../docs/production.md)。
-
-
-## SDK 管理接口（需网关鉴权）
-
-- `GET/PUT /api/core/admin/node-configs/{id}`：统一管理游戏、大区及区服组 SDK JSON。
-- `GET/POST /api/core/admin/channel-apps`、`PUT/DELETE /api/core/admin/channel-apps/{id}`：渠道包。
-- `GET/PUT /api/core/admin/services[/{id}]`：全局功能开关（GET 列表、PUT 单项）。
-- `GET/PUT /api/core/admin/channel-apps/{id}/services[/{serviceId}]`：渠道包环境服务开关。
-
-管理路由目前无应用内登录，**必须用 Nginx 私有管理网关隔离**。公开 SDK 网关要返回 403，不得公开代理这些路由。
-
-已有库需手工执行 `config-center/db/sql/migrate_sdk_node_config.sql`，之后再同时部署 Core、Service、配置中心和前端。详情参见 [数据库迁移](../docs/database.md)。
+[架构](../docs/architecture.md) · [本地开发](../docs/development.md) · [生产运维](../docs/production.md)
