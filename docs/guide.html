@@ -9,7 +9,7 @@
 <style>
 :root{color-scheme:light;--bg:#fff;--surface:#fff;--sidebar:#fbfcfe;--subtle:#f5f7fa;--text:#1c2634;--muted:#687589;--border:#e5e9f0;--accent:#355fd8;--accent-bg:#eef2ff;--code:#141b28;--code-text:#e5edf9}
 html[data-theme="dark"]{color-scheme:dark;--bg:#0f141d;--surface:#121924;--sidebar:#121923;--subtle:#1b2533;--text:#e8edf5;--muted:#a1adbf;--border:#2b3749;--accent:#9bb8ff;--accent-bg:#1b3156;--code:#0a1018;--code-text:#e7edf6}
-*{box-sizing:border-box}
+*{box-sizing:border-box}[hidden]{display:none!important}
 html{scroll-behavior:smooth;scroll-padding-top:85px}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
 button,input{font:inherit}button{cursor:pointer}
@@ -298,7 +298,7 @@ ls -l /tmp/middle-platform-stage/bin/
 sudo cp -a /tmp/middle-platform-stage/bin/. /data/middle-platform/bin/
 sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/</code></pre></div>
 <p>使用 <code>-SkipFrontend</code> 构建的包没有 <code>admin/</code>，不要执行对应 <code>cp</code>。创建低权限服务账号 <code>middle-platform</code>，按实际用户/组授予 <code>bin/</code>、<code>config/</code> 和 <code>logs/</code> 最小权限；真实 <code>config-center.yaml</code>、<code>config-center-access.yaml</code>、<code>sdk-core.yaml</code>、<code>sdk-service.yaml</code> 单独放在 <code>/data/middle-platform/config/</code>。</p>
-<h3 id="production-3">打包参数及产物</h3>
+<h3>打包参数及产物</h3>
 <p><code>scripts/package.ps1</code> 是唯一手动打包入口，支持 Windows PowerShell 与 GitHub Actions 统一生成 Linux ELF + tar.gz。依赖 Go 1.27.3；包含前端时还需要 Node.js 22 / npm。</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
 .\scripts\package.ps1 -Arch arm64 -Version v1.0.0
@@ -380,7 +380,7 @@ location ^~ /api/service/ {
     proxy_pass http://127.0.0.1:8221;
 }</code></pre></div>
 <p>Nginx 不会因 <code>/health/ready</code> 自动从静态 upstream 中摘除后端；需要明确的流量摘除流程或具备主动健康检查的网关。</p>
-<h3 id="production-6">配置管理前端：运行时配置</h3>
+<h3>配置管理前端：运行时配置</h3>
 <p>前端构建采用 Vite <code>base: &#39;./&#39;</code>，可以直接放在 Nginx 的 <code>/admin/</code> 或其他子路径下。静态资源使用相对路径，不需要修改打包脚本或重新构建。</p>
 <p>前端所有配置中心 API 请求从 <code>admin/config.js</code> 中读取：</p>
 <div class="code-card"><div class="code-header"><span>js</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-js">window.__MIDDLE_PLATFORM_CONFIG__ = {
