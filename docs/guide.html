@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="研发中台开发与运维手册：系统架构、数据库、开发指南与生产部署。">
+<title>研发中台 · 开发与运维手册</title>
+<style>
+:root{color-scheme:light;--bg:#fff;--surface:#fff;--sidebar:#fbfcfe;--subtle:#f5f7fa;--text:#1c2634;--muted:#687589;--border:#e5e9f0;--accent:#355fd8;--accent-bg:#eef2ff;--code:#141b28;--code-text:#e5edf9}
+html[data-theme="dark"]{color-scheme:dark;--bg:#0f141d;--surface:#121924;--sidebar:#121923;--subtle:#1b2533;--text:#e8edf5;--muted:#a1adbf;--border:#2b3749;--accent:#9bb8ff;--accent-bg:#1b3156;--code:#0a1018;--code-text:#e7edf6}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html{scroll-behavior:smooth;scroll-padding-top:85px}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+button,input{font:inherit}button{cursor:pointer}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.top{position:sticky;top:0;z-index:30;display:grid;grid-template-columns:minmax(185px,1fr) auto minmax(170px,1fr);align-items:center;gap:16px;height:64px;padding:0 28px;background:var(--surface);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}.logo{width:34px;height:34px;border-radius:10px;background:#315bd3;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;flex:none}.brand-name{font-size:14px;font-weight:750;white-space:nowrap;line-height:1.25}.brand-sub{display:block;font-size:10px;color:var(--muted);letter-spacing:1px;line-height:1.4;margin-top:2px}
+.tabs{display:flex;align-items:center;justify-content:center;gap:3px;padding:4px;border:1px solid var(--border);background:var(--subtle);border-radius:11px}
+.tab{border:0;background:transparent;color:var(--muted);font-size:13px;font-weight:550;padding:6px 15px;border-radius:8px;white-space:nowrap}.tab:hover{color:var(--text)}.tab[aria-selected="true"]{background:var(--surface);color:var(--text);font-weight:720;box-shadow:0 1px 5px #00000012}
+.actions{display:flex;align-items:center;justify-content:flex-end;gap:9px}.switch-link{display:inline-block;border:1px solid var(--border);padding:5px 11px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap}.icon-btn{height:35px;width:35px;display:grid;place-items:center;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--muted)}.icon-btn:hover,.switch-link:hover{background:var(--subtle);text-decoration:none}
+#menu{display:none}.shell{max-width:1500px;margin:0 auto;display:grid;grid-template-columns:264px minmax(0,1fr);min-height:calc(100vh - 64px)}
+.sidebar{position:sticky;top:64px;height:calc(100vh - 64px);min-width:0;overflow:auto;padding:24px 15px 30px;background:var(--sidebar);border-right:1px solid var(--border);scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.search{width:100%;height:38px;padding:6px 13px;border:1px solid var(--border);background:var(--surface);border-radius:9px;outline:0;color:var(--text);font-size:13px}.search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}.search::placeholder{color:var(--muted)}
+.toc-title{font-size:11px;color:var(--muted);font-weight:750;padding:9px 10px 6px;margin-top:13px;letter-spacing:.4px}.toc-link{display:block;padding:8px 11px;color:var(--muted);font-size:12.5px;line-height:1.55;border-radius:8px;word-break:break-word}.toc-link:hover{color:var(--text);background:var(--subtle);text-decoration:none}.toc-link.active{color:var(--accent);background:var(--accent-bg);font-weight:650}.empty{font-size:12px;color:var(--muted);padding:20px 10px}
+.content{min-width:0;width:100%;}.inner{max-width:980px;padding:34px 54px 100px;margin:0 auto}
+.doc-pane[hidden],.toc-group[hidden]{display:none!important}.eyebrow{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:1.2px}.pane-subtitle{font-size:13px;color:var(--muted);margin:8px 0 15px}
+.doc-pane h1{font-size:27px;line-height:1.4;letter-spacing:-.45px;margin:0 0 24px;font-weight:740}.doc-pane h2{font-size:20px;line-height:1.45;letter-spacing:-.2px;margin:40px 0 16px;padding-top:7px;border-top:1px solid var(--border);scroll-margin-top:84px}.doc-pane h3{font-size:15px;line-height:1.5;margin:28px 0 12px;scroll-margin-top:84px}.doc-pane h4{font-size:14px;margin:21px 0 8px}
+.doc-pane p{margin:13px 0;line-height:1.9}.doc-pane strong{font-weight:700}.doc-pane ul,.doc-pane ol{padding-left:24px;margin:12px 0 19px}.doc-pane li{margin:7px 0;line-height:1.85}.doc-pane li::marker{color:var(--muted)}
+.doc-pane code:not(pre code){border:1px solid var(--border);background:var(--subtle);color:var(--text);border-radius:5px;padding:1px 5px;font-size:12px;overflow-wrap:anywhere}
+.code-card{margin:15px 0 24px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--code)}
+.code-header{height:36px;padding:0 13px;display:flex;justify-content:space-between;align-items:center;background:#ffffff0d;color:#aeb9ca;font-size:11px;font-weight:600;letter-spacing:.3px}
+.copy-btn{border:1px solid #ffffff2b;color:#c9d6e7;background:none;border-radius:6px;padding:2px 9px;font-size:11px}.copy-btn:hover{background:#ffffff1f}
+pre{margin:0;padding:16px 17px;overflow:auto;color:var(--code-text);font:12px/1.75 "SFMono-Regular",Consolas,"Liberation Mono",monospace;tab-size:2}
+pre code{white-space:pre;word-wrap:normal}
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin:15px 0 23px}table{border-collapse:collapse;width:100%;min-width:440px;font-size:12.5px;line-height:1.75}
+th,td{padding:10px 13px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--subtle);color:var(--muted);font-weight:700}tr:last-child td{border-bottom:0}
+blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;color:var(--muted)}hr{border:0;border-top:1px solid var(--border);margin:30px 0}
+.footer{border-top:1px solid var(--border);padding:20px 0;margin-top:44px;color:var(--muted);font-size:12px}
+.tab:focus-visible,.switch-link:focus-visible,.toc-link:focus-visible,.icon-btn:focus-visible,.copy-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:1060px){.top{grid-template-columns:auto 1fr auto;padding:0 16px;gap:10px}.tab{padding:6px 10px}.inner{padding:28px 28px 85px}}
+@media(max-width:760px){.top{grid-template-columns:1fr auto;height:auto;min-height:62px;padding:10px 13px}.brand{grid-column:1}.actions{grid-column:2}.tabs{grid-column:1 / -1;grid-row:2;overflow:auto;justify-content:space-between}.tab{flex:1;padding:7px 5px;font-size:12px}.shell{display:block}.sidebar{display:none;position:fixed;top:0;bottom:0;left:0;z-index:45;width:min(300px,82vw);height:100vh;box-shadow:8px 0 40px #0003;padding-top:70px}.sidebar.open{display:block}#menu{display:grid}.inner{padding:26px 20px 65px}.doc-pane h1{font-size:24px}.doc-pane h2{font-size:19px}.doc-pane h2,.doc-pane h3{scroll-margin-top:135px}.overlay{display:none;position:fixed;inset:0;background:#0007;z-index:40}.overlay.show{display:block}.code-card{margin-left:-6px;margin-right:-6px}.brand-sub{display:none}.switch-link{padding:5px 7px}}
+@media print{.top,.sidebar,.overlay,.copy-btn{display:none!important}.shell{display:block}.inner{max-width:none;padding:0}.doc-pane{display:block!important;break-before:page}.code-card,pre{break-inside:avoid}.doc-pane a:after{content:" (" attr(href) ")";font-size:9px;color:#777}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><button class="icon-btn" id="menu" type="button" aria-label="打开目录" aria-expanded="false">☰</button><div class="logo">MP</div><div><div class="brand-name">研发中台</div><span class="brand-sub">DEVELOPER GUIDE</span></div></div>
+  <nav class="tabs" role="tablist" aria-label="文档类别"><button class="tab" id="tab-architecture" type="button" role="tab" aria-controls="architecture" aria-selected="true" data-tab="architecture">系统架构</button><button class="tab" id="tab-database" type="button" role="tab" aria-controls="database" aria-selected="false" data-tab="database">数据库</button><button class="tab" id="tab-development" type="button" role="tab" aria-controls="development" aria-selected="false" data-tab="development">开发指南</button><button class="tab" id="tab-production" type="button" role="tab" aria-controls="production" aria-selected="false" data-tab="production">生产运维</button></nav>
+  <div class="actions"><a class="switch-link" href="index.html">接口文档</a><button class="icon-btn" id="theme" type="button" aria-label="切换主题" title="切换主题">☾</button></div>
+</header>
+<div class="overlay" id="overlay" hidden></div>
+<div class="shell">
+  <aside class="sidebar" id="sidebar" aria-label="文档目录"><input class="search" id="search" type="search" placeholder="搜索章节与内容..." aria-label="搜索章节与内容"><nav id="toc" aria-label="章节导航"><div class="toc-group" data-group="architecture"><div class="toc-title">系统架构</div><a class="toc-link" data-cat="architecture" href="#architecture-1">服务与数据流</a><a class="toc-link" data-cat="architecture" href="#architecture-2">配置数据模型</a><a class="toc-link" data-cat="architecture" href="#architecture-3">节点变更与同步一致性</a><a class="toc-link" data-cat="architecture" href="#architecture-4">边界与演进原则</a><a class="toc-link" data-cat="architecture" href="#architecture-5">SDK 业务与密钥边界</a><a class="toc-link" data-cat="architecture" href="#architecture-6">SDK Core 与 SDK Service 职责</a><a class="toc-link" data-cat="architecture" href="#architecture-7">统一 SDK 节点配置</a><a class="toc-link" data-cat="architecture" href="#architecture-8">内部路由与健康检查</a></div>
+<div class="toc-group" data-group="database"><div class="toc-title">数据库</div><a class="toc-link" data-cat="database" href="#database-1">核心约定</a><a class="toc-link" data-cat="database" href="#database-2">SQL 目录与增量编号</a><a class="toc-link" data-cat="database" href="#database-3">本地 MySQL 示例</a><a class="toc-link" data-cat="database" href="#database-4">权威库的业务表</a><a class="toc-link" data-cat="database" href="#database-5">SDK 功能配置与数据安全</a><a class="toc-link" data-cat="database" href="#database-6">SDK 配置拆分上线顺序</a></div>
+<div class="toc-group" data-group="development"><div class="toc-title">开发指南</div><a class="toc-link" data-cat="development" href="#development-1">环境</a><a class="toc-link" data-cat="development" href="#development-2">1. 权威配置中心</a><a class="toc-link" data-cat="development" href="#development-3">2. 接入端（可选）</a><a class="toc-link" data-cat="development" href="#development-4">3. SDK Core</a><a class="toc-link" data-cat="development" href="#development-5">4. SDK Service（平台查询与游戏消息转发）</a><a class="toc-link" data-cat="development" href="#development-6">5. Vue 管理端</a><a class="toc-link" data-cat="development" href="#development-7">6. 检查与排障</a><a class="toc-link" data-cat="development" href="#development-8">7. 测试与 CI</a></div>
+<div class="toc-group" data-group="production"><div class="toc-title">生产运维</div><a class="toc-link" data-cat="production" href="#production-1">1. 部署目录与端口</a><a class="toc-link" data-cat="production" href="#production-2">2. 打包上传与首次安装</a><a class="toc-link" data-cat="production" href="#production-3">3. 手动 SQL 先于启动</a><a class="toc-link" data-cat="production" href="#production-4">4. Supervisor 管理服务</a><a class="toc-link" data-cat="production" href="#production-5">5. Nginx 网关与访问边界</a><a class="toc-link" data-cat="production" href="#production-6">6. 直接发布与失败排查</a><a class="toc-link" data-cat="production" href="#production-7">7. 日志、停服与排障</a><a class="toc-link" data-cat="production" href="#production-8">上线发布前检查</a><a class="toc-link" data-cat="production" href="#production-9">8. 事件上报迁移发布顺序（重要）</a><a class="toc-link" data-cat="production" href="#production-10">SDK 管理接口的 Nginx 隔离</a></div></nav><p class="empty" id="empty" hidden>没有匹配的章节</p></aside>
+  <div class="content"><div class="inner"><article class="doc-pane" id="architecture" data-pane="architecture" aria-labelledby="tab-architecture" ><div class="eyebrow">DEVELOPER GUIDE / ARCHITECTURE</div><p class="pane-subtitle">服务职责、数据流、配置同步与安全边界</p><h1>研发中台架构（当前实现）</h1>
+<p>本文仅描述当前系统结构；具体表结构见 <a href="#database">数据库文档</a>，接口与签名规范见 <a href="index.html">统一接口文档</a>。</p>
+<h2 id="architecture-1">服务与数据流</h2>
+<div class="code-card"><div class="code-header"><span>text</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-text">Vue 3 管理端 ──HTTP──&gt; config-center ────────&gt; 权威 MySQL（config_center）
+                             │                         ↑
+                    节点变更写入 revision              │ 只读 JOIN
+                             │                         │
+                             └──签名 Webhook──&gt; config-center-access
+                                                   │          │
+                                            HTTP 拉取节点     本地 MySQL
+                                            快照/增量日志     （config_access）
+
+游戏/客户端 ──SDK 配置、订单─────────&gt; sdk-core ───&gt; 权威 MySQL
+平台 ──支付回调──────────────────────&gt; sdk-core ───&gt; 游戏发货通知
+平台 ──核验、查询、封解禁──────────────&gt; sdk-service ──适配器──&gt; 游戏接口
+游戏 ──事件上报、订阅消息──────────────&gt; sdk-service ───────────&gt; 平台
+                                               └──────────────&gt; 权威 MySQL（只读）</code></pre></div>
+<ul>
+<li><code>config-center</code>：管理基础节点与订阅者，并提供同步版本、变更记录、快照查询。</li>
+<li><code>config-center-access</code>：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。</li>
+<li><code>sdk-core</code>：直接查询权威库，根据环境绑定和接口映射生成配置；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。</li>
+<li><code>sdk-service</code>：平台主动调用游戏，处理平台发起的用户核验、角色/区服查询、封解禁，以及游戏上报的事件和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。</li>
+<li><code>config-center-admin</code>：Vue 3 管理界面，管理接口默认启用 <code>adminAuth</code> 签名校验，生产仍须配置 TLS 与受保护的管理网关。</li>
+</ul>
+<h2 id="architecture-2">配置数据模型</h2>
+<p><code>config_node</code> 只有三种节点：</p>
+<ol>
+<li><code>game</code>：根节点，<code>game_id</code> 与 <code>region_id</code> 均为空。</li>
+<li><code>region</code>：归属于游戏，<code>env_type</code> 仅支持 <code>test</code>、<code>prod</code>、<code>review</code>（旧数据可能为空）。</li>
+<li><code>server_group</code>：归属于游戏与大区。</li>
+</ol>
+<p>表不再使用 <code>parent_id</code>；接口的 <code>parentId</code> 由 <code>game_id</code> / <code>region_id</code> 推导。<code>sdk_channel_app</code> 是独立表，<code>code</code> 全局唯一，每个 AppID 的 <code>prod_server_group_id</code>、<code>test_server_group_id</code>、<code>review_server_group_id</code> 各指向至多一个区服组。三个环境共享同一份应用 <code>config</code> JSON，不存在独立绑定配置表，也不自动向上继承 JSON。</p>
+<h2 id="architecture-3">节点变更与同步一致性</h2>
+<ol>
+<li>配置中心写入三级节点时，在同一 MySQL 事务中更新节点、全局 <code>revision</code> 和 <code>config_node_change_log</code>，确保版本提交次序一致；无变化写入不增加 revision。</li>
+<li>Webhook 仅携带 <code>epoch</code>、<code>revision</code>，使用订阅者密钥参与 SHA-1 排序签名，并校验时间窗口和 nonce，不在通知内传输完整配置。接入端收到有效通知后异步拉取。</li>
+<li>接入端按 <code>revision</code> 获取变更节点 ID，再批量查询最新节点；节点内容与游标在本地同一事务提交。初始化、epoch 变化或变更日志断档时使用一致性快照。</li>
+<li>接入端定时校对版本（默认 5 分钟）补偿丢失的 Webhook；HTTP 202 表示通知已受理，<strong>不等于节点已完成同步</strong>。</li>
+<li><code>sdk_channel_app</code> 的增删改及三环境绑定不推进三级节点的 <code>revision</code>，SDK Core 直接从权威库读取，不依赖接入副本同步。</li>
+</ol>
+<p>配置中心多实例可共享权威 MySQL；投递进度由数据库租约与重试协调。单个 MySQL 仍是单点，生产需要独立的备份与故障恢复机制。</p>
+<h2 id="architecture-4">边界与演进原则</h2>
+<ul>
+<li>当前数据库由管理员手动执行 SQL 建表或升级；各服务启动只校验表结构，不执行 DDL、也不维护历史迁移版本。</li>
+<li>服务内部业务路由不包含 <code>/sdk</code> 或 <code>/v1</code>；Nginx 可分别转发 <code>/api/config/</code>、<code>/api/core/</code>、<code>/api/service/</code>，公网若使用 <code>/sdk/</code> 前缀由网关负责转换。</li>
+<li>接口级字段映射编译进 <code>sdk-core</code>，新增映射字段不必修改 SQL，但需要重新构建并滚动部署。</li>
+<li>管理接口默认使用 <code>adminAuth</code> 签名，仍须通过可信内网或受保护的 HTTPS 网关访问；同步接口和回调地址也需限制访问。生产环境不能将管理 API 与公开 SDK API 无差别暴露。</li>
+</ul>
+<p>部署方案见 <a href="#production">生产运维</a>。</p>
+<h2 id="architecture-5">SDK 业务与密钥边界</h2>
+<ul>
+<li><code>sdk_service</code> 管理已实现功能的全局开关，<code>sdk_service_channel</code> 按服务、渠道包、环境唯一绑定；当前功能包括 <code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code> 和 <code>role_control</code>。</li>
+<li>游戏侧用 <code>sdk_node_config(game).config.gameSecret</code> 验签，平台侧用 <code>sdk_channel_app.config.appSecret</code> 验签；两套签名密钥不能混用。</li>
+<li>订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。</li>
+<li>对外协议及签名细节以 <a href="index.html#g-start">游戏 HTML</a> 和 <a href="index.html#p-start">平台 HTML</a> 为准，避免维护多份相同字段表。</li>
+</ul>
+<h2 id="architecture-6">SDK Core 与 SDK Service 职责</h2>
+<ul>
+<li><code>sdk-core</code>：管理 SDK 节点配置、渠道包、服务开关，并承担配置查询、订单登记、支付回调和游戏发货通知。</li>
+<li><code>sdk-service</code>：承担平台 → 游戏的核验/查询/封解禁，以及游戏 → 平台的事件上报/订阅消息推送。</li>
+<li>事件上报迁移后统一入口为 <code>POST /api/service/events/{env}</code>，订阅消息为 <code>POST /api/service/subscribe/{env}</code>；不保留 Core 旧事件入口。</li>
+<li>两类平台上报均沿用 <code>sdk_service</code> 全局开关和 <code>sdk_service_channel</code> 渠道环境开关，无新建业务数据表。</li>
+</ul>
+<h2 id="architecture-7">统一 SDK 节点配置</h2>
+<p><code>config_node</code> 继续保存游戏、大区和区服组的基础信息与 JSON；SDK Core 独立管理 <code>sdk_node_config(node_id,config)</code>，同一节点最多一条 SDK 配置。SDK 密钥、适配器、游戏回调地址不再属于配置中心同步数据。渠道包由 <code>sdk_channel_app</code> 管理；SDK Service 直接只读 JOIN SDK 配置表，无须经 Core HTTP 查询。</p>
+<p>在共享 MySQL 中，Node 与 SDK 配置存在跨模块外键依赖。旧库迁移、服务同步切换及清理旧 JSON 分开执行，参见 <a href="#database">数据库文档</a>。</p>
+<h2 id="architecture-8">内部路由与健康检查</h2>
+<ul>
+<li>业务接口、管理接口、请求字段与签名规则统一维护于 <a href="index.html">接口文档</a>；本文件不重复完整 HTTP 契约。</li>
+<li>配置中心的节点读取与同步内部入口包括 <code>GET /api/config/nodes/{id}</code>、<code>POST /api/config/nodes/batch-get</code>、<code>GET /api/config/sync/revision</code>、<code>GET /api/config/sync/changes</code>、<code>GET /api/config/sync/snapshot</code>。</li>
+<li>接入端提供 <code>GET /api/access/nodes</code>、<code>GET /api/access/revision</code>，通过 <code>POST /internal/config/callback</code> 接受 Webhook 后异步同步。</li>
+<li>各 Go 服务提供 <code>GET /health/live</code>（进程存活）和 <code>GET /health/ready</code>（依赖就绪）；本地验证方式见 <a href="#development">开发指南</a>，生产探针见 <a href="#production">运维指南</a>。</li>
+</ul></article>
+<article class="doc-pane" id="database" data-pane="database" aria-labelledby="tab-database" hidden><div class="eyebrow">DEVELOPER GUIDE / DATABASE</div><p class="pane-subtitle">数据模型、全量 SQL、增量升级与迁移</p><h1>数据库结构与手动 SQL</h1>
+<h2 id="database-1">核心约定</h2>
+<p><strong>所有建表和升级都由管理员人工执行 SQL。</strong> 四个 Go 服务不会在启动时执行 DDL；只校验实际表结构。SQL 随 Linux 发布包一起交付，也可从源码中获取：</p>
+<div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><a href="../db/full/config_center.sql">config_center.sql</a></td></tr><tr><td>新建空的 <code>config_access</code></td><td><a href="../db/full/config_access.sql">config_access.sql</a></td></tr><tr><td>已有库缺少订单表</td><td><a href="../db/incremental/V0001__add_game_order.sql">V0001__add_game_order.sql</a></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><a href="../db/incremental/V0002__add_sdk_services.sql">V0002__add_sdk_services.sql</a></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><a href="../db/incremental/V0003__migrate_sdk_service_channel.sql">V0003__migrate_sdk_service_channel.sql</a></td></tr><tr><td>已有服务表缺少核验用户信息目录</td><td><a href="../db/incremental/V0004__add_sdk_user_check.sql">V0004__add_sdk_user_check.sql</a></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><a href="../db/incremental/V0005__add_sdk_role_query.sql">V0005__add_sdk_role_query.sql</a></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><a href="../db/incremental/V0006__add_sdk_server_query.sql">V0006__add_sdk_server_query.sql</a></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><a href="../db/incremental/V0007__add_sdk_role_control.sql">V0007__add_sdk_role_control.sql</a></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><a href="../db/incremental/V0008__add_sdk_subscribe_message.sql">V0008__add_sdk_subscribe_message.sql</a></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><a href="../db/incremental/V0009__migrate_sdk_node_config.sql">V0009__migrate_sdk_node_config.sql</a></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><a href="../db/incremental/V0010__cleanup_legacy_sdk_fields.sql">V0010__cleanup_legacy_sdk_fields.sql</a></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><a href="../db/incremental/V0011__add_game_market_type.sql">V0011__add_game_market_type.sql</a></td></tr></tbody></table></div>
+<p>不得对已有配置数据的库再次执行 <code>db/full/</code> 中的全量 SQL。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 <code>DROP TABLE</code>。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。</p>
+<h2 id="database-2">SQL 目录与增量编号</h2>
+<ul>
+<li>根目录 <code>db/full/</code>：<code>config_center.sql</code> 与 <code>config_access.sql</code> 是<strong>当前完整结构快照</strong>，仅用于新建对应空库，不包含生产业务数据。</li>
+<li>根目录 <code>db/incremental/</code>：文件命名为 <code>V0001__description.sql</code>，序号全局连续递增，历史存量脚本为 <strong>V0001～V0011</strong>；下一份增量是 <strong>V0012</strong>。跨数据库时在文件名中注明 <code>config_center</code> 或 <code>config_access</code>。</li>
+<li><strong>新增数据库变更时，创建新编号的增量 SQL，并同步更新对应的全量 SQL</strong>，以及本文和 CI、发布相关检查。已经发布的增量 SQL 不允许修改、删除或重新编号。</li>
+<li>新增增量 SQL 头部注明目标数据库、适用旧结构与前置条件；所有 SQL 仍由管理员手工检查并执行。</li>
+<li><strong>注意：V0001～V0011 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。</strong> 例如 <code>V0003</code> 只适用于仍有旧 <code>sdk_service_binding</code> / <code>scope_type</code> 的库，<code>V0009</code> 仅适用于旧渠道表结构。已升级的库不得重跑。</li>
+<li>当前不引入 Flyway、自动执行或迁移版本记录表。<strong>编号本身不能证明数据库已经应用过该变更</strong>，执行前需检查真实表结构、数据和历史操作记录。</li>
+</ul>
+<p>源码目录 <code>db/full/</code>、<code>db/incremental/</code> 在发布包中分别对应 <code>sql/full/</code>、<code>sql/incremental/</code>。原有 <code>config-center/internal/sqlc/</code> SQL 仅用于代码生成，不属于手动数据库部署脚本。</p>
+<h2 id="database-3">本地 MySQL 示例</h2>
+<div class="code-card"><div class="code-header"><span>sql</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-sql">CREATE DATABASE IF NOT EXISTS config_center
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS config_access
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;</code></pre></div>
+<p><strong>只对新建空库执行初始化：</strong></p>
+<div class="code-card"><div class="code-header"><span>bat</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bat">mysql -u root -p config_center &lt; db/full/config_center.sql
+mysql -u root -p config_access &lt; db/full/config_access.sql</code></pre></div>
+<p>上面两行采用 shell 输入重定向，适用于 CMD/bash；PowerShell 可直接在 Navicat、DataGrip 等数据库工具中执行 SQL，或从 CMD 调用。</p>
+<p><strong>已有 config_center 库且缺少订单表时，只执行：</strong></p>
+<div class="code-card"><div class="code-header"><span>sql</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-sql">-- 先核对订单表是否已存在
+SHOW TABLES FROM config_center LIKE &#39;game_order&#39;;</code></pre></div>
+<p>检查后在数据库工具中运行 <code>db/incremental/V0001__add_game_order.sql</code>。该 SQL 只创建 <code>game_order</code>，不会改动配置表及历史业务数据。若表已经存在，不要重复运行，应先对比字段、索引和数据。</p>
+<p>执行后核对：</p>
+<div class="code-card"><div class="code-header"><span>sql</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-sql">SHOW TABLES FROM config_center LIKE &#39;game_order&#39;;
+SHOW CREATE TABLE config_center.game_order;
+SELECT COUNT(*) FROM config_center.config_node;</code></pre></div>
+<h2 id="database-4">权威库的业务表</h2>
+<ul>
+<li><code>config_node</code>：游戏、大区、区服组三级节点；<code>region.env_type</code> 为 <code>prod/test/review</code></li>
+<li><code>sdk_channel_app</code>：SDK Core 管理，全局唯一 AppID、共享 JSON 配置、三环境绑定</li>
+<li><code>sdk_node_config</code>：SDK Core 管理，node_id 引用 <code>config_node.id</code>，游戏/大区/区服组的 SDK 专属 JSON</li>
+<li><code>config_revision</code>、<code>config_node_change_log</code>：同步游标和变更日志</li>
+<li><code>config_subscriber</code>、<code>config_subscriber_delivery_state</code>：Webhook 订阅者和投递状态</li>
+<li><code>game_order</code>：SDK Core 充值订单、支付状态、通知租约和补偿</li>
+<li><code>sdk_service</code>：SDK 功能目录与全局开关，新库初始化预置已实现的 <code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code>、<code>role_control</code>，不包含 <code>scope_type</code>、<code>sort_order</code></li>
+<li><code>sdk_service_channel</code>：按 <code>service_id + channel_app_id + env</code> 唯一的渠道包服务绑定</li>
+</ul>
+<p><code>config_center</code> 的配置表与订单表使用同一个数据库。SDK Core 只使用一个 <code>database.dsn</code> 连接池；建议配置表只授予 SELECT、订单表授予 SELECT/INSERT/UPDATE，运行账号不授予 DDL。</p>
+<h2 id="database-5">SDK 功能配置与数据安全</h2>
+<ul>
+<li><code>sdk_service_channel</code> 使用 <code>(service_id, channel_app_id, env)</code> 唯一约束，<code>env</code> 只能是 <code>prod/test/review</code>。</li>
+<li><code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code> 与 <code>role_control</code> 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。</li>
+<li><code>sdk_service_channel.config</code> 为 JSON 对象；当前事件上报不使用事件级规则，不持久化和自动重试。</li>
+<li>SDK Core 的管理接口为 <code>GET /api/core/admin/services</code>、<code>PUT /api/core/admin/services/{id}</code> 和渠道包 <code>/api/core/admin/channel-apps/{id}/services</code> 系列，详见 <a href="index.html#a-sdk-start">管理接口</a>。</li>
+<li>充值订单和发货通知不依赖功能开关。</li>
+</ul>
+<ul>
+<li>MySQL DDL 会隐式提交，失败时不能假定事务回滚。应检查实际执行到哪一条 SQL，再制定恢复步骤。</li>
+<li>接入端副本 <code>config_access</code> 独立于权威库，只保存三级节点及同步游标。首次全量拉取由接入服务在表结构就绪后完成，不再自动建表。</li>
+<li>生产环境继续控制 <code>/api/config/**</code> 的访问权限，保护 <code>gameSecret</code> 和其他原始配置密钥。</li>
+</ul>
+<h2 id="database-6">SDK 配置拆分上线顺序</h2>
+<ol>
+<li>在维护窗口停止旧版本 <code>config-center</code>、所有 <code>sdk-core-*</code>、<code>sdk-service</code> 与管理端写操作；备份 <code>config_center</code> 并核对真实字段。</li>
+<li><strong>已有库</strong>执行 <code>db/incremental/V0009__migrate_sdk_node_config.sql</code>。该脚本创建 <code>sdk_node_config</code>、复制已知的游戏/大区 SDK 字段，并将 <code>config_channel_app</code> 改名为 <code>sdk_channel_app</code>。保留旧 <code>config_node.config</code> JSON 供比较，禁止对已经迁移的库重复执行。</li>
+<li>对比游戏密钥、适配器、五类回调地址、渠道包数量/ID、环境绑定及功能开关，检查是否存在未归类的自定义 SDK 字段。确认没有遗漏后再升级二进制与前端。</li>
+<li>同时切换 <code>config-center</code>、全部 <code>sdk-core</code>、<code>sdk-service</code>，不能保留混合新旧版本；Nginx 新增对 <code>/api/core/admin/</code> 的保护。验证配置查询、订单登记/回调/发货、角色与区服查询、封解禁、事件与订阅消息。</li>
+<li>验证通过后，在单独维护窗口人工执行 <code>db/incremental/V0010__cleanup_legacy_sdk_fields.sql</code>。清理后校验配置快照和日志不再包含 SDK 密钥。不得通过自动启动逻辑执行 DDL。</li>
+</ol>
+<p><strong>注意</strong>：MySQL DDL 隐式提交，迁移脚本不是单事务；重命名表前应确认目标表不存在，失败时人工核对已执行步骤。仅对已知 SDK 字段自动搬迁，未知自定义键需人工识别及处理。密钥迁移不可输出明文到 CI 或审计日志。</p></article>
+<article class="doc-pane" id="development" data-pane="development" aria-labelledby="tab-development" hidden><div class="eyebrow">DEVELOPER GUIDE / DEVELOPMENT</div><p class="pane-subtitle">本地启动、联调测试与 CI</p><h1>本地开发与联调</h1>
+<p>本文以 <strong>Windows PowerShell</strong> 为例；四个 Go 服务使用各自的 <code>configs/config.yaml</code> 作为公开模板，复制为未提交的 <code>configs/config-dev.yaml</code> 并填写凭据。不要将包含真实密码的 YAML 提交 Git。</p>
+<h2 id="development-1">环境</h2>
+<ul>
+<li>Go 1.27.3、MySQL 8.0+；运行 Vue 管理端另需 Node.js 22 / npm。</li>
+<li>本地默认端口：<code>config-center:8080</code>、<code>config-center-access:8081</code>、<code>sdk-core:8082</code>、<code>sdk-service:8221</code>。</li>
+<li>权威数据库和接入副本必须分开：<code>config_center</code> 与 <code>config_access</code>。</li>
+</ul>
+<p>使用 MySQL 管理工具执行：</p>
+<div class="code-card"><div class="code-header"><span>sql</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-sql">CREATE DATABASE IF NOT EXISTS config_center
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS config_access
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;</code></pre></div>
+<h2 id="development-2">1. 权威配置中心</h2>
+<p>打开第一个 PowerShell 终端：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center
+Copy-Item configs/config.yaml configs/config-dev.yaml</code></pre></div>
+<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code>，例如 <code>root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&amp;loc=UTC</code>。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口默认启用 <code>adminAuth</code> 签名；下文未携带签名的本地管理请求示例，仅适用于<strong>隔离的本地开发环境</strong>，需在 <code>config-center</code> 和 <code>sdk-core</code> 的 <code>configs/config-dev.yaml</code> 中显式设置 <code>adminAuth.enabled: false</code>。如保持默认开启，请按 <a href="index.html#sig-admin">管理签名规范</a> 添加请求头。生产不得免签，并须经受保护的 HTTPS 网关访问；新增订阅者无需重启。回调支持公网/内网的域名与 IP（HTTP/HTTPS），无需配置域名白名单。</p>
+<p>对<strong>新空库先手动执行 SQL，再启动</strong>：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 先在数据库工具中执行 db/full/config_center.sql（仅新库）
+go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
+<p>成功后检查 <code>http://127.0.0.1:8080/health/ready</code>。若提示数据库表或字段缺失，先核实 DSN、表结构以及 SQL 是否已手工执行；启动程序不会建表。</p>
+<h2 id="development-3">2. 接入端（可选）</h2>
+<p>新终端进入 <code>config-center-access</code>：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center-access
+Copy-Item configs/config.yaml configs/config-dev.yaml
+# 修改 YAML 中 database.dsn / configCenter.url / webhook.secret
+go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></div>
+<p><code>database.dsn</code> 指向 <code>config_access</code>，<code>configCenter.url</code> 通常是 <code>http://127.0.0.1:8080</code>，<code>webhook.secret</code> 必须是足够长的随机密钥。首次启动前须对空 <code>config_access</code> 执行 <code>db/full/config_access.sql</code>，随后全量拉取节点，随后增量同步；旧副本库参见 <a href="#database">数据库文档</a>。</p>
+<p>在运行中的配置中心注册订阅者（示例密钥需与接入端一致，且管理写接口必须在受保护的网络上启用）；无需重启 Worker：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">$body = @{
+    code = &quot;access-local&quot;
+    callbackUrl = &quot;http://127.0.0.1:8081/internal/config/callback&quot;
+    secret = &quot;replace-with-a-strong-local-secret&quot;
+} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri &quot;http://127.0.0.1:8080/api/config/admin/subscribers&quot; -ContentType &quot;application/json&quot; -Body $body</code></pre></div>
+<p>检查 <code>http://127.0.0.1:8081/api/access/revision</code>。Webhook 使用 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>，将订阅者密钥、时间戳、nonce、epoch、revision 按值排序计算 SHA-1。签名验证成功只代表已接受异步同步，真正的节点更新以副本游标和节点结果为准。旧 HMAC-SHA256 接入端不再兼容，新旧服务端必须同步升级。</p>
+<h2 id="development-4">3. SDK Core</h2>
+<p>新终端进入 <code>sdk-core</code>：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd sdk-core
+Copy-Item configs/config.yaml configs/config-dev.yaml
+# 只需要 database.dsn，连接 config_center；订单路由随服务启动。
+# 已有权威库先人工执行 db/incremental/V0001__add_game_order.sql，
+# 同一数据库账号应具备 game_order 表读写权限。
+go run ./cmd/sdk-core -config configs/config-dev.yaml</code></pre></div>
+<p>SDK Core <strong>直接查询权威库</strong>，不连接 <code>config_access</code>，也不执行迁移；需要先在管理端创建已启用游戏、大区、区服组和渠道应用，并给对应环境绑定区服组，再调用：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">Invoke-RestMethod &quot;http://127.0.0.1:8082/api/core/config/prod/your-appid&quot;</code></pre></div>
+<p><code>your-appid</code> 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口与签名见 <a href="index.html">统一接口文档</a>；模块说明见 <a href="../sdk-core/README.md">SDK Core</a>。</p>
+<h2 id="development-5">4. SDK Service（平台查询与游戏消息转发）</h2>
+<p>进入 <code>sdk-service</code> 目录，复制配置文件，<code>database.dsn</code> 指向 <code>config_center</code>（只读账号）：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd sdk-service
+Copy-Item configs/config.yaml configs/config-dev.yaml
+go run ./cmd/sdk-service -config configs/config-dev.yaml</code></pre></div>
+<p>首次部署应确认功能开关表已建立并包含 <code>user_check</code>、<code>event_report</code>、<code>subscribe_message</code> 等已实现服务；已有库缺少订阅消息服务时先手动执行 <code>db/incremental/V0008__add_sdk_subscribe_message.sql</code>。游戏 <code>gameSecret</code>、渠道包 <code>appSecret</code>、大区 <code>userCheckUrl</code> 已配置，且相应全局与渠道环境的功能开关已开启。<strong>默认 <code>standard</code> 适配器无需配置</strong>。本地健康检查：<code>http://127.0.0.1:8221/health/ready</code>。</p>
+<p>游戏上报事件使用 <code>POST /api/service/events/{env}</code>，订阅消息使用 <code>POST /api/service/subscribe/{env}</code>，AppID 放 <code>x-app-id</code>。平台两个目标地址由 <code>sdk-service/configs/config-dev.yaml</code> 的 <code>platform.eventReportURL</code> 与 <code>platform.subscribeMessageURL</code> 指定，未启用相应业务时可留空。旧 Core 事件路由已移除；不要继续请求 <code>/api/core/events/{env}</code>。</p>
+<p>平台和游戏联调报文分别见 <a href="index.html#p-start">平台接口 HTML</a>、<a href="index.html#g-start">游戏接口 HTML</a>。</p>
+<h2 id="development-6">5. Vue 管理端</h2>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center-admin
+npm ci
+npm run dev</code></pre></div>
+<p>按 Vite 控制台显示的地址打开管理端。需要其他局域网设备访问时可运行 <code>npm run dev -- --host 0.0.0.0</code>，并配置相应防火墙与后端访问策略；切勿将无认证的管理端直接开放公网。</p>
+<h2 id="development-7">6. 检查与排障</h2>
+<div class="table-scroll"><table><thead><tr><th scope="col">现象</th><th scope="col">检查项</th></tr></thead><tbody><tr><td><code>database.dsn ... is required</code></td><td>指定 YAML 中是否填 DSN；也可使用对应环境变量</td></tr><tr><td><code>database structure invalid</code></td><td>检查表、关键索引以及手动 SQL 是否执行</td></tr><tr><td><code>obsolete replica schema</code></td><td>接入端表结构不兼容；先备份并确认真实结构，禁止对非空库直接初始化</td></tr><tr><td>SDK Core 返回 404</td><td>AppID、<code>env</code>、三个绑定字段、节点启用状态</td></tr><tr><td>Webhook 不生效</td><td>订阅者密钥、回调 URL 可达性、反向代理访问和同步游标</td></tr><tr><td>前端接口失败</td><td>Vite 代理、配置中心端口及网关允许访问管理接口的规则</td></tr></tbody></table></div>
+<p>公共配置优先级以各工程的 <code>configs/config.yaml</code> 与 <code>internal/settings</code> 实现为准，通常由默认值、配置文件和环境变量叠加。线上发布请转到 <a href="#production">生产运维</a>。</p>
+<p>旧版 YAML 可能包含已废弃字段，必须以当前各服务 <code>configs/config.yaml</code> 模板为准更新，避免严格解析失败；不要在生产库运行开发或模拟支付脚本。</p>
+<h2 id="development-8">7. 测试与 CI</h2>
+<p>四个 Go 服务各自运行（<code>shared/logging</code> 与 <code>shared/signature</code> 为独立 Go Module，也应单独验证）：</p>
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">go test -race ./...
+go vet ./...
+go build ./cmd/...</code></pre></div>
+<p>Vue 管理端：</p>
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">cd config-center-admin
+npm ci
+npm run build</code></pre></div>
+<p>GitHub Actions 工作流：</p>
+<div class="table-scroll"><table><thead><tr><th scope="col">名称</th><th scope="col">文件</th><th scope="col">作用</th></tr></thead><tbody><tr><td>Build</td><td><code>.github/workflows/build.yml</code></td><td>配置中心、接入端、Vue、人工 SQL 与 Webhook 集成测试</td></tr><tr><td>sdk-core</td><td><code>.github/workflows/sdk-core.yml</code></td><td>Core 单元测试、race、vet 与集成测试</td></tr><tr><td>sdk-service</td><td><code>.github/workflows/sdk-service.yml</code></td><td>Service 与公共签名校验</td></tr><tr><td>Package Linux</td><td><code>.github/workflows/package.yml</code></td><td>tar.gz 构建、ELF 架构与权限验证</td></tr></tbody></table></div>
+<p><code>scripts/ci_schema_sql_smoke.py</code> 和 <code>scripts/ci_smoke.py</code> 是 CI 测试脚本，<strong>不得在生产数据库执行</strong>。Build 的 CI Gate 不会自动覆盖其他独立工作流。发布流程、打包参数统一参见 <a href="#production">生产运维</a>。</p></article>
+<article class="doc-pane" id="production" data-pane="production" aria-labelledby="tab-production" hidden><div class="eyebrow">DEVELOPER GUIDE / PRODUCTION</div><p class="pane-subtitle">Supervisor、Nginx、发布流程与排障</p><h1>生产部署与运维（Supervisor 优先）</h1>
+<p>部署模型：<strong>Linux 二进制 + 独立 MySQL 8.0+ + Nginx + Supervisor</strong>。<code>systemd</code> 可选，但本文以当前采用的 Supervisor 为主要方案。服务管理配置不放入仓库，也不包含在发布包中；生产机无需安装 Go、Node.js。</p>
+<blockquote>配置中心与 SDK Core 管理 API 默认启用 <code>adminAuth</code> 请求签名，但签名不代替访问控制。管理、同步、接入回调仍须通过可信内网或具备认证、白名单和 TLS 的专用网关暴露。对外开放的业务 API 包括必要的 <code>/api/core/**</code> 与 <code>/api/service/**</code>，其他管理与同步路径仍需保护。</blockquote>
+<h2 id="production-1">1. 部署目录与端口</h2>
+<div class="code-card"><div class="code-header"><span>text</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-text">/data/middle-platform/
+├── bin/             # 四个 Linux 可执行程序
+├── config/          # 生产 YAML（禁止提交 Git 或打入归档）
+├── admin/           # Vue 静态文件
+└── logs/            # 由 Supervisor 或系统负责轮转</code></pre></div>
+<p>建议：<code>config-center:8201</code>、<code>sdk-core-1:8211</code>、<code>sdk-core-2:8212</code>、<code>sdk-service:8221</code>、<code>config-center-access:8291</code>（可选），管理端由内部 Nginx 提供。具体端口按现有主机资源调整；不同实例不得占用同一监听地址。</p>
+<ul>
+<li><code>config-center</code> 多实例共享 <code>config_center</code> 权威库。</li>
+<li><code>sdk-core</code> 使用单一 <code>database.dsn</code> 和单连接池，配置表只读、<code>config_center.game_order</code> 限定读写；订单接口及补偿 Worker 随服务启动。多实例可共用一份 YAML，并通过 <code>SDK_CORE_ADDR</code> 覆盖监听端口。平台 v1 通过签名、订单与金额一致性校验后确认支付；不查单，但签名未覆盖金额的残余风险必须明确接受。</li>
+<li><code>config-center-access</code> 只有需要本地三级节点副本时才部署，使用独立 <code>config_access</code> 库。</li>
+</ul>
+<h2 id="production-2">2. 打包上传与首次安装</h2>
+<p>在开发机执行：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\scripts\package.ps1 -Arch amd64 -Version v1.0.0</code></pre></div>
+<p>将 <code>dist/middle-platform-v1.0.0-linux-amd64.tar.gz</code> 上传到服务器 <code>/tmp/</code>。<strong>仅首次部署且确认程序尚未运行时</strong>，可用以下命令安装：</p>
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">sudo mkdir -p /data/middle-platform/{bin,config,admin,logs}
+sudo mkdir -p /tmp/middle-platform-stage
+sudo tar --no-same-owner -xzpf /tmp/middle-platform-v1.0.0-linux-amd64.tar.gz -C /tmp/middle-platform-stage
+file /tmp/middle-platform-stage/bin/*
+ls -l /tmp/middle-platform-stage/bin/
+sudo cp -a /tmp/middle-platform-stage/bin/. /data/middle-platform/bin/
+sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/</code></pre></div>
+<p>使用 <code>-SkipFrontend</code> 构建的包没有 <code>admin/</code>，不要执行对应 <code>cp</code>。创建低权限服务账号 <code>middle-platform</code>，按实际用户/组授予 <code>bin/</code>、<code>config/</code> 和 <code>logs/</code> 最小权限；真实 <code>config-center.yaml</code>、<code>config-center-access.yaml</code>、<code>sdk-core.yaml</code>、<code>sdk-service.yaml</code> 单独放在 <code>/data/middle-platform/config/</code>。</p>
+<h3>打包参数及产物</h3>
+<p><code>scripts/package.ps1</code> 是唯一手动打包入口，支持 Windows PowerShell 与 GitHub Actions 统一生成 Linux ELF + tar.gz。依赖 Go 1.27.3；包含前端时还需要 Node.js 22 / npm。</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
+.\scripts\package.ps1 -Arch arm64 -Version v1.0.0
+.\scripts\package.ps1 -SkipFrontend -Version v1.0.0</code></pre></div>
+<p>省略 <code>-Version</code> 时使用提交号或本地时间作为版本标识；Go 交叉编译加 <code>-buildvcs=false</code>。正常情况下 <code>dist/</code> 只保留一个版本归档，没有中间目录。</p>
+<p>归档结构以打包脚本为准：</p>
+<div class="code-card"><div class="code-header"><span>text</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-text">bin/
+  config-center
+  config-center-access
+  sdk-core
+  sdk-service
+sql/
+  full/
+    config_center.sql
+    config_access.sql
+  incremental/
+    V0001__add_game_order.sql
+    ...
+    V0011__add_game_market_type.sql
+admin/                     # -SkipFrontend 时不存在</code></pre></div>
+<p>归档不包含生产密钥、YAML、Nginx/Supervisor 配置。Linux 可执行文件保存 0755 权限，可在上传后执行 <code>tar -tzf</code>、<code>file bin/*</code> 校验。GitHub Actions <code>.github/workflows/package.yml</code> 使用同一脚本并检查 ELF 架构与权限。打包不会自动部署、执行 SQL 或管理 Supervisor。</p>
+<h2 id="production-3">3. 手动 SQL 先于启动</h2>
+<p>备份并核对目标数据库，<strong>只执行对应场景的 SQL</strong>。现有 V0001～V0011 为不同历史场景的编号归档，不可以不经检查而依次执行：</p>
+<ul>
+<li>SDK 拆分升级：停所有旧实例并备份后执行 <code>sql/incremental/V0009__migrate_sdk_node_config.sql</code>，验证新版后单独执行 <code>sql/incremental/V0010__cleanup_legacy_sdk_fields.sql</code>。详见 <a href="#database">数据库文档</a>。</li>
+<li>全新、空的 <code>config_center</code>：<code>sql/full/config_center.sql</code>。</li>
+<li>已有 <code>config_center</code> 仅缺少订单表：<code>sql/incremental/V0001__add_game_order.sql</code>。</li>
+<li>已有权威库但没有 SDK 服务表：<code>sql/incremental/V0002__add_sdk_services.sql</code>（仅表确实不存在时执行）。</li>
+<li>已有功能表但缺少 <code>user_check</code> 服务目录：<code>sql/incremental/V0004__add_sdk_user_check.sql</code>。</li>
+<li>已有服务表但缺少角色查询、区服查询或封解禁目录：分别手工执行 <code>sql/incremental/V0005__add_sdk_role_query.sql</code>、<code>sql/incremental/V0006__add_sdk_server_query.sql</code>、<code>sql/incremental/V0007__add_sdk_role_control.sql</code>，在部署新版 sdk-service 前完成。</li>
+<li>已有服务表但缺少订阅消息目录：手动执行 <code>sql/incremental/V0008__add_sdk_subscribe_message.sql</code>，在部署新版 sdk-service 前完成。</li>
+<li>全新、空的 <code>config_access</code>：<code>sql/full/config_access.sql</code>。</li>
+</ul>
+<p>例如在 Linux 发布包解压目录（已有库补建订单表）：</p>
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">mysql -u &lt;管理账号&gt; -p config_center &lt; sql/incremental/V0001__add_game_order.sql</code></pre></div>
+<p>如果目标表已经存在，不要反复执行初始化 SQL；应检查实际表定义与索引。 应用启动只校验结构，不创建或修改数据库表。历史 <code>config_schema_migrations</code> 仅作遗留记录，新代码不再检查或更新。 参见 <a href="#database">数据库说明</a>。</p>
+<h2 id="production-4">4. Supervisor 管理服务</h2>
+<p>Supervisor 配置由服务器独立管理，例如 <code>/etc/supervisor/conf.d/middle-platform.conf</code>。以下是配置中心的<strong>参考样例</strong>，使用前要确认账号存在、权限正确、YAML 已填写、服务已在 <code>8201</code> 监听：</p>
+<div class="code-card"><div class="code-header"><span>ini</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-ini">[program:config-center]
+command=/data/middle-platform/bin/config-center -config /data/middle-platform/config/config-center.yaml
+directory=/data/middle-platform
+user=middle-platform
+autostart=true
+autorestart=unexpected
+stopsignal=TERM
+stopwaitsecs=40
+redirect_stderr=true
+stdout_logfile=/data/middle-platform/logs/config-center.log
+stdout_logfile_maxbytes=50MB
+stdout_logfile_backups=5
+environment=CONFIG_GO_ADDR=&quot;:8201&quot;</code></pre></div>
+<p>对于 <code>sdk-core-1</code> / <code>sdk-core-2</code>，可复用 <code>bin/sdk-core</code> 与 <code>config/sdk-core.yaml</code>，但分别配置 <code>SDK_CORE_ADDR=&quot;:8211&quot;</code> / <code>&quot;:8212&quot;</code>、独立 <code>[program:...]</code> 名称和日志文件。<code>sdk-service</code> 使用独立的 <code>bin/sdk-service</code>、<code>config/sdk-service.yaml</code>，默认监听 <code>:8221</code>；接入端同理使用独立进程、DSN 与端口。配置变更后：</p>
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl status
+sudo supervisorctl restart config-center
+sudo supervisorctl tail -f config-center</code></pre></div>
+<p>生产机原有 Supervisor 配置应以实际路径、命名和用户为准，<strong>不要因为示例而覆盖已有服务定义</strong>。如改用 <code>systemd</code>，请配置 <code>Restart=on-failure</code>、<code>KillSignal=SIGTERM</code>、<code>TimeoutStopSec=40s</code>，日志由 <code>journald</code> 收集；两种管理器不要同时控制同一个进程。</p>
+<h2 id="production-5">5. Nginx 网关与访问边界</h2>
+<p>以下示例按后端内部路由 <code>/api/...</code> 转发。若公网使用 <code>/sdk/api/...</code>，需在 Nginx 明确移除 <code>/sdk</code> 前缀后再交给后端，避免出现双重前缀。</p>
+<ul>
+<li>对外业务域名：<code>/api/core/</code> 转发到 SDK Core 多实例；<code>/api/service/</code> 转发到 SDK Service（平台核验/查询/封解禁和游戏事件/订阅消息）。</li>
+<li>管理域名或受保护内网：<code>/api/config/</code> 转发到配置中心，后台静态页来自 <code>admin/</code>；对管理和同步路径设置白名单/认证。</li>
+<li><code>/internal/config/callback</code> 只允许配置中心从可信网络访问接入端；验证 HMAC 和时间窗口并不能替代网络边界。</li>
+</ul>
+<div class="code-card"><div class="code-header"><span>nginx</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-nginx">upstream sdk_core {
+    server 127.0.0.1:8211;
+    server 127.0.0.1:8212;
+}
+# 以下 location 仅放在对外 SDK API 对应的 server 中
+# 必须放在通用 /api/core/ 路由之前：SDK 管理接口不能通过公开 SDK 网关访问。
+location ^~ /api/core/admin/ {
+    return 403;
+}
+location ^~ /api/core/ {
+    proxy_pass http://sdk_core;
+}
+location ^~ /api/service/ {
+    proxy_pass http://127.0.0.1:8221;
+}</code></pre></div>
+<p>Nginx 不会因 <code>/health/ready</code> 自动从静态 upstream 中摘除后端；需要明确的流量摘除流程或具备主动健康检查的网关。</p>
+<h3>配置管理前端：运行时配置</h3>
+<p>前端构建采用 Vite <code>base: &#39;./&#39;</code>，可以直接放在 Nginx 的 <code>/admin/</code> 或其他子路径下。静态资源使用相对路径，不需要修改打包脚本或重新构建。</p>
+<p>前端所有配置中心 API 请求从 <code>admin/config.js</code> 中读取：</p>
+<div class="code-card"><div class="code-header"><span>js</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-js">window.__MIDDLE_PLATFORM_CONFIG__ = {
+  apiBaseUrl: &#39;/api/config&#39;,
+  sdkApiBaseUrl: &#39;/api/core&#39;
+}</code></pre></div>
+<p>注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。<code>apiBaseUrl</code> 指向配置中心，<code>sdkApiBaseUrl</code> 指向 SDK Core。管理页面只可通过内网/受认证的独立网关访问，不得通过公开 SDK 网关访问 <code>/api/core/admin/</code>。</p>
+<p>为了确保更新 <code>admin/</code> 静态资源时不覆盖生产配置，建议在正式服务器将配置长期保存于 <code>/data/middle-platform/config/admin.js</code>：</p>
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">cp -n /data/middle-platform/admin/config.js /data/middle-platform/config/admin.js
+vi /data/middle-platform/config/admin.js</code></pre></div>
+<p>在现有的 <code>zk.skybluek.com</code> HTTPS <code>server {}</code> 内，优先配置精确匹配：</p>
+<div class="code-card"><div class="code-header"><span>nginx</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-nginx">location = /admin/config.js {
+    alias /data/middle-platform/config/admin.js;
+    add_header Cache-Control &quot;no-store&quot; always;
+}
+location = /admin {
+    return 301 /admin/;
+}
+location ^~ /admin/ {
+    alias /data/middle-platform/admin/;
+    index index.html;
+    try_files $uri $uri/ /admin/index.html;
+}
+location ^~ /api/config/ {
+    proxy_pass http://127.0.0.1:8201;
+}</code></pre></div>
+<p>该规则只演示配置中心相关路径。SDK Core 的 <code>/api/core/</code> 仍应独立配置负载均衡代理，不能转发到配置中心。此处 <code>proxy_pass</code> 不附加 URI，直接透传原始 <code>/api/config/</code> 请求路径。</p>
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">nginx -t &amp;&amp; systemctl reload nginx
+curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
+<p>改动 <code>admin.js</code> 后强制刷新浏览器即可生效，不需要重启 Supervisor。原项目使用 hash 路由，子路径刷新不会要求额外的前端路由配置。</p>
+<p><strong>安全提醒：</strong> 配置中心管理 API 默认启用 <code>adminAuth</code> 请求签名，<code>/admin/</code> 和 <code>/api/config/admin/</code> 仍须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。</p>
+<h2 id="production-6">6. 直接发布与失败排查</h2>
+<p>本项目使用固定的 <code>bin/</code>、<code>admin/</code>、<code>sql/</code> 目录，不建立 <code>releases/</code> 版本目录，也不提供自动或手动回滚脚本。发布工具见 <a href="../publish/README.md">本地发布说明</a>。</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 在开发机上执行：默认打包、上传、更新文件、重启 Supervisor 并验活
+.\publish\publish.ps1 -Version v1.0.0
+
+# 仅部署 SDK Core（按 publish.config.json 的 services 配置依次重启）
+.\publish\publish.ps1 -Version v1.0.1 -Service sdk-core
+
+# 仅更新文件，不重启
+.\publish\publish.ps1 -Version v1.0.2 -SkipRestart</code></pre></div>
+<ol>
+<li>发布前确认服务与数据库结构兼容。DDL 仍在单独变更窗口由管理员审核并执行，不随脚本自动迁移。</li>
+<li>上传后校验 SHA-256、架构、归档内容、所选服务；校验成功再把文件逐个写入同目录临时文件并重命名替换，保留 <code>config/</code>、<code>logs/</code>、<code>admin/config.js</code>。</li>
+<li>默认读取本地 <code>publish/publish.config.json</code> 的 <code>services</code>（Supervisor 进程名 → 健康检查端口），只重启选中模块对应的实例并逐个验证本机 <code>/health/ready</code>。实例支持 <code>config-center-1/2</code>、<code>sdk-core-1/2/3</code> 等名称；新增实例只需改 JSON。<code>-SkipRestart</code> 可跳过这一阶段。</li>
+<li><strong>单次发布不是跨多个文件的事务</strong>；更新、重启或验活失败不会自动回滚，可能需要人工修复。Nginx 静态 upstream 不自动根据健康端点摘流量，两个 Core 顺序重启不保证零中断。</li>
+<li>发布后还需人工抽查充值订单、配置同步和事件上报等关键业务，确认未发生接口或配置不兼容。</li>
+</ol>
+<h2 id="production-7">7. 日志、停服与排障</h2>
+<p>四个 Go 进程共用 <code>shared/logging</code>（<code>log/slog</code>），YAML 示例：</p>
+<div class="code-card"><div class="code-header"><span>yaml</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-yaml">log:
+  level: info
+  format: json
+  output: stdout
+  accessEnabled: true
+  slowThreshold: 500ms</code></pre></div>
+<p>支持 <code>LOG_LEVEL</code>、<code>LOG_FORMAT</code>、<code>LOG_OUTPUT</code>、<code>LOG_ACCESS_ENABLED</code>、<code>LOG_SLOW_THRESHOLD</code> 环境变量；<code>INSTANCE_ID</code> 可标记实例。HTTP 响应携带 <code>X-Request-ID</code>，访问日志含 <code>service</code>、<code>instance</code>、<code>request_id</code>、<code>status</code>、<code>duration_ms</code> 等字段，不记录密码、签名、请求体。Supervisor 收集 stdout 并轮转；若选择 systemd 则使用 <code>journalctl</code> / journald。不要把高基数的 <code>request_id</code> 用作日志系统标签。</p>
+<p>服务接到 <code>SIGINT</code> 或 <code>SIGTERM</code> 时先将 <code>/health/ready</code> 置为不可用，<code>http.Server.Shutdown</code> 等待存量 HTTP 请求（最多 30 秒），再等待 Webhook 或同步 Worker 并关闭数据库连接；超时可能被强制关闭，依靠游标/租约重试恢复。Supervisor 应设置 <code>stopsignal=TERM</code> 和至少 40 秒停机宽限时间。不要使用强制 Kill 作为正常停机方式。</p>
+<p><strong>提醒：</strong> Go 的 Shutdown 不会自动排空 WebSocket/hijacked 连接；未来 SDK 新增此类连接需单独处理退出。</p>
+<h2 id="production-8">上线发布前检查</h2>
+<ul>
+<li>配置中心管理写接口<strong>始终注册，默认需要 <code>adminAuth</code> 签名</strong>：升级部署前还必须由防火墙、私有网络或具备身份验证的网关限制整个 <code>/api/config/</code> 前缀，特别是 <code>/api/config/admin/</code>、节点原始 JSON 和同步快照，避免任意用户写入或读取服务端密钥。不要仅隐藏管理网页。</li>
+<li>SDK Core 订单接口和补偿 Worker 始终加载，数据库必须已有 <code>game_order</code> 表，账号需配置表 SELECT 与订单表 SELECT/INSERT/UPDATE；SDK Service 还需服务开关表与游戏、大区、渠道包的只读权限。</li>
+<li>平台 v1 缺少实付金额字段的签名完整性认证；SDK Core 不做二次查单，按签名和登记金额一致性执行支付确认。上线前须核实平台服务端可信定价、支付成功回调保障和游戏幂等发货，并接受现有回调协议的残余风险。</li>
+<li>部署前按各模块当前 YAML 模板更新私有配置，删除废弃开关及环境变量；代码合并不代表已经更新 Nginx ACL、线上配置或数据库。</li>
+</ul>
+<h2 id="production-9">8. 事件上报迁移发布顺序（重要）</h2>
+<ol>
+<li>先在存量权威库执行 <code>sql/incremental/V0008__add_sdk_subscribe_message.sql</code>，确认 <code>event_report</code>、<code>subscribe_message</code> 已注册且渠道环境功能开关配置正确。</li>
+<li>把原 <code>/data/middle-platform/config/sdk-core.yaml</code> 中的 <code>platform.eventReportURL</code> 移到 <code>sdk-service.yaml</code> 的同名配置；为订阅消息填写 <code>platform.subscribeMessageURL</code>。Core YAML 中必须删除旧 <code>platform</code>，否则严格 YAML 解码将拒绝启动。</li>
+<li>先验证 Nginx <code>/api/service/</code> 转发正确，再部署 SDK Service 和 SDK Core 新程序。旧 Core 的 <code>POST /api/core/events/{env}</code> 删除后返回 404。</li>
+<li>同步更新游戏端或调用 SDK 的事件上报 URL 到 <code>POST /api/service/events/{env}</code>，新增订阅消息使用 <code>POST /api/service/subscribe/{env}</code>。</li>
+<li>迁移切换不是无缝兼容：游戏方未更新旧地址时上报会失败。生产发布窗口应协调上游切换，必要时由受控网关短期转发旧路径到新 Service，完成切换后移除，避免双写。</li>
+</ol>
+<p>发布不执行 SQL、不自动修改服务器 YAML，也不会自动变更 Nginx；必须按以上顺序人工部署。</p>
+<h2 id="production-10">SDK 管理接口的 Nginx 隔离</h2>
+<p>SDK Core 进程中同时存在公开业务路由和 <code>/api/core/admin/</code> 管理路由。<strong>管理路由默认启用 <code>adminAuth</code> 请求签名，但没有用户登录/RBAC</strong>。生产环境仍应使用两个受网络隔离的网关入口：</p>
+<ul>
+<li>公共 SDK server：如上所示，用 <code>location ^~ /api/core/admin/ { return 403; }</code> 拒绝管理前缀，再代理 <code>/api/core/</code> 业务。</li>
+<li>独立管理 server：仅可信内网、VPN 或带认证的网关可以访问，允许 <code>/api/core/admin/</code> 反向代理到 <code>sdk_core</code>；后台静态页面及 <code>/api/config/admin/</code> 也由该入口保护。</li>
+</ul>
+<p>确保配置文件中带 <code>/sdk</code> 外部前缀时，先在对应外层 location 显式拒绝 <code>/sdk/api/core/admin/</code>，不能只拦截内部路径。请验证未认证的外部请求无法访问管理接口后才开始切流；单纯隐藏管理页面不足以保障安全。</p></article><footer class="footer">研发中台 · 开发与运维手册 · <a href="index.html">统一接口文档</a></footer></div></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const cats=["architecture","database","development","production"];
+  const tabs=[...document.querySelectorAll("[data-tab]")],panes=[...document.querySelectorAll("[data-pane]")],groups=[...document.querySelectorAll(".toc-group")],tocLinks=[...document.querySelectorAll(".toc-link")];
+  const sidebar=document.getElementById("sidebar"),search=document.getElementById("search"),overlay=document.getElementById("overlay"),menu=document.getElementById("menu");
+  const theme=document.getElementById("theme");
+  function toggleMenu(open){sidebar.classList.toggle("open",open);overlay.classList.toggle("show",open);overlay.hidden=!open;menu.setAttribute("aria-expanded",String(open));}
+  function getCategory(hash){const id=decodeURIComponent((hash||"").replace(/^#/,""));return cats.find(c=>id===c||id.startsWith(c+"-"))||"architecture";}
+  let active=getCategory(location.hash);
+  function refreshNav(){
+    const q=search.value.trim().toLowerCase();
+    let found=0;
+    groups.forEach(g=>{
+      let n=0;
+      g.querySelectorAll(".toc-link").forEach(a=>{
+        let match=!q||a.textContent.toLowerCase().includes(q);
+        if(q&&!match){
+          const target=document.getElementById(a.getAttribute("href").slice(1));
+          if(target){let el=target.nextElementSibling;while(el&&!/^H2$/.test(el.tagName)){if((el.textContent||"").toLowerCase().includes(q)){match=true;break;}el=el.nextElementSibling;}}
+        }
+        a.hidden=!match; if(match)n++;
+      });
+      const show=(q? n>0 : g.dataset.group===active);
+      g.hidden=!show;if(show)found+=n;
+    });
+    document.getElementById("empty").hidden=found>0;
+  }
+  function activate(cat){
+    active=cat;
+    panes.forEach(p=>p.hidden=p.dataset.pane!==cat);
+    tabs.forEach(b=>{const on=b.dataset.tab===cat;b.setAttribute("aria-selected",String(on));b.tabIndex=on?0:-1;});
+    tocLinks.forEach(a=>a.classList.toggle("active",a.hash===location.hash));
+    refreshNav();
+  }
+  tabs.forEach((b,i)=>b.addEventListener("click",()=>{history.replaceState(null,"","#"+b.dataset.tab);activate(b.dataset.tab);window.scrollTo({top:0,behavior:"instant"});toggleMenu(false);}));
+  document.getElementById("toc").addEventListener("click",e=>{const a=e.target.closest(".toc-link");if(!a)return;activate(a.dataset.cat);tocLinks.forEach(x=>x.classList.toggle("active",x===a));toggleMenu(false);});
+  window.addEventListener("hashchange",()=>{activate(getCategory(location.hash));const t=document.getElementById(location.hash.slice(1));if(t)t.scrollIntoView({block:"start"});});
+  search.addEventListener("input",refreshNav);
+  menu.addEventListener("click",()=>toggleMenu(!sidebar.classList.contains("open")));
+  overlay.addEventListener("click",()=>toggleMenu(false));
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")toggleMenu(false);});
+  let saved="light";try{saved=localStorage.getItem("mp-api-theme")|| (window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");}catch(e){}
+  document.documentElement.dataset.theme=saved==="dark"?"dark":"light";
+  function refreshTheme(){theme.textContent=document.documentElement.dataset.theme==="dark"?"☀":"☾";}
+  theme.addEventListener("click",()=>{const next=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=next;try{localStorage.setItem("mp-api-theme",next);}catch(e){}refreshTheme();});
+  refreshTheme();
+  document.querySelectorAll(".copy-btn").forEach(btn=>btn.addEventListener("click",async()=>{
+    const content=btn.closest(".code-card").querySelector("pre code").textContent;
+    try{
+      if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(content);
+      else{const ta=document.createElement("textarea");ta.value=content;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();const ok=document.execCommand("copy");ta.remove();if(!ok)throw Error("copy failed");}
+      btn.textContent="已复制";
+    }catch(e){btn.textContent="复制失败";}
+    btn.blur();
+    setTimeout(()=>{btn.textContent="复制";},1600);
+  }));
+  activate(active);
+  if(location.hash){const t=document.getElementById(location.hash.slice(1));if(t)requestAnimationFrame(()=>t.scrollIntoView({block:"start"}));}
+})();
+</script>
+</body></html>

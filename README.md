@@ -25,13 +25,13 @@
 3. 在各模块目录执行 `go run ./cmd/<模块名> -config configs/config-dev.yaml`。
 4. 在 `config-center-admin/` 执行 `npm ci`、`npm run dev`。
 
-本地默认监听：配置中心 `8080`、可选接入端 `8081`、SDK Core `8082`、SDK Service `8221`。完整步骤见 [本地开发与测试](docs/development.md)。
+本地默认监听：配置中心 `8080`、可选接入端 `8081`、SDK Core `8082`、SDK Service `8221`。完整步骤见 [本地开发与测试](docs/guide.html#development)。
 
 ## 文档导航
 
 **接口协议（唯一权威文档）**：[统一接口文档](docs/index.html)（游戏 / 平台 / 配置同步 / 管理接口 / 签名规则）
 
-**内部开发**：[架构与内部路由](docs/architecture.md) · [数据库与手动 SQL](docs/database.md) · [开发与 CI](docs/development.md) · [打包与生产运维](docs/production.md)
+**开发与运维**：[开发与运维手册](docs/guide.html)（架构 / 数据库 / 本地开发 / 生产运维）
 
 **模块**：[配置中心](config-center/README.md) · [配置接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md) · [SDK Service](sdk-service/README.md)
 

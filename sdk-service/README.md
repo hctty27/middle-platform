@@ -27,7 +27,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-service -config configs/config-dev.yaml
 ```
 
-默认端口 `:8221`。首次部署或升级前按 [数据库文档](../docs/database.md) 核对功能服务表与增量 SQL；平台事件/订阅目标 URL 在 `platform.eventReportURL` 和 `platform.subscribeMessageURL` 配置。旧的 `/api/core/events/{env}` 不再存在。
+默认端口 `:8221`。首次部署或升级前按 [数据库文档](../docs/guide.html#database) 核对功能服务表与增量 SQL；平台事件/订阅目标 URL 在 `platform.eventReportURL` 和 `platform.subscribeMessageURL` 配置。旧的 `/api/core/events/{env}` 不再存在。
 
 ```bash
 go test -race ./...
@@ -35,4 +35,4 @@ go vet ./...
 go build ./cmd/sdk-service
 ```
 
-[架构与内部路由](../docs/architecture.md) · [本地开发](../docs/development.md) · [生产部署与迁移](../docs/production.md)
+[架构与内部路由](../docs/guide.html#architecture) · [本地开发](../docs/guide.html#development) · [生产部署与迁移](../docs/guide.html#production)

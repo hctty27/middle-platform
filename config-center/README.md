@@ -4,7 +4,7 @@
 
 ## 本地启动
 
-1. 新建空库时手工执行 `../db/full/config_center.sql`；已有库按 [数据库文档](../docs/database.md) 核对后选择增量 SQL，禁止重新执行全量初始化。
+1. 新建空库时手工执行 `../db/full/config_center.sql`；已有库按 [数据库文档](../docs/guide.html#database) 核对后选择增量 SQL，禁止重新执行全量初始化。
 2. 将 `configs/config.yaml` 复制为 `configs/config-dev.yaml` 并填写 `database.dsn`。
 3. 在本目录运行：
 
@@ -19,10 +19,10 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 `/api/config/admin/**` 默认启用 `adminAuth` 管理签名。两服务的管理密钥应一致；即使启用签名，生产也必须限制网关访问范围并使用 HTTPS。同步快照和原始节点接口同样不得无防护地公开。
 
 - [统一接口与签名规范](../docs/index.html)
-- [架构与内部路由](../docs/architecture.md)
-- [数据库与手动 SQL](../docs/database.md)
-- [本地开发](../docs/development.md)
-- [生产运维](../docs/production.md)
+- [架构与内部路由](../docs/guide.html#architecture)
+- [数据库与手动 SQL](../docs/guide.html#database)
+- [本地开发](../docs/guide.html#development)
+- [生产运维](../docs/guide.html#production)
 
 ```bash
 go test -race ./...

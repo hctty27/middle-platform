@@ -23,7 +23,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
 
-新库按 [数据库文档](../docs/database.md) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。接口字段映射编译在 `internal/mapping/response-mapping.json`，修改后需要重新构建。
+新库按 [数据库文档](../docs/guide.html#database) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。接口字段映射编译在 `internal/mapping/response-mapping.json`，修改后需要重新构建。
 
 `/api/core/admin/**` 默认使用 `adminAuth` 签名，与配置中心使用相同管理密钥；生产仍需网关隔离并启用 HTTPS，不应公开暴露管理路由。
 
@@ -33,4 +33,4 @@ go vet ./...
 go build ./cmd/sdk-core
 ```
 
-[架构](../docs/architecture.md) · [本地开发](../docs/development.md) · [生产运维](../docs/production.md)
+[架构](../docs/guide.html#architecture) · [本地开发](../docs/guide.html#development) · [生产运维](../docs/guide.html#production)
