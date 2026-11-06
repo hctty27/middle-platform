@@ -29,6 +29,6 @@ go vet ./...
 go build ./cmd/config-center-access
 ```
 
-[统一接口与签名规范](../docs/index.html) · [同步架构](../docs/guide.html#architecture) · [数据库结构](../docs/guide.html#database) · [联调](../docs/guide.html#development)
+[统一接口与签名规范](../admin/public/docs/index.html) · [同步架构](../admin/public/docs/guide.html#architecture) · [数据库结构](../admin/public/docs/guide.html#database) · [联调](../admin/public/docs/guide.html#development)
 
-第三方同步接入协议见 [配置同步接入文档](../docs/index.html#s-intro)。
+第三方同步接入协议见 [配置同步接入文档](../admin/public/docs/index.html#s-intro)。

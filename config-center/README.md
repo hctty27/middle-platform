@@ -4,7 +4,7 @@
 
 ## 本地启动
 
-1. 新建空库时手工执行 `../db/full/config_center.sql`；已有库按 [数据库文档](../docs/guide.html#database) 核对后选择增量 SQL，禁止重新执行全量初始化。
+1. 新建空库时手工执行 `../db/full/config_center.sql`；已有库按 [数据库文档](../admin/public/docs/guide.html#database) 核对后选择增量 SQL，禁止重新执行全量初始化。
 2. 将 `configs/config.yaml` 复制为**完整独立**的 `configs/config-dev.yaml` 并填写 `database.dsn`。启动时只读取指定文件；不传 `-config` 时默认读取当前工作目录下的 `configs/config.yaml`。环境变量仍可覆盖指定字段。
 3. 在本目录运行：
 
@@ -18,11 +18,11 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 `/api/config/admin/**` 始终使用 `adminAuth.secret` 管理签名。两服务的管理密钥应一致；即使启用签名，生产也必须限制网关访问范围并使用 HTTPS。同步快照和原始节点接口同样不得无防护地公开。
 
-- [统一接口与签名规范](../docs/index.html)
-- [架构与内部路由](../docs/guide.html#architecture)
-- [数据库与手动 SQL](../docs/guide.html#database)
-- [本地开发](../docs/guide.html#development)
-- [生产运维](../docs/guide.html#production)
+- [统一接口与签名规范](../admin/public/docs/index.html)
+- [架构与内部路由](../admin/public/docs/guide.html#architecture)
+- [数据库与手动 SQL](../admin/public/docs/guide.html#database)
+- [本地开发](../admin/public/docs/guide.html#development)
+- [生产运维](../admin/public/docs/guide.html#production)
 
 ```bash
 go test -race ./...

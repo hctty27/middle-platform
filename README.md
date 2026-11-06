@@ -10,7 +10,7 @@
 | `config-center-access/` | 可选接入端：三级节点副本、Webhook 回调与快照/增量同步 |
 | `sdk-core/` | SDK 配置与服务管理、订单登记、支付回调、异步发货 |
 | `sdk-service/` | 平台主动核验/查询/封解禁、游戏事件上报与订阅消息转发 |
-| `config-center-admin/` | Vue 3 管理端 |
+| `admin/` | Vue 3 管理端与静态接口/运维文档 |
 | `shared/` | 结构化日志和签名公共库 |
 | `scripts/` | 打包及 CI 测试辅助脚本 |
 
@@ -23,15 +23,15 @@
 1. 创建空 `config_center`，手工执行 `db/full/config_center.sql`；已有库禁止重新执行初始化 SQL。
 2. 在各服务目录复制 `configs/config.yaml` 为 `configs/config-dev.yaml`，填写数据库 DSN 等必要配置。四个 Go 服务启动时均只读取**一份完整 YAML**（不传 `-config` 时读取当前工作目录下的 `configs/config.yaml`，指定时只读取该文件，不叠加其他 YAML），随后应用各自支持的环境变量覆盖；切勿提交真实密码。
 3. 在各模块目录执行 `go run ./cmd/<模块名> -config configs/config-dev.yaml`。
-4. 在 `config-center-admin/` 执行 `npm ci`、`npm run dev`。
+4. 在 `admin/` 执行 `npm ci`、`npm run dev`。
 
-本地默认监听：配置中心 `8080`、可选接入端 `8081`、SDK Core `8082`、SDK Service `8221`。完整步骤见 [本地开发与测试](docs/guide.html#development)。
+本地默认监听：配置中心 `8080`、可选接入端 `8081`、SDK Core `8082`、SDK Service `8221`。完整步骤见 [本地开发与测试](admin/public/docs/guide.html#development)。
 
 ## 文档导航
 
-**接口协议（唯一权威文档）**：[统一接口文档](docs/index.html)（游戏 / 平台 / 配置同步 / 管理接口 / 签名规则）
+**接口协议（唯一权威文档）**：[统一接口文档](admin/public/docs/index.html)（游戏 / 平台 / 配置同步 / 管理接口 / 签名规则）
 
-**开发与运维**：[开发与运维手册](docs/guide.html)（架构 / 数据库 / 本地开发 / 生产运维）
+**开发与运维**：[开发与运维手册](admin/public/docs/guide.html)（架构 / 数据库 / 本地开发 / 生产运维）
 
 **模块**：[配置中心](config-center/README.md) · [配置接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md) · [SDK Service](sdk-service/README.md)
 
@@ -42,4 +42,4 @@
 - 数据库 DDL 由管理员审核后手动执行，服务启动不建表、不自动迁移。
 - `/api/config/admin/**`、`/api/core/admin/**` 始终使用 `adminAuth.secret` 请求签名；生产仍须使用 TLS 和受保护的管理网关，不能只依赖签名或隐藏页面。可能包含密钥的原始配置/同步接口也必须限制访问。
 - Go 业务路由不包含 `/sdk` 前缀，公网如使用 `/sdk/` 应由 Nginx 负责前缀转换。
-- 订单与发货通知必须幂等；事件上报当前不落库、不自动重试。对外请求与签名规范统一在 `docs/index.html` 中维护。
+- 订单与发货通知必须幂等；事件上报当前不落库、不自动重试。对外请求与签名规范统一在 `admin/public/docs/index.html` 中维护。

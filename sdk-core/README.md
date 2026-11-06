@@ -13,7 +13,7 @@
 | GET/POST | `/api/core/admin/channel-apps` | 渠道包查询与新增 |
 | GET/PUT | `/api/core/admin/services[/{id}]` | 服务开关查询与更新 |
 
-上述表格仅用于快速定位；完整字段、全部管理路由、签名、错误码和请求示例统一以 [接口文档](../docs/index.html) 为准。
+上述表格仅用于快速定位；完整字段、全部管理路由、签名、错误码和请求示例统一以 [接口文档](../admin/public/docs/index.html) 为准。
 
 ## 本地启动
 
@@ -23,7 +23,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
 
-新库按 [数据库文档](../docs/guide.html#database) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。公开配置接口固定返回 `snKey`、`zoneKey` 和可选 `tsKey`，直接读取所需数据库字段，不再使用响应映射文件。需要增加公开字段时同步更新查询、DTO、测试和接口文档。
+新库按 [数据库文档](../admin/public/docs/guide.html#database) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。公开配置接口固定返回 `snKey`、`zoneKey` 和可选 `tsKey`，直接读取所需数据库字段，不再使用响应映射文件。需要增加公开字段时同步更新查询、DTO、测试和接口文档。
 
 `/api/core/admin/**` 始终使用 `adminAuth.secret` 签名，与配置中心使用相同管理密钥；生产仍需网关隔离并启用 HTTPS，不应公开暴露管理路由。
 
@@ -33,4 +33,4 @@ go vet ./...
 go build ./cmd/sdk-core
 ```
 
-[架构](../docs/guide.html#architecture) · [本地开发](../docs/guide.html#development) · [生产运维](../docs/guide.html#production)
+[架构](../admin/public/docs/guide.html#architecture) · [本地开发](../admin/public/docs/guide.html#development) · [生产运维](../admin/public/docs/guide.html#production)

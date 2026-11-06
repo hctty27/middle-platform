@@ -77,7 +77,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li><code>config-center-access</code>：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。</li>
 <li><code>sdk-core</code>：直接查询权威库，根据环境绑定按需返回固定公开配置字段；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。</li>
 <li><code>sdk-service</code>：平台主动调用游戏，处理平台发起的用户核验、角色/区服查询、封解禁，以及游戏上报的事件和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。</li>
-<li><code>config-center-admin</code>：Vue 3 管理界面，管理后台以密钥解锁，管理请求始终使用 <code>adminAuth</code> 签名；生产仍须使用 TLS 与受保护的管理网关。</li>
+<li><code>admin</code>：Vue 3 管理界面，管理后台以密钥解锁，管理请求始终使用 <code>adminAuth</code> 签名；生产仍须使用 TLS 与受保护的管理网关。</li>
 </ul>
 <h2 id="architecture-2">配置数据模型</h2>
 <p><code>config_node</code> 只有三种节点：</p>
@@ -134,7 +134,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <article class="doc-pane" id="database" data-pane="database" aria-labelledby="tab-database" hidden><div class="eyebrow">DEVELOPER GUIDE / DATABASE</div><p class="pane-subtitle">数据模型、全量 SQL、增量升级与迁移</p><h1>数据库结构与手动 SQL</h1>
 <h2 id="database-1">核心约定</h2>
 <p><strong>所有建表和升级都由管理员人工执行 SQL。</strong> 四个 Go 服务不会在启动时执行 DDL；只校验实际表结构。SQL 随 Linux 发布包一起交付，也可从源码中获取：</p>
-<div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><a href="../db/full/config_center.sql">config_center.sql</a></td></tr><tr><td>新建空的 <code>config_access</code></td><td><a href="../db/full/config_access.sql">config_access.sql</a></td></tr><tr><td>已有库缺少订单表</td><td><a href="../db/incremental/V0001__add_game_order.sql">V0001__add_game_order.sql</a></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><a href="../db/incremental/V0002__add_sdk_services.sql">V0002__add_sdk_services.sql</a></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><a href="../db/incremental/V0003__migrate_sdk_service_channel.sql">V0003__migrate_sdk_service_channel.sql</a></td></tr><tr><td>已有服务表缺少核验用户信息目录</td><td><a href="../db/incremental/V0004__add_sdk_user_check.sql">V0004__add_sdk_user_check.sql</a></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><a href="../db/incremental/V0005__add_sdk_role_query.sql">V0005__add_sdk_role_query.sql</a></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><a href="../db/incremental/V0006__add_sdk_server_query.sql">V0006__add_sdk_server_query.sql</a></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><a href="../db/incremental/V0007__add_sdk_role_control.sql">V0007__add_sdk_role_control.sql</a></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><a href="../db/incremental/V0008__add_sdk_subscribe_message.sql">V0008__add_sdk_subscribe_message.sql</a></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><a href="../db/incremental/V0009__migrate_sdk_node_config.sql">V0009__migrate_sdk_node_config.sql</a></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><a href="../db/incremental/V0010__cleanup_legacy_sdk_fields.sql">V0010__cleanup_legacy_sdk_fields.sql</a></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><a href="../db/incremental/V0011__add_game_market_type.sql">V0011__add_game_market_type.sql</a></td></tr></tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_center.sql">config_center.sql</a></td></tr><tr><td>新建空的 <code>config_access</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_access.sql">config_access.sql</a></td></tr><tr><td>已有库缺少订单表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0001__add_game_order.sql">V0001__add_game_order.sql</a></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0002__add_sdk_services.sql">V0002__add_sdk_services.sql</a></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0003__migrate_sdk_service_channel.sql">V0003__migrate_sdk_service_channel.sql</a></td></tr><tr><td>已有服务表缺少核验用户信息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0004__add_sdk_user_check.sql">V0004__add_sdk_user_check.sql</a></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0005__add_sdk_role_query.sql">V0005__add_sdk_role_query.sql</a></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0006__add_sdk_server_query.sql">V0006__add_sdk_server_query.sql</a></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0007__add_sdk_role_control.sql">V0007__add_sdk_role_control.sql</a></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0008__add_sdk_subscribe_message.sql">V0008__add_sdk_subscribe_message.sql</a></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0009__migrate_sdk_node_config.sql">V0009__migrate_sdk_node_config.sql</a></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0010__cleanup_legacy_sdk_fields.sql">V0010__cleanup_legacy_sdk_fields.sql</a></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0011__add_game_market_type.sql">V0011__add_game_market_type.sql</a></td></tr></tbody></table></div>
 <p>不得对已有配置数据的库再次执行 <code>db/full/</code> 中的全量 SQL。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 <code>DROP TABLE</code>。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。</p>
 <h2 id="database-2">SQL 目录与增量编号</h2>
 <ul>
@@ -244,7 +244,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-core -config configs/config-dev.yaml</code></pre></div>
 <p>SDK Core <strong>直接查询权威库</strong>，不连接 <code>config_access</code>，也不执行迁移；需要先在管理端创建已启用游戏、大区、区服组和渠道应用，并给对应环境绑定区服组，再调用：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">Invoke-RestMethod &quot;http://127.0.0.1:8082/api/core/config/prod/your-appid&quot;</code></pre></div>
-<p><code>your-appid</code> 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口与签名见 <a href="index.html">统一接口文档</a>；模块说明见 <a href="../sdk-core/README.md">SDK Core</a>。</p>
+<p><code>your-appid</code> 必须替换为实际渠道应用 Code；未配置时返回 404 属预期行为。接口与签名见 <a href="index.html">统一接口文档</a>；模块说明见 <a href="https://github.com/hctty27/middle-platform/blob/main/sdk-core/README.md">SDK Core</a>。</p>
 <h2 id="development-5">4. SDK Service（平台查询与游戏消息转发）</h2>
 <p>进入 <code>sdk-service</code> 目录，复制配置文件，<code>database.dsn</code> 指向 <code>config_center</code>（只读账号）：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd sdk-service
@@ -254,7 +254,7 @@ go run ./cmd/sdk-service -config configs/config-dev.yaml</code></pre></div>
 <p>游戏上报事件使用 <code>POST /api/service/events/{env}</code>，订阅消息使用 <code>POST /api/service/subscribe/{env}</code>，AppID 放 <code>x-app-id</code>。平台两个目标地址由 <code>sdk-service/configs/config-dev.yaml</code> 的 <code>platform.eventReportURL</code> 与 <code>platform.subscribeMessageURL</code> 指定，未启用相应业务时可留空。旧 Core 事件路由已移除；不要继续请求 <code>/api/core/events/{env}</code>。</p>
 <p>平台和游戏联调报文分别见 <a href="index.html#p-start">平台接口 HTML</a>、<a href="index.html#g-start">游戏接口 HTML</a>。</p>
 <h2 id="development-6">5. Vue 管理端</h2>
-<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center-admin
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd admin
 npm ci
 npm run dev</code></pre></div>
 <p>按 Vite 控制台显示的地址打开管理端。需要其他局域网设备访问时可运行 <code>npm run dev -- --host 0.0.0.0</code>，并配置相应防火墙与后端访问策略；切勿将无认证的管理端直接开放公网。</p>
@@ -268,7 +268,7 @@ npm run dev</code></pre></div>
 go vet ./...
 go build ./cmd/...</code></pre></div>
 <p>Vue 管理端：</p>
-<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">cd config-center-admin
+<div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">cd admin
 npm ci
 npm run build</code></pre></div>
 <p>GitHub Actions 工作流：</p>
@@ -416,7 +416,7 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 <p>改动 <code>admin.js</code> 后强制刷新浏览器即可生效，不需要重启 Supervisor。原项目使用 hash 路由，子路径刷新不会要求额外的前端路由配置。</p>
 <p><strong>安全提醒：</strong> 配置中心管理 API 始终使用 <code>adminAuth</code> 请求签名，<code>/admin/</code> 和 <code>/api/config/admin/</code> 仍须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。</p>
 <h2 id="production-6">6. 直接发布与失败排查</h2>
-<p>本项目使用固定的 <code>bin/</code>、<code>admin/</code>、<code>sql/</code> 目录，不建立 <code>releases/</code> 版本目录，也不提供自动或手动回滚脚本。发布工具见 <a href="../publish/README.md">本地发布说明</a>。</p>
+<p>本项目使用固定的 <code>bin/</code>、<code>admin/</code>、<code>sql/</code> 目录，不建立 <code>releases/</code> 版本目录，也不提供自动或手动回滚脚本。发布工具见 <a href="https://github.com/hctty27/middle-platform/blob/main/publish/README.md">本地发布说明</a>。</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 在开发机上执行：默认打包、上传、更新文件、重启 Supervisor 并验活
 .\publish\publish.ps1 -Version v1.0.0
 

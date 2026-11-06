@@ -17,7 +17,7 @@ AppID 来自请求头 `x-app-id`。游戏节点的 `gameSecret`、`serviceAdapte
 
 用户核验、角色查询、区服查询和封解禁均默认使用内置 `standard` 适配器，无需额外配置。只有特殊游戏需要在对应游戏 SDK 节点配置中显式选择已注册适配器。功能生效还依赖全局及渠道环境开关。
 
-协议参数、签名算法、请求示例及响应结构不在此 README 重复，统一见 [游戏接口](../docs/index.html#g-start)、[平台接口](../docs/index.html#p-start)、[签名规范](../docs/index.html#sig-overview)。
+协议参数、签名算法、请求示例及响应结构不在此 README 重复，统一见 [游戏接口](../admin/public/docs/index.html#g-start)、[平台接口](../admin/public/docs/index.html#p-start)、[签名规范](../admin/public/docs/index.html#sig-overview)。
 
 ## 本地启动
 
@@ -27,7 +27,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-service -config configs/config-dev.yaml
 ```
 
-默认端口 `:8221`。首次部署或升级前按 [数据库文档](../docs/guide.html#database) 核对功能服务表与增量 SQL；平台事件/订阅目标 URL 在 `platform.eventReportURL` 和 `platform.subscribeMessageURL` 配置。旧的 `/api/core/events/{env}` 不再存在。
+默认端口 `:8221`。首次部署或升级前按 [数据库文档](../admin/public/docs/guide.html#database) 核对功能服务表与增量 SQL；平台事件/订阅目标 URL 在 `platform.eventReportURL` 和 `platform.subscribeMessageURL` 配置。旧的 `/api/core/events/{env}` 不再存在。
 
 ```bash
 go test -race ./...
@@ -35,4 +35,4 @@ go vet ./...
 go build ./cmd/sdk-service
 ```
 
-[架构与内部路由](../docs/guide.html#architecture) · [本地开发](../docs/guide.html#development) · [生产部署与迁移](../docs/guide.html#production)
+[架构与内部路由](../admin/public/docs/guide.html#architecture) · [本地开发](../admin/public/docs/guide.html#development) · [生产部署与迁移](../admin/public/docs/guide.html#production)
