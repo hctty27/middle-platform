@@ -66,9 +66,8 @@ func (c *adminNonceCache) use(nonce string, expiresAt int64, now time.Time) bool
 }
 
 // AdminMiddleware 只保护指定 /admin 前缀，其它业务、同步和健康检查接口不受影响。
-// enabled=false 仅用于受控开发环境；未显式关闭时必须验签。
 // Nonce 缓存是进程内的；多实例场景下不能替代共享去重与业务幂等。
-func AdminMiddleware(next http.Handler, prefix, secret string, enabled bool) http.Handler {
+func AdminMiddleware(next http.Handler, prefix, secret string) http.Handler {
 	cache := &adminNonceCache{}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != prefix && !strings.HasPrefix(r.URL.Path, prefix+"/") {
@@ -76,10 +75,6 @@ func AdminMiddleware(next http.Handler, prefix, secret string, enabled bool) htt
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		if !enabled {
-			next.ServeHTTP(w, r)
-			return
-		}
 		if len(secret) < 32 {
 			http.Error(w, "管理接口签名密钥未配置或强度不足", http.StatusServiceUnavailable)
 			return

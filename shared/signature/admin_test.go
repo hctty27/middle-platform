@@ -29,7 +29,7 @@ func TestAdminMiddleware(t *testing.T) {
 		raw, _ := io.ReadAll(r.Body)
 		received = string(raw)
 		w.WriteHeader(http.StatusNoContent)
-	}), "/api/core/admin", testAdminSecret, true)
+	}), "/api/core/admin", testAdminSecret)
 
 	call := func(req *http.Request) int {
 		rec := httptest.NewRecorder()
@@ -71,7 +71,7 @@ func TestAdminMiddleware(t *testing.T) {
 
 func TestAdminSignatureRejectsExpiredAndMissingKey(t *testing.T) {
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	guard := AdminMiddleware(okHandler, "/api/config/admin", testAdminSecret, true)
+	guard := AdminMiddleware(okHandler, "/api/config/admin", testAdminSecret)
 	expired := signedAdminRequest(http.MethodGet, "/api/config/admin/nodes", "", "4444444444444444")
 	old := strconv.FormatInt(time.Now().Add(-10*time.Minute).Unix(), 10)
 	expired.Header.Set("X-Timestamp", old)
@@ -81,14 +81,14 @@ func TestAdminSignatureRejectsExpiredAndMissingKey(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized { t.Fatalf("expired signature: %d", rec.Code) }
 
 	rec = httptest.NewRecorder()
-	AdminMiddleware(okHandler, "/api/config/admin", "", true).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/config/admin/nodes", nil))
+	AdminMiddleware(okHandler, "/api/config/admin", "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/config/admin/nodes", nil))
 	if rec.Code != http.StatusServiceUnavailable { t.Fatalf("unconfigured secret: %d", rec.Code) }
 }
 
 func TestAdminSignatureBindsQueryAndMethod(t *testing.T) {
 	gate := AdminMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), "/api/core/admin", testAdminSecret, true)
+	}), "/api/core/admin", testAdminSecret)
 	req := signedAdminRequest(http.MethodGet, "/api/core/admin/services?env=prod", "", "5555555555555555")
 	req.URL.RawQuery = "env=test"
 	rec := httptest.NewRecorder()
@@ -103,27 +103,17 @@ func TestAdminSignatureBindsQueryAndMethod(t *testing.T) {
 }
 
 
-func TestAdminMiddlewareExplicitDisable(t *testing.T) {
-    called := 0
+func TestAdminMiddlewareAlwaysRequiresSignature(t *testing.T) {
     next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-        called++
         w.WriteHeader(http.StatusNoContent)
     })
-    disabled := AdminMiddleware(next, "/api/config/admin", "", false)
+    guard := AdminMiddleware(next, "/api/config/admin", testAdminSecret)
     for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
         recorder := httptest.NewRecorder()
-        disabled.ServeHTTP(recorder, httptest.NewRequest(method, "/api/config/admin/nodes", nil))
-        if recorder.Code != http.StatusNoContent {
-            t.Fatalf("disabled %s returned HTTP %d", method, recorder.Code)
+        guard.ServeHTTP(recorder, httptest.NewRequest(method, "/api/config/admin/nodes", nil))
+        if recorder.Code != http.StatusUnauthorized {
+            t.Fatalf("unsigned %s: HTTP %d", method, recorder.Code)
         }
-    }
-    if called != 4 { t.Fatalf("expected 4 forwarded calls, got %d", called) }
-
-    enabled := AdminMiddleware(next, "/api/config/admin", testAdminSecret, true)
-    recorder := httptest.NewRecorder()
-    enabled.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/config/admin/nodes", nil))
-    if recorder.Code != http.StatusUnauthorized {
-        t.Fatalf("enabled unsigned request = HTTP %d", recorder.Code)
     }
 }
 

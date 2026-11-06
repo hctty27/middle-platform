@@ -16,7 +16,7 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 ## 安全与参考
 
-`/api/config/admin/**` 默认启用 `adminAuth` 管理签名。两服务的管理密钥应一致；即使启用签名，生产也必须限制网关访问范围并使用 HTTPS。同步快照和原始节点接口同样不得无防护地公开。
+`/api/config/admin/**` 始终使用 `adminAuth.secret` 管理签名。两服务的管理密钥应一致；即使启用签名，生产也必须限制网关访问范围并使用 HTTPS。同步快照和原始节点接口同样不得无防护地公开。
 
 - [统一接口与签名规范](../docs/index.html)
 - [架构与内部路由](../docs/guide.html#architecture)
