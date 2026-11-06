@@ -32,6 +32,7 @@ const savedConfig = ref('{}')
 const nodesLoading = ref(false)
 const configLoading = ref(false)
 const saving = ref(false)
+const switching = ref(false)
 const searchWord = ref('')
 const searchMatches = ref<NodeMatch[]>([])
 const searchLoading = ref(false)
@@ -117,8 +118,9 @@ async function loadNodes(preferredID: number | null) {
   rawConfig.value = '{}'
   savedConfig.value = '{}'
   searchWord.value = ''
+  configLoading.value = false
+  nodesLoading.value = !!props.gameId
   if (!props.gameId) return
-  nodesLoading.value = true
   try {
     const { data } = await nodeApi.getNode(props.gameId)
     if (request !== nodesSequence) return
@@ -152,7 +154,7 @@ async function loadNodes(preferredID: number | null) {
 }
 
 async function selectNode(node: NodeSummary, path: NodeSummary[]) {
-  if (nodesLoading.value || configLoading.value || saving.value) {
+  if (switching.value || nodesLoading.value || configLoading.value || saving.value) {
     treeRef.value?.setCurrentKey(currentID.value ?? undefined)
     return
   }
@@ -160,17 +162,22 @@ async function selectNode(node: NodeSummary, path: NodeSummary[]) {
     searchWord.value = ''
     return
   }
-  if (!(await confirmDiscardChanges())) {
-    treeRef.value?.setCurrentKey(currentID.value ?? undefined)
-    return
+  switching.value = true
+  try {
+    if (!(await confirmDiscardChanges())) {
+      treeRef.value?.setCurrentKey(currentID.value ?? undefined)
+      return
+    }
+    currentNode.value = node
+    currentPath.value = path
+    searchWord.value = ''
+    expandedKeys.value = [...new Set([props.gameId ?? node.id, ...path.slice(0, -1).map(item => item.id)])]
+    if (treeRef.value?.getNode(node.id)) treeRef.value.setCurrentKey(node.id)
+    else treeVersion.value++
+    await loadConfig()
+  } finally {
+    switching.value = false
   }
-  currentNode.value = node
-  currentPath.value = path
-  searchWord.value = ''
-  expandedKeys.value = [...new Set([props.gameId ?? node.id, ...path.slice(0, -1).map(item => item.id)])]
-  if (treeRef.value?.getNode(node.id)) treeRef.value.setCurrentKey(node.id)
-  else treeVersion.value++
-  await loadConfig()
 }
 
 function onTreeClick(node: NodeSummary, rawTreeNode: unknown) {
@@ -212,15 +219,15 @@ watch(searchWord, (word, _old, onCleanup) => {
 async function save() {
   const node = currentNode.value
   if (!node || !isEditableNode(node) || saving.value || configLoading.value) return
-  try {
-    const definition = await getConfigSchema('sdk', node.nodeType)
-    validateConfigAgainstSchema(rawConfig.value, definition.schema)
-  } catch (error) {
-    ElMessage.warning(error instanceof Error ? error.message : 'SDK 配置不合法')
-    return
-  }
   saving.value = true
   try {
+    try {
+      const definition = await getConfigSchema('sdk', node.nodeType)
+      validateConfigAgainstSchema(rawConfig.value, definition.schema)
+    } catch (error) {
+      ElMessage.warning(error instanceof Error ? error.message : 'SDK 配置不合法')
+      return
+    }
     await sdkApi.put('/admin/node-configs/' + node.id, { config: rawConfig.value })
     ElMessage.success('SDK 配置已保存')
     savedConfig.value = rawConfig.value
@@ -233,7 +240,7 @@ async function save() {
 }
 
 async function refresh() {
-  if (saving.value || !(await confirmDiscardChanges())) return
+  if (saving.value || nodesLoading.value || switching.value || !(await confirmDiscardChanges())) return
   await loadNodes(currentID.value)
 }
 
@@ -273,7 +280,7 @@ watch(() => [props.gameId, props.focusNodeId], () => {
         <div v-show="!searchWord.trim()" class="sdk-config-tree-scroll" v-loading="nodesLoading">
           <el-tree v-if="gameNode" :key="treeVersion" ref="treeRef" node-key="id" lazy
                    :load="loadTree" :props="treeProps" :default-expanded-keys="expandedKeys"
-                   :current-node-key="currentID" highlight-current :expand-on-click-node="false"
+                   :current-node-key="currentID ?? undefined" highlight-current :expand-on-click-node="false"
                    @node-click="onTreeClick" @node-expand="onExpand" @node-collapse="onCollapse">
             <template #default="{ data }">
               <span class="sdk-config-node-label" :title="data.name + ' / ' + data.code">
