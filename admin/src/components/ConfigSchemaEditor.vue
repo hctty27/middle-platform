@@ -114,7 +114,6 @@ function displayValue(field: FormField): string {
                     :placeholder="field.rule['x-placeholder'] || (typeof field.rule.default === 'string' ? '默认：' + field.rule.default : '')"
                     :type="field.rule.writeOnly ? 'password' : 'text'"
                     :show-password="!!field.rule.writeOnly"
-                    :name="'config-' + scope + '-' + field.key.replaceAll('.', '-')"
                     :autocomplete="field.rule.writeOnly ? 'new-password' : 'off'" clearable
                     @update:model-value="(value: string) => changeField(field.key, value)" />
           <div class="muted form-tip">{{ field.rule.description }}（{{ field.key }}）</div>
@@ -133,7 +132,7 @@ function displayValue(field: FormField): string {
     </template>
     <p v-else-if="!loading && !fetchError" class="muted">当前节点没有预置业务字段，支持通过高级 JSON 自定义扩展。</p>
     <el-alert v-if="validationError" :title="validationError" type="error" :closable="false" show-icon />
-    <el-collapse v-model="advanced" style="margin-top:16px">
+    <el-collapse v-model="advanced" class="config-advanced">
       <el-collapse-item title="高级 JSON 配置" name="json">
         <p class="muted">与表单共用同一份 config；未知扩展字段会被保留。原始配置可能包含密钥，请谨慎操作。</p>
         <JsonConfigEditor :model-value="displayedRaw" :readonly="readonly" :rows="10"
