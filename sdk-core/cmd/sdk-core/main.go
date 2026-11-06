@@ -15,7 +15,6 @@ import (
     "time"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/api"
-    "github.com/hctty27/middle-platform/sdk-core/internal/mapping"
     "github.com/hctty27/middle-platform/sdk-core/internal/notify"
     "github.com/hctty27/middle-platform/sdk-core/internal/service"
     "github.com/hctty27/middle-platform/sdk-core/internal/settings"
@@ -50,9 +49,6 @@ func run(configPath string)error{
     if err=db.PingContext(initCtx);err!=nil{return fmt.Errorf("连接配置中心数据库失败: %w",err)}
     repository:=store.NewStore(db)
     if err=repository.VerifySchema(initCtx);err!=nil{return err}
-    resolver,err:=mapping.LoadDefault()
-    if err!=nil{return fmt.Errorf("加载响应字段映射失败: %w",err)}
-    if err=resolver.Require(mapping.RouteCoreConfig);err!=nil{return err}
 
     // 配置查询与订单读写共用一个 sql.DB，订单路由和补偿 Worker 随进程启动。
     // 不自动建表：必须先通过 config-center/cmd/migrate 执行 V12。
@@ -82,7 +78,7 @@ func run(configPath string)error{
     ready.Store(true)
     server:=&http.Server{
         Addr:cfg.Server.Address,
-        Handler:logging.HTTP(cfg.Log,bootstrap.ReadinessMiddleware(signature.AdminMiddleware(api.RouterWithAdmin(service.NewConfigService(repository,resolver),db,orders), "/api/core/admin", cfg.AdminAuth.Secret, cfg.AdminAuth.Enabled == nil || *cfg.AdminAuth.Enabled),&ready)),
+        Handler:logging.HTTP(cfg.Log,bootstrap.ReadinessMiddleware(signature.AdminMiddleware(api.RouterWithAdmin(service.NewConfigService(repository),db,orders), "/api/core/admin", cfg.AdminAuth.Secret, cfg.AdminAuth.Enabled == nil || *cfg.AdminAuth.Enabled),&ready)),
         ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,
         WriteTimeout:15*time.Second,IdleTimeout:60*time.Second,
     }

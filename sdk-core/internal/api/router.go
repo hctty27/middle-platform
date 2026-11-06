@@ -10,12 +10,11 @@ import (
     "time"
 
     "github.com/hctty27/middle-platform/sdk-core/internal/model"
-    "github.com/hctty27/middle-platform/sdk-core/internal/mapping"
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
 // Fetcher 提供公开 SDK 配置查询，不暴露原始密钥。
-type Fetcher interface { Get(context.Context,string,string)(map[string]any,error) }
+type Fetcher interface { Get(context.Context,string,string)(model.ConfigResponse,error) }
 // Pinger 提供依赖数据库的就绪探测。
 type Pinger interface { PingContext(context.Context)error }
 
@@ -32,7 +31,7 @@ func RouterWithAdmin(fetcher Fetcher, db *sql.DB, orders ...OrderAPI) http.Handl
 func router(fetcher Fetcher, db Pinger, admin *sql.DB, orders ...OrderAPI) http.Handler {
     mux:=http.NewServeMux()
     if admin!=nil {registerAdminRoutes(mux,admin)}
-    mux.HandleFunc(mapping.RouteCoreConfig,func(w http.ResponseWriter,r *http.Request){
+    mux.HandleFunc("GET /api/core/config/{env}/{appid}",func(w http.ResponseWriter,r *http.Request){
         w.Header().Set("Cache-Control","no-store")
         ctx,cancel:=context.WithTimeout(r.Context(),5*time.Second)
         defer cancel()

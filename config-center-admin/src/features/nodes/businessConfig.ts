@@ -49,7 +49,7 @@ export const businessConfigFields: Record<BusinessConfigType, readonly BusinessC
   ],
   server_group: [],
   channel_app: [
-    { key: 'tsKey', label: 'TS Key', description: '可通过 SDK Core 响应映射向客户端返回', placeholder: '请输入 TS Key' },
+    { key: 'tsKey', label: 'TS Key', description: 'SDK Core 公开配置接口直接返回此字段（可选）', placeholder: '请输入 TS Key' },
     { key: 'appSecret', label: '平台 App Secret', description: '支付平台回调验签使用的服务端密钥，三个环境共享', placeholder: '请输入平台 App Secret', secret: true }
   ]
 }

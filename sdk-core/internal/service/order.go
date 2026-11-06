@@ -20,9 +20,14 @@ import (
 var ErrInvalidOrder = errors.New("订单请求参数不合法")
 var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
+// OrderConfigReader 保留订单登记所需的游戏密钥和大区通知地址查询。
+type OrderConfigReader interface {
+    Lookup(context.Context, string, string) (model.ChannelApp, *model.BoundGroup, error)
+}
+
 // OrderService 负责订单登记、平台回调确认及游戏发货补偿。
 type OrderService struct {
-    ConfigReader Reader
+    ConfigReader OrderConfigReader
     Orders interface {
         Find(context.Context, string, string) (model.Order, error)
         Register(context.Context, model.Order) error

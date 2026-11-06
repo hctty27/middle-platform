@@ -34,3 +34,10 @@ type BoundGroup struct {
     Config json.RawMessage
     SDKConfig json.RawMessage
 }
+
+// ConfigResponse 是公开 AppID 配置接口的固定响应结构，不包含游戏或平台密钥。
+type ConfigResponse struct {
+    SnKey   string  `json:"snKey"`
+    ZoneKey string  `json:"zoneKey"`
+    TsKey   *string `json:"tsKey,omitempty"`
+}

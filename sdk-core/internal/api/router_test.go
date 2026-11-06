@@ -1,6 +1,7 @@
 package api
 
 import (
+    "bytes"
     "context"
     "encoding/json"
     "errors"
@@ -13,13 +14,13 @@ import (
 )
 
 type fakeFetcher struct {
-    result map[string]any
+    result model.ConfigResponse
     err error
     env string
     appID string
 }
 
-func (f *fakeFetcher) Get(_ context.Context,env,appID string) (map[string]any,error) {
+func (f *fakeFetcher) Get(_ context.Context,env,appID string) (model.ConfigResponse,error) {
     f.env,f.appID=env,appID
     return f.result,f.err
 }
@@ -27,8 +28,9 @@ func (f *fakeFetcher) Get(_ context.Context,env,appID string) (map[string]any,er
 type fakePinger struct { err error }
 func (p fakePinger) PingContext(context.Context) error { return p.err }
 
-func TestCoreRouteUsesMappedResponseData(t *testing.T) {
-    data:=map[string]any{"snKey":"a1","zoneKey":"s1","tsKey":"secretless"}
+func TestCoreRouteUsesFixedResponseData(t *testing.T) {
+    key:="secretless"
+    data:=model.ConfigResponse{SnKey:"a1",ZoneKey:"s1",TsKey:&key}
     f:=&fakeFetcher{result:data}
     rec:=httptest.NewRecorder()
     Router(f,fakePinger{}).ServeHTTP(rec,httptest.NewRequest(http.MethodGet,"/api/core/config/prod/app",nil))
@@ -38,22 +40,19 @@ func TestCoreRouteUsesMappedResponseData(t *testing.T) {
     var response struct {
         Code int `json:"code"`
         Message string `json:"message"`
-        Data map[string]any `json:"data"`
+        Data model.ConfigResponse `json:"data"`
     }
     if err:=json.Unmarshal(rec.Body.Bytes(),&response);err!=nil { t.Fatal(err) }
     if response.Code!=0 || response.Message!="success" || !reflect.DeepEqual(response.Data,data) {
         t.Fatalf("response: %+v",response)
     }
     if rec.Header().Get("Cache-Control")!="no-store" { t.Fatal("Cache-Control should be no-store") }
-    if _,ok:=response.Data["regions"];ok { t.Fatal("legacy regions field leaked") }
-    if _,ok:=response.Data["config"];ok { t.Fatal("raw config leaked") }
+    if bytes.Contains(rec.Body.Bytes(), []byte(`"regions"`)) { t.Fatal("legacy regions field leaked") }
+    if bytes.Contains(rec.Body.Bytes(), []byte(`"config"`)) { t.Fatal("raw config leaked") }
 }
 
 func TestCoreRouteReturnsSuccessWithOmittedFields(t *testing.T) {
-    f := &fakeFetcher{result: map[string]any{
-        "snKey": "app1001",
-        "zoneKey": "group1001",
-    }}
+    f := &fakeFetcher{result: model.ConfigResponse{SnKey: "app1001", ZoneKey: "group1001"}}
     rec := httptest.NewRecorder()
     Router(f, fakePinger{}).ServeHTTP(rec,
         httptest.NewRequest(http.MethodGet, "/api/core/config/prod/app1001", nil))
@@ -61,11 +60,11 @@ func TestCoreRouteReturnsSuccessWithOmittedFields(t *testing.T) {
     var result struct {
         Code int `json:"code"`
         Message string `json:"message"`
-        Data map[string]any `json:"data"`
+        Data model.ConfigResponse `json:"data"`
     }
     if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil { t.Fatal(err) }
     if result.Code != 0 || result.Message != "success" { t.Fatalf("response: %+v", result) }
-    if _, exists := result.Data["tsKey"]; exists { t.Fatalf("unconfigured tsKey must be omitted: %+v", result.Data) }
+    if bytes.Contains(rec.Body.Bytes(), []byte(`"tsKey"`)) { t.Fatalf("unconfigured tsKey must be omitted: %s", rec.Body.String()) }
 }
 
 func TestConfigErrors(t *testing.T) {
