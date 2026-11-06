@@ -77,7 +77,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li><code>config-center-access</code>：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。</li>
 <li><code>sdk-core</code>：直接查询权威库，根据环境绑定按需返回固定公开配置字段；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。</li>
 <li><code>sdk-service</code>：平台主动调用游戏，处理平台发起的用户核验、角色/区服查询、封解禁，以及游戏上报的事件和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。</li>
-<li><code>config-center-admin</code>：Vue 3 管理界面，管理接口默认启用 <code>adminAuth</code> 签名校验，生产仍须配置 TLS 与受保护的管理网关。</li>
+<li><code>config-center-admin</code>：Vue 3 管理界面，管理后台以密钥解锁，管理请求始终使用 <code>adminAuth</code> 签名；生产仍须使用 TLS 与受保护的管理网关。</li>
 </ul>
 <h2 id="architecture-2">配置数据模型</h2>
 <p><code>config_node</code> 只有三种节点：</p>
@@ -214,7 +214,7 @@ CREATE DATABASE IF NOT EXISTS config_access
 <p>打开第一个 PowerShell 终端：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml</code></pre></div>
-<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code>，例如 <code>root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&amp;loc=UTC</code>。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口默认启用 <code>adminAuth</code> 签名；下文未携带签名的本地管理请求示例，仅适用于<strong>隔离的本地开发环境</strong>，需在 <code>config-center</code> 和 <code>sdk-core</code> 的 <code>configs/config-dev.yaml</code> 中显式设置 <code>adminAuth.enabled: false</code>。如保持默认开启，请按 <a href="index.html#sig-admin">管理签名规范</a> 添加请求头。生产不得免签，并须经受保护的 HTTPS 网关访问；新增订阅者无需重启。回调支持公网/内网的域名与 IP（HTTP/HTTPS），无需配置域名白名单。</p>
+<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code>，例如 <code>root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&amp;loc=UTC</code>。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终使用 <code>adminAuth.secret</code> 验签；下文未携带签名的管理请求仅用于展示参数，实际执行必须按 <a href="index.html#sig-admin">管理签名规范</a> 添加请求头。Vue 管理页面直接输入该密钥解锁并自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问；新增订阅者无需重启。回调支持公网/内网的域名与 IP（HTTP/HTTPS），无需配置域名白名单。</p>
 <p>对<strong>新空库先手动执行 SQL，再启动</strong>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 先在数据库工具中执行 db/full/config_center.sql（仅新库）
 go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
@@ -276,7 +276,7 @@ npm run build</code></pre></div>
 <p><code>scripts/ci_schema_sql_smoke.py</code> 和 <code>scripts/ci_smoke.py</code> 是 CI 测试脚本，<strong>不得在生产数据库执行</strong>。Build 的 CI Gate 不会自动覆盖其他独立工作流。发布流程、打包参数统一参见 <a href="#production">生产运维</a>。</p></article>
 <article class="doc-pane" id="production" data-pane="production" aria-labelledby="tab-production" hidden><div class="eyebrow">DEVELOPER GUIDE / PRODUCTION</div><p class="pane-subtitle">Supervisor、Nginx、发布流程与排障</p><h1>生产部署与运维（Supervisor 优先）</h1>
 <p>部署模型：<strong>Linux 二进制 + 独立 MySQL 8.0+ + Nginx + Supervisor</strong>。<code>systemd</code> 可选，但本文以当前采用的 Supervisor 为主要方案。服务管理配置不放入仓库，也不包含在发布包中；生产机无需安装 Go、Node.js。</p>
-<blockquote>配置中心与 SDK Core 管理 API 默认启用 <code>adminAuth</code> 请求签名，但签名不代替访问控制。管理、同步、接入回调仍须通过可信内网或具备认证、白名单和 TLS 的专用网关暴露。对外开放的业务 API 包括必要的 <code>/api/core/**</code> 与 <code>/api/service/**</code>，其他管理与同步路径仍需保护。</blockquote>
+<blockquote>配置中心与 SDK Core 管理 API 始终使用 <code>adminAuth</code> 请求签名，但签名不代替访问控制。管理、同步、接入回调仍须通过可信内网或具备认证、白名单和 TLS 的专用网关暴露。对外开放的业务 API 包括必要的 <code>/api/core/**</code> 与 <code>/api/service/**</code>，其他管理与同步路径仍需保护。</blockquote>
 <h2 id="production-1">1. 部署目录与端口</h2>
 <div class="code-card"><div class="code-header"><span>text</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-text">/data/middle-platform/
 ├── bin/             # 四个 Linux 可执行程序
@@ -414,7 +414,7 @@ location ^~ /api/config/ {
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">nginx -t &amp;&amp; systemctl reload nginx
 curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 <p>改动 <code>admin.js</code> 后强制刷新浏览器即可生效，不需要重启 Supervisor。原项目使用 hash 路由，子路径刷新不会要求额外的前端路由配置。</p>
-<p><strong>安全提醒：</strong> 配置中心管理 API 默认启用 <code>adminAuth</code> 请求签名，<code>/admin/</code> 和 <code>/api/config/admin/</code> 仍须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。</p>
+<p><strong>安全提醒：</strong> 配置中心管理 API 始终使用 <code>adminAuth</code> 请求签名，<code>/admin/</code> 和 <code>/api/config/admin/</code> 仍须同时通过 IP 白名单或网关认证保护。只隐藏前端页面不能保护管理接口。</p>
 <h2 id="production-6">6. 直接发布与失败排查</h2>
 <p>本项目使用固定的 <code>bin/</code>、<code>admin/</code>、<code>sql/</code> 目录，不建立 <code>releases/</code> 版本目录，也不提供自动或手动回滚脚本。发布工具见 <a href="../publish/README.md">本地发布说明</a>。</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 在开发机上执行：默认打包、上传、更新文件、重启 Supervisor 并验活
@@ -460,7 +460,7 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 </ol>
 <p>发布不执行 SQL、不自动修改服务器 YAML，也不会自动变更 Nginx；必须按以上顺序人工部署。</p>
 <h2 id="production-10">SDK 管理接口的 Nginx 隔离</h2>
-<p>SDK Core 进程中同时存在公开业务路由和 <code>/api/core/admin/</code> 管理路由。<strong>管理路由默认启用 <code>adminAuth</code> 请求签名，但没有用户登录/RBAC</strong>。生产环境仍应使用两个受网络隔离的网关入口：</p>
+<p>SDK Core 进程中同时存在公开业务路由和 <code>/api/core/admin/</code> 管理路由。<strong>管理路由始终使用 <code>adminAuth.secret</code> 签名，管理页面使用相同密钥解锁（没有账号/RBAC）</strong>。生产环境仍应使用两个受网络隔离的网关入口：</p>
 <ul>
 <li>公共 SDK server：如上所示，用 <code>location ^~ /api/core/admin/ { return 403; }</code> 拒绝管理前缀，再代理 <code>/api/core/</code> 业务。</li>
 <li>独立管理 server：仅可信内网、VPN 或带认证的网关可以访问，允许 <code>/api/core/admin/</code> 反向代理到 <code>sdk_core</code>；后台静态页面及 <code>/api/config/admin/</code> 也由该入口保护。</li>
