@@ -62,7 +62,7 @@ func Validate(nodeType, raw string) error {
         return errors.New("配置必须是 JSON 对象")
     }
     for key := range object {
-        if owner, exists := sdkOwned[key]; exists && owner == nodeType {
+        if _, exists := sdkOwned[key]; exists {
             return fmt.Errorf("%s 已迁移到 SDK 专属配置", key)
         }
     }
