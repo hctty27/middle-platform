@@ -168,7 +168,7 @@ async function confirmCallback() {
     <section class="recharge-panel">
       <el-tabs v-model="activeTab">
         <el-tab-pane label="订单登记" name="register">
-          <el-form label-position="top" class="recharge-form" @submit.prevent="register">
+          <el-form label-position="top" class="recharge-form" autocomplete="off" @submit.prevent="register">
             <el-form-item label="请求 URL（完整地址）" required>
               <el-input v-model="registerUrl" placeholder="https://example.com/api/core/orders/test/110006" clearable />
             </el-form-item>
@@ -194,7 +194,7 @@ async function confirmCallback() {
           </el-form>
         </el-tab-pane>
         <el-tab-pane label="支付回调" name="callback">
-          <el-form label-position="top" class="recharge-form" @submit.prevent="confirmCallback">
+          <el-form label-position="top" class="recharge-form" autocomplete="off" @submit.prevent="confirmCallback">
             <el-form-item label="请求 URL（完整地址）" required>
               <el-input v-model="callbackUrl" placeholder="https://example.com/api/core/pay/notify/110006" clearable />
             </el-form-item>
