@@ -34,7 +34,7 @@ func (f *fakeOrderRoutes) Receive(_ context.Context, appID string, _ http.Header
 }
 
 func TestBusinessRoutesUseTrailingParameters(t *testing.T) {
-	fetcher := &fakeFetcher{result: map[string]any{"snKey": "110006"}}
+	fetcher := &fakeFetcher{result: model.ConfigResponse{SnKey: "110006", ZoneKey: "group1001"}}
 	orders := &fakeOrderRoutes{}
 	router := Router(fetcher, fakePinger{}, orders)
 
