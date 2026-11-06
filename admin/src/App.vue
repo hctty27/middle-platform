@@ -194,7 +194,7 @@ onUnmounted(() => {
         <div class="top-right">
           <span class="topbar-game-label">当前游戏</span>
           <el-select :model-value="currentGameId" @change="switchGame" :loading="gamesLoading" filterable placeholder="选择游戏"
-                     class="topbar-game-switcher">
+                     class="topbar-game-switcher" name="admin-game-switcher" autocomplete="off">
             <el-option v-for="game in games" :key="game.id" :value="game.id"
                        :label="game.name + (game.marketType ? ' · ' + gameMarketLabels[game.marketType] : '')" />
           </el-select>
