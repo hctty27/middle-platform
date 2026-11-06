@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmDiscardChanges, registerUnsavedChecker } from '../../app/unsavedChanges'
 import { sdkApi, apiErrorMessage } from '../../api/http'
 import BusinessConfigEditor from './components/BusinessConfigEditor.vue'
 import ServiceBindingPanel from '../services/ServiceBindingPanel.vue'
@@ -31,6 +32,9 @@ const groupLoading = reactive<Record<RegionEnvType, boolean>>({ prod: false, tes
 // 各环境独立维护请求序号，避免旧搜索结果覆盖用户最新选择。
 const groupSequences: Record<RegionEnvType, number> = { prod: 0, test: 0, review: 0 }
 const form = ref<AppForm>(emptyForm())
+const originalForm = ref(JSON.stringify(form.value))
+const unregisterUnsaved = registerUnsavedChecker(() => visible.value && JSON.stringify(form.value) !== originalForm.value)
+onBeforeUnmount(unregisterUnsaved)
 let sequence = 0
 const filteredApps = computed(() => apps.value.filter(item =>
   (item.name + item.code).toLowerCase().includes(appSearch.value.trim().toLowerCase())))
@@ -82,6 +86,7 @@ function openEditor(app?: ChannelApp) {
     prodServerGroupId: app.prodServerGroupId, testServerGroupId: app.testServerGroupId,
     reviewServerGroupId: app.reviewServerGroupId
   } : emptyForm()
+  originalForm.value = JSON.stringify(form.value)
   for (const env of environments) void loadOptions(env.key)
   visible.value = true
 }
@@ -94,6 +99,7 @@ async function saveApp() {
     const payload = { ...form.value, gameId: props.gameId }
     if (editing.value) await sdkApi.put(`/admin/channel-apps/${editing.value}`, payload)
     else await sdkApi.post('/admin/channel-apps', payload)
+    originalForm.value = JSON.stringify(form.value)
     visible.value = false
     await loadApps()
     emit('changed')
@@ -102,6 +108,7 @@ async function saveApp() {
   finally { saving.value = false }
 }
 async function deleteApp(app: ChannelApp) {
+  if (!(await confirmDiscardChanges())) return
   try { await ElMessageBox.confirm(`删除「${app.name}」？请先清空三个环境的区服组绑定。`,
     '删除渠道应用', { type: 'warning' }) } catch { return }
   try {
@@ -121,6 +128,17 @@ function displayGroup(env: RegionEnvType, id: number | null): string {
   const option = groupOptions[env].find(item => item.id === id)
   return option ? groupLabel(option) : `区服组 ID ${id}`
 }
+async function selectApp(app: ChannelApp) {
+  if (active.value?.id === app.id || !(await confirmDiscardChanges())) return
+  active.value = app
+}
+async function closeEditor() {
+  if (!(await confirmDiscardChanges())) return
+  visible.value = false
+}
+async function beforeDrawerClose(done: () => void) {
+  if (await confirmDiscardChanges()) done()
+}
 watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; void loadApps() }, { immediate: true })
 </script>
 
@@ -138,7 +156,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
         <el-input v-model="appSearch" clearable placeholder="搜索名称或 Code" />
         <div v-loading="loading" class="channel-list-scroll">
           <button v-for="app in filteredApps" :key="app.id" class="channel-list-item"
-                  :class="{ active: active?.id === app.id }" @click="active = app">
+                  :class="{ active: active?.id === app.id }" @click="selectApp(app)">
             <span class="app-icon">{{ app.name.slice(0, 1) }}</span>
             <span class="app-item-text"><strong>{{ app.name }}</strong><small>{{ app.code }}</small></span>
             <el-tag v-if="app.status === 0" size="small" type="info">停用</el-tag>
@@ -190,7 +208,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
         </template>
       </section>
     </div>
-    <el-drawer v-model="visible" class="channel-app-editor-drawer" :title="editing ? '编辑渠道应用' : '新增渠道应用'" size="min(650px, 96vw)" :close-on-click-modal="false">
+    <el-drawer v-model="visible" class="channel-app-editor-drawer" :title="editing ? '编辑渠道应用' : '新增渠道应用'" size="min(650px, 96vw)" :close-on-click-modal="false" :before-close="beforeDrawerClose">
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="编码" required><el-input v-model="form.code" :disabled="!!editing" maxlength="128" /></el-form-item>
@@ -208,7 +226,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
         <BusinessConfigEditor v-model="form.config" node-type="channel_app" />
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="visible = false">取消</el-button>
+      <template #footer><el-button @click="closeEditor">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveApp">保存应用</el-button></template>
     </el-drawer>
   </main>
