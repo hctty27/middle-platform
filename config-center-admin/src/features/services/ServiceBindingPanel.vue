@@ -29,7 +29,15 @@ function snapshot(item: EditableEntry): string {
 function isDirty(item: EditableEntry): boolean { return savedById.value[item.serviceId] !== snapshot(item) }
 const unregisterUnsaved = registerUnsavedChecker(
   () => entries.value.some(isDirty),
-  () => { savedById.value = Object.fromEntries(entries.value.map(item => [item.serviceId, snapshot(item)])) }
+  () => {
+    for (const item of entries.value) {
+      const original = savedById.value[item.serviceId]
+      if (!original) continue
+      const saved = JSON.parse(original) as { enabled: boolean; configText: string }
+      item.enabled = saved.enabled
+      item.configText = saved.configText
+    }
+  }
 )
 onBeforeUnmount(unregisterUnsaved)
 let sequence = 0
