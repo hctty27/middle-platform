@@ -296,3 +296,44 @@ button { font: inherit; }
 .v2-shell .json-valid { color: #15956e; font-size: 12px; }
 .v2-shell .json-invalid, .v2-shell .json-error { color: #d5565c; font-size: 12px; }
 .v2-shell .json-error { margin: 8px 0; word-break: break-word; }
+
+/* 管理密钥登录页：不引入账户、会话或数据库依赖。 */
+.admin-login {
+  display: flex;
+  min-height: 100vh;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: #f4f6fb;
+}
+.admin-login-panel {
+  width: min(100%, 400px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 42px 34px;
+  background: #fff;
+  border: 1px solid #e7ecf4;
+  border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(28, 48, 86, .08);
+}
+.admin-login-logo {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  background: #386df6;
+  border-radius: 12px;
+}
+.admin-login-panel h1 { margin: 0; font-size: 22px; color: #192942; }
+.admin-login-panel p { margin: -8px 0 6px; color: #8795a8; font-size: 13px; }
+.admin-login-panel .el-input { width: 100%; }
+.admin-login-button { width: 100%; margin: 0; }
+.admin-login-hint { color: #8795a8; font-size: 11px; text-align: center; }
+@media (max-width: 480px) {
+  .admin-login-panel { padding: 34px 20px; }
+}

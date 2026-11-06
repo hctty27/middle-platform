@@ -65,28 +65,14 @@ func TestAdminSecretConfiguration(t *testing.T) {
 }
 
 
-func TestAdminAuthEnabledDefaultsToTrue(t *testing.T) {
-    cases := []struct {
-        name string
-        admin string
-        expected bool
-    }{
-        {"omitted", "", true},
-        {"explicit true", "adminAuth:\n  enabled: true\n", true},
-        {"explicit false", "adminAuth:\n  enabled: false\n", false},
-        {"empty configuration", "adminAuth:\n  secret: ''\n", true},
-    }
-    for _, tc := range cases {
-        t.Run(tc.name, func(t *testing.T) {
-            path := filepath.Join(t.TempDir(), "config.yaml")
-            data := "database:\n  dsn: test-dsn\n" + tc.admin
-            if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
-            cfg, err := LoadFile(path)
-            if err != nil { t.Fatal(err) }
-            if cfg.AdminAuthEnabled != tc.expected {
-                t.Fatalf("enabled = %v, want %v", cfg.AdminAuthEnabled, tc.expected)
-            }
-        })
+func TestRemovedAdminAuthEnabledRejected(t *testing.T) {
+    for _, enabled := range []string{"true", "false"} {
+        path := filepath.Join(t.TempDir(), "config.yaml")
+        data := "database:\n  dsn: test-dsn\nadminAuth:\n  enabled: " + enabled + "\n"
+        if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
+        if _, err := LoadFile(path); err == nil {
+            t.Fatalf("removed adminAuth.enabled=%s should be rejected", enabled)
+        }
     }
 }
 
@@ -94,11 +80,11 @@ func TestConfigFileDoesNotInheritBaseConfig(t *testing.T) {
     dir := t.TempDir()
     base := filepath.Join(dir, "config.yaml")
     dev := filepath.Join(dir, "config-dev.yaml")
-    if err := os.WriteFile(base, []byte("server:\n  address: ':9999'\nadminAuth:\n  enabled: false\n"), 0600); err != nil { t.Fatal(err) }
+    if err := os.WriteFile(base, []byte("server:\n  address: ':9999'\nadminAuth:\n  secret: base-only-secret\n"), 0600); err != nil { t.Fatal(err) }
     if err := os.WriteFile(dev, []byte("database:\n  dsn: test\n"), 0600); err != nil { t.Fatal(err) }
     cfg, err := LoadFile(dev)
     if err != nil { t.Fatal(err) }
-    if !cfg.AdminAuthEnabled || cfg.Address != "127.0.0.1:8080" {
+    if cfg.AdminSecret != "" || cfg.Address != "127.0.0.1:8080" {
         t.Fatalf("指定文件不应继承同目录的 config.yaml: %+v", cfg)
     }
 }

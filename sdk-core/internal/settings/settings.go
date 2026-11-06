@@ -26,7 +26,6 @@ type Config struct {
     Server struct {Address string `yaml:"address"`} `yaml:"server"`
     Database Database `yaml:"database"`
     AdminAuth struct {
-        Enabled *bool `yaml:"enabled"`
         Secret string `yaml:"secret"`
     } `yaml:"adminAuth"`
 }

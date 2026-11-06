@@ -62,28 +62,13 @@ func TestAdminSecretConfiguration(t *testing.T) {
 }
 
 
-func TestAdminAuthEnabledDefaultsToTrue(t *testing.T) {
-    cases := []struct {
-        name string
-        admin string
-        expected bool
-    }{
-        {"omitted", "", true},
-        {"explicit true", "adminAuth:\n  enabled: true\n", true},
-        {"explicit false", "adminAuth:\n  enabled: false\n", false},
-        {"empty configuration", "adminAuth:\n  secret: ''\n", true},
-    }
-    for _, tc := range cases {
-        t.Run(tc.name, func(t *testing.T) {
-            path := filepath.Join(t.TempDir(), "config.yaml")
-            data := "database:\n  dsn: test-dsn\n" + tc.admin
-            if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
-            cfg, err := Load(path)
-            if err != nil { t.Fatal(err) }
-            enabled := cfg.AdminAuth.Enabled == nil || *cfg.AdminAuth.Enabled
-            if enabled != tc.expected {
-                t.Fatalf("enabled = %v, want %v", enabled, tc.expected)
-            }
-        })
+func TestRemovedAdminAuthEnabledRejected(t *testing.T) {
+    for _, enabled := range []string{"true", "false"} {
+        path := filepath.Join(t.TempDir(), "config.yaml")
+        data := "database:\n  dsn: test-dsn\nadminAuth:\n  enabled: " + enabled + "\n"
+        if err := os.WriteFile(path, []byte(data), 0600); err != nil { t.Fatal(err) }
+        if _, err := Load(path); err == nil {
+            t.Fatalf("removed adminAuth.enabled=%s should be rejected", enabled)
+        }
     }
 }

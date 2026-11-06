@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
+import { api, apiErrorMessage } from './api/http'
+import { adminAuthenticated, clearAdminSecret, setAdminSecret, unlockAdmin } from './api/adminAuth'
 import { getRevision } from './api/syncApi'
 import { currentGameId, focusNodeId, games, gamesLoading, loadGames } from './app/gameContext'
 import { gameMarketLabels } from './features/nodes/types'
@@ -25,6 +28,8 @@ const titles: Record<Page, string> = {
 const currentTitle = computed(() => titles[navigation.value])
 const activeGame = computed(() => games.value.find(game => game.id === currentGameId.value))
 const updating = ref(false)
+const loginSecret = ref('')
+const loggingIn = ref(false)
 watch(currentGameId, () => { focusNodeId.value = null }, { flush: 'sync' })
 
 function readRoute() {
@@ -51,16 +56,57 @@ async function refreshAll() {
   catch { ElMessage.error('刷新游戏列表失败') }
   finally { updating.value = false }
 }
+async function login() {
+  if (loggingIn.value) return
+  if (loginSecret.value.length < 32) {
+    ElMessage.warning('管理密钥至少需要 32 字节')
+    return
+  }
+  loggingIn.value = true
+  setAdminSecret(loginSecret.value)
+  try {
+    await api.get('/admin/nodes/tree', { params: { parentId: 0 } })
+    unlockAdmin()
+    loginSecret.value = ''
+    void refreshAll()
+  } catch (error) {
+    clearAdminSecret()
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      ElMessage.error('管理密钥错误')
+    } else {
+      ElMessage.error(apiErrorMessage(error, '验证管理密钥失败'))
+    }
+  } finally {
+    loggingIn.value = false
+  }
+}
+function logout() {
+  clearAdminSecret()
+  loginSecret.value = ''
+  window.location.reload()
+}
 onMounted(() => {
   readRoute()
   window.addEventListener('hashchange', readRoute)
-  void refreshAll()
 })
 onUnmounted(() => window.removeEventListener('hashchange', readRoute))
 </script>
 
 <template>
-  <div class="shell v2-shell">
+  <div v-if="!adminAuthenticated" class="admin-login">
+    <section class="admin-login-panel">
+      <div class="admin-login-logo">M</div>
+      <h1>研发中台</h1>
+      <p>输入管理密钥以访问后台</p>
+      <el-input v-model="loginSecret" type="password" show-password clearable
+                autocomplete="off" placeholder="请输入管理密钥"
+                size="large" @keyup.enter="login" />
+      <el-button type="primary" size="large" :loading="loggingIn" class="admin-login-button"
+                 @click="login">进入管理后台</el-button>
+      <span class="admin-login-hint">密钥仅保存在当前页面内存中，刷新后需重新输入</span>
+    </section>
+  </div>
+  <div v-else class="shell v2-shell">
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="brand">
         <div class="brand-mark">M</div>
@@ -116,6 +162,7 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
           <el-tag v-if="activeGame?.marketType" type="info" effect="plain">{{ gameMarketLabels[activeGame.marketType] }}</el-tag>
           <el-tag type="success" effect="plain">Revision {{ revision }}</el-tag>
           <el-button :loading="updating" @click="refreshAll">刷新</el-button>
+          <el-button @click="logout">退出</el-button>
         </div>
       </header>
       <div class="page-content">
@@ -134,7 +181,7 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
           <p>当前权威数据集：{{ epoch }}</p>
           <p>当前配置版本：{{ revision }}</p>
           <p>配置树：游戏 → 大区 → 区服组；渠道应用归属游戏，通过绑定关联区服组，公共配置支持环境覆盖。</p>
-          <el-alert title="管理后台没有登录和账号权限，请仅通过内网或受控网关开放。"
+          <el-alert title="管理页面使用密钥签名认证；仍需通过 HTTPS 和受控网关访问。"
                     type="warning" show-icon :closable="false" />
         </main>
       </div>
