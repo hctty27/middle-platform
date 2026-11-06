@@ -29,28 +29,30 @@ export interface BusinessConfigField {
   description: string
   placeholder: string
   secret?: boolean
+  group?: string
+  url?: boolean
   defaultValue?: string
 }
 
 export const businessConfigFields: Record<BusinessConfigType, readonly BusinessConfigField[]> = {
   game: [
-    { key: 'gameSecret', label: '游戏主密钥', description: '游戏服与 SDK Core/Service 共用的服务端签名密钥，所有环境共享', placeholder: '请输入游戏主密钥', secret: true },
-    { key: 'serviceAdapters.user_check', label: '用户核验适配器', description: '可选。留空自动使用标准适配器，只有特殊游戏才需要填写', placeholder: '留空默认 standard', defaultValue: 'standard' },
-    { key: 'serviceAdapters.role_query', label: '角色查询适配器', description: '可选。留空自动使用标准适配器，特殊游戏可以配置已注册的实现', placeholder: '留空默认 standard', defaultValue: 'standard' },
-    { key: 'serviceAdapters.server_query', label: '区服查询适配器', description: '可选。留空自动使用标准适配器，特殊游戏可选择已注册实现', placeholder: '留空默认 standard', defaultValue: 'standard' },
-    { key: 'serviceAdapters.role_control', label: '封解禁适配器', description: '可选。留空自动使用标准适配器，特殊游戏可指定已注册实现', placeholder: '留空默认 standard', defaultValue: 'standard' }
+    { key: 'gameSecret', group: '安全与签名', label: '游戏主密钥', description: '游戏服与 SDK Core/Service 共用的服务端签名密钥，所有环境共享', placeholder: '请输入游戏主密钥', secret: true },
+    { key: 'serviceAdapters.user_check', group: '服务适配器', label: '用户核验适配器', description: '可选。留空自动使用标准适配器，只有特殊游戏才需要填写', placeholder: '留空默认 standard', defaultValue: 'standard' },
+    { key: 'serviceAdapters.role_query', group: '服务适配器', label: '角色查询适配器', description: '可选。留空自动使用标准适配器，特殊游戏可以配置已注册的实现', placeholder: '留空默认 standard', defaultValue: 'standard' },
+    { key: 'serviceAdapters.server_query', group: '服务适配器', label: '区服查询适配器', description: '可选。留空自动使用标准适配器，特殊游戏可选择已注册实现', placeholder: '留空默认 standard', defaultValue: 'standard' },
+    { key: 'serviceAdapters.role_control', group: '服务适配器', label: '封解禁适配器', description: '可选。留空自动使用标准适配器，特殊游戏可指定已注册实现', placeholder: '留空默认 standard', defaultValue: 'standard' }
   ],
   region: [
-    { key: 'payNotifyUrl', label: '支付发货通知地址', description: 'SDK Core 支付成功后通知游戏服的 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/pay/notify' },
-    { key: 'userCheckUrl', label: '用户核验地址', description: 'SDK Service 核验玩家时请求的完整游戏服 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/user/check' },
-    { key: 'roleQueryUrl', label: '角色查询地址', description: 'SDK Service 查询游戏角色时请求的完整 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/role/query' },
-    { key: 'serverQueryUrl', label: '区服查询地址', description: 'SDK Service 实时分页查询游戏区服的完整 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/server/query' },
-    { key: 'roleControlUrl', label: '封解禁地址', description: 'SDK Service 封号、解封、禁言、解禁言共用的游戏 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/role/control' }
+    { key: 'payNotifyUrl', group: '支付通知', url: true, label: '支付发货通知地址', description: 'SDK Core 支付成功后通知游戏服的 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/pay/notify' },
+    { key: 'userCheckUrl', group: '用户与角色', url: true, label: '用户核验地址', description: 'SDK Service 核验玩家时请求的完整游戏服 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/user/check' },
+    { key: 'roleQueryUrl', group: '用户与角色', url: true, label: '角色查询地址', description: 'SDK Service 查询游戏角色时请求的完整 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/role/query' },
+    { key: 'serverQueryUrl', group: '区服接口', url: true, label: '区服查询地址', description: 'SDK Service 实时分页查询游戏区服的完整 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/server/query' },
+    { key: 'roleControlUrl', group: '用户与角色', url: true, label: '封解禁地址', description: 'SDK Service 封号、解封、禁言、解禁言共用的游戏 HTTP/HTTPS 地址', placeholder: 'https://game.example.com/internal/role/control' }
   ],
   server_group: [],
   channel_app: [
-    { key: 'tsKey', label: 'TS Key', description: 'SDK Core 公开配置接口直接返回此字段（可选）', placeholder: '请输入 TS Key' },
-    { key: 'appSecret', label: '平台 App Secret', description: '支付平台回调验签使用的服务端密钥，三个环境共享', placeholder: '请输入平台 App Secret', secret: true }
+    { key: 'tsKey', group: '公开配置', label: 'TS Key', description: 'SDK Core 公开配置接口直接返回此字段（可选）', placeholder: '请输入 TS Key' },
+    { key: 'appSecret', group: '安全与签名', label: '平台 App Secret', description: '支付平台回调验签使用的服务端密钥，三个环境共享', placeholder: '请输入平台 App Secret', secret: true }
   ]
 }
 
@@ -102,6 +104,14 @@ export function validateBusinessConfig(nodeType: BusinessConfigType, config: str
     const fieldValue = getPath(value, field.key)
     if (fieldValue !== undefined && typeof fieldValue !== 'string') {
       throw new Error(`${field.label} 必须是字符串`)
+    }
+    if (field.url && typeof fieldValue === 'string' && fieldValue.trim()) {
+      try {
+        const parsed = new URL(fieldValue.trim())
+        if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error()
+      } catch {
+        throw new Error(`${field.label} 必须是完整的 HTTP/HTTPS 地址`)
+      }
     }
   }
 }
