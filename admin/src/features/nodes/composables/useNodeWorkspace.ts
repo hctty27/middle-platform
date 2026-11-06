@@ -1,6 +1,7 @@
 import { nextTick, onBeforeUnmount, reactive, ref, computed } from 'vue'
 import axios from 'axios'
 import { nodeApi } from '../../../api/nodeApi'
+import { getConfigSchema, validateConfigAgainstSchema } from '../../../api/configSchemaApi'
 import { apiErrorMessage } from '../../../api/http'
 import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch, RegionEnvType, GameMarketType } from '../types'
 import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
@@ -335,8 +336,13 @@ async function save() {
     ElMessage.warning('请填写名称和编码')
     return
   }
-  try { JSON.parse(form.config) }
-  catch { ElMessage.error('JSON 格式不正确'); return }
+  try {
+    const definition = await getConfigSchema('base', form.nodeType)
+    validateConfigAgainstSchema(form.config, definition.schema)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '配置校验失败')
+    return
+  }
   saving.value = true
   try {
     if (creating.value) {

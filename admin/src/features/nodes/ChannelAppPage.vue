@@ -3,9 +3,9 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { confirmDiscardChanges, registerUnsavedChecker } from '../../app/unsavedChanges'
 import { sdkApi, apiErrorMessage } from '../../api/http'
-import BusinessConfigEditor from './components/BusinessConfigEditor.vue'
+import ConfigSchemaEditor from '../../components/ConfigSchemaEditor.vue'
 import ServiceBindingPanel from '../services/ServiceBindingPanel.vue'
-import { validateBusinessConfig } from './businessConfig'
+import { getConfigSchema, parseConfigObject, validateConfigAgainstSchema } from '../../api/configSchemaApi'
 import type { RegionEnvType } from './types'
 
 type GroupField = 'prodServerGroupId' | 'testServerGroupId' | 'reviewServerGroupId'
@@ -50,7 +50,7 @@ function pretty(value: string): string {
   try { return JSON.stringify(JSON.parse(value), null, 2) } catch { return value }
 }
 function validJSON(value: string): boolean {
-  try { validateBusinessConfig('channel_app', value); return true }
+  try { parseConfigObject(value); return true }
   catch { return false }
 }
 async function loadApps() {
@@ -96,6 +96,13 @@ function openEditor(app?: ChannelApp) {
 async function saveApp() {
   if (!props.gameId || !form.value.code.trim() || !form.value.name.trim() || !validJSON(form.value.config)) {
     ElMessage.warning('请填写名称、编码和合法的 JSON 对象'); return
+  }
+  try {
+    const definition = await getConfigSchema('sdk', 'channel_app')
+    validateConfigAgainstSchema(form.value.config, definition.schema)
+  } catch (error) {
+    ElMessage.warning(error instanceof Error ? error.message : '渠道包配置不合法')
+    return
   }
   saving.value = true
   try {
@@ -195,7 +202,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
               <div class="section-heading"><div><h3>共享业务配置</h3>
                 <p class="muted">三个环境使用同一份 JSON 配置，独立字段直接展示在下方。</p></div>
                 <el-button @click="openEditor(active)">修改配置</el-button></div>
-              <BusinessConfigEditor :model-value="active.config" node-type="channel_app" readonly />
+              <ConfigSchemaEditor :model-value="active.config" node-type="channel_app" scope="sdk" readonly />
             </el-tab-pane>
             <el-tab-pane label="服务配置">
               <ServiceBindingPanel :key="active.id" :target-id="active.id" />
@@ -231,7 +238,7 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
       <!-- 区服组选择和业务密钥不共用表单，避免密码管理器干扰搜索。 -->
       <el-form label-position="top">
         <div class="section-heading"><h3>共享业务配置</h3></div>
-        <BusinessConfigEditor v-model="form.config" node-type="channel_app" />
+        <ConfigSchemaEditor v-model="form.config" node-type="channel_app" scope="sdk" />
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="closeEditor">取消</el-button>
