@@ -175,7 +175,7 @@ try {
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。
     if ($buildFrontend) {
         $frontendTimer = [System.Diagnostics.Stopwatch]::StartNew()
-        $frontendDir = Join-Path $repoRoot 'config-center-admin'
+        $frontendDir = Join-Path $repoRoot 'admin'
         Write-Host '正在构建 Vue 管理端...'
         Push-Location $frontendDir
         try {
@@ -209,6 +209,11 @@ try {
         $distDir = Join-Path $frontendDir 'dist'
         if (-not (Test-Path -LiteralPath (Join-Path $distDir 'index.html') -PathType Leaf)) {
             throw "前端构建未生成 dist/index.html"
+        }
+        foreach ($relativeDoc in @('docs/index.html', 'docs/guide.html')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $distDir $relativeDoc) -PathType Leaf)) {
+                throw "前端构建未生成 dist/$relativeDoc"
+            }
         }
         $adminDir = Join-Path $stageDir 'admin'
         New-Item -ItemType Directory -Force -Path $adminDir | Out-Null

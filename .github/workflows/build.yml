@@ -81,16 +81,20 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: config-center-admin
+        working-directory: admin
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: config-center-admin/package-lock.json
+          cache-dependency-path: admin/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - name: Verify bundled HTML docs
+        run: |
+          test -s dist/docs/index.html
+          test -s dist/docs/guide.html
 
   integration:
     name: Go MySQL manual SQL + two instances + Webhook E2E

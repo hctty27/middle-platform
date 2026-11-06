@@ -10,11 +10,10 @@ on:
       - 'sdk-core/**'
       - 'sdk-service/**'
       - 'shared/**'
-      - 'config-center-admin/**'
+      - 'admin/**'
       - 'publish/**'
       - 'scripts/package.ps1'
       - 'scripts/package-archive.go'
-      - 'docs/package.md'
       - '.github/workflows/package.yml'
   push:
     branches: [main]
@@ -24,7 +23,7 @@ on:
       - 'sdk-core/**'
       - 'sdk-service/**'
       - 'shared/**'
-      - 'config-center-admin/**'
+      - 'admin/**'
       - 'publish/**'
       - 'scripts/package.ps1'
       - 'scripts/package-archive.go'
@@ -48,7 +47,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: config-center-admin/package-lock.json
+          cache-dependency-path: admin/package-lock.json
       - name: Build binary and frontend release package
         shell: pwsh
         run: ./scripts/package.ps1 -Arch amd64 -Version ${{ github.sha }}
@@ -64,7 +63,7 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ admin/ admin/index.html admin/config.js; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do

@@ -100,6 +100,9 @@ async function login() {
     loggingIn.value = false
   }
 }
+function openDoc(path: 'index.html' | 'guide.html') {
+  window.open(`${import.meta.env.BASE_URL}docs/${path}`, '_blank', 'noopener,noreferrer')
+}
 async function logout() {
   if (!(await confirmDiscardChanges())) return
   window.removeEventListener('beforeunload', preventUnloadWithUnsavedChanges)
@@ -167,6 +170,13 @@ onUnmounted(() => {
       </button>
       <button title="系统说明" :class="{ active: navigation === 'about' }" @click="navigate('about')">
         <span class="nav-symbol">ⓘ</span><span v-if="!sidebarCollapsed">系统说明</span>
+      </button>
+      <div v-if="!sidebarCollapsed" class="group-title">文档中心</div>
+      <button title="接口文档" @click="openDoc('index.html')">
+        <span class="nav-symbol">≡</span><span v-if="!sidebarCollapsed">接口文档</span>
+      </button>
+      <button title="开发运维手册" @click="openDoc('guide.html')">
+        <span class="nav-symbol">▤</span><span v-if="!sidebarCollapsed">开发运维手册</span>
       </button>
       <div class="sidebar-bottom">
         <button class="collapse-button" @click="sidebarCollapsed = !sidebarCollapsed">

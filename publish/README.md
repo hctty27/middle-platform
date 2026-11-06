@@ -61,7 +61,7 @@
 
 本地完成构建和归档校验后上传到服务器临时目录，验证 SHA-256、文件类型、架构与选定服务，再直接更新固定的 `bin/`、`admin/`、`sql/`。生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；SQL 仅分发，不会自动执行。
 
-默认按 `publish.config.json` 中的 `services` 逐实例执行 Supervisor 重启与 `/health/ready` 验活；未列出的实例不会被重启。本发布流程**不提供自动回滚或零中断保证**，失败时需人工处置。完整的部署目录、Nginx、数据库升级与故障处理以 [生产运维](../docs/guide.html#production) 为准。
+默认按 `publish.config.json` 中的 `services` 逐实例执行 Supervisor 重启与 `/health/ready` 验活；未列出的实例不会被重启。本发布流程**不提供自动回滚或零中断保证**，失败时需人工处置。完整的部署目录、Nginx、数据库升级与故障处理以 [生产运维](../admin/public/docs/guide.html#production) 为准。
 
 ## CI 和自测
 
