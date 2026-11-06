@@ -111,6 +111,9 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li>订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。</li>
 <li>对外协议及签名细节以 <a href="index.html#g-start">游戏 HTML</a> 和 <a href="index.html#p-start">平台 HTML</a> 为准，避免维护多份相同字段表。</li>
 </ul>
+<h3>共享签名模块与业务边界</h3>
+<p><code>shared/signature</code> 仅提供通用签名计算与格式校验，不负责读取数据库、选择业务签名字段或执行鉴权。<code>SignValues</code> 过滤空字符串、按值排序并计算 SHA-1；<code>SignAllValues</code> 保留空字符串，兼容支付回调 V1；<code>BodyValues</code> 负责提取业务 JSON 值；<code>SignAdmin</code> 组装管理请求的七个签名值。业务模块负责密钥归属、AppID、权限和幂等性，不能将时间戳及 nonce 的格式检查当成跨实例全局防重放。</p>
+<p>各接口具体签名字段、测试向量和 Java / Go / Node.js 示例统一见 <a href="index.html#sig-overview">签名接入规范</a>；新增业务应复用共享计算函数，但明确指定各自参与签名的字段。</p>
 <h2 id="architecture-6">SDK Core 与 SDK Service 职责</h2>
 <ul>
 <li><code>sdk-core</code>：管理 SDK 节点配置、渠道包、服务开关，并承担配置查询、订单登记、支付回调和游戏发货通知。</li>

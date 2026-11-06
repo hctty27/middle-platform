@@ -411,9 +411,9 @@ x-signature: &lt;使用 appSecret、Header、Body 计算的 SHA-1&gt;
 <li>上游失败返回 502，超时返回 504 且实际操作状态待确认；不会自动重试。</li><li>时间戳和 nonce 格式校验不能代替跨实例的 nonce 防重放或持久化幂等保障。</li></ul></section><section id="p-subscribe" class="section"><div class="section-title"><h2>接收订阅消息</h2></div><div class="summary">SDK Service 将游戏订阅消息转发至发行平台</div><div class="route"><span class="verb post">POST</span><code>{platform.subscribeMessageURL}</code></div><p>平台地址从 SDK Service YAML 的 <code>platform.subscribeMessageURL</code> 读取，测试地址示例：<code>https://openapiv3.qk6.top/game/subscribe/send-message</code>。</p><p>平台签名使用 <code>appSecret</code>、<code>x-app-id</code>、<code>x-timestamp</code>、<code>x-nonce</code> 四个值排序后计算 SHA-1；<strong>Body 不参与签名</strong>。</p><div class="codebox"><div class="codehead"><span>平台成功响应</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{&quot;code&quot;:0,&quot;message&quot;:&quot;ok&quot;,&quot;data&quot;:true}</code></pre></div><ul class="points"><li>消息体包括 <code>open_id</code>、<code>tpl_id</code>、可选 <code>data</code> 与 <code>ext</code> 字符串。</li><li>仅 HTTP 200、<code>code=0</code> 且 <code>data=true</code> 才向游戏返回成功。</li><li>用户的订阅授权和模板管理由平台及渠道负责。</li></ul></section><section id="p-sign" class="section"><div class="section-title"><h2>签名算法对照</h2></div><div class="summary">平台支付回调与 SDK Service 接口的签名字段并不完全相同。</div><p>平台支付 V1 回调保留空字符串参与签名；Service 业务接口按其定义提取 Body 字段。各方向字段对照及计算规则见 <a href="#sig-platform">签名规范 · 平台签名</a>。</p></section><section id="p-errors" class="section"><div class="section-title"><h2>响应与联调检查</h2></div><div class="summary">平台对接常见状态及验收条件</div><div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>一般含义</th></tr></thead><tbody><tr><td><code>400</code></td><td>请求格式、字段或路径参数不合法</td></tr><tr><td><code>401</code></td><td>签名或鉴权失败</td></tr><tr><td><code>403</code></td><td>功能未启用或无权访问</td></tr><tr><td><code>404</code></td><td>AppID 不存在、环境未绑定或路由无效</td></tr><tr><td><code>409</code></td><td>订单重复登记但参数不一致等业务冲突</td></tr><tr><td><code>422</code></td><td>密钥或业务配置不合法（适用于部分接口）</td></tr><tr><td><code>502/504</code></td><td>调用上游失败或超时</td></tr><tr><td><code>503</code></td><td>依赖服务或必要配置不可用</td></tr></tbody></table></div><h3>推荐联调清单</h3><ul class="points"><li>支付回调：验签正确、错误签名、未知订单、金额不一致、重复回调、精确 nonce 应答。</li><li>用户核验：存在/不存在、功能关闭、目标环境未绑定、游戏上游超时；先确认真实签名样本。</li><li>事件接收：平台按 Header 验签、不把 Body 加入签名；正常返回 <code>{code:0,data:true}</code>。</li><li>检查两端时间同步与 nonce 格式，确认 HTTP 失败后的重试和幂等策略。</li></ul><div class="notice info">中台内部管理 API、配置同步 API 不属于平台的公开对接范围。</div></section>
 <div class="footnote">研发中台 middle-platform · 协议核对日期 2026-11-04。示例地址为占位值；对外发布前需确认实际域名与密钥。<a href="#p-start">返回接入说明</a></div></main>
 <main class="main doc-panel" id="panel-sync" data-doc="sync" role="tabpanel" aria-labelledby="tab-sync" hidden>
-<div class="hero"><div class="eyebrow">CONFIGURATION SYNC API</div><h1>第三方配置同步接入文档</h1><p>面向第三方游戏服务端与业务系统的配置同步协议。通过 HMAC-SHA256 Webhook 获知变更，主动拉取三级节点配置，支持全量快照和可选增量同步。</p><div class="pills"><span class="pill">纯 HTML · 无外部依赖</span><span class="pill gray">基于 main 路由及数据模型</span><span class="pill gray">9 个章节</span></div></div>
+<div class="hero"><div class="eyebrow">CONFIGURATION SYNC API</div><h1>第三方配置同步接入文档</h1><p>面向第三方游戏服务端与业务系统的配置同步协议。通过 SHA-1 排序签名 Webhook 获知变更，主动拉取三级节点配置，支持全量快照和可选增量同步。</p><div class="pills"><span class="pill">纯 HTML · 无外部依赖</span><span class="pill gray">基于 main 路由及数据模型</span><span class="pill gray">9 个章节</span></div></div>
 <section id="s-intro" class="section"><div class="section-title"><h2>接入流程</h2></div><div class="summary">Webhook 通知 + 主动拉取；优先采用全量快照</div><p>第三方系统提供可接收通知的回调地址，由中台管理员注册订阅者。配置中心的游戏、大区或区服组发生变更时会发送签名 Webhook。第三方收到通知后快速应答，在后台主动拉取配置并更新自己的缓存或数据库。</p><h3>推荐的最简接入流程</h3><ul class="points"><li>第三方准备 <code>callbackUrl</code>，与中台管理员安全交换 <code>secret</code> 和配置中心 API 地址。</li><li>管理员在配置中心创建订阅者（第三方不需要自行调用管理 API）。</li><li>中台变更配置后 POST Webhook；第三方校验签名和时间戳，立即返回 HTTP 2xx。</li><li>第三方在后台调用 <code>GET /api/config/sync/snapshot</code> 获取一致性全量快照，将节点与 <code>epoch/revision</code> 同时保存。</li><li>建议每 5 分钟主动调用版本接口，补偿通知丢失；配置量很大时才考虑增量同步。</li></ul><h3>同步范围</h3><div class="table-wrap"><table><thead><tr><th>节点类型</th><th>含义</th><th>是否同步</th></tr></thead><tbody><tr><td><code>game</code></td><td>游戏</td><td>是</td></tr><tr><td><code>region</code></td><td>大区（测试/正式/提审）</td><td>是</td></tr><tr><td><code>server_group</code></td><td>区服组</td><td>是</td></tr><tr><td><code>channel_app</code></td><td>渠道应用、渠道绑定、AppID 配置</td><td>否</td></tr><tr><td><code>game_order</code></td><td>充值订单</td><td>否</td></tr></tbody></table></div><div class="notice info"><strong>推荐：</strong>第三方优先实现 Webhook + 全量快照 + 周期版本校对。无需使用中台的 MySQL 副本，也不需要对接管理写 API。</div></section>
-<section id="s-config" class="section"><div class="section-title"><h2>接入参数</h2></div><div class="summary">双方交换的最小配置项</div><div class="table-wrap"><table><thead><tr><th>参数</th><th>提供方</th><th>含义 / 示例</th></tr></thead><tbody><tr><td><code>code</code></td><td>第三方</td><td>订阅者唯一标识，例如 <code>game-service-a</code></td></tr><tr><td><code>callbackUrl</code></td><td>第三方</td><td>中台可访问的回调，例如 <code>https://game.example.com/internal/config/callback</code></td></tr><tr><td><code>secret</code></td><td>双方安全交换</td><td>HMAC-SHA256 共享密钥，建议使用高强度随机字符串</td></tr><tr><td><code>configCenterBaseUrl</code></td><td>中台</td><td>配置中心 API 根地址，例如 <code>https://config.example.com</code></td></tr></tbody></table></div><p>文档接口路径均不包含 <code>/sdk</code> 前缀。实际部署若使用公网 <code>/sdk/api/...</code>，应以管理员提供的网关地址为准。</p><div class="notice warn">Webhook 回调地址可为公网或内网 HTTP/HTTPS 域名或 IP；生产优先 HTTPS。平台拒绝元数据服务及部分特殊网络地址，不代表任意地址都能直接访问。</div></section>
+<section id="s-config" class="section"><div class="section-title"><h2>接入参数</h2></div><div class="summary">双方交换的最小配置项</div><div class="table-wrap"><table><thead><tr><th>参数</th><th>提供方</th><th>含义 / 示例</th></tr></thead><tbody><tr><td><code>code</code></td><td>第三方</td><td>订阅者唯一标识，例如 <code>game-service-a</code></td></tr><tr><td><code>callbackUrl</code></td><td>第三方</td><td>中台可访问的回调，例如 <code>https://game.example.com/internal/config/callback</code></td></tr><tr><td><code>secret</code></td><td>双方安全交换</td><td>用于 SHA-1 排序签名的订阅者密钥，建议使用高强度随机字符串</td></tr><tr><td><code>configCenterBaseUrl</code></td><td>中台</td><td>配置中心 API 根地址，例如 <code>https://config.example.com</code></td></tr></tbody></table></div><p>文档接口路径均不包含 <code>/sdk</code> 前缀。实际部署若使用公网 <code>/sdk/api/...</code>，应以管理员提供的网关地址为准。</p><div class="notice warn">Webhook 回调地址可为公网或内网 HTTP/HTTPS 域名或 IP；生产优先 HTTPS。平台拒绝元数据服务及部分特殊网络地址，不代表任意地址都能直接访问。</div></section>
 <section id="s-webhook" class="section"><div class="section-title"><h2>接收 Webhook 回调</h2></div><div class="summary">配置变更通知；签名通过后尽快返回 2xx</div><p>签名公式与测试向量见 <a href="#sig-sync">签名规范 · 配置同步签名</a>。</p><div class="route"><span class="verb post">POST</span><code>{callbackUrl}</code></div><p>配置中心向第三方预先提供的 <code>callbackUrl</code> 发起请求，Body 只包含 <code>epoch</code>、<code>revision</code>，不包含完整配置。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>类型/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr><tr><td><code>X-Timestamp</code></td><td>Unix 秒级时间戳</td></tr><tr><td><code>X-Nonce</code></td><td>16 位小写十六进制随机数</td></tr><tr><td><code>X-Signature</code></td><td>40 位小写十六进制 SHA-1</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>epoch</code></td><td>string</td><td>是</td><td>数据集标识，发生变化需重新全量同步</td></tr><tr><td><code>revision</code></td><td>integer</td><td>是</td><td>该 epoch 内的版本游标</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /internal/config/callback HTTP/1.1
 Host: game.example.com
 Content-Type: application/json
@@ -656,10 +656,9 @@ signature = lower_hex(SHA1(UTF8(plain)))</code></pre></div>
 <p>对应接口流程见 <a href="#s-webhook">接收 Webhook 回调</a>。</p></section>
 <section id="sig-examples" class="section"><div class="section-title"><h2>Java / Go / Node.js 签名示例</h2></div><div class="summary">复用通用计算函数，但每个业务接口仍自行选择参与签名的值。</div>
 <p>Java 17 示例分别见 <a href="#sig-game">游戏签名 · SdkSignature</a> 与 <a href="#sig-admin">管理签名 · AdminSigner</a>。下面提供 Go、Node.js 的等价计算示例，适合服务端接入或单元测试。</p>
-<div class="codebox"><div class="codehead"><span>Go · SHA-1 排序签名与 HMAC-SHA256</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>package signature
+<div class="codebox"><div class="codehead"><span>Go · SHA-1 排序签名</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>package signature
 
 import (
-    &quot;crypto/hmac&quot;
     &quot;crypto/sha1&quot;
     &quot;crypto/sha256&quot;
     &quot;encoding/hex&quot;
@@ -691,16 +690,13 @@ func SignAdmin(secret, method, path string, query url.Values,
     )
 }
 
-func SignConfigWebhook(secret, timestamp, epoch, revision string) string {
-    message := timestamp + &quot;.&quot; + epoch + &quot;.&quot; + revision
-    mac := hmac.New(sha256.New, []byte(secret))
-    _, _ = mac.Write([]byte(message))
-    return &quot;sha256=&quot; + hex.EncodeToString(mac.Sum(nil))
+func SignConfigWebhook(secret, timestamp, nonce, epoch, revision string) string {
+    return SignValues(secret, timestamp, nonce, epoch, revision)
 }</code></pre></div>
 <h3>Node.js 18+ 示例（无需第三方依赖）</h3>
 <p>使用 Node.js 内置 <code>node:crypto</code>，保存为 <code>signature-example.cjs</code> 后运行 <code>node signature-example.cjs</code>。包括游戏常规签名、支付平台 V1（保留空字符串）、管理签名及配置同步 Webhook；用 <code>assert</code> 校验测试向量。</p>
-<div class="codebox"><div class="codehead"><span>Node.js · SHA-1 / HMAC-SHA256</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>const assert = require('node:assert/strict');
-const { createHash, createHmac, randomBytes } = require('node:crypto');
+<div class="codebox"><div class="codehead"><span>Node.js · SHA-1 排序签名</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>const assert = require('node:assert/strict');
+const { createHash, randomBytes } = require('node:crypto');
 
 function signValues(values, keepEmpty = false) {
   const items = values
@@ -747,9 +743,8 @@ function signAdmin(secret, method, path, query, body, timestamp, nonce) {
   ]);
 }
 
-function signConfigWebhook(secret, timestamp, epoch, revision) {
-  const plain = timestamp + '.' + epoch + '.' + revision;
-  return 'sha256=' + createHmac('sha256', secret).update(plain, 'utf8').digest('hex');
+function signConfigWebhook(secret, timestamp, nonce, epoch, revision) {
+  return signValues([secret, timestamp, nonce, epoch, String(revision)]);
 }
 
 const secret = '0123456789abcdef0123456789abcdef';
@@ -760,8 +755,8 @@ assert.equal(
   '0058c35dc2f4d20c909b333faeebbf661dde26c2'
 );
 assert.equal(
-  signConfigWebhook('demo-webhook-secret', fixedTimestamp, '550e8400-e29b-41d4-a716-446655440000', 12),
-  'sha256=28bb6dfea35253f986210496819b0ce5b110ed60ebecf440f1e128fa866bf36b'
+  signConfigWebhook('demo-webhook-secret', fixedTimestamp, fixedNonce, '550e8400-e29b-41d4-a716-446655440000', 12),
+  'a95aee794bee55d020586fd60c8b0fe860779636'
 );
 assert.equal(
   signGame('测试-密钥!', '110006', '1793700000', fixedNonce, ['G100', '600']),
