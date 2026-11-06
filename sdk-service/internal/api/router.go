@@ -16,10 +16,12 @@ import (
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// UserChecker 定义用户核验 HTTP 接口依赖的业务能力。
 type UserChecker interface {
     Check(*http.Request, string, string, model.UserCheckRequest) (model.UserCheckResult, error)
 }
 
+// Pinger 定义就绪探针使用的数据库连通性检查。
 type Pinger interface { PingContext(context.Context) error }
 
 var appIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
@@ -38,6 +40,7 @@ func writeJSON(w http.ResponseWriter, status int, data response) {
     _ = json.NewEncoder(w).Encode(data)
 }
 
+// parseBody 只接受包含单个 open_id 字符串的 JSON 对象，拒绝多余字段及尾随数据。
 func parseBody(w http.ResponseWriter, r *http.Request) (model.UserCheckRequest, error) {
     if strings.TrimSpace(r.URL.RawQuery) != "" || !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
         return model.UserCheckRequest{}, errInvalidBody
@@ -58,6 +61,7 @@ func parseBody(w http.ResponseWriter, r *http.Request) (model.UserCheckRequest, 
     return model.UserCheckRequest{OpenID: openID}, nil
 }
 
+// Router 注册用户核验及可选的角色查询接口，兼容原有调用方式。
 func Router(checker UserChecker, db Pinger, roleQueriers ...RoleQuerier) http.Handler {
     var role RoleQuerier
     if len(roleQueriers) > 0 {
@@ -66,17 +70,20 @@ func Router(checker UserChecker, db Pinger, roleQueriers ...RoleQuerier) http.Ha
     return RouterWithServices(checker, db, role, nil)
 }
 
+// RouterWithServices 在基础路由上注册可用的角色、区服及封解禁服务。
 func RouterWithServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier, controls ...RoleController) http.Handler {
     var control RoleController
     if len(controls) > 0 { control = controls[0] }
     return routerServices(checker, db, role, server, control, nil, nil)
 }
 
+// RouterWithPublishers 额外接入事件上报与订阅消息的转发服务。
 func RouterWithPublishers(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier,
     control RoleController, events EventReporter, subscriptions SubscribeSender) http.Handler {
     return routerServices(checker, db, role, server, control, events, subscriptions)
 }
 
+// routerServices 仅暴露已经注入实现的业务接口，并统一提供存活和就绪探针。
 func routerServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier,
     control RoleController, events EventReporter, subscriptions SubscribeSender) http.Handler {
     mux := http.NewServeMux()

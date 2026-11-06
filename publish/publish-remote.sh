@@ -50,7 +50,7 @@ while IFS= read -r entry; do
         exit 1
     fi
 done < "$stage/entries"
-# Packages produced by package.ps1 contain regular files and directories only.
+# package.ps1 生成的归档只允许包含普通文件和目录。
 tar -tvzf "$archive" > "$stage/types"
 while IFS= read -r entry; do
     case "${entry:0:1}" in
@@ -95,7 +95,7 @@ if [[ -d "$stage/unpacked/admin" && ! -f "$stage/unpacked/admin/index.html" ]]; 
     exit 1
 fi
 
-# Refuse symlinked destination directories instead of following them into config/logs.
+# 拒绝目标路径中的符号链接，避免意外写入配置或日志目录。
 ensure_directory() {
     local path=$root part relative=$1
     IFS='/' read -r -a parts <<< "${root#/}/$relative"
@@ -111,15 +111,15 @@ ensure_directory() {
     done
 }
 find "$stage/unpacked" -type f -print0 > "$stage/files"
-# Check all destination directories before replacing any application file.
+# 替换应用文件前，先检查并创建所有目标目录。
 ensure_directory packages
 while IFS= read -r -d '' source; do
     relative=${source#"$stage/unpacked/"}
     ensure_directory "$(dirname -- "$relative")"
 done < "$stage/files"
 
-# Validate every configured instance before replacing application files.
-# The plan contains only supervised process names and localhost HTTP ports, not secrets.
+# 替换应用文件前，验证所有待重启的 Supervisor 实例。
+# 重启计划只包含 Supervisor 进程名和本地健康检查端口，不含密钥。
 programs=()
 ports=()
 if [[ "$restart" == 1 && "$service" != admin ]]; then
@@ -179,7 +179,7 @@ while IFS= read -r -d '' source; do
     fi
     temporary=$(mktemp "$(dirname -- "$target")/.publish-file-XXXXXXXX")
     cp -p -- "$source" "$temporary"
-    # Same-directory rename avoids writing into an executable used by a live process.
+    # 使用同目录原子重命名，避免直接覆盖运行中的可执行文件。
     mv -fT -- "$temporary" "$target"
     temporary=''
     printf 'Updated %s\n' "$relative"

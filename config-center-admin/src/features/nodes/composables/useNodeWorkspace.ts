@@ -105,8 +105,7 @@ function closeEditor() {
   void beforeDrawerClose(() => { drawerVisible.value = false })
 }
 
-// Element Plus 懒加载仅查询当前目录的直接子节点，避免全量构建大树。
-// 懒加载仅请求当前父节点的直接子项，不一次性拉取整棵配置树。
+// Element Plus 目录树按需读取直接子节点，避免一次性构建整棵树。
 const loadTree: LoadFunction = async (node, resolve, reject) => {
   const parentId = node.level === 0 ? 0 : (node.data as NodeSummary).id
   try {
@@ -121,8 +120,7 @@ const loadTree: LoadFunction = async (node, resolve, reject) => {
 function onExpand(node: NodeSummary) {
   if (!expandedKeys.value.includes(node.id)) expandedKeys.value = [...expandedKeys.value, node.id]
 }
-// 收起父节点时同步移除已展开的后代标记，避免下次刷新错误恢复展开状态。
-// 折叠时同步移除所有后代展开键，防止重新展开时出现幽灵状态。
+// 收起父节点时清理后代展开标记，避免刷新后错误恢复展开状态。
 function onCollapse(node: NodeSummary) {
   const collapsedKeys = new Set<number>([node.id])
   const descendants = [...(treeRef.value?.getNode(node.id)?.childNodes ?? [])]
@@ -135,8 +133,7 @@ function onCollapse(node: NodeSummary) {
   expandedKeys.value = expandedKeys.value.filter(id => !collapsedKeys.has(id))
 }
 
-// 重建树后恢复展开路径和滚动位置，避免用户刷新后丢失浏览上下文。
-// 刷新前暂存滚动位置及展开节点，避免写入成功后视图跳回顶部。
+// 刷新前记录展开路径和滚动位置，重建后恢复，避免视图跳回顶部。
 async function reloadTree() {
   const scrollTop = treeScrollRef.value?.scrollTop ?? 0
   restoredExpandedKeys.value = [...expandedKeys.value]

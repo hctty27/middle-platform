@@ -13,12 +13,15 @@ import (
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// RoleController 定义封号、解封、禁言和解禁言的统一执行入口。
 type RoleController interface {
     Execute(*http.Request, string, string, model.RoleControlRequest) error
 }
 
 var errInvalidRoleControl = errors.New("封解禁参数不合法")
 
+// parseRoleControlBody 严格按平台字段解析封解禁请求，拒绝重复键和未约定字段。
+// duration 使用指针保留“未提交”和“明确传入 0”的区别，以免影响验签。
 func parseRoleControlBody(w http.ResponseWriter, r *http.Request) (model.RoleControlRequest, error) {
     var input model.RoleControlRequest
     if strings.TrimSpace(r.URL.RawQuery) != "" ||
@@ -107,6 +110,7 @@ func parseRoleControlBody(w http.ResponseWriter, r *http.Request) (model.RoleCon
     return input, nil
 }
 
+// roleControlHandler 处理封解禁入站请求并统一映射业务错误。
 func roleControlHandler(control RoleController) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         env, appID := r.PathValue("env"), r.Header.Get("x-app-id")

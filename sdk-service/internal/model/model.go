@@ -14,6 +14,7 @@ var (
     ErrUpstream = errors.New("游戏服务请求失败")
 )
 
+// Target 保存已验证的渠道环境路由、上下游密钥及游戏接口地址。
 type Target struct {
     AppID string
     Env string
@@ -27,14 +28,17 @@ type Target struct {
     GameSecret string
 }
 
+// UserCheckRequest 表示用户核验的身份参数。
 type UserCheckRequest struct {
     OpenID string
 }
 
+// UserCheckResult 表示游戏侧用户是否存在。
 type UserCheckResult struct {
     Exists bool
 }
 
+// RoleQueryRequest 表示平台支持的角色身份及区服筛选条件。
 type RoleQueryRequest struct {
     OpenID           string `json:"open_id,omitempty"`
     RoleID           string `json:"role_id,omitempty"`
@@ -43,10 +47,12 @@ type RoleQueryRequest struct {
     Extension        string `json:"extension,omitempty"`
 }
 
+// SignatureValues 按平台协议顺序返回角色查询的签名参数。
 func (r RoleQueryRequest) SignatureValues() []string {
     return []string{r.OpenID, r.RoleID, r.OriginalServerID, r.CurrentServerID, r.Extension}
 }
 
+// HasIdentityFilter 判断是否提供至少一个角色身份或区服筛选条件。
 func (r RoleQueryRequest) HasIdentityFilter() bool {
     return r.OpenID != "" || r.RoleID != "" || r.OriginalServerID != "" || r.CurrentServerID != ""
 }
@@ -74,6 +80,7 @@ type Role struct {
     PalyTime           *int64 `json:"paly_time,omitempty"`
 }
 
+// Valid 检查角色响应中平台要求的必填字段。
 func (r Role) Valid() bool {
     return r.RoleID != "" && r.RoleName != "" && r.Level != "" &&
         r.OriginalServerID != "" && r.OriginalServerName != "" &&
@@ -82,6 +89,7 @@ func (r Role) Valid() bool {
         r.LastOfflineAt != nil && r.LastLoginAt != nil
 }
 
+// ServerQueryRequest 表示区服查询条件及分页字段的显式提交状态。
 type ServerQueryRequest struct {
     OriginalServerID string `json:"original_server_id,omitempty"`
     CurrentServerID  string `json:"current_server_id,omitempty"`
@@ -105,6 +113,7 @@ func (r ServerQueryRequest) ForwardSignatureValues() []string {
     return []string{r.OriginalServerID, r.CurrentServerID, strconv.Itoa(r.Page), strconv.Itoa(r.PageSize), r.Zonekey}
 }
 
+// ServerInfo 保持平台区服信息的原始字段及可选数值类型。
 type ServerInfo struct {
     OriginalServerID   string `json:"original_server_id"`
     OriginalServerName string `json:"original_server_name"`
@@ -123,6 +132,7 @@ type ServerInfo struct {
     RoleOnlineTotal    *int64 `json:"role_online_total"`
 }
 
+// Valid 校验区服状态、必要标识及非负统计数据。
 func (s ServerInfo) Valid() bool {
     switch s.Status {
     case "0", "1", "3", "4":
@@ -142,11 +152,14 @@ func (s ServerInfo) Valid() bool {
         (s.MergeCount == nil || *s.MergeCount >= 0)
 }
 
+// ServerQueryResult 返回区服总数及当前页列表。
 type ServerQueryResult struct {
     Total int64        `json:"total"`
     List  []ServerInfo `json:"list"`
 }
 
+// RoleControlRequest 表示封号、解封、禁言及解禁言操作。
+// Duration 使用指针区分未提交与显式传入零值。
 type RoleControlRequest struct {
     Type      string `json:"type"`
     ServerID  string `json:"server_id,omitempty"`

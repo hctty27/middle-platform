@@ -15,6 +15,7 @@ import (
     "github.com/hctty27/middle-platform/shared/signature"
 )
 
+// HTTPDoer 抽象 HTTP 请求发送，允许业务适配器使用测试客户端。
 type HTTPDoer interface {
     Do(*http.Request) (*http.Response, error)
 }

@@ -10,6 +10,7 @@ import (
     "time"
 )
 
+// channelApp 是管理接口返回的渠道包及环境绑定视图。
 type channelApp struct {
     ID int64 `json:"id"`
     GameID int64 `json:"gameId"`
@@ -24,6 +25,7 @@ type channelApp struct {
     CreatedAt time.Time `json:"createdAt"`
     UpdatedAt time.Time `json:"updatedAt"`
 }
+// channelWrite 只接收渠道包可编辑字段，环境绑定通过区服组 ID 指定。
 type channelWrite struct {
     GameID int64 `json:"gameId"`
     Code string `json:"code"`
@@ -35,8 +37,10 @@ type channelWrite struct {
     TestServerGroupID *int64 `json:"testServerGroupId"`
     ReviewServerGroupID *int64 `json:"reviewServerGroupId"`
 }
+// channelColumns 必须与 scanChannel 的扫描顺序一致。
 const channelColumns = "id,game_id,code,name,status,config,remark,prod_server_group_id,test_server_group_id,review_server_group_id,created_at,updated_at"
 
+// registerChannelAdminRoutes 注册渠道包管理及环境区服组绑定查询接口。
 func registerChannelAdminRoutes(mux *http.ServeMux, h *adminStore) {
     mux.HandleFunc("GET /api/core/admin/channel-apps", h.channelApps)
     mux.HandleFunc("POST /api/core/admin/channel-apps", h.createChannelApp)
@@ -46,6 +50,7 @@ func registerChannelAdminRoutes(mux *http.ServeMux, h *adminStore) {
     mux.HandleFunc("GET /api/core/admin/server-groups/{id}/channel-apps", h.serverGroupBindings)
 }
 
+// scanChannel 将数据库可空字段转换为管理接口的可选 JSON 字段。
 func scanChannel(row interface{ Scan(...any)error }) (channelApp,error) {
     var a channelApp
     var remark sql.NullString
@@ -59,6 +64,7 @@ func scanChannel(row interface{ Scan(...any)error }) (channelApp,error) {
     return a,err
 }
 
+// validChannelWrite 校验渠道包名称、状态、备注长度及 JSON 配置格式。
 func validChannelWrite(req channelWrite) bool {
     if strings.TrimSpace(req.Name)=="" || len([]rune(req.Name))>128 ||
        req.Status==nil || (*req.Status!=0 && *req.Status!=1) ||
@@ -66,9 +72,11 @@ func validChannelWrite(req channelWrite) bool {
     _,valid:=jsonObject(req.Config)
     return valid
 }
+// RemarkValue 返回可选备注的实际值，用于统一校验长度。
 func (r channelWrite) RemarkValue() string {
     if r.Remark==nil {return ""};return *r.Remark
 }
+// validateChannelGroups 逐一验证三个环境绑定的区服组属于同一游戏且环境一致。
 func validateChannelGroups(ctx context.Context, tx *sql.Tx,gameID int64,req channelWrite) error {
     for _,b:=range []struct{env string;id *int64}{
         {"prod",req.ProdServerGroupID},{"test",req.TestServerGroupID},{"review",req.ReviewServerGroupID},
@@ -103,6 +111,7 @@ func parseAdminQueryID(r *http.Request,key string)(int64,error){
     return strconv.ParseInt(r.URL.Query().Get(key),10,64)
 }
 
+// createChannelApp 在事务中锁定配置版本并校验绑定，避免并发写入导致状态不一致。
 func (h *adminStore) createChannelApp(w http.ResponseWriter,r *http.Request){
     var req channelWrite
     if !adminDecode(w,r,&req){return}
@@ -133,6 +142,7 @@ func (h *adminStore) createChannelApp(w http.ResponseWriter,r *http.Request){
     writeJSON(w,201,item)
 }
 
+// updateChannelApp 保持渠道包所属游戏不变，只更新允许修改的字段及环境绑定。
 func (h *adminStore) updateChannelApp(w http.ResponseWriter,r *http.Request) {
     id,ok:=adminID(r)
     if !ok {adminError(w,400,"渠道包 ID 不合法");return}
@@ -160,6 +170,7 @@ func (h *adminStore) updateChannelApp(w http.ResponseWriter,r *http.Request) {
     writeJSON(w,200,item)
 }
 
+// deleteChannelApp 要求先解除环境绑定，再删除渠道功能关联及渠道包记录。
 func (h *adminStore) deleteChannelApp(w http.ResponseWriter,r *http.Request) {
     id,ok:=adminID(r)
     if !ok {adminError(w,400,"渠道包 ID 不合法");return}
@@ -184,6 +195,7 @@ func (h *adminStore) deleteChannelApp(w http.ResponseWriter,r *http.Request) {
     w.WriteHeader(204)
 }
 
+// serverGroupOptions 仅返回指定游戏与环境的区服组，并对 LIKE 搜索字符转义。
 func (h *adminStore) serverGroupOptions(w http.ResponseWriter,r *http.Request){
     gameID,err:=parseAdminQueryID(r,"gameId")
     env:=r.URL.Query().Get("envType")
@@ -210,6 +222,7 @@ func (h *adminStore) serverGroupOptions(w http.ResponseWriter,r *http.Request){
     writeJSON(w,200,out)
 }
 
+// serverGroupBindings 查询绑定了指定区服组的渠道包，不区分绑定环境。
 func (h *adminStore) serverGroupBindings(w http.ResponseWriter,r *http.Request){
     id,ok:=adminID(r)
     if !ok {adminError(w,400,"区服组 ID 不合法");return}

@@ -14,7 +14,9 @@ import (
     "github.com/hctty27/middle-platform/sdk-service/internal/model"
 )
 
+// Store 只读访问配置中心数据库，为各业务服务提供环境绑定与路由信息。
 type Store struct { db *sql.DB }
+// New 使用外部提供的数据库连接池创建只读路由存储。
 func New(db *sql.DB) *Store { return &Store{db: db} }
 
 // 单次查询通过 AppID 与环境定位游戏、配置和渠道服务开关。
@@ -41,6 +43,8 @@ LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id
     AND ch.channel_app_id=a.id AND ch.env=?
 WHERE a.code=? AND a.status=1`
 
+// VerifySchema 检查服务所需的表结构和服务目录是否已初始化。
+// 缺少必要服务时明确报错，不在启动阶段自动执行数据库迁移。
 func (s *Store) VerifySchema(ctx context.Context) error {
     rows, err := s.db.QueryContext(ctx, routeQuery+" LIMIT 0", "prod", "prod", "user_check", "prod", "__probe__")
     if err != nil { return fmt.Errorf("核验功能依赖的数据库结构不完整: %w", err) }
@@ -63,10 +67,13 @@ func (s *Store) VerifySchema(ctx context.Context) error {
     return nil
 }
 
+// Lookup 查询用户核验使用的渠道环境配置。
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, error) {
     return s.LookupService(ctx, appID, env, "user_check")
 }
 
+// LookupService 按渠道 AppID、环境和服务代码查询启用状态、密钥与转发地址。
+// 不回退到其他环境，防止跨环境读取密钥和业务路由。
 func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode string) (model.Target, error) {
     if serviceCode != "user_check" && serviceCode != "role_query" && serviceCode != "server_query" && serviceCode != "role_control" &&
         serviceCode != "event_report" && serviceCode != "subscribe_message" {
