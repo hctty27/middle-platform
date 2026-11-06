@@ -127,7 +127,7 @@ watch(() => [props.gameId, props.focusNodeId], () => { void loadNodes() }, { imm
         <el-form label-position="top">
           <el-form-item label="配置节点">
             <el-select :model-value="currentID" filterable placeholder="选择游戏或大区" style="width:100%"
-                       name="sdk-node-selector" autocomplete="off"
+                       autocomplete="off"
                        :disabled="saving || loading" @change="selectNode">
               <el-option v-for="item in options" :key="item.id"
                          :label="`${item.nodeType === 'game' ? '游戏' : '大区'} / ${item.name}`"
@@ -135,7 +135,7 @@ watch(() => [props.gameId, props.focusNodeId], () => { void loadNodes() }, { imm
             </el-select>
           </el-form-item>
         </el-form>
-        <el-form label-position="top" v-loading="loading">
+        <el-form label-position="top" class="admin-config-form" autocomplete="off" v-loading="loading">
           <ConfigSchemaEditor v-if="current" v-model="rawConfig" :node-type="current.nodeType" scope="sdk" />
           <el-tag v-if="rawConfig !== savedConfig" type="warning" effect="plain">有未保存的修改</el-tag>
           <div class="panel-actions" style="justify-content: flex-end; margin-top: 20px">
