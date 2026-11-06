@@ -36,8 +36,9 @@ async function copy() {
         <el-button link @click="copy">复制</el-button>
       </div>
     </div>
-    <el-input :model-value="modelValue" :readonly="readonly" type="textarea" :rows="rows"
-              class="json-input" spellcheck="false"
+    <el-input :model-value="modelValue" :readonly="readonly" type="textarea"
+              :autosize="{ minRows: 4, maxRows: Math.max(4, rows) }" resize="none"
+              class="json-input" spellcheck="false" autocomplete="off"
               @update:model-value="emit('update:modelValue', $event)" />
     <p v-if="validation" class="json-error">{{ validation }}</p>
   </div>

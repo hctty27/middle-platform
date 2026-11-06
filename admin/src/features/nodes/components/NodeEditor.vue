@@ -25,15 +25,15 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <el-drawer  :model-value="visible" @update:model-value="emit('update:visible', $event)" :title="title" size="min(720px, 96vw)"
+    <el-drawer class="node-config-drawer" :model-value="visible" @update:model-value="emit('update:visible', $event)" :title="title" size="min(720px, 96vw)"
                :before-close="beforeClose" :close-on-click-modal="false">
       <div v-loading="detailLoading" class="drawer-content">
-        <el-form v-if="!detailLoading" label-position="top" class="node-form">
+        <el-form v-if="!detailLoading" label-position="top" class="node-form" autocomplete="off">
           <div class="form-grid">
             <el-form-item label="节点类型"><el-input :model-value="labels[form.nodeType]" disabled /></el-form-item>
             <el-form-item label="父节点 ID（根据层级推导）"><el-input :model-value="String(form.parentId)" disabled /></el-form-item>
-            <el-form-item label="业务编码"><el-input v-model="form.code" :disabled="!creating" maxlength="128" /></el-form-item>
-            <el-form-item label="节点名称"><el-input v-model="form.name" maxlength="128" show-word-limit /></el-form-item>
+            <el-form-item label="业务编码"><el-input v-model="form.code" :disabled="!creating" maxlength="128" autocomplete="off" /></el-form-item>
+            <el-form-item label="节点名称"><el-input v-model="form.name" maxlength="128" show-word-limit autocomplete="off" /></el-form-item>
           </div>
           <el-form-item v-if="form.nodeType === 'game'" label="运营地区" required>
             <el-radio-group v-model="form.marketType">
@@ -55,9 +55,9 @@ const emit = defineEmits<{
           <div class="section-heading"><h3>业务配置</h3></div>
           <p class="muted form-tip">仅存储基础节点的自定义配置；SDK 密钥、适配器及回调地址请在「SDK 配置」中编辑。</p>
           <ConfigSchemaEditor v-model="form.config" :node-type="form.nodeType" scope="base" />
-          <div class="muted form-tip">此处不保存 SDK 专属配置。</div>
           <el-form-item label="备注">
-            <el-input v-model="form.remark" type="textarea" maxlength="500" show-word-limit />
+            <el-input v-model="form.remark" type="textarea" maxlength="500" show-word-limit
+                      :autosize="{ minRows: 2, maxRows: 5 }" resize="none" autocomplete="off" />
           </el-form-item>
         </el-form>
       </div>

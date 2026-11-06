@@ -67,11 +67,11 @@ onMounted(() => void loadSubscribers())
           <el-table-column prop="lastError" label="最近错误" min-width="160" show-overflow-tooltip />
         </el-table>
         <el-dialog v-model="showSubscriber" title="新增接入平台" width="530px">
-          <el-form label-position="top">
-            <el-form-item label="唯一编码"><el-input v-model="newSubscriber.code" /></el-form-item>
-            <el-form-item label="Webhook 回调地址"><el-input v-model="newSubscriber.callbackUrl" /></el-form-item>
+          <el-form label-position="top" class="admin-config-form" autocomplete="off">
+            <el-form-item label="唯一编码"><el-input v-model="newSubscriber.code" autocomplete="off" /></el-form-item>
+            <el-form-item label="Webhook 回调地址"><el-input v-model="newSubscriber.callbackUrl" autocomplete="off" /></el-form-item>
             <el-form-item label="共享签名密钥">
-              <el-input v-model="newSubscriber.secret" type="password" show-password />
+              <el-input v-model="newSubscriber.secret" type="password" show-password autocomplete="new-password" />
             </el-form-item>
             <p class="muted">回调域名须在配置中心服务端允许列表中。</p>
           </el-form>
