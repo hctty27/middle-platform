@@ -75,7 +75,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <ul>
 <li><code>config-center</code>：管理基础节点与订阅者，并提供同步版本、变更记录、快照查询。</li>
 <li><code>config-center-access</code>：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。</li>
-<li><code>sdk-core</code>：直接查询权威库，根据环境绑定和接口映射生成配置；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。</li>
+<li><code>sdk-core</code>：直接查询权威库，根据环境绑定按需返回固定公开配置字段；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。</li>
 <li><code>sdk-service</code>：平台主动调用游戏，处理平台发起的用户核验、角色/区服查询、封解禁，以及游戏上报的事件和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。</li>
 <li><code>config-center-admin</code>：Vue 3 管理界面，管理接口默认启用 <code>adminAuth</code> 签名校验，生产仍须配置 TLS 与受保护的管理网关。</li>
 </ul>
@@ -100,7 +100,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <ul>
 <li>当前数据库由管理员手动执行 SQL 建表或升级；各服务启动只校验表结构，不执行 DDL、也不维护历史迁移版本。</li>
 <li>服务内部业务路由不包含 <code>/sdk</code> 或 <code>/v1</code>；Nginx 可分别转发 <code>/api/config/</code>、<code>/api/core/</code>、<code>/api/service/</code>，公网若使用 <code>/sdk/</code> 前缀由网关负责转换。</li>
-<li>接口级字段映射编译进 <code>sdk-core</code>，新增映射字段不必修改 SQL，但需要重新构建并滚动部署。</li>
+<li>SDK Core 公开配置接口使用固定响应结构和按需 SQL 查询；新增公开字段需同步修改查询、响应结构和接口文档，不再依赖映射文件。</li>
 <li>管理接口默认使用 <code>adminAuth</code> 签名，仍须通过可信内网或受保护的 HTTPS 网关访问；同步接口和回调地址也需限制访问。生产环境不能将管理 API 与公开 SDK API 无差别暴露。</li>
 </ul>
 <p>部署方案见 <a href="#production">生产运维</a>。</p>

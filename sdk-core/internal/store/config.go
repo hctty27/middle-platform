@@ -67,6 +67,63 @@ WHERE a.code = ?
     AND a.status = 1
 LIMIT 1`
 
+
+// publicConfigQuery 只读取 SDK 公开配置接口需要的字段，不加载服务端密钥或整段配置 JSON。
+// 仍验证游戏、大区、区服组和渠道包的状态、归属关系以及环境绑定。
+const publicConfigQuery = `
+SELECT
+    a.code,
+    sg.code,
+    JSON_EXTRACT(a.config, '$.tsKey')
+FROM sdk_channel_app a
+JOIN config_node g
+    ON g.id = a.game_id
+    AND g.node_type = 'game'
+    AND g.status = 1
+JOIN config_node sg
+    ON sg.id = CASE ?
+        WHEN 'prod' THEN a.prod_server_group_id
+        WHEN 'test' THEN a.test_server_group_id
+        WHEN 'review' THEN a.review_server_group_id
+        ELSE NULL
+    END
+    AND sg.node_type = 'server_group'
+    AND sg.status = 1
+    AND sg.game_id = a.game_id
+JOIN config_node r
+    ON r.id = sg.region_id
+    AND r.node_type = 'region'
+    AND r.status = 1
+    AND r.game_id = a.game_id
+    AND r.env_type = ?
+WHERE a.code = ?
+    AND a.status = 1
+LIMIT 1`
+
+// LookupPublicConfig 使用单条查询获取固定公开字段，完全不读取 SDK 专属密钥。
+func (s *Store) LookupPublicConfig(ctx context.Context, appID, env string) (model.ConfigResponse, error) {
+    var result model.ConfigResponse
+    var rawTSKey []byte
+    err := s.db.QueryRowContext(ctx, publicConfigQuery, env, env, appID).
+        Scan(&result.SnKey, &result.ZoneKey, &rawTSKey)
+    if errors.Is(err, sql.ErrNoRows) {
+        return model.ConfigResponse{}, model.ErrNotFound
+    }
+    if err != nil {
+        return model.ConfigResponse{}, fmt.Errorf("查询公开 SDK 配置失败: %w", err)
+    }
+    // 未配置和 JSON null 均省略 tsKey，空字符串则保留，与原响应行为一致。
+    if len(rawTSKey) == 0 || string(rawTSKey) == "null" {
+        return result, nil
+    }
+    var value string
+    if err := json.Unmarshal(rawTSKey, &value); err != nil {
+        return model.ConfigResponse{}, fmt.Errorf("%w: tsKey 必须是字符串", model.ErrInvalidConfig)
+    }
+    result.TsKey = &value
+    return result, nil
+}
+
 // Lookup 使用单条 SELECT 获取一致的应用、大区、区服组数据，避免二次查询和显式事务开销。
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp, *model.BoundGroup, error) {
     var app model.ChannelApp
@@ -108,12 +165,17 @@ func (s *Store) Lookup(ctx context.Context, appID, env string) (model.ChannelApp
 
 // VerifySchema 复用实际查询验证所有必需表和字段，避免单独维护一份易过时的探测 SQL。
 func (s *Store) VerifySchema(ctx context.Context) error {
-    rows, err := s.db.QueryContext(ctx, configQuery, "prod", "prod", "__sdk_core_schema_probe__")
-    if err != nil {
-        return fmt.Errorf("检查 SDK Core 数据库表结构失败: %w", err)
+    // 两条查询分别服务于公开配置和订单登记，启动时都必须验证表结构。
+    for _, query := range []string{publicConfigQuery, configQuery} {
+        rows, err := s.db.QueryContext(ctx, query, "prod", "prod", "__sdk_core_schema_probe__")
+        if err != nil {
+            return fmt.Errorf("检查 SDK Core 数据库表结构失败: %w", err)
+        }
+        if err := rows.Close(); err != nil {
+            return err
+        }
     }
-    defer rows.Close()
-    return rows.Err()
+    return nil
 }
 
 // LookupPlatformSecret 按全局唯一 AppID 读取渠道包顶层 appSecret，不依赖环境和当前绑定状态。

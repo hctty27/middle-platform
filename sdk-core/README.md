@@ -23,7 +23,7 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
 
-新库按 [数据库文档](../docs/guide.html#database) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。接口字段映射编译在 `internal/mapping/response-mapping.json`，修改后需要重新构建。
+新库按 [数据库文档](../docs/guide.html#database) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。公开配置接口固定返回 `snKey`、`zoneKey` 和可选 `tsKey`，直接读取所需数据库字段，不再使用响应映射文件。需要增加公开字段时同步更新查询、DTO、测试和接口文档。
 
 `/api/core/admin/**` 默认使用 `adminAuth` 签名，与配置中心使用相同管理密钥；生产仍需网关隔离并启用 HTTPS，不应公开暴露管理路由。
 

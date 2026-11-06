@@ -6,6 +6,7 @@ import (
     "encoding/json"
     "errors"
     "os"
+    "reflect"
     "testing"
 
     _ "github.com/go-sql-driver/mysql"
@@ -109,18 +110,52 @@ func TestLookupMySQL(t *testing.T) {
             if err := json.Unmarshal(app.GameConfig,&gameConfig);err!=nil { t.Fatal(err) }
             if gameConfig["gameKey"]!="main" { t.Fatalf("unexpected game JSON: %s",app.GameConfig) }
             if len(group.Config)==0 { t.Fatal("missing server group JSON") }
+            publicConfig, err := store.LookupPublicConfig(ctx, "app1001", tc.env)
+            if err != nil { t.Fatal(err) }
+            if publicConfig.SnKey != "app1001" || publicConfig.ZoneKey != tc.groupCode ||
+                publicConfig.TsKey == nil || *publicConfig.TsKey != "abc" {
+                t.Fatalf("unexpected public SDK config: %+v", publicConfig)
+            }
         })
     }
+
+    // 未配置的 tsKey 省略，空字符串保留，错误类型拒绝返回。
+    for _, tc := range []struct {
+        raw string
+        expected *string
+        invalid bool
+    }{
+        {`{}`, nil, false},
+        {`{"tsKey":null}`, nil, false},
+        {`{"tsKey":""}`, stringPointer(""), false},
+        {`{"tsKey":123}`, nil, true},
+        {`{"tsKey":{"secret":"x"}}`, nil, true},
+    } {
+        if _, err := db.ExecContext(ctx, "UPDATE sdk_channel_app SET config=? WHERE id=10", tc.raw); err != nil { t.Fatal(err) }
+        got, err := store.LookupPublicConfig(ctx, "app1001", "prod")
+        if tc.invalid {
+            if !errors.Is(err, model.ErrInvalidConfig) { t.Fatalf("config=%s: got %v", tc.raw, err) }
+            continue
+        }
+        if err != nil || !reflect.DeepEqual(got.TsKey, tc.expected) {
+            t.Fatalf("config=%s: tsKey=%v, want=%v, err=%v", tc.raw, got.TsKey, tc.expected, err)
+        }
+    }
+    if _, err := db.ExecContext(ctx, `UPDATE sdk_channel_app SET config='{"tsKey":"abc"}' WHERE id=10`); err != nil { t.Fatal(err) }
 
     // 未绑定、区服组禁用、大区禁用、游戏禁用、渠道禁用均不可返回配置。
     if _,err := db.ExecContext(ctx,"UPDATE sdk_channel_app SET review_server_group_id=NULL WHERE id=10");err!=nil { t.Fatal(err) }
     assertLookupNotFound(t,store,"review")
+    assertPublicConfigNotFound(t,store,"review")
     if _,err := db.ExecContext(ctx,"UPDATE config_node SET status=0 WHERE id=5");err!=nil { t.Fatal(err) }
     assertLookupNotFound(t,store,"prod")
+    assertPublicConfigNotFound(t,store,"prod")
     if _,err := db.ExecContext(ctx,"UPDATE config_node SET status=0 WHERE id=3");err!=nil { t.Fatal(err) }
     assertLookupNotFound(t,store,"test")
+    assertPublicConfigNotFound(t,store,"test")
     if _,err := db.ExecContext(ctx,"UPDATE config_node SET status=0 WHERE id=1");err!=nil { t.Fatal(err) }
     assertLookupNotFound(t,store,"prod")
+    assertPublicConfigNotFound(t,store,"prod")
     // 支付密钥位于渠道包顶层，独立于大区绑定和当前启用状态。
     _,err = db.ExecContext(ctx,
         `UPDATE sdk_channel_app SET config='{"tsKey":"abc","appSecret":"integration-secret"}' WHERE id=10`)
@@ -135,6 +170,7 @@ func TestLookupMySQL(t *testing.T) {
         `UPDATE sdk_channel_app SET config='{"tsKey":"abc"}' WHERE id=10`);err!=nil {t.Fatal(err)}
     if _,err=store.LookupPlatformSecret(ctx,"app1001");!errors.Is(err,model.ErrInvalidConfig){t.Fatalf("missing appSecret: %v",err)}
     assertLookupNotFound(t,store,"prod")
+    assertPublicConfigNotFound(t,store,"prod")
 }
 
 func assertLookupNotFound(t *testing.T,store *Store,env string) {
@@ -150,4 +186,14 @@ func jsonHasRegionKey(raw []byte,want string) bool {
         RegionKey string `json:"regionKey"`
     }
     return json.Unmarshal(raw,&obj)==nil && obj.RegionKey==want
+}
+
+func stringPointer(value string) *string { return &value }
+
+func assertPublicConfigNotFound(t *testing.T, store *Store, env string) {
+    t.Helper()
+    _, err := store.LookupPublicConfig(context.Background(), "app1001", env)
+    if !errors.Is(err, model.ErrNotFound) {
+        t.Fatalf("env=%s: expected ErrNotFound for public config, got %v", env, err)
+    }
 }
