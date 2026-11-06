@@ -220,26 +220,26 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
       </section>
     </div>
     <el-drawer v-model="visible" class="channel-app-editor-drawer" :title="editing ? '编辑渠道应用' : '新增渠道应用'" size="min(650px, 96vw)" :close-on-click-modal="false" :before-close="beforeDrawerClose">
-      <el-form label-position="top">
+      <el-form label-position="top" class="admin-config-form" autocomplete="off">
         <div class="form-grid">
-          <el-form-item label="编码" required><el-input v-model="form.code" :disabled="!!editing" maxlength="128" /></el-form-item>
-          <el-form-item label="名称" required><el-input v-model="form.name" maxlength="128" /></el-form-item>
+          <el-form-item label="编码" required><el-input v-model="form.code" :disabled="!!editing" maxlength="128" autocomplete="off" /></el-form-item>
+          <el-form-item label="名称" required><el-input v-model="form.name" maxlength="128" autocomplete="off" /></el-form-item>
         </div>
         <el-form-item label="状态"><el-switch v-model="form.status" :active-value="1" :inactive-value="0" /></el-form-item>
         <el-form-item v-for="env in environments" :key="env.key" :label="env.label + '区服组（可选）'">
           <el-select v-model="form[env.field]" filterable remote clearable :value-on-clear="null" :remote-method="(keyword: string) => loadOptions(env.key, keyword)"
                      :loading="groupLoading[env.key]" placeholder="搜索当前游戏对应环境的区服组" style="width:100%"
-                     :name="'channel-group-' + env.key" autocomplete="off">
+                     autocomplete="off">
             <el-option v-for="group in [...selectedOption(env.key, form[env.field]), ...groupOptions[env.key]]"
                        :key="group.id" :value="group.id" :label="groupLabel(group)" />
           </el-select>
         </el-form-item>
       </el-form>
       <!-- 区服组选择和业务密钥不共用表单，避免密码管理器干扰搜索。 -->
-      <el-form label-position="top">
+      <el-form label-position="top" class="admin-config-form" autocomplete="off">
         <div class="section-heading"><h3>共享业务配置</h3></div>
         <ConfigSchemaEditor v-model="form.config" node-type="channel_app" scope="sdk" />
-        <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" resize="none" autocomplete="off" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="closeEditor">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveApp">保存应用</el-button></template>
