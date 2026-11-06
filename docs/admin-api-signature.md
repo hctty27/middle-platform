@@ -55,14 +55,13 @@ X-Signature: <40 位小写十六进制摘要>
 - `X-Nonce`：每次请求重新生成的 8 字节安全随机数，16 位小写十六进制。
 - `X-Signature`：40 位小写十六进制 SHA-1 摘要，不发送明文 Secret。
 
-## 管理签名 V1
+## 管理签名
 
 复用现有 `shared/signature.SignValues`：去掉空字符串，字符串**按值字典序升序**排序，用 `_` 拼接，对拼接后的 UTF-8 数据做 SHA-1，输出小写十六进制。
 
-参与签名的值（注意固定前缀和冒号）：
+参与签名的值（注意字段前缀和冒号）：
 
 ```text
-admin-v1
 {secret}
 method:{UPPERCASE_HTTP_METHOD}
 path:{ESCAPED_PATH}
@@ -97,7 +96,7 @@ public final class AdminSigner {
                               String timestamp, String nonce) throws Exception {
         String bodyHash = hash("SHA-256", body);
         List<String> values = Stream.of(
-                "admin-v1", secret, "method:" + method.toUpperCase(),
+                secret, "method:" + method.toUpperCase(),
                 "path:" + path, "query:" + canonicalQuery,
                 "body:" + bodyHash, "timestamp:" + timestamp, "nonce:" + nonce
         ).filter(v -> !v.isEmpty()).sorted().toList();

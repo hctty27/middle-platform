@@ -31,7 +31,7 @@ def request(port, path, method="GET", data=None, expected=200, extra_headers=Non
             urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
         ))
         values = [
-            "admin-v1", secret, "method:" + method.upper(),
+            secret, "method:" + method.upper(),
             "path:" + parsed.path, "query:" + query,
             "body:" + hashlib.sha256(payload or b"").hexdigest(),
             "timestamp:" + stamp, "nonce:" + nonce,
