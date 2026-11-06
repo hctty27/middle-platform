@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../../../api/http'
 import type { NodeType, NodeSummary, NodeRecord, NodePage, NodeMatch, RegionEnvType, GameMarketType } from '../types'
 import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
 import type { LoadFunction } from 'element-plus'
+import { registerUnsavedChecker } from '../../../app/unsavedChanges'
 
 /**
  * useNodeWorkspace 集中管理配置树、搜索、分页、节点编辑及刷新动作。
@@ -53,6 +54,7 @@ const nextLabel = computed(() => {
 })
 const editorTitle = computed(() => creating.value ? '新增' + labels[form.nodeType] : '编辑配置节点')
 let originalForm = ''
+const unregisterUnsaved = registerUnsavedChecker(() => drawerVisible.value && JSON.stringify(form) !== originalForm)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let childTimer: ReturnType<typeof setTimeout> | undefined
 // 异步请求序号与 AbortController 配合，确保最后一次用户操作拥有更新权。
@@ -412,6 +414,7 @@ async function refresh() {
 }
 
 onBeforeUnmount(() => {
+  unregisterUnsaved()
   if (searchTimer) clearTimeout(searchTimer)
   if (childTimer) clearTimeout(childTimer)
   searchController?.abort()
