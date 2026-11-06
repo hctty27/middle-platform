@@ -23,7 +23,7 @@ let sequence = 0
 const current = computed(() => options.value.find(item => item.id === currentID.value) ?? null)
 const unregisterUnsaved = registerUnsavedChecker(
   () => !!currentID.value && rawConfig.value !== savedConfig.value,
-  () => { savedConfig.value = rawConfig.value }
+  () => { rawConfig.value = savedConfig.value }
 )
 onBeforeUnmount(unregisterUnsaved)
 
