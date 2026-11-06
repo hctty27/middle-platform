@@ -54,7 +54,10 @@ const nextLabel = computed(() => {
 })
 const editorTitle = computed(() => creating.value ? '新增' + labels[form.nodeType] : '编辑配置节点')
 let originalForm = ''
-const unregisterUnsaved = registerUnsavedChecker(() => drawerVisible.value && JSON.stringify(form) !== originalForm)
+const unregisterUnsaved = registerUnsavedChecker(
+  () => drawerVisible.value && JSON.stringify(form) !== originalForm,
+  () => { drawerVisible.value = false; originalForm = JSON.stringify(form) }
+)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let childTimer: ReturnType<typeof setTimeout> | undefined
 // 异步请求序号与 AbortController 配合，确保最后一次用户操作拥有更新权。
