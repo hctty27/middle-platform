@@ -6,8 +6,8 @@ function toHex(data: ArrayBuffer | Uint8Array): string {
     byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-async function digest(algorithm: 'SHA-1' | 'SHA-256', data: Uint8Array): Promise<string> {
-  return toHex(await crypto.subtle.digest(algorithm, data))
+async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<string> {
+  return toHex(await crypto.subtle.digest(algorithm, encoder.encode(text)))
 }
 
 function byteOrder(a: string, b: string): number {
@@ -46,7 +46,7 @@ export async function signAdminRequest(
   }
   const timestamp = String(Math.floor(Date.now() / 1000))
   const nonce = toHex(crypto.getRandomValues(new Uint8Array(8)))
-  const bodyHash = await digest('SHA-256', encoder.encode(body))
+  const bodyHash = await digest('SHA-256', body)
   const values = [
     secret,
     'method:' + method.toUpperCase(),
@@ -56,7 +56,7 @@ export async function signAdminRequest(
     'timestamp:' + timestamp,
     'nonce:' + nonce
   ].filter(Boolean).sort(byteOrder)
-  const signature = await digest('SHA-1', encoder.encode(values.join('_')))
+  const signature = await digest('SHA-1', values.join('_'))
   return {
     'X-Timestamp': timestamp,
     'X-Nonce': nonce,
