@@ -119,15 +119,19 @@ watch(() => [props.gameId, props.focusNodeId], () => { void loadNodes() }, { imm
     <section class="channel-detail-panel">
       <el-empty v-if="!gameId" description="请先选择游戏" />
       <template v-else>
-        <el-form label-position="top" v-loading="loading">
+        <!-- 节点搜索与包含密钥输入框的业务表单分离，避免浏览器误识别为登录账号。 -->
+        <el-form label-position="top">
           <el-form-item label="配置节点">
             <el-select :model-value="currentID" filterable placeholder="选择游戏或大区" style="width:100%"
+                       name="sdk-node-selector" autocomplete="off"
                        :disabled="saving || loading" @change="selectNode">
               <el-option v-for="item in options" :key="item.id"
                          :label="`${item.nodeType === 'game' ? '游戏' : '大区'} / ${item.name}`"
                          :value="item.id" />
             </el-select>
           </el-form-item>
+        </el-form>
+        <el-form label-position="top" v-loading="loading">
           <BusinessConfigEditor v-if="current" v-model="rawConfig" :node-type="current.nodeType" />
           <el-tag v-if="rawConfig !== savedConfig" type="warning" effect="plain">有未保存的修改</el-tag>
           <div class="panel-actions" style="justify-content: flex-end; margin-top: 20px">
