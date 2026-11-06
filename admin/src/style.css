@@ -134,11 +134,14 @@ button { font: inherit; }
 .leaf-tip { margin-top: 12px; padding: 18px; color: #687a94; border: 1px solid #e8edf5; border-radius: 8px; font-size: 13px; background: #f8fafe; }
 .content-panel { margin: 20px; padding: 24px; min-height: 350px; }
 .muted { color: #8492a5; font-size: 12px; line-height: 1.6; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
-.drawer-content { min-height: 200px; }
-.node-form { padding-bottom: 20px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.form-grid > .el-form-item { min-width: 0; }
+.drawer-content { min-width: 0; min-height: 200px; }
+.node-form { padding-bottom: 4px; }
+.node-form > .section-heading { margin-top: 24px; margin-bottom: 10px; }
+.node-form > .section-heading + .form-tip { margin-top: 0; }
 .json-input textarea { font-family: "JetBrains Mono", Consolas, monospace !important; line-height: 1.7; background: #f9fbfe; }
-.form-tip { margin: -8px 0 22px; }
+.form-tip { margin: 4px 0 14px; }
 
 /* 业务配置字段：说明独占一行，避免与输入框重叠和产生额外留白。 */
 .business-config-editor .form-tip {
@@ -148,18 +151,29 @@ button { font: inherit; }
   line-height: 1.5;
 }
 .business-config-editor .el-form-item { margin-bottom: 18px; }
+.business-config-editor .el-form-item__content { min-width: 0; width: 100%; }
+.business-config-editor .config-field-group + .config-field-group { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e7ecf4; }
+.business-config-editor .config-advanced { margin-top: 18px; }
+.business-config-editor .config-advanced .el-collapse-item__header { font-weight: 600; }
+.admin-config-form .el-form-item { margin-bottom: 18px; }
 
 /* 渠道应用抽屉：正文独立滚动，底部操作区保持可见。 */
+.node-config-drawer .el-drawer__body,
 .channel-app-editor-drawer .el-drawer__body {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-bottom: 24px;
+  padding: 20px 24px 24px;
 }
+.node-config-drawer .el-drawer__footer,
 .channel-app-editor-drawer .el-drawer__footer {
   flex-shrink: 0;
   border-top: 1px solid #e7ecf4;
   padding-top: 12px;
+}
+@media (max-width: 580px) {
+  .node-config-drawer .el-drawer__body,
+  .channel-app-editor-drawer .el-drawer__body { padding: 16px; }
 }
 @media (max-width: 1100px) {
   .workspace { grid-template-columns: minmax(235px, 270px) minmax(0, 1fr); }
@@ -290,7 +304,7 @@ button { font: inherit; }
 .v2-shell .node-child-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .v2-shell .node-child-pane .children-toolbar { padding-top: 8px; }
 .v2-shell .node-detail-content { flex: 1; min-height: 230px; overflow: auto; padding-top: 12px; }
-.v2-shell .json-editor { width: 100%; }
+.v2-shell .json-editor { width: 100%; min-width: 0; }
 .v2-shell .json-editor-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #e6ecf5; background: #f8fafe; border-bottom: 0; border-radius: 8px 8px 0 0; }
 .v2-shell .json-editor .el-textarea__inner { border-radius: 0 0 8px 8px; }
 .v2-shell .json-valid { color: #15956e; font-size: 12px; }
