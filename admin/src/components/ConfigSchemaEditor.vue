@@ -77,7 +77,8 @@ const validationError = computed(() => {
   } catch (error) { return error instanceof Error ? error.message : '配置格式错误' }
 })
 const displayedRaw = computed(() => {
-  if (!props.readonly || !schema.value) return props.modelValue
+  if (!props.readonly) return props.modelValue
+  if (!schema.value) return '{}'
   try { return redactConfig(props.modelValue, schema.value.schema) }
   catch { return '配置格式不正确' }
 })
