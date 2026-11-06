@@ -33,7 +33,10 @@ const groupLoading = reactive<Record<RegionEnvType, boolean>>({ prod: false, tes
 const groupSequences: Record<RegionEnvType, number> = { prod: 0, test: 0, review: 0 }
 const form = ref<AppForm>(emptyForm())
 const originalForm = ref(JSON.stringify(form.value))
-const unregisterUnsaved = registerUnsavedChecker(() => visible.value && JSON.stringify(form.value) !== originalForm.value)
+const unregisterUnsaved = registerUnsavedChecker(
+  () => visible.value && JSON.stringify(form.value) !== originalForm.value,
+  () => { originalForm.value = JSON.stringify(form.value); visible.value = false }
+)
 onBeforeUnmount(unregisterUnsaved)
 let sequence = 0
 const filteredApps = computed(() => apps.value.filter(item =>
