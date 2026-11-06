@@ -126,3 +126,12 @@ func TestAdminMiddlewareExplicitDisable(t *testing.T) {
         t.Fatalf("enabled unsigned request = HTTP %d", recorder.Code)
     }
 }
+
+// 测试管理签名不再包含固定协议标识，防止第三方签名计算不一致。
+func TestSignAdminKnownVector(t *testing.T) {
+	got := SignAdmin(testAdminSecret, http.MethodGet, "/api/core/admin/services", "", "1793865600", "0123456789abcdef", nil)
+	const want = "0058c35dc2f4d20c909b333faeebbf661dde26c2"
+	if got != want {
+		t.Fatalf("管理接口 SHA-1 签名不匹配: got=%s want=%s", got, want)
+	}
+}

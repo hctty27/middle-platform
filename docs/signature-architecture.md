@@ -12,7 +12,7 @@
 | 游戏 → SDK Service 事件及订阅 | gameSecret、AppID、时间戳、Nonce、Body 顶层业务值 | `BodyValues` + `SignValues` |
 | 平台 → SDK Service 用户、角色、区服查询 | appSecret、AppID、时间戳、Nonce、接口指定的业务值 | `SignValues` |
 | SDK Service → 平台事件、订阅 | appSecret、AppID、时间戳、Nonce（不签 Body） | `SignValues` |
-| 第三方 → 管理 API | admin-v1、管理密钥、方法、路径、查询串、请求体摘要、时间戳、Nonce | `SignAdmin` |
+| 第三方 → 管理 API | 管理密钥、方法、路径、查询串、请求体摘要、时间戳、Nonce | `SignAdmin` |
 | 配置中心 → 订阅者 Webhook | subscriberSecret、时间戳、Nonce、epoch、revision（十进制字符串） | `SignValues` + `ValidHeaders` + `EqualHex` |
 
 ## 共享工具

@@ -25,7 +25,6 @@ const (
 func SignAdmin(secret, method, path, canonicalQuery, timestamp, nonce string, body []byte) string {
 	digest := sha256.Sum256(body)
 	return SignValues(
-		"admin-v1",
 		secret,
 		"method:"+strings.ToUpper(method),
 		"path:"+path,
