@@ -227,11 +227,11 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
                        :key="group.id" :value="group.id" :label="groupLabel(group)" />
           </el-select>
         </el-form-item>
-        </el-form>
-        <!-- 区服组选择和业务密钥不共用表单，避免密码管理器干扰搜索。 -->
-        <el-form label-position="top">
-          <div class="section-heading"><h3>共享业务配置</h3></div>
-          <BusinessConfigEditor v-model="form.config" node-type="channel_app" />
+      </el-form>
+      <!-- 区服组选择和业务密钥不共用表单，避免密码管理器干扰搜索。 -->
+      <el-form label-position="top">
+        <div class="section-heading"><h3>共享业务配置</h3></div>
+        <BusinessConfigEditor v-model="form.config" node-type="channel_app" />
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="closeEditor">取消</el-button>
