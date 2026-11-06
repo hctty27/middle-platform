@@ -58,3 +58,21 @@ func TestCreateRejectsMalformedJSON(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest { t.Fatalf("status = %d", rec.Code) }
 }
+
+func TestConfigSchemaRoute(t *testing.T) {
+    handler := RouterWithWrites(stubReader{}, &fakeWriter{})
+    rec := httptest.NewRecorder()
+    handler.ServeHTTP(rec, httptest.NewRequest("GET", "/api/config/admin/config-schema/game", nil))
+    if rec.Code != 200 { t.Fatalf("unexpected status %d: %s", rec.Code, rec.Body.String()) }
+    var payload struct {
+        NodeType string `json:"nodeType"`
+        Schema struct { Properties map[string]any `json:"properties"` } `json:"schema"`
+    }
+    if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil { t.Fatal(err) }
+    if payload.NodeType != "game" || payload.Schema.Properties == nil {
+        t.Fatalf("invalid schema: %+v", payload)
+    }
+    rec = httptest.NewRecorder()
+    handler.ServeHTTP(rec, httptest.NewRequest("GET", "/api/config/admin/config-schema/unknown", nil))
+    if rec.Code != 404 { t.Fatalf("unknown type status %d", rec.Code) }
+}

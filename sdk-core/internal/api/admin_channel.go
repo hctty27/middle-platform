@@ -8,6 +8,7 @@ import (
     "strconv"
     "strings"
     "time"
+    "github.com/hctty27/middle-platform/sdk-core/internal/configschema"
 )
 
 // channelApp 是管理接口返回的渠道包及环境绑定视图。
@@ -70,7 +71,7 @@ func validChannelWrite(req channelWrite) bool {
        req.Status==nil || (*req.Status!=0 && *req.Status!=1) ||
        len([]rune(req.RemarkValue()))>500 {return false}
     _,valid:=jsonObject(req.Config)
-    return valid
+    return valid && configschema.Validate("channel_app", req.Config) == nil
 }
 // RemarkValue 返回可选备注的实际值，用于统一校验长度。
 func (r channelWrite) RemarkValue() string {

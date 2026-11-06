@@ -19,8 +19,7 @@ function envTagType(env: RegionEnvType | null | undefined): 'success' | 'warning
 }
 import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
-import JsonConfigEditor from './components/JsonConfigEditor.vue'
-import { redactBusinessConfig } from './features/nodes/businessConfig'
+import ConfigSchemaEditor from './components/ConfigSchemaEditor.vue'
 import GroupBindings from './features/nodes/components/GroupBindings.vue'
 
 const props = defineProps<{ gameId: number | null }>()
@@ -231,7 +230,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
                          @click="emit('open-sdk-config', selected.id)">编辑 SDK 配置</el-button>
               <el-button @click="openEditor(selected)">编辑基础配置</el-button>
             </div></div>
-          <JsonConfigEditor :model-value="redactBusinessConfig(selected.nodeType, nodeDetail?.config ?? '{}')" readonly :rows="10" />
+          <ConfigSchemaEditor :model-value="nodeDetail?.config ?? '{}'" :node-type="selected.nodeType" scope="base" readonly />
         </div>
         <div v-else class="node-detail-content" v-loading="nodeDetailLoading">
           <el-descriptions :column="1" border>

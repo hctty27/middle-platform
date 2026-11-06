@@ -10,12 +10,14 @@ import (
     "net/http"
     "strconv"
     "strings"
+    "github.com/hctty27/middle-platform/sdk-core/internal/configschema"
 )
 
 type adminStore struct{ db *sql.DB }
 
 func registerAdminRoutes(mux *http.ServeMux, db *sql.DB) {
     h := &adminStore{db: db}
+    mux.HandleFunc("GET /api/core/admin/config-schema/{nodeType}", getConfigSchema)
     mux.HandleFunc("GET /api/core/admin/node-configs/{id}", h.getNodeConfig)
     mux.HandleFunc("PUT /api/core/admin/node-configs/{id}", h.putNodeConfig)
     registerChannelAdminRoutes(mux, h)
@@ -54,28 +56,10 @@ func jsonObject(raw string) (map[string]json.RawMessage, bool) {
     return obj, true
 }
 
-var sdkKeys = map[string]string{
-    "gameSecret": "game", "serviceAdapters": "game",
-    "payNotifyUrl": "region", "userCheckUrl": "region",
-    "roleQueryUrl": "region", "serverQueryUrl": "region",
-    "roleControlUrl": "region",
-}
-
-// 每级节点只允许其自身的 SDK 预置字段，未知字段保留供后续扩展。
+// 配置读写沿用现有接口，字段规则与对外 Schema 保持一致。
 func validSDKNodeConfig(kind, raw string) bool {
-    obj, ok := jsonObject(raw)
-    if !ok { return false }
-    for key, value := range obj {
-        if owner, known := sdkKeys[key]; known && owner != kind { return false }
-        if key == "serviceAdapters" {
-            var adapters map[string]string
-            if json.Unmarshal(value, &adapters) != nil || adapters == nil { return false }
-        } else if _, known := sdkKeys[key]; known {
-            var str string
-            if string(value) == "null" || json.Unmarshal(value, &str) != nil { return false }
-        }
-    }
-    return kind == "game" || kind == "region" || kind == "server_group"
+    if _, ok := jsonObject(raw); !ok { return false }
+    return configschema.Validate(kind, raw) == nil
 }
 
 func (h *adminStore) getNodeConfig(w http.ResponseWriter, r *http.Request) {

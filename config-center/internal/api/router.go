@@ -75,6 +75,7 @@ func router(reader Reader, writer Writer) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "UP"})
 	})
 	// 管理查询和接入同步共享同一服务前缀，由 Nginx 在更外层区分业务模块。
+	r.Get("/api/config/admin/config-schema/{nodeType}", h.configSchema)
 	r.Get("/api/config/admin/nodes", h.list)
 	r.Get("/api/config/admin/nodes/tree", h.tree)
 	r.Get("/api/config/admin/nodes/children", h.children)

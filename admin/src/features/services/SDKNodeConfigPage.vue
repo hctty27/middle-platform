@@ -5,12 +5,11 @@ import { ElMessage } from 'element-plus'
 import { confirmDiscardChanges, registerUnsavedChecker } from '../../app/unsavedChanges'
 import { sdkApi, apiErrorMessage } from '../../api/http'
 import { nodeApi } from '../../api/nodeApi'
-import BusinessConfigEditor from '../nodes/components/BusinessConfigEditor.vue'
-import { validateBusinessConfig } from '../nodes/businessConfig'
-import type { BusinessConfigType } from '../nodes/businessConfig'
+import ConfigSchemaEditor from '../../components/ConfigSchemaEditor.vue'
+import { getConfigSchema, validateConfigAgainstSchema } from '../../api/configSchemaApi'
 
-interface Option { id: number; name: string; nodeType: BusinessConfigType }
-interface NodeSDKConfig { nodeId: number; nodeType: BusinessConfigType; config: string }
+interface Option { id: number; name: string; nodeType: 'game' | 'region' }
+interface NodeSDKConfig { nodeId: number; nodeType: 'game' | 'region'; config: string }
 const props = defineProps<{ gameId: number | null; focusNodeId: number | null }>()
 const options = ref<Option[]>([])
 const currentID = ref<number | null>(null)
@@ -78,8 +77,13 @@ async function loadConfig() {
 // save 在写入前校验业务字段，保存后重新读取服务端配置。
 async function save() {
   if (!current.value) return
-  try { validateBusinessConfig(current.value.nodeType, rawConfig.value) }
-  catch (error) { ElMessage.warning(error instanceof Error ? error.message : 'SDK 配置不合法'); return }
+  try {
+    const definition = await getConfigSchema('sdk', current.value.nodeType)
+    validateConfigAgainstSchema(rawConfig.value, definition.schema)
+  } catch (error) {
+    ElMessage.warning(error instanceof Error ? error.message : 'SDK 配置不合法')
+    return
+  }
   saving.value = true
   try {
     await sdkApi.put(`/admin/node-configs/${current.value.id}`, { config: rawConfig.value })
@@ -132,7 +136,7 @@ watch(() => [props.gameId, props.focusNodeId], () => { void loadNodes() }, { imm
           </el-form-item>
         </el-form>
         <el-form label-position="top" v-loading="loading">
-          <BusinessConfigEditor v-if="current" v-model="rawConfig" :node-type="current.nodeType" />
+          <ConfigSchemaEditor v-if="current" v-model="rawConfig" :node-type="current.nodeType" scope="sdk" />
           <el-tag v-if="rawConfig !== savedConfig" type="warning" effect="plain">有未保存的修改</el-tag>
           <div class="panel-actions" style="justify-content: flex-end; margin-top: 20px">
             <el-button type="primary" :disabled="!current || loading" :loading="saving" @click="save">保存 SDK 配置</el-button>
