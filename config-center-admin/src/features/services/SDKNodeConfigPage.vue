@@ -21,7 +21,10 @@ const saving = ref(false)
 // 使用递增请求序号，避免快速切换游戏或节点时旧响应覆盖新数据。
 let sequence = 0
 const current = computed(() => options.value.find(item => item.id === currentID.value) ?? null)
-const unregisterUnsaved = registerUnsavedChecker(() => !!currentID.value && rawConfig.value !== savedConfig.value)
+const unregisterUnsaved = registerUnsavedChecker(
+  () => !!currentID.value && rawConfig.value !== savedConfig.value,
+  () => { savedConfig.value = rawConfig.value }
+)
 onBeforeUnmount(unregisterUnsaved)
 
 // loadNodes 按当前游戏加载游戏和大区节点，并默认选中游戏配置。
