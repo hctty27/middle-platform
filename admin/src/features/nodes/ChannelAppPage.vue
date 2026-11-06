@@ -156,7 +156,8 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
       <section class="channel-list-panel">
         <div class="section-heading"><h3>应用列表 <span class="muted">{{ apps.length }}</span></h3>
           <el-button link @click="loadApps">刷新</el-button></div>
-        <el-input v-model="appSearch" clearable placeholder="搜索名称或 Code" />
+        <el-input v-model="appSearch" clearable placeholder="搜索名称或 Code"
+                  name="channel-app-search" autocomplete="off" />
         <div v-loading="loading" class="channel-list-scroll">
           <button v-for="app in filteredApps" :key="app.id" class="channel-list-item"
                   :class="{ active: active?.id === app.id }" @click="selectApp(app)">
@@ -220,11 +221,15 @@ watch(() => props.gameId, () => { active.value = null; appSearch.value = ''; voi
         <el-form-item label="状态"><el-switch v-model="form.status" :active-value="1" :inactive-value="0" /></el-form-item>
         <el-form-item v-for="env in environments" :key="env.key" :label="env.label + '区服组（可选）'">
           <el-select v-model="form[env.field]" filterable remote clearable :value-on-clear="null" :remote-method="(keyword: string) => loadOptions(env.key, keyword)"
-                     :loading="groupLoading[env.key]" placeholder="搜索当前游戏对应环境的区服组" style="width:100%">
+                     :loading="groupLoading[env.key]" placeholder="搜索当前游戏对应环境的区服组" style="width:100%"
+                     :name="'channel-group-' + env.key" autocomplete="off">
             <el-option v-for="group in [...selectedOption(env.key, form[env.field]), ...groupOptions[env.key]]"
                        :key="group.id" :value="group.id" :label="groupLabel(group)" />
           </el-select>
         </el-form-item>
+      </el-form>
+      <!-- 区服组选择和业务密钥不共用表单，避免密码管理器干扰搜索。 -->
+      <el-form label-position="top">
         <div class="section-heading"><h3>共享业务配置</h3></div>
         <BusinessConfigEditor v-model="form.config" node-type="channel_app" />
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>

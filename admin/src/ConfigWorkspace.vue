@@ -100,6 +100,7 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
         </div>
       </div>
       <el-input v-model="searchWord" clearable placeholder="全局搜索名称或 Code"
+                name="admin-node-search" autocomplete="off"
                 @input="onSearchInput" @clear="onSearchInput" />
       <div v-if="searchWord.trim()" class="tree-scroll search-results" v-loading="searchLoading">
         <div class="search-count">跨所有游戏、大区、区服组和渠道应用搜索</div>
@@ -182,7 +183,8 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
                        clearable @change="onRegionFilterChange" style="width: 140px">
               <el-option v-for="(label, key) in regionEnvLabels" :key="key" :label="label" :value="key" />
             </el-select>
-            <el-input v-model="childSearch" clearable placeholder="筛选直属子项" @input="onChildSearch" />
+            <el-input v-model="childSearch" clearable placeholder="筛选直属子项"
+                      name="admin-child-search" autocomplete="off" @input="onChildSearch" />
             <el-button type="primary" @click="openCreate(selected)">+ 新增{{ nextLabel }}</el-button>
           </div>
         </div>

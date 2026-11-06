@@ -64,7 +64,8 @@ function displayValue(field: BusinessConfigField): string {
         <el-form-item v-for="field in group.items" :key="field.key" :label="field.label">
           <el-input :model-value="valueOf(field.key)" :placeholder="field.placeholder"
                     :type="field.secret ? 'password' : 'text'" :show-password="!!field.secret"
-                    autocomplete="off" clearable
+                    :name="'sdk-config-' + field.key.split('.').join('-')"
+                    :autocomplete="field.secret ? 'new-password' : 'off'" clearable
                     @update:model-value="(value: string) => changeField(field.key, value)" />
           <div class="muted form-tip">{{ field.description }}（{{ field.key }}）</div>
         </el-form-item>
