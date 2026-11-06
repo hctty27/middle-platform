@@ -21,6 +21,15 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const advanced = ref<string[]>([])
 
 const fields = computed(() => businessConfigFields[props.nodeType])
+const groupedFields = computed(() => {
+  const groups = new Map<string, BusinessConfigField[]>()
+  for (const field of fields.value) {
+    const name = field.group ?? '其他配置'
+    if (!groups.has(name)) groups.set(name, [])
+    groups.get(name)!.push(field)
+  }
+  return [...groups].map(([name, items]) => ({ name, items }))
+})
 const error = computed(() => {
   try {
     validateBusinessConfig(props.nodeType, props.modelValue)
@@ -50,19 +59,27 @@ function displayValue(field: BusinessConfigField): string {
 <template>
   <div class="business-config-editor">
     <template v-if="fields.length && !readonly">
-      <el-form-item v-for="field in fields" :key="field.key" :label="field.label">
-        <el-input :model-value="valueOf(field.key)" :placeholder="field.placeholder"
-                  :type="field.secret ? 'password' : 'text'" :show-password="!!field.secret"
-                  autocomplete="off" clearable
-                  @update:model-value="(value: string) => changeField(field.key, value)" />
-        <div class="muted form-tip">{{ field.description }}（{{ field.key }}）</div>
-      </el-form-item>
+      <section v-for="group in groupedFields" :key="group.name" class="config-field-group">
+        <div class="section-heading"><h3>{{ group.name }}</h3></div>
+        <el-form-item v-for="field in group.items" :key="field.key" :label="field.label">
+          <el-input :model-value="valueOf(field.key)" :placeholder="field.placeholder"
+                    :type="field.secret ? 'password' : 'text'" :show-password="!!field.secret"
+                    autocomplete="off" clearable
+                    @update:model-value="(value: string) => changeField(field.key, value)" />
+          <div class="muted form-tip">{{ field.description }}（{{ field.key }}）</div>
+        </el-form-item>
+      </section>
     </template>
-    <el-descriptions v-else-if="fields.length" :column="1" border>
-      <el-descriptions-item v-for="field in fields" :key="field.key" :label="field.label">
-        {{ displayValue(field) }}
-      </el-descriptions-item>
-    </el-descriptions>
+    <template v-else-if="fields.length">
+      <section v-for="group in groupedFields" :key="group.name" class="config-field-group">
+        <div class="section-heading"><h3>{{ group.name }}</h3></div>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item v-for="field in group.items" :key="field.key" :label="field.label">
+            {{ displayValue(field) }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </section>
+    </template>
     <p v-else class="muted">当前节点没有预置的业务配置字段，支持通过高级 JSON 自定义扩展。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <el-collapse v-model="advanced" style="margin-top: 16px">

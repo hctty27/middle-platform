@@ -19,11 +19,12 @@ function envTagType(env: RegionEnvType | null | undefined): 'success' | 'warning
 }
 import { useNodeWorkspace } from './features/nodes/composables/useNodeWorkspace'
 import NodeEditor from './features/nodes/components/NodeEditor.vue'
-import BusinessConfigEditor from './features/nodes/components/BusinessConfigEditor.vue'
+import JsonConfigEditor from './components/JsonConfigEditor.vue'
+import { redactBusinessConfig } from './features/nodes/businessConfig'
 import GroupBindings from './features/nodes/components/GroupBindings.vue'
 
 const props = defineProps<{ gameId: number | null }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{ changed: []; 'open-sdk-config': [nodeId: number] }>()
 const { selectById, labels, nextType, treeProps, treeRef, treeScrollRef, treeVersion, restoredExpandedKeys, searchWord, searchMatches, searchLoading, selected, breadcrumbs, children, childTotal, childPage, childSize, childSearch, regionFilter, onRegionFilterChange, childrenLoading, drawerVisible, creating, envTypeLocked, detailLoading, saving, form, nextLabel, editorTitle, loadTree, onExpand, onCollapse, onTreeClick, onSearchInput, openMatch, openChild, navigateBreadcrumb, onChildSearch, onPageChange, openEditor, openCreate, beforeDrawerClose, closeEditor, save, removeNode, refresh } = useNodeWorkspace(emit)
 
 const activeTab = ref<'list' | 'config' | 'info'>('list')
@@ -221,10 +222,14 @@ watch(() => [props.gameId, focusNodeRequest.value], async ([gameId]) => {
 
         </div>
         <div v-else-if="activeTab === 'config'" class="node-detail-content" v-loading="nodeDetailLoading">
-          <div class="section-heading"><div><h3>当前节点业务配置</h3>
-            <p class="muted">直接展示本节点的业务字段，原始 JSON 收起在高级区域。</p></div>
-            <el-button @click="openEditor(selected)">编辑配置</el-button></div>
-          <BusinessConfigEditor :model-value="nodeDetail?.config ?? '{}'" :node-type="selected.nodeType" readonly />
+          <div class="section-heading"><div><h3>基础节点配置</h3>
+            <p class="muted">这里只管理配置中心的基础 JSON；SDK 密钥、适配器及回调地址在「SDK 配置」中维护。</p></div>
+            <div class="panel-actions">
+              <el-button v-if="selected.nodeType === 'game' || selected.nodeType === 'region'"
+                         @click="emit('open-sdk-config', selected.id)">编辑 SDK 配置</el-button>
+              <el-button @click="openEditor(selected)">编辑基础配置</el-button>
+            </div></div>
+          <JsonConfigEditor :model-value="redactBusinessConfig(selected.nodeType, nodeDetail?.config ?? '{}')" readonly :rows="10" />
         </div>
         <div v-else class="node-detail-content" v-loading="nodeDetailLoading">
           <el-descriptions :column="1" border>

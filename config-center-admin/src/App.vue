@@ -5,6 +5,7 @@ import axios from 'axios'
 import { api, apiErrorMessage } from './api/http'
 import { adminAuthenticated, clearAdminSecret, setAdminSecret, unlockAdmin } from './api/adminAuth'
 import { getRevision } from './api/syncApi'
+import { confirmDiscardChanges, preventUnloadWithUnsavedChanges } from './app/unsavedChanges'
 import { currentGameId, focusNodeId, games, gamesLoading, loadGames } from './app/gameContext'
 import { gameMarketLabels } from './features/nodes/types'
 import ConfigWorkspace from './ConfigWorkspace.vue'
@@ -18,6 +19,7 @@ import RechargeSimulatorPage from './features/recharge/RechargeSimulatorPage.vue
 type Page = 'overview' | 'nodes' | 'channel_apps' | 'sdk_node_config' | 'sdk_services' | 'subscribers' | 'recharge' | 'about'
 const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'sdk_node_config', 'sdk_services', 'subscribers', 'recharge', 'about']
 const navigation = ref<Page>('overview')
+const sdkFocusNodeId = ref<number | null>(null)
 const sidebarCollapsed = ref(false)
 const revision = ref(0)
 const epoch = ref('')
@@ -26,20 +28,38 @@ const titles: Record<Page, string> = {
   subscribers: '接入同步', recharge: '充值模拟', about: '系统说明'
 }
 const currentTitle = computed(() => titles[navigation.value])
+const currentSection = computed(() => ['sdk_node_config', 'sdk_services', 'channel_apps', 'recharge'].includes(navigation.value)
+  ? 'SDK 管理' : ['nodes', 'subscribers'].includes(navigation.value) ? '配置中心' : '工作空间')
 const activeGame = computed(() => games.value.find(game => game.id === currentGameId.value))
 const updating = ref(false)
 const loginSecret = ref('')
 const loggingIn = ref(false)
 watch(currentGameId, () => { focusNodeId.value = null }, { flush: 'sync' })
 
-function readRoute() {
+async function readRoute() {
   const target = window.location.hash.replace(/^#\/?/, '').split('/')[0] as Page
-  navigation.value = pageSet.includes(target) ? target : 'overview'
+  const next = pageSet.includes(target) ? target : 'overview'
+  if (next === navigation.value) return
+  if (!(await confirmDiscardChanges())) {
+    window.location.hash = '/' + navigation.value
+    return
+  }
+  sdkFocusNodeId.value = null
+  navigation.value = next
 }
-function navigate(page: Page) {
+async function navigate(page: Page, sdkNodeId: number | null = null) {
+  if (navigation.value !== page && !(await confirmDiscardChanges())) return
+  if (page === 'sdk_node_config') sdkFocusNodeId.value = sdkNodeId
   if (navigation.value === page) return
-  window.location.hash = '/' + page
   navigation.value = page
+  window.location.hash = '/' + page
+}
+function openSDKConfig(nodeId: number) {
+  void navigate('sdk_node_config', nodeId)
+}
+async function switchGame(gameId: number) {
+  if (gameId === currentGameId.value || !(await confirmDiscardChanges())) return
+  currentGameId.value = gameId
 }
 async function refreshRevision() {
   try {
@@ -80,16 +100,22 @@ async function login() {
     loggingIn.value = false
   }
 }
-function logout() {
+async function logout() {
+  if (!(await confirmDiscardChanges())) return
+  window.removeEventListener('beforeunload', preventUnloadWithUnsavedChanges)
   clearAdminSecret()
   loginSecret.value = ''
   window.location.reload()
 }
 onMounted(() => {
-  readRoute()
+  void readRoute()
   window.addEventListener('hashchange', readRoute)
+  window.addEventListener('beforeunload', preventUnloadWithUnsavedChanges)
 })
-onUnmounted(() => window.removeEventListener('hashchange', readRoute))
+onUnmounted(() => {
+  window.removeEventListener('hashchange', readRoute)
+  window.removeEventListener('beforeunload', preventUnloadWithUnsavedChanges)
+})
 </script>
 
 <template>
@@ -118,9 +144,14 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
       <button title="工作台" :class="{ active: navigation === 'overview' }" @click="navigate('overview')">
         <span class="nav-symbol">◫</span><span v-if="!sidebarCollapsed">工作台</span>
       </button>
-      <button title="配置管理" :class="{ active: navigation === 'nodes' }" @click="navigate('nodes')">
-        <span class="nav-symbol">▦</span><span v-if="!sidebarCollapsed">配置管理</span>
+      <div v-if="!sidebarCollapsed" class="group-title">配置中心</div>
+      <button title="节点与基础配置" :class="{ active: navigation === 'nodes' }" @click="navigate('nodes')">
+        <span class="nav-symbol">▦</span><span v-if="!sidebarCollapsed">节点与基础配置</span>
       </button>
+      <button title="接入同步" :class="{ active: navigation === 'subscribers' }" @click="navigate('subscribers')">
+        <span class="nav-symbol">↗</span><span v-if="!sidebarCollapsed">接入同步</span>
+      </button>
+      <div v-if="!sidebarCollapsed" class="group-title">SDK 管理</div>
       <button title="SDK 配置" :class="{ active: navigation === 'sdk_node_config' }" @click="navigate('sdk_node_config')">
         <span class="nav-symbol">⚙</span><span v-if="!sidebarCollapsed">SDK 配置</span>
       </button>
@@ -130,9 +161,7 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
       <button title="服务管理" :class="{ active: navigation === 'sdk_services' }" @click="navigate('sdk_services')">
         <span class="nav-symbol">⚙</span><span v-if="!sidebarCollapsed">服务管理</span>
       </button>
-      <button title="接入同步" :class="{ active: navigation === 'subscribers' }" @click="navigate('subscribers')">
-        <span class="nav-symbol">↗</span><span v-if="!sidebarCollapsed">接入同步</span>
-      </button>
+      <div v-if="!sidebarCollapsed" class="group-title">其他</div>
       <button title="充值模拟" :class="{ active: navigation === 'recharge' }" @click="navigate('recharge')">
         <span class="nav-symbol">¥</span><span v-if="!sidebarCollapsed">充值模拟</span>
       </button>
@@ -149,12 +178,12 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
     <div class="main">
       <header class="topbar">
         <div class="topbar-heading">
-          <div class="topbar-breadcrumb">研发中台 / 配置中心 / <span>{{ currentTitle }}</span></div>
+          <div class="topbar-breadcrumb">研发中台 / {{ currentSection }} / <span>{{ currentTitle }}</span></div>
           <strong>{{ currentTitle }}</strong>
         </div>
         <div class="top-right">
           <span class="topbar-game-label">当前游戏</span>
-          <el-select v-model="currentGameId" :loading="gamesLoading" filterable placeholder="选择游戏"
+          <el-select :model-value="currentGameId" @change="switchGame" :loading="gamesLoading" filterable placeholder="选择游戏"
                      class="topbar-game-switcher">
             <el-option v-for="game in games" :key="game.id" :value="game.id"
                        :label="game.name + (game.marketType ? ' · ' + gameMarketLabels[game.marketType] : '')" />
@@ -168,10 +197,10 @@ onUnmounted(() => window.removeEventListener('hashchange', readRoute))
       <div class="page-content">
         <GameOverview v-if="navigation === 'overview'" :game-id="currentGameId" @navigate="navigate" />
         <div v-show="navigation === 'nodes'" class="workspace-shell">
-          <ConfigWorkspace :game-id="currentGameId" @changed="refreshAll" />
+          <ConfigWorkspace :game-id="currentGameId" @changed="refreshAll" @open-sdk-config="openSDKConfig" />
         </div>
         <ChannelAppPage v-if="navigation === 'channel_apps'" :game-id="currentGameId" @changed="refreshAll" />
-        <SDKNodeConfigPage v-if="navigation === 'sdk_node_config'" :game-id="currentGameId" />
+        <SDKNodeConfigPage v-if="navigation === 'sdk_node_config'" :game-id="currentGameId" :focus-node-id="sdkFocusNodeId" />
         <SDKServicePage v-if="navigation === 'sdk_services'" />
         <SubscriberPage v-if="navigation === 'subscribers'" />
         <RechargeSimulatorPage v-if="navigation === 'recharge'" />
