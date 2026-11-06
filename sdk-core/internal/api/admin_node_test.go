@@ -53,3 +53,38 @@ func TestSDKConfigObjectShape(t *testing.T){
    if valid {t.Fatal("multiple JSON values must be rejected")}
    var _ json.RawMessage
 }
+
+func TestSDKConfigSchemaRoute(t *testing.T) {
+    mux := http.NewServeMux()
+    registerAdminRoutes(mux, nil)
+    rec := httptest.NewRecorder()
+    mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/core/admin/config-schema/region", nil))
+    if rec.Code != 200 { t.Fatalf("unexpected status %d: %s", rec.Code, rec.Body.String()) }
+    var payload struct {
+        NodeType string `json:"nodeType"`
+        Schema struct { Properties map[string]any `json:"properties"` } `json:"schema"`
+    }
+    if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil { t.Fatal(err) }
+    if payload.NodeType != "region" || payload.Schema.Properties["payNotifyUrl"] == nil {
+        t.Fatalf("invalid schema: %+v", payload)
+    }
+    rec = httptest.NewRecorder()
+    mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/core/admin/config-schema/channel_app", nil))
+    if rec.Code != 404 { t.Fatalf("unexpected type status %d", rec.Code) }
+}
+
+func TestSDKSchemaAndValidation(t *testing.T) {
+    for _, config := range []string{
+        `{"serviceAdapters":{"role_query":null}}`,
+        `{"serviceAdapters":{"custom":1}}`,
+        `{"gameSecret":null}`,
+    } {
+        if validSDKNodeConfig("game", config) { t.Errorf("expected invalid game config %s", config) }
+    }
+    if validSDKNodeConfig("region", `{"roleQueryUrl":"ftp://example.com/file"}`) {
+        t.Fatal("non-HTTP URL must be rejected")
+    }
+    if !validSDKNodeConfig("region", `{"roleQueryUrl":"https://game.example.com/path","custom":{"value":1}}`) {
+        t.Fatal("custom SDK fields must remain supported")
+    }
+}
