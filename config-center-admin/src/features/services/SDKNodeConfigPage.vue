@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// SDK 节点配置与基础配置中心分离，游戏和大区的业务字段独立读写。
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { sdkApi, apiErrorMessage } from '../../api/http'
@@ -15,9 +16,11 @@ const currentID = ref<number | null>(null)
 const rawConfig = ref('{}')
 const loading = ref(false)
 const saving = ref(false)
+// 使用递增请求序号，避免快速切换游戏或节点时旧响应覆盖新数据。
 let sequence = 0
 const current = computed(() => options.value.find(item => item.id === currentID.value) ?? null)
 
+// loadNodes 按当前游戏加载游戏和大区节点，并默认选中游戏配置。
 async function loadNodes() {
   const request = ++sequence
   options.value = []
@@ -46,6 +49,7 @@ async function loadNodes() {
     if (request === sequence) loading.value = false
   }
 }
+// loadConfig 仅接受最新请求的响应，避免展示已切换节点的旧配置。
 async function loadConfig() {
   const id = currentID.value
   const request = ++sequence
@@ -61,6 +65,7 @@ async function loadConfig() {
     if (request === sequence) loading.value = false
   }
 }
+// save 在写入前校验业务字段，保存后重新读取服务端配置。
 async function save() {
   if (!current.value) return
   try { validateBusinessConfig(current.value.nodeType, rawConfig.value) }

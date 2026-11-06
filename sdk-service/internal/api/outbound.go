@@ -15,10 +15,12 @@ import (
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// EventReporter 定义事件上报的业务入口。
 type EventReporter interface {
     ReportEvent(*http.Request, string, string, []byte) error
 }
 
+// SubscribeSender 定义订阅消息推送的业务入口。
 type SubscribeSender interface {
     SendSubscribe(*http.Request, string, string, []byte) error
 }
@@ -26,6 +28,8 @@ type SubscribeSender interface {
 var errInvalidOutbound = errors.New("上报或订阅消息参数不合法")
 var errOutboundTooLarge = errors.New("事件或订阅消息请求体超过 64KiB")
 
+// parseOutbound 严格校验字段白名单、重复键和 64KiB 大小限制。
+// 保留原始请求体供后续游戏请求验签，避免重编码改变签名输入。
 func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte, error) {
     if r.URL.RawQuery != "" ||
         !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
@@ -112,6 +116,7 @@ func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte,
     return raw, nil
 }
 
+// readOutboundString 检查 JSON 字符串类型、长度及必填约束。
 func readOutboundString(raw json.RawMessage, max int, required bool) (string, bool) {
     if len(raw) == 0 {
         return "", !required
@@ -129,6 +134,7 @@ func readOutboundString(raw json.RawMessage, max int, required bool) (string, bo
     return value, true
 }
 
+// serveOutbound 统一处理环境校验、请求解析、服务错误映射及成功响应。
 func serveOutbound(w http.ResponseWriter, r *http.Request, code string,
     send func(*http.Request, string, string, []byte) error) {
     env, appID := r.PathValue("env"), r.Header.Get("x-app-id")

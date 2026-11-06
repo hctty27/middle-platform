@@ -9,11 +9,13 @@ import (
     "github.com/hctty27/middle-platform/sdk-service/internal/platform"
 )
 
+// RoleControlService 负责封解禁请求的服务路由、验签与游戏适配。
 type RoleControlService struct {
     Routes   ServiceRouteReader
     Adapters *rolecontrol.Registry
 }
 
+// Execute 使用平台约定字段验签，并将封解禁操作交给对应游戏适配器。
 func (s *RoleControlService) Execute(r *http.Request, env, appID string, input model.RoleControlRequest) error {
     target, err := s.Routes.LookupService(r.Context(), appID, env, "role_control")
     if err != nil {

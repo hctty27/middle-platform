@@ -11,12 +11,14 @@ import (
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// RoleQuerier 定义平台角色查询接口使用的业务能力。
 type RoleQuerier interface {
     Query(*http.Request, string, string, model.RoleQueryRequest) ([]model.Role, error)
 }
 
 var errInvalidRoleBody = errors.New("角色查询请求需要至少一个身份条件，且只能包含平台约定的字符串字段")
 
+// parseRoleBody 仅接受平台约定的查询字段，且至少包含一个身份筛选条件。
 func parseRoleBody(w http.ResponseWriter, r *http.Request) (model.RoleQueryRequest, error) {
     var input model.RoleQueryRequest
     if strings.TrimSpace(r.URL.RawQuery) != "" ||
@@ -79,6 +81,7 @@ func parseRoleBody(w http.ResponseWriter, r *http.Request) (model.RoleQueryReque
     return input, nil
 }
 
+// roleQueryHandler 将角色查询结果转换为平台统一响应，空结果返回空数组。
 func roleQueryHandler(query RoleQuerier) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         env, appID := r.PathValue("env"), r.Header.Get("x-app-id")

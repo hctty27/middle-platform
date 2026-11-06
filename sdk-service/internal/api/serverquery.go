@@ -12,12 +12,15 @@ import (
     "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// ServerQuerier 定义平台区服查询接口使用的业务能力。
 type ServerQuerier interface {
     Query(*http.Request, string, string, model.ServerQueryRequest) (model.ServerQueryResult, error)
 }
 
 var errInvalidServerQuery = errors.New("区服查询参数不合法")
 
+// parseServerBody 校验分页范围，并记录 page_size 是否由调用方显式提供。
+// 显式传参与默认值的区别会影响平台入站请求的签名字段集合。
 func parseServerBody(w http.ResponseWriter, r *http.Request) (model.ServerQueryRequest, error) {
     input := model.ServerQueryRequest{PageSize: 1000}
     if strings.TrimSpace(r.URL.RawQuery) != "" ||
@@ -93,6 +96,7 @@ func parseServerBody(w http.ResponseWriter, r *http.Request) (model.ServerQueryR
     return input, nil
 }
 
+// serverQueryHandler 统一处理区服查询错误与空列表响应。
 func serverQueryHandler(query ServerQuerier) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         env, appID := r.PathValue("env"), r.Header.Get("x-app-id")

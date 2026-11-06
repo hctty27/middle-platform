@@ -18,14 +18,18 @@ import (
     "github.com/hctty27/middle-platform/shared/signature"
 )
 
+// ErrPublishEndpointMissing 表示当前平台服务尚未配置接收地址。
 var ErrPublishEndpointMissing = errors.New("平台接收地址未配置")
+// ErrPublishRejected 表示请求平台失败或平台未确认业务成功。
 var ErrPublishRejected = errors.New("平台拒绝请求或平台调用失败")
 
+// Publisher 复用 HTTP 客户端并按服务代码选择平台上报地址。
 type Publisher struct {
     client *http.Client
     endpoints map[string]string
 }
 
+// NewPublisher 校验平台接口地址的协议、路径和其他限制，禁止请求重定向。
 func NewPublisher(eventURL, subscribeURL string) (*Publisher, error) {
     endpoints := map[string]string{
         "event_report": eventURL,
@@ -56,6 +60,8 @@ func NewPublisher(eventURL, subscribeURL string) (*Publisher, error) {
     }, nil
 }
 
+// Send 使用渠道 AppSecret 为平台请求签名，并校验 HTTP 及平台业务响应。
+// 平台签名仅包含密钥与指定 Header 值，业务 Body 不参与签名。
 func (p *Publisher) Send(ctx context.Context, code, appID, secret string, body []byte) error {
     if p == nil || p.endpoints[code] == "" {
         return ErrPublishEndpointMissing

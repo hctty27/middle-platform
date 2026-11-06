@@ -11,6 +11,7 @@ import (
  "github.com/hctty27/middle-platform/shared/logging"
 )
 
+// Database 定义 SDK Service 使用的 MySQL 连接池参数。
 type Database struct {
     DSN string `yaml:"dsn"`
     MaxOpenConns int `yaml:"maxOpenConns"`
@@ -18,6 +19,7 @@ type Database struct {
     ConnMaxLifetime string `yaml:"connMaxLifetime"`
 }
 
+// Config 汇总服务监听、数据库、游戏超时、平台地址及日志配置。
 type Config struct {
     Server struct { Address string `yaml:"address"` } `yaml:"server"`
     Database Database `yaml:"database"`
@@ -29,6 +31,7 @@ type Config struct {
     Log logging.Config `yaml:"log"`
 }
 
+// Load 加载 YAML 配置并应用环境变量覆盖，同时校验必填项及连接池约束。
 func Load(path string) (Config, error) {
     cfg := Config{}
     cfg.Server.Address = ":8221"

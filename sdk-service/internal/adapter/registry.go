@@ -12,6 +12,7 @@ type Registry[T any] struct {
     adapters map[string]T
 }
 
+// NewRegistry 校验并复制适配器映射，避免调用方后续修改注册集合。
 func NewRegistry[T any](implementations map[string]T) (*Registry[T], error) {
     if len(implementations) == 0 {
         return nil, fmt.Errorf("%w: 未注册任何实现", model.ErrAdapterMissing)
@@ -26,6 +27,7 @@ func NewRegistry[T any](implementations map[string]T) (*Registry[T], error) {
     return &Registry[T]{adapters: registered}, nil
 }
 
+// Get 按名称获取适配器，未注册或空注册表时返回明确错误。
 func (r *Registry[T]) Get(name string) (T, error) {
     var zero T
     if r == nil {
