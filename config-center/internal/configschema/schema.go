@@ -33,7 +33,7 @@ var sdkOwned = map[string]string{
 // Schema 返回 JSON Schema 2020-12 格式，允许额外业务字段。
 func Schema(nodeType string) (map[string]any, bool) {
     definitions, ok := fields[nodeType]
-    if !ok { return nil, false }
+    if !ok || nodeType == "channel_app" { return nil, false }
     properties := make(map[string]any, len(definitions))
     for _, field := range definitions {
         item := map[string]any{

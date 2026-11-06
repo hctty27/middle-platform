@@ -70,7 +70,7 @@ func TestSDKConfigSchemaRoute(t *testing.T) {
     }
     rec = httptest.NewRecorder()
     mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/core/admin/config-schema/channel_app", nil))
-    if rec.Code != 404 { t.Fatalf("unexpected type status %d", rec.Code) }
+    if rec.Code != 200 { t.Fatalf("channel app schema status %d", rec.Code) }
 }
 
 func TestSDKSchemaAndValidation(t *testing.T) {

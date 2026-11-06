@@ -28,6 +28,10 @@ var fields = map[string][]Field{
         {Key: "roleControlUrl", Title: "封解禁地址", Description: "SDK Service 封号、解封、禁言、解禁言接口地址", Group: "用户与角色", Format: "uri", Order: 5},
     },
     "server_group": {},
+    "channel_app": {
+        {Key: "tsKey", Title: "TS Key", Description: "SDK Core 公开配置接口返回的可选字段", Group: "公开配置", Order: 1},
+        {Key: "appSecret", Title: "平台 App Secret", Description: "平台回调验签使用的服务端密钥", Group: "安全与签名", Secret: true, Order: 2},
+    },
 }
 
 var owners = func() map[string]string {
