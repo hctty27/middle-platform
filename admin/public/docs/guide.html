@@ -145,7 +145,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li><strong>注意：V0001～V0011 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。</strong> 例如 <code>V0003</code> 只适用于仍有旧 <code>sdk_service_binding</code> / <code>scope_type</code> 的库，<code>V0009</code> 仅适用于旧渠道表结构。已升级的库不得重跑。</li>
 <li>当前不引入 Flyway、自动执行或迁移版本记录表。<strong>编号本身不能证明数据库已经应用过该变更</strong>，执行前需检查真实表结构、数据和历史操作记录。</li>
 </ul>
-<p>源码目录 <code>db/full/</code>、<code>db/incremental/</code> 在发布包中分别对应 <code>sql/full/</code>、<code>sql/incremental/</code>。原有 <code>config-center/internal/sqlc/</code> SQL 仅用于代码生成，不属于手动数据库部署脚本。</p>
+<p>源码目录 <code>db/full/</code>、<code>db/incremental/</code> 在发布包中分别对应 <code>sql/full/</code>、<code>sql/incremental/</code>。手动部署只使用这两处 SQL。</p>
 <h2 id="database-3">本地 MySQL 示例</h2>
 <div class="code-card"><div class="code-header"><span>sql</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-sql">CREATE DATABASE IF NOT EXISTS config_center
   CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;

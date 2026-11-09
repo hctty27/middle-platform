@@ -8,7 +8,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"hitall.com/middle-platform/config-center/internal/model"
 	"hitall.com/middle-platform/config-center/internal/service"
-	"hitall.com/middle-platform/config-center/internal/sqlcgen"
 )
 
 // databaseError 将已知的 MySQL 错误转换为业务冲突。
@@ -23,9 +22,10 @@ func databaseError(err error) error {
 
 // recordChange 在同一事务内递增版本并记录节点事件。
 func recordChange(ctx context.Context, tx *sql.Tx, nodeID int64, operation string) error {
-	queries := sqlcgen.New(tx)
-	if err := queries.IncrementRevision(ctx); err != nil { return err }
-	current, err := queries.GetRevision(ctx)
+	if _, err := tx.ExecContext(ctx, "UPDATE config_revision SET revision = revision + 1 WHERE id=1"); err != nil {
+		return err
+	}
+	current, err := revision(ctx, tx)
 	if err != nil { return err }
 	_, err = tx.ExecContext(ctx, "INSERT INTO config_node_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))", current.Revision, nodeID, operation)
 	return err
@@ -33,8 +33,8 @@ func recordChange(ctx context.Context, tx *sql.Tx, nodeID int64, operation strin
 
 // lockRevision 锁定全局版本行，避免并发写入版本乱序。
 func lockRevision(ctx context.Context, tx *sql.Tx) error {
-	_, err := sqlcgen.New(tx).LockRevision(ctx)
-	return err
+	var current int64
+	return tx.QueryRowContext(ctx, "SELECT revision FROM config_revision WHERE id=1 FOR UPDATE").Scan(&current)
 }
 
 // Create 校验父子关系后原子写入节点及版本事件。

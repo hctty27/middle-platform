@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
-	"hitall.com/middle-platform/config-center/internal/sqlcgen"
+	"time"
 )
 
 // Revision 读取全局同步版本号。
@@ -12,29 +12,38 @@ func (s *Store) Revision(ctx context.Context) (Revision, error) {
 }
 
 // revision 在数据库连接及事务间复用版本读取。
-func revision(ctx context.Context, db sqlcgen.DBTX) (Revision, error) {
-	row, err := sqlcgen.New(db).GetRevision(ctx)
-	if err != nil { return Revision{}, err }
-	return Revision{Epoch: row.Epoch, Revision: row.Revision}, nil
+func revision(ctx context.Context, db queryer) (Revision, error) {
+	var epoch string
+	var rev int64
+	err := db.QueryRowContext(ctx, "SELECT epoch, revision FROM config_revision WHERE id=1").Scan(&epoch, &rev)
+	if err != nil {
+		return Revision{}, err
+	}
+	return Revision{Epoch: epoch, Revision: rev}, nil
 }
 
 // Changes 分页读取全局版本之后的变更记录。
 func (s *Store) Changes(ctx context.Context, after int64, limit int) ([]ChangeEvent, error) {
-	if after < 0 || limit < 1 || limit > 500 { return nil, ErrInvalid }
-	found, err := sqlcgen.New(s.DB).ListChanges(ctx, sqlcgen.ListChangesParams{
-		Revision: after, Limit: int32(limit),
-	})
-	if err != nil { return nil, err }
-	out := make([]ChangeEvent, 0, len(found))
-	for _, event := range found {
-		out = append(out, ChangeEvent{
-			Revision: event.Revision,
-			NodeID: event.NodeID,
-			Operation: event.Operation,
-			CreatedAt: LocalDateTime(event.CreatedAt),
-		})
+	if after < 0 || limit < 1 || limit > 500 {
+		return nil, ErrInvalid
 	}
-	return out, nil
+	rows, err := s.DB.QueryContext(ctx, `SELECT revision, node_id, operation, created_at
+		FROM config_node_change_log WHERE revision > ? ORDER BY revision LIMIT ?`, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ChangeEvent, 0)
+	for rows.Next() {
+		var event ChangeEvent
+		var created time.Time
+		if err := rows.Scan(&event.Revision, &event.NodeID, &event.Operation, &created); err != nil {
+			return nil, err
+		}
+		event.CreatedAt = LocalDateTime(created)
+		out = append(out, event)
+	}
+	return out, rows.Err()
 }
 
 // Snapshot 在可重复读事务内读取一致性配置快照。
