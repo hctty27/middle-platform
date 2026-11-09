@@ -25,6 +25,14 @@ type OrderConfigReader interface {
     Lookup(context.Context, string, string) (model.ChannelApp, *model.BoundGroup, error)
 }
 
+// VerifiedRegistration 保存同一次请求验签时读取的配置快照，供登记阶段复用。
+type VerifiedRegistration struct {
+    AppID string
+    Env string
+    App model.ChannelApp
+    Group model.BoundGroup
+}
+
 // OrderService 负责订单登记、平台回调确认及游戏发货补偿。
 type OrderService struct {
     ConfigReader OrderConfigReader
@@ -47,24 +55,42 @@ type OrderService struct {
     }
 }
 
-// VerifyRegistration 从 AppID 所属游戏读取主密钥，验证登记请求签名及环境绑定。
-func(s *OrderService) VerifyRegistration(r *http.Request,body []byte,env,appid string)error {
-    if !validEnv(env)||!orderIDPattern.MatchString(appid){return ErrInvalidOrder}
-    app,group,err:=s.ConfigReader.Lookup(r.Context(),appid,env)
-    if err!=nil{return err}
-    if group==nil{return model.ErrNotFound}
-    secret,err:=auth.ParseGameSecret(app.GameSDKConfig)
-    if err!=nil{return model.ErrInvalidConfig}
-    return auth.VerifyRegistration(r,body,secret)
+// VerifyRegistration 读取一次渠道配置并完成验签，返回当前请求可复用的配置快照。
+func (s *OrderService) VerifyRegistration(r *http.Request, body []byte, env, appid string) (VerifiedRegistration, error) {
+    if !validEnv(env) || !orderIDPattern.MatchString(appid) {
+        return VerifiedRegistration{}, ErrInvalidOrder
+    }
+    app, group, err := s.ConfigReader.Lookup(r.Context(), appid, env)
+    if err != nil {
+        return VerifiedRegistration{}, err
+    }
+    if group == nil {
+        return VerifiedRegistration{}, model.ErrNotFound
+    }
+    secret, err := auth.ParseGameSecret(app.GameSDKConfig)
+    if err != nil {
+        return VerifiedRegistration{}, model.ErrInvalidConfig
+    }
+    if err = auth.VerifyRegistration(r, body, secret); err != nil {
+        return VerifiedRegistration{}, err
+    }
+    return VerifiedRegistration{
+        AppID: appid,
+        Env: env,
+        App: app,
+        Group: *group,
+    }, nil
 }
 
 func validEnv(env string)bool {return env=="prod"||env=="test"||env=="review"}
 
 // Register 将游戏订单和大区通知地址存为快照，重复请求必须保持业务参数一致。
-func(s *OrderService) Register(ctx context.Context,env,appid string,req model.RegisterOrder)error {
-    if !validEnv(env)||!orderIDPattern.MatchString(appid)||
-        !orderIDPattern.MatchString(req.GameOrderID)||req.Amount<=0||
-        req.Amount>9007199254740991||len(req.Attach)>4096 {
+func (s *OrderService) Register(ctx context.Context, env, appid string, req model.RegisterOrder, verified VerifiedRegistration) error {
+    if !validEnv(env) || !orderIDPattern.MatchString(appid) ||
+        !orderIDPattern.MatchString(req.GameOrderID) || req.Amount <= 0 ||
+        req.Amount > 9007199254740991 || len(req.Attach) > 4096 ||
+        verified.AppID != appid || verified.Env != env ||
+        verified.App.Code != appid || verified.App.GameID <= 0 {
         return ErrInvalidOrder
     }
     // 已存在订单的重试不依赖当前大区通知地址，避免配置变更破坏幂等。
@@ -76,18 +102,23 @@ func(s *OrderService) Register(ctx context.Context,env,appid string,req model.Re
         return nil
     }
     if !errors.Is(lookupErr, model.ErrOrderNotFound) { return lookupErr }
-    app,group,err:=s.ConfigReader.Lookup(ctx,appid,env)
-    if err!=nil{return err}
-    if group==nil {return model.ErrNotFound}
     var config map[string]json.RawMessage
-    if err=json.Unmarshal(group.RegionSDKConfig,&config);err!=nil{return model.ErrInvalidConfig}
-    raw,ok:=config["payNotifyUrl"]
-    if !ok{return model.ErrInvalidConfig}
+    if err := json.Unmarshal(verified.Group.RegionSDKConfig, &config); err != nil {
+        return model.ErrInvalidConfig
+    }
+    raw, ok := config["payNotifyUrl"]
+    if !ok {
+        return model.ErrInvalidConfig
+    }
     var url string
-    if err=json.Unmarshal(raw,&url);err!=nil||url==""{return model.ErrInvalidConfig}
-    if err=s.Notifier.ValidateTarget(url);err!=nil{return model.ErrInvalidConfig}
-    return s.Orders.Register(ctx,model.Order{
-        AppID:appid,GameID:app.GameID,Env:env,GameOrderID:req.GameOrderID,
+    if err := json.Unmarshal(raw, &url); err != nil || url == "" {
+        return model.ErrInvalidConfig
+    }
+    if err := s.Notifier.ValidateTarget(url); err != nil {
+        return model.ErrInvalidConfig
+    }
+    return s.Orders.Register(ctx, model.Order{
+        AppID: appid, GameID: verified.App.GameID, Env: env, GameOrderID: req.GameOrderID,
         Amount:req.Amount,Attach:req.Attach,GameNotifyURL:url,
     })
 }

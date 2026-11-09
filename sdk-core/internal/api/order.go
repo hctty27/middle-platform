@@ -16,9 +16,9 @@ import (
 
 // OrderAPI 定义订单登记鉴权、入库和平台回调处理所需的业务能力。
 type OrderAPI interface {
-    VerifyRegistration(*http.Request,[]byte,string,string)error
-    Register(context.Context,string,string,model.RegisterOrder)error
-    Receive(context.Context,string,http.Header,model.PaymentCallback)(string,error)
+    VerifyRegistration(*http.Request, []byte, string, string) (service.VerifiedRegistration, error)
+    Register(context.Context, string, string, model.RegisterOrder, service.VerifiedRegistration) error
+    Receive(context.Context, string, http.Header, model.PaymentCallback) (string, error)
 }
 
 // decodeOrderJSON 严格拒绝顶层重复键、未知字段、缺字段和非 JSON 对象。
@@ -76,12 +76,19 @@ func registerOrderRoutes(mux *http.ServeMux,svc OrderAPI){
         raw,err:=readBody(w,r)
         if err!=nil{writeJSON(w,http.StatusRequestEntityTooLarge,response{Code:413,Message:"请求体格式不合法或超过大小限制"});return}
         env,appid:=r.PathValue("env"),r.PathValue("appid")
-        if err=svc.VerifyRegistration(r,raw,env,appid);err!=nil{orderError(w,err);return}
+        verified, err := svc.VerifyRegistration(r, raw, env, appid)
+        if err != nil {
+            orderError(w, err)
+            return
+        }
         var req model.RegisterOrder
         if err=decodeOrderJSON(raw,[]string{"game_order_id","amount","attach"},&req);err!=nil {
             orderError(w,service.ErrInvalidOrder);return
         }
-        if err=svc.Register(r.Context(),env,appid,req);err!=nil{orderError(w,err);return}
+        if err = svc.Register(r.Context(), env, appid, req, verified); err != nil {
+            orderError(w, err)
+            return
+        }
         writeJSON(w,http.StatusOK,response{Code:0,Message:"success",
             Data:map[string]string{"game_order_id":req.GameOrderID,"registration_status":"REGISTERED"}})
     })

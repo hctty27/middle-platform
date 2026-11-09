@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/hctty27/middle-platform/sdk-core/internal/model"
+	"github.com/hctty27/middle-platform/sdk-core/internal/service"
 )
 
 type fakeOrderRoutes struct {
@@ -18,12 +19,16 @@ type fakeOrderRoutes struct {
 	callback model.PaymentCallback
 }
 
-func (f *fakeOrderRoutes) VerifyRegistration(_ *http.Request, _ []byte, env, appID string) error {
+func (f *fakeOrderRoutes) VerifyRegistration(_ *http.Request, _ []byte, env, appID string) (service.VerifiedRegistration, error) {
 	f.verifiedEnv, f.verifiedAppID = env, appID
-	return nil
+	return service.VerifiedRegistration{
+		AppID: appID,
+		Env: env,
+		App: model.ChannelApp{Code: appID, GameID: 1},
+	}, nil
 }
 
-func (f *fakeOrderRoutes) Register(_ context.Context, env, appID string, order model.RegisterOrder) error {
+func (f *fakeOrderRoutes) Register(_ context.Context, env, appID string, order model.RegisterOrder, _ service.VerifiedRegistration) error {
 	f.registeredEnv, f.registeredAppID, f.registeredOrder = env, appID, order
 	return nil
 }
