@@ -61,14 +61,14 @@ func Run(configPath string) error {
 	}
 
 	// 配置查询与订单读写共用一个 sql.DB，订单路由和补偿 Worker 随进程启动。
-	// 不自动建表：数据库升级 SQL 由管理员按 db/incremental/ 手动执行。
+	// 不自动建表：必须先通过 config-center/cmd/migrate 执行 V12。
 	rows, err := db.QueryContext(initCtx, `SELECT id, appid, game_id, env, game_order_id,
 		amount, attach, game_notify_url, platform_order_no, paid_at, payment_status,
 		notify_status, notify_attempts, last_notify_at, last_notify_error,
 		notify_success_at, next_notify_at, created_at, updated_at
 		FROM game_order LIMIT 0`)
 	if err != nil {
-		return fmt.Errorf("检查 game_order 表结构失败: %w", err)
+		return fmt.Errorf("检查 game_order 表结构失败（需要 V12）: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return fmt.Errorf("关闭 game_order 表结构检查结果失败: %w", err)

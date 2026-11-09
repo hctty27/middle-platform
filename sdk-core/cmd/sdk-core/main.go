@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "configs/config.yaml", "YAML 配置文件")
+	configPath := flag.String("config", "configs/config.yaml", "YAML configuration file")
 	flag.Parse()
 
 	if err := app.Run(*configPath); err != nil {
