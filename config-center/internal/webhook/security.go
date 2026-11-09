@@ -11,7 +11,7 @@ import (
     "strings"
     "time"
 
-    "github.com/hctty27/middle-platform/config-center/internal/model"
+    "hitall.com/middle-platform/config-center/internal/model"
 )
 
 var ErrInvalid = model.ErrInvalid

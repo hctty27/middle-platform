@@ -8,8 +8,8 @@ import (
     "strings"
     "time"
 
-    "github.com/hctty27/middle-platform/shared/bootstrap"
- "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/shared/bootstrap"
+ "hitall.com/middle-platform/shared/logging"
 )
 
 // Database 保存 config_center 单连接池参数。

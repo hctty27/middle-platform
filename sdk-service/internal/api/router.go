@@ -11,9 +11,9 @@ import (
     "strings"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
-    "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 // UserChecker 定义用户核验 HTTP 接口依赖的业务能力。

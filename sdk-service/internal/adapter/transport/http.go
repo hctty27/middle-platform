@@ -11,8 +11,8 @@ import (
     "strconv"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 // HTTPDoer 抽象 HTTP 请求发送，允许业务适配器使用测试客户端。

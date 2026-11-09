@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hctty27/middle-platform/config-center/internal/model"
-	"github.com/hctty27/middle-platform/config-center/internal/service"
+	"hitall.com/middle-platform/config-center/internal/model"
+	"hitall.com/middle-platform/config-center/internal/service"
 )
 
 const appColumns = "id,game_id,code,name,status,config,remark,prod_server_group_id,test_server_group_id,review_server_group_id,created_at,updated_at"

@@ -6,7 +6,7 @@ import (
     "strings"
     "unicode/utf8"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 // Reader 只提供公开配置接口需要的三个字段，不参与订单登记的配置查询。

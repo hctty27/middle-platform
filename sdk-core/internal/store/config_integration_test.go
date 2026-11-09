@@ -10,7 +10,7 @@ import (
     "testing"
 
     _ "github.com/go-sql-driver/mysql"
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 // TestLookupMySQL 使用真实 MySQL 验证单次 JOIN 的环境关联、状态过滤与大区 JSON。

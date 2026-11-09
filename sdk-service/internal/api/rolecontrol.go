@@ -9,8 +9,8 @@ import (
     "strconv"
     "strings"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 // RoleController 定义封号、解封、禁言和解禁言的统一执行入口。

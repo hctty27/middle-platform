@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hctty27/middle-platform/shared/signature"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 // SignValues 保持旧调用方式，统一委托 shared/signature 计算。

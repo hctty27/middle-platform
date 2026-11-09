@@ -7,8 +7,8 @@ import (
     "strings"
     "time"
 
-    "github.com/hctty27/middle-platform/shared/bootstrap"
- "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/shared/bootstrap"
+ "hitall.com/middle-platform/shared/logging"
 )
 
 // Database 定义 SDK Service 使用的 MySQL 连接池参数。

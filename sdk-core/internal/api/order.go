@@ -8,10 +8,10 @@ import (
     "io"
     "net/http"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
-    "github.com/hctty27/middle-platform/sdk-core/internal/payment"
-    "github.com/hctty27/middle-platform/sdk-core/internal/service"
+    "hitall.com/middle-platform/sdk-core/internal/auth"
+    "hitall.com/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/payment"
+    "hitall.com/middle-platform/sdk-core/internal/service"
 )
 
 // OrderAPI 定义订单登记鉴权、入库和平台回调处理所需的业务能力。

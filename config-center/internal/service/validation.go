@@ -4,7 +4,7 @@ package service
 import (
 	"encoding/json"
 	"strings"
-	"github.com/hctty27/middle-platform/config-center/internal/model"
+	"hitall.com/middle-platform/config-center/internal/model"
 )
 
 // 复用领域层错误标识，使 HTTP 层能统一映射非法参数响应。

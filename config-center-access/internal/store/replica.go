@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hctty27/middle-platform/config-center-access/internal/remote"
+	"hitall.com/middle-platform/config-center-access/internal/remote"
 )
 
 // State 与节点副本在同一事务内提交，防止部分同步。

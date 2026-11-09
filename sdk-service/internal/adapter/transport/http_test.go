@@ -8,8 +8,8 @@ import (
     "net/http/httptest"
     "testing"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 func TestPostJSONPreservesSignatureFields(t *testing.T) {

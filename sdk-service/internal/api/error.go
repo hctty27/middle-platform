@@ -5,8 +5,8 @@ import (
     "errors"
     "net/http"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
 )
 
 // mapServiceError 将 SDK Service 通用异常映射为保持兼容的 HTTP 状态与业务文案。

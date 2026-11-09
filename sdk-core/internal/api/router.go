@@ -9,8 +9,8 @@ import (
     "net/http"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
-    "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 // Fetcher 提供公开 SDK 配置查询，不暴露原始密钥。

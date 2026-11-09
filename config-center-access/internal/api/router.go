@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hctty27/middle-platform/config-center-access/internal/store"
-	"github.com/hctty27/middle-platform/shared/signature"
+	"hitall.com/middle-platform/config-center-access/internal/store"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 // SyncTrigger 由后台单飞任务实现。

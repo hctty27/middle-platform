@@ -8,9 +8,9 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolecontrol"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/rolecontrol"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 type controlRoutes struct {

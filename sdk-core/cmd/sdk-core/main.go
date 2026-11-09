@@ -14,14 +14,14 @@ import (
     "syscall"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/api"
-    "github.com/hctty27/middle-platform/sdk-core/internal/notify"
-    "github.com/hctty27/middle-platform/sdk-core/internal/service"
-    "github.com/hctty27/middle-platform/sdk-core/internal/settings"
-    "github.com/hctty27/middle-platform/sdk-core/internal/store"
-    "github.com/hctty27/middle-platform/shared/bootstrap"
-    "github.com/hctty27/middle-platform/shared/logging"
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/sdk-core/internal/api"
+    "hitall.com/middle-platform/sdk-core/internal/notify"
+    "hitall.com/middle-platform/sdk-core/internal/service"
+    "hitall.com/middle-platform/sdk-core/internal/settings"
+    "hitall.com/middle-platform/sdk-core/internal/store"
+    "hitall.com/middle-platform/shared/bootstrap"
+    "hitall.com/middle-platform/shared/logging"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 func main(){

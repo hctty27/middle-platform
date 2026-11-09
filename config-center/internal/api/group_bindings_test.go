@@ -6,7 +6,7 @@ import (
     "net/http/httptest"
     "testing"
 
-    "github.com/hctty27/middle-platform/config-center/internal/model"
+    "hitall.com/middle-platform/config-center/internal/model"
 )
 
 type groupBindingsReader struct { Reader }

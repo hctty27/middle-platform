@@ -6,7 +6,7 @@ import (
     "strings"
     "testing"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/model"
 )
 
 type fakeRoleQuerier struct {

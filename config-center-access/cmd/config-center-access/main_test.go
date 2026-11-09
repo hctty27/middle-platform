@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-    "github.com/hctty27/middle-platform/shared/bootstrap"
+    "hitall.com/middle-platform/shared/bootstrap"
 )
 
 func TestWithDrainReadiness(t *testing.T) {

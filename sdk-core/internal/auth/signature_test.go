@@ -7,7 +7,7 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
+    "hitall.com/middle-platform/sdk-core/internal/auth"
 )
 
 func TestGamePlatformStyleSignatureVectors(t *testing.T) {

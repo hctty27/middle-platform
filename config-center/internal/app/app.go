@@ -14,14 +14,14 @@ import (
 	"syscall"
 	"time"
 	"github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/shared/bootstrap"
-    "github.com/hctty27/middle-platform/shared/logging"
-	"github.com/hctty27/middle-platform/shared/signature"
-	"github.com/hctty27/middle-platform/config-center/internal/api"
-	"github.com/hctty27/middle-platform/config-center/internal/schema"
-	"github.com/hctty27/middle-platform/config-center/internal/settings"
-	"github.com/hctty27/middle-platform/config-center/internal/store"
-	"github.com/hctty27/middle-platform/config-center/internal/webhook"
+	"hitall.com/middle-platform/shared/bootstrap"
+    "hitall.com/middle-platform/shared/logging"
+	"hitall.com/middle-platform/shared/signature"
+	"hitall.com/middle-platform/config-center/internal/api"
+	"hitall.com/middle-platform/config-center/internal/schema"
+	"hitall.com/middle-platform/config-center/internal/settings"
+	"hitall.com/middle-platform/config-center/internal/store"
+	"hitall.com/middle-platform/config-center/internal/webhook"
 )
 
 // Run 加载指定的 YAML 配置文件，未指定时使用 configs/config.yaml。

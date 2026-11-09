@@ -5,8 +5,8 @@ import (
     "encoding/json"
     "fmt"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/transport"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/transport"
 )
 
 const maxControlResponseBytes = 16 * 1024

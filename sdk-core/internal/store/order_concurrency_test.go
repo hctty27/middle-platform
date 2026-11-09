@@ -11,7 +11,7 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 // TestConcurrentNotifyClaims 使用两个独立连接池验证领取唯一性、租约恢复和过期结果隔离。

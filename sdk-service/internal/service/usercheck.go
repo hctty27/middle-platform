@@ -6,9 +6,9 @@ import (
     "net/http"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/usercheck"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/usercheck"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
 )
 
 // RouteReader 定义用户核验所需的渠道环境路由查询能力。

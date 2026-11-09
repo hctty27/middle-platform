@@ -8,8 +8,8 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/auth"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 const registrationTestAppID = "app1001"

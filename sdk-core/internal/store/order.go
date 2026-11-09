@@ -9,7 +9,7 @@ import (
     "time"
 
     "github.com/go-sql-driver/mysql"
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 // OrderStore 在共享的 config_center 连接池中读写 game_order，不修改配置表。

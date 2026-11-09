@@ -10,7 +10,7 @@ import (
     "net/http"
     "strconv"
     "strings"
-    "github.com/hctty27/middle-platform/sdk-core/internal/configschema"
+    "hitall.com/middle-platform/sdk-core/internal/configschema"
 )
 
 type adminStore struct{ db *sql.DB }

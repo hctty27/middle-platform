@@ -15,14 +15,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hctty27/middle-platform/config-center-access/internal/api"
-	"github.com/hctty27/middle-platform/config-center-access/internal/remote"
-	"github.com/hctty27/middle-platform/config-center-access/internal/settings"
-	"github.com/hctty27/middle-platform/config-center-access/internal/store"
-	"github.com/hctty27/middle-platform/config-center-access/internal/syncer"
+	"hitall.com/middle-platform/config-center-access/internal/api"
+	"hitall.com/middle-platform/config-center-access/internal/remote"
+	"hitall.com/middle-platform/config-center-access/internal/settings"
+	"hitall.com/middle-platform/config-center-access/internal/store"
+	"hitall.com/middle-platform/config-center-access/internal/syncer"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/shared/bootstrap"
-    "github.com/hctty27/middle-platform/shared/logging"
+	"hitall.com/middle-platform/shared/bootstrap"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 // main 统一处理启动与运行失败。

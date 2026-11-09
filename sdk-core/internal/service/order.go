@@ -11,9 +11,9 @@ import (
     "sync"
     "log/slog"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
-    "github.com/hctty27/middle-platform/sdk-core/internal/payment"
+    "hitall.com/middle-platform/sdk-core/internal/auth"
+    "hitall.com/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/payment"
 )
 
 // ErrInvalidOrder 表示登记或回调的订单参数不符合约束。

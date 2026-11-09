@@ -7,8 +7,8 @@ import (
     "net/http"
     "strings"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 // RoleQuerier 定义平台角色查询接口使用的业务能力。

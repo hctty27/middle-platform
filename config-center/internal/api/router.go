@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 	"github.com/go-chi/chi/v5"
-	"github.com/hctty27/middle-platform/config-center/internal/model"
+	"hitall.com/middle-platform/config-center/internal/model"
 )
 
 // HTTP 接口使用统一的领域类型，保持既有 JSON 字段协议。
