@@ -32,9 +32,11 @@ jobs:
           cache-dependency-path: |
             sdk-service/go.sum
             shared/go.sum
-      - name: Verify shared signature module
-        working-directory: shared/signature
+      - name: Verify shared module
+        working-directory: shared
         run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
           go test -race -count=1 ./...
           go vet ./...
       - name: Verify SDK Service module
