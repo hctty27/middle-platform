@@ -2,34 +2,38 @@
 package service
 
 import (
-    "context"
-    "net/http"
-    "time"
+	"context"
+	"net/http"
+	"time"
 
-    "hitall.com/middle-platform/sdk-service/internal/adapter/usercheck"
-    "hitall.com/middle-platform/sdk-service/internal/model"
-    "hitall.com/middle-platform/sdk-service/internal/platform"
+	"hitall.com/middle-platform/sdk-service/internal/adapter/usercheck"
+	"hitall.com/middle-platform/sdk-service/internal/model"
+	"hitall.com/middle-platform/sdk-service/internal/platform"
 )
 
 // RouteReader 定义用户核验所需的渠道环境路由查询能力。
 type RouteReader interface {
-    Lookup(context.Context, string, string) (model.Target, error)
+	Lookup(context.Context, string, string) (model.Target, error)
 }
 
 // UserCheckService 负责平台用户核验验签及游戏侧协议适配。
 type UserCheckService struct {
-    Routes RouteReader
-    Adapters *usercheck.Registry
+	Routes   RouteReader
+	Adapters *usercheck.Registry
 }
 
 // Check 查找渠道核验配置，验证平台签名后调用对应的游戏适配器。
 func (s *UserCheckService) Check(r *http.Request, env, appID string, in model.UserCheckRequest) (model.UserCheckResult, error) {
-    target, err := s.Routes.Lookup(r.Context(), appID, env)
-    if err != nil { return model.UserCheckResult{}, err }
-    if err := platform.VerifyRequest(r, appID, target.AppSecret, in.OpenID, time.Now()); err != nil {
-        return model.UserCheckResult{}, err
-    }
-    adapter, err := s.Adapters.Get(target.AdapterName)
-    if err != nil { return model.UserCheckResult{}, err }
-    return adapter.Check(r.Context(), target, in)
+	target, err := s.Routes.Lookup(r.Context(), appID, env)
+	if err != nil {
+		return model.UserCheckResult{}, err
+	}
+	if err := platform.VerifyRequest(r, appID, target.AppSecret, in.OpenID, time.Now()); err != nil {
+		return model.UserCheckResult{}, err
+	}
+	adapter, err := s.Adapters.Get(target.AdapterName)
+	if err != nil {
+		return model.UserCheckResult{}, err
+	}
+	return adapter.Check(r.Context(), target, in)
 }

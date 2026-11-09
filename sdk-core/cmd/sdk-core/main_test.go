@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-    "hitall.com/middle-platform/shared/bootstrap"
+	"hitall.com/middle-platform/shared/bootstrap"
 )
 
 func TestWithDrainReadiness(t *testing.T) {
@@ -36,4 +36,3 @@ func TestWithDrainReadiness(t *testing.T) {
 		t.Fatalf("liveness during draining = %d, want %d", got, http.StatusNoContent)
 	}
 }
-

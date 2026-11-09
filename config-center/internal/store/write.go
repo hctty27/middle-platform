@@ -14,8 +14,12 @@ import (
 func databaseError(err error) error {
 	var mysqlErr *mysql.MySQLError
 	if errors.As(err, &mysqlErr) {
-		if mysqlErr.Number == 1062 { return fmt.Errorf("%w: 编码重复，违反唯一约束", ErrConflict) }
-		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 { return fmt.Errorf("%w: 违反数据库约束", ErrConflict) }
+		if mysqlErr.Number == 1062 {
+			return fmt.Errorf("%w: 编码重复，违反唯一约束", ErrConflict)
+		}
+		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 {
+			return fmt.Errorf("%w: 违反数据库约束", ErrConflict)
+		}
 	}
 	return err
 }
@@ -26,7 +30,9 @@ func recordChange(ctx context.Context, tx *sql.Tx, nodeID int64, operation strin
 		return err
 	}
 	current, err := revision(ctx, tx)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, "INSERT INTO config_node_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))", current.Revision, nodeID, operation)
 	return err
 }
@@ -39,26 +45,42 @@ func lockRevision(ctx context.Context, tx *sql.Tx) error {
 
 // Create 校验父子关系后原子写入节点及版本事件。
 func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, error) {
-	if err := service.ValidateCreate(input); err != nil { return Node{}, err }
-	if err := model.ValidateBusinessConfig(input.NodeType, input.Config); err != nil { return Node{}, err }
+	if err := service.ValidateCreate(input); err != nil {
+		return Node{}, err
+	}
+	if err := model.ValidateBusinessConfig(input.NodeType, input.Config); err != nil {
+		return Node{}, err
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil { return Node{}, err }
+	if err != nil {
+		return Node{}, err
+	}
 	defer tx.Rollback()
 	// 在节点变更前锁定全局版本行，保证多实例写入的版本顺序。
-	if err := lockRevision(ctx, tx); err != nil { return Node{}, err }
+	if err := lockRevision(ctx, tx); err != nil {
+		return Node{}, err
+	}
 
 	// 祖先 ID 在创建时从父节点推导，避免调用方伪造跨游戏、跨大区的层级关系。
 	var gameID, regionID *int64
 	if input.NodeType != "game" {
 		parent, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", input.ParentID))
-		if errors.Is(err, sql.ErrNoRows) { return Node{}, ErrInvalid }
-		if err != nil { return Node{}, err }
+		if errors.Is(err, sql.ErrNoRows) {
+			return Node{}, ErrInvalid
+		}
+		if err != nil {
+			return Node{}, err
+		}
 		switch input.NodeType {
 		case "region":
-			if parent.NodeType != "game" { return Node{}, ErrInvalid }
+			if parent.NodeType != "game" {
+				return Node{}, ErrInvalid
+			}
 			gameID = &parent.ID
 		case "server_group":
-			if parent.NodeType != "region" { return Node{}, ErrInvalid }
+			if parent.NodeType != "region" {
+				return Node{}, ErrInvalid
+			}
 			gameID, regionID = parent.GameID, &parent.ID
 		}
 	}
@@ -70,39 +92,68 @@ func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, erro
 	result, err := tx.ExecContext(ctx, `INSERT INTO config_node(game_id,region_id,node_type,env_type,market_type,code,name,status,config,remark,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,
 		gameID, regionID, input.NodeType, input.EnvType, marketType, input.Code, input.Name, *input.Status, input.Config, input.Remark)
-	if err != nil { return Node{}, databaseError(err) }
+	if err != nil {
+		return Node{}, databaseError(err)
+	}
 	id, err := result.LastInsertId()
-	if err != nil { return Node{}, err }
-	if err := recordChange(ctx, tx, id, "UPSERT"); err != nil { return Node{}, err }
+	if err != nil {
+		return Node{}, err
+	}
+	if err := recordChange(ctx, tx, id, "UPSERT"); err != nil {
+		return Node{}, err
+	}
 	node, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
-	if err != nil { return Node{}, err }
-	if err := tx.Commit(); err != nil { return Node{}, err }
+	if err != nil {
+		return Node{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Node{}, err
+	}
 	return node, nil
 }
 
 // Update 仅在字段确实变化时更新数据库和全局版本。
 func (s *Store) Update(ctx context.Context, id int64, input UpdateNodeRequest) (Node, error) {
-	if id <= 0 { return Node{}, ErrInvalid }
-	if err := service.ValidateNode(input.Name, input.Status, input.Config, input.Remark); err != nil { return Node{}, err }
+	if id <= 0 {
+		return Node{}, ErrInvalid
+	}
+	if err := service.ValidateNode(input.Name, input.Status, input.Config, input.Remark); err != nil {
+		return Node{}, err
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil { return Node{}, err }
+	if err != nil {
+		return Node{}, err
+	}
 	defer tx.Rollback()
-	if err := lockRevision(ctx, tx); err != nil { return Node{}, err }
+	if err := lockRevision(ctx, tx); err != nil {
+		return Node{}, err
+	}
 	current, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
-    if err != nil { return Node{}, err }
-    if err := model.ValidateBusinessConfig(current.NodeType, input.Config); err != nil { return Node{}, err }
-    if err := service.ValidateEnvType(current.NodeType, input.EnvType); err != nil { return Node{}, err }
-    if err := service.ValidateMarketType(current.NodeType, input.MarketType); err != nil { return Node{}, err }
-    marketType := input.MarketType
-    if current.NodeType == "game" && marketType == nil {
-        marketType = current.MarketType
-        if marketType == nil { defaultMarket := "domestic"; marketType = &defaultMarket }
-    }
-    if current.NodeType == "region" && current.EnvType != nil && *current.EnvType != *input.EnvType {
-        return Node{}, ErrConflict
-    }
-    // 只有数据确实变化时才递增全局 revision，避免无意义的回调广播。
-    var unchanged sql.NullBool
+	if err != nil {
+		return Node{}, err
+	}
+	if err := model.ValidateBusinessConfig(current.NodeType, input.Config); err != nil {
+		return Node{}, err
+	}
+	if err := service.ValidateEnvType(current.NodeType, input.EnvType); err != nil {
+		return Node{}, err
+	}
+	if err := service.ValidateMarketType(current.NodeType, input.MarketType); err != nil {
+		return Node{}, err
+	}
+	marketType := input.MarketType
+	if current.NodeType == "game" && marketType == nil {
+		marketType = current.MarketType
+		if marketType == nil {
+			defaultMarket := "domestic"
+			marketType = &defaultMarket
+		}
+	}
+	if current.NodeType == "region" && current.EnvType != nil && *current.EnvType != *input.EnvType {
+		return Node{}, ErrConflict
+	}
+	// 只有数据确实变化时才递增全局 revision，避免无意义的回调广播。
+	var unchanged sql.NullBool
 	if err := tx.QueryRowContext(ctx, `SELECT (name <=> ?) AND (status <=> ?) AND (remark <=> ?)
 		AND (config = CAST(? AS JSON)) AND (env_type <=> ?) AND (market_type <=> ?) FROM config_node WHERE id=?`,
 		input.Name, *input.Status, input.Remark, input.Config, input.EnvType, marketType, id).Scan(&unchanged); err != nil {
@@ -111,24 +162,40 @@ func (s *Store) Update(ctx context.Context, id int64, input UpdateNodeRequest) (
 	if !unchanged.Valid || !unchanged.Bool {
 		_, err := tx.ExecContext(ctx, `UPDATE config_node SET name=?,status=?,config=?,remark=?,env_type=?,market_type=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`,
 			input.Name, *input.Status, input.Config, input.Remark, input.EnvType, marketType, id)
-		if err != nil { return Node{}, databaseError(err) }
-		if err := recordChange(ctx, tx, id, "UPSERT"); err != nil { return Node{}, err }
+		if err != nil {
+			return Node{}, databaseError(err)
+		}
+		if err := recordChange(ctx, tx, id, "UPSERT"); err != nil {
+			return Node{}, err
+		}
 		current, err = scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
-		if err != nil { return Node{}, err }
+		if err != nil {
+			return Node{}, err
+		}
 	}
-	if err := tx.Commit(); err != nil { return Node{}, err }
+	if err := tx.Commit(); err != nil {
+		return Node{}, err
+	}
 	return current, nil
 }
 
 // Delete 拒绝删除仍有子节点的配置并记录删除事件。
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	if id <= 0 { return ErrInvalid }
+	if id <= 0 {
+		return ErrInvalid
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback()
-	if err := lockRevision(ctx, tx); err != nil { return err }
+	if err := lockRevision(ctx, tx); err != nil {
+		return err
+	}
 	current, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	// 按直接祖先字段判断是否存在子节点，拒绝产生孤儿配置。
 	var childCondition string
 	switch current.NodeType {
@@ -146,18 +213,32 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_node WHERE "+childCondition, id).Scan(&count); err != nil {
 			return err
 		}
-		if count > 0 { return ErrConflict }
+		if count > 0 {
+			return ErrConflict
+		}
 	}
 	// 不能删除仍有渠道应用的游戏或仍有绑定的区服组。
 	if current.NodeType == "game" {
-		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_channel_app WHERE game_id=?",id).Scan(&count); err != nil { return err }
-		if count>0 { return ErrConflict }
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM sdk_channel_app WHERE game_id=?", id).Scan(&count); err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrConflict
+		}
 	}
 	if current.NodeType == "server_group" {
-		if err := tx.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_channel_app WHERE prod_server_group_id=? OR test_server_group_id=? OR review_server_group_id=?",id,id,id).Scan(&count); err != nil { return err }
-        if count>0 { return ErrConflict }
-    }
-    if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil { return databaseError(err) }
-	if err := recordChange(ctx, tx, id, "DELETE"); err != nil { return err }
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM sdk_channel_app WHERE prod_server_group_id=? OR test_server_group_id=? OR review_server_group_id=?", id, id, id).Scan(&count); err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrConflict
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil {
+		return databaseError(err)
+	}
+	if err := recordChange(ctx, tx, id, "DELETE"); err != nil {
+		return err
+	}
 	return tx.Commit()
 }

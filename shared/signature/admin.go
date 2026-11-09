@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	adminWindow = 5 * time.Minute
-	adminBodyLimit = 1 << 20
+	adminWindow     = 5 * time.Minute
+	adminBodyLimit  = 1 << 20
 	adminNonceLimit = 10000
 )
 
@@ -36,8 +36,8 @@ func SignAdmin(secret, method, path, canonicalQuery, timestamp, nonce string, bo
 }
 
 type adminNonceCache struct {
-	mu sync.Mutex
-	used map[string]int64
+	mu          sync.Mutex
+	used        map[string]int64
 	lastCleanup time.Time
 }
 

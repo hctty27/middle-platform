@@ -32,28 +32,28 @@ type Delivery struct {
 
 // Dispatcher 控制回调任务领取、并发发送与重试。
 type Dispatcher struct {
-	DB           *sql.DB
-	Client       *http.Client
-	BatchSize    int
-	Concurrency  int
+	DB          *sql.DB
+	Client      *http.Client
+	BatchSize   int
+	Concurrency int
 }
 
 // NewDispatcher 创建不跟随重定向并校验连接目标的回调客户端。
 func NewDispatcher(db *sql.DB) *Dispatcher {
 	transport := &http.Transport{
-		DialContext: secureWebhookDial(nil),
-		MaxIdleConns: 20,
+		DialContext:         secureWebhookDial(nil),
+		MaxIdleConns:        20,
 		MaxIdleConnsPerHost: 4,
-		IdleConnTimeout: 30 * time.Second,
+		IdleConnTimeout:     30 * time.Second,
 	}
 	return &Dispatcher{
 		DB: db,
 		Client: &http.Client{
-			Timeout: 5 * time.Second,
-			Transport: transport,
+			Timeout:       5 * time.Second,
+			Transport:     transport,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		BatchSize: 16,
+		BatchSize:   16,
 		Concurrency: 4,
 	}
 }
@@ -61,7 +61,9 @@ func NewDispatcher(db *sql.DB) *Dispatcher {
 // claim 通过数据库行锁与租约协调集群任务领取。
 func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	tx, err := d.DB.BeginTx(ctx, nil)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer tx.Rollback()
 	delivery := &Delivery{}
 	// SKIP LOCKED 让多实例跳过已被领取的任务，避免相互阻塞与重复投递。
@@ -76,19 +78,31 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 		ORDER BY d.next_attempt_at,d.subscriber_id
 		LIMIT 1 FOR UPDATE OF d SKIP LOCKED`).Scan(
 		&delivery.SubscriberID, &delivery.URL, &delivery.Secret, &delivery.Epoch, &delivery.Revision)
-	if errors.Is(err, sql.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil { return nil, err }
+	if _, err := rand.Read(id[:]); err != nil {
+		return nil, err
+	}
 	// 随机租约标识用于回写时的所有权校验，过期任务不能覆盖新领取者的结果。
 	delivery.LeaseID = hex.EncodeToString(id[:])
 	result, err := tx.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
 		SET lease_owner=?,lease_until=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 30 SECOND)
 		WHERE subscriber_id=?`, delivery.LeaseID, delivery.SubscriberID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	rows, err := result.RowsAffected()
-	if err != nil || rows != 1 { return nil, fmt.Errorf("领取 Webhook 投递租约失败: %v", err) }
-	if err := tx.Commit(); err != nil { return nil, err }
+	if err != nil || rows != 1 {
+		return nil, fmt.Errorf("领取 Webhook 投递租约失败: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return delivery, nil
 }
 
@@ -98,25 +112,35 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err := ValidateCallback(job.URL); err != nil {
 		return fmt.Errorf("Webhook 通知目标不安全: %w", err)
 	}
-	if job.Secret == "" { return errors.New("Webhook 订阅者密钥不能为空") }
+	if job.Secret == "" {
+		return errors.New("Webhook 订阅者密钥不能为空")
+	}
 	var random [8]byte
-	if _, err := rand.Read(random[:]); err != nil { return fmt.Errorf("生成 Webhook nonce 失败: %w", err) }
+	if _, err := rand.Read(random[:]); err != nil {
+		return fmt.Errorf("生成 Webhook nonce 失败: %w", err)
+	}
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	nonce := hex.EncodeToString(random[:])
 	signed := signature.SignValues(job.Secret, timestamp, nonce, job.Epoch, strconv.FormatInt(job.Revision, 10))
 	body, err := json.Marshal(struct {
-		Epoch string `json:"epoch"`
-		Revision int64 `json:"revision"`
+		Epoch    string `json:"epoch"`
+		Revision int64  `json:"revision"`
 	}{job.Epoch, job.Revision})
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, job.URL, bytes.NewReader(body))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Timestamp", timestamp)
 	req.Header.Set("X-Nonce", nonce)
 	req.Header.Set("X-Signature", signed)
 	response, err := d.Client.Do(req)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer response.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -141,7 +165,9 @@ func (d *Dispatcher) delivered(ctx context.Context, job Delivery) error {
 // failed 记录失败信息并按指数退避安排重试。
 func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) error {
 	message := []rune(reason.Error())
-	if len(message) > 500 { message = message[:500] }
+	if len(message) > 500 {
+		message = message[:500]
+	}
 	// 指数退避上限为五分钟，防止故障订阅者持续消耗回调资源。
 	_, err := d.DB.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
 		SET lease_owner=NULL,lease_until=NULL,failure_count=failure_count+1,
@@ -157,21 +183,33 @@ func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) err
 // dispatch 并发领取和投递一批到期任务，避免单个回调阻塞其他订阅者。
 func (d *Dispatcher) dispatch(ctx context.Context) error {
 	batchSize := d.BatchSize
-	if batchSize <= 0 || batchSize > 64 { batchSize = 16 }
+	if batchSize <= 0 || batchSize > 64 {
+		batchSize = 16
+	}
 	concurrency := d.Concurrency
-	if concurrency <= 0 || concurrency > 16 { concurrency = 4 }
+	if concurrency <= 0 || concurrency > 16 {
+		concurrency = 4
+	}
 	jobs := make([]Delivery, 0, batchSize)
 	for len(jobs) < batchSize {
 		job, err := d.claim(ctx)
-		if err != nil { return err }
-		if job == nil { break }
+		if err != nil {
+			return err
+		}
+		if job == nil {
+			break
+		}
 		jobs = append(jobs, *job)
 	}
-	if len(jobs) == 0 { return nil }
+	if len(jobs) == 0 {
+		return nil
+	}
 	limit := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	for _, job := range jobs {
-		if ctx.Err() != nil { break }
+		if ctx.Err() != nil {
+			break
+		}
 		limit <- struct{}{}
 		wg.Add(1)
 		go func(job Delivery) {
@@ -188,7 +226,9 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 					slog.Error("更新 Webhook 失败状态失败", "subscriber", job.SubscriberID, "error", dbErr)
 				}
 			}
-			if err != nil { slog.Warn("Webhook 投递失败", "subscriber", job.SubscriberID, "error", err) }
+			if err != nil {
+				slog.Warn("Webhook 投递失败", "subscriber", job.SubscriberID, "error", err)
+			}
 		}(job)
 	}
 	wg.Wait()
@@ -198,7 +238,9 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 // Run 定时领取并发送回调，响应优雅停机。
 // Run 循环处理待投递任务，并在上下文取消后停止。
 func (d *Dispatcher) Run(ctx context.Context) {
-	if d.Client == nil { d.Client = NewDispatcher(d.DB).Client }
+	if d.Client == nil {
+		d.Client = NewDispatcher(d.DB).Client
+	}
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -213,9 +255,11 @@ func (d *Dispatcher) Run(ctx context.Context) {
 	}
 }
 
- // Send 对指定任务发送签名回调，集成测试通过此入口验证协议。
+// Send 对指定任务发送签名回调，集成测试通过此入口验证协议。
 func (d *Dispatcher) Send(ctx context.Context, job Delivery) error { return d.send(ctx, job) }
+
 // Claim 领取一个任务，集成测试通过此入口验证数据库租约。
 func (d *Dispatcher) Claim(ctx context.Context) (*Delivery, error) { return d.claim(ctx) }
+
 // Delivered 提交已确认版本，集成测试通过此入口验证确认逻辑。
 func (d *Dispatcher) Delivered(ctx context.Context, job Delivery) error { return d.delivered(ctx, job) }

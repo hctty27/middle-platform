@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/go-chi/chi/v5"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
-	"github.com/go-chi/chi/v5"
 )
 
 // writeJSON 统一输出 JSON 响应。
@@ -27,7 +27,10 @@ func writeError(w http.ResponseWriter, status int, message string) {
 
 // respond 根据业务错误选择相应 HTTP 状态码。
 func respond(w http.ResponseWriter, value any, err error) {
-	if err == nil { writeJSON(w, http.StatusOK, value); return }
+	if err == nil {
+		writeJSON(w, http.StatusOK, value)
+		return
+	}
 	switch {
 	case errors.Is(err, ErrInvalid):
 		writeError(w, http.StatusBadRequest, "请求参数不合法")
@@ -43,9 +46,13 @@ func respond(w http.ResponseWriter, value any, err error) {
 
 // number 解析整数并应用默认值。
 func number(s string, fallback int64) (int64, error) {
-	if s == "" { return fallback, nil }
+	if s == "" {
+		return fallback, nil
+	}
 	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil { return 0, ErrInvalid }
+	if err != nil {
+		return 0, ErrInvalid
+	}
 	return n, nil
 }
 
@@ -64,8 +71,12 @@ func id(r *http.Request) (int64, error) {
 func decodeBody(w http.ResponseWriter, r *http.Request, target any) error {
 	defer r.Body.Close()
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	if err := decoder.Decode(target); err != nil { return ErrInvalid }
+	if err := decoder.Decode(target); err != nil {
+		return ErrInvalid
+	}
 	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) { return ErrInvalid }
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return ErrInvalid
+	}
 	return nil
 }

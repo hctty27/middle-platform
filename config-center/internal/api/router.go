@@ -3,10 +3,10 @@ package api
 
 import (
 	"context"
-	"net/http"
-	"time"
 	"github.com/go-chi/chi/v5"
 	"hitall.com/middle-platform/config-center/internal/model"
+	"net/http"
+	"time"
 )
 
 // HTTP 接口使用统一的领域类型，保持既有 JSON 字段协议。
@@ -21,6 +21,7 @@ type Subscriber = model.Subscriber
 type CreateNodeRequest = model.CreateNodeRequest
 type UpdateNodeRequest = model.UpdateNodeRequest
 type CreateSubscriberRequest = model.CreateSubscriberRequest
+
 var ErrInvalid = model.ErrInvalid
 var ErrConflict = model.ErrConflict
 
@@ -64,7 +65,9 @@ func RouterWithWrites(reader Reader, writer Writer) http.Handler { return router
 func router(reader Reader, writer Writer) http.Handler {
 	h := &api{reader: reader, writer: writer}
 	r := chi.NewRouter()
-	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, map[string]string{"status": "UP"}) })
+	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "UP"})
+	})
 	r.Get("/health/ready", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()

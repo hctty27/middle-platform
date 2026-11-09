@@ -14,10 +14,19 @@ func (h *api) revision(w http.ResponseWriter, r *http.Request) {
 // changes 仅返回游标之后的事件；调用方应检测事件连续性并在缺失时回退全量快照。
 func (h *api) changes(w http.ResponseWriter, r *http.Request) {
 	after, err := param(r, "afterRevision", 0)
-	if err != nil { respond(w, nil, err); return }
+	if err != nil {
+		respond(w, nil, err)
+		return
+	}
 	limit, err := param(r, "limit", 200)
-	if err != nil { respond(w, nil, err); return }
-	if after < 0 || limit < 1 || limit > 500 { respond(w, nil, ErrInvalid); return }
+	if err != nil {
+		respond(w, nil, err)
+		return
+	}
+	if after < 0 || limit < 1 || limit > 500 {
+		respond(w, nil, ErrInvalid)
+		return
+	}
 	out, err := h.reader.Changes(r.Context(), after, int(limit))
 	respond(w, out, err)
 }

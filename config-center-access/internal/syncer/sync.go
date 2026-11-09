@@ -22,7 +22,7 @@ type Client interface {
 
 // Synchronizer 通过本地行锁和游标 CAS 协调同库多实例同步。
 type Synchronizer struct {
-	local *store.Replica
+	local  *store.Replica
 	remote Client
 }
 
@@ -36,57 +36,91 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 	// 多实例游标 CAS 冲突后重新读取权威版本，限制重试次数避免无限循环。
 	for retries := 0; retries < 8; retries++ {
 		state, err := s.local.ReadState(ctx)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		head, err := s.remote.Head(ctx)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		if head.Epoch == "" || head.Revision < 0 {
 			return fmt.Errorf("配置中心版本号不合法")
 		}
 		if state.Epoch == "" || state.Epoch != head.Epoch || state.Revision > head.Revision {
 			applied, err := s.snapshot(ctx, state)
-			if err != nil { return err }
-			if !applied { continue }
+			if err != nil {
+				return err
+			}
+			if !applied {
+				continue
+			}
 			// 快照下载期间可能产生新 revision，继续追到最新。
 			continue
 		}
-		if state.Revision == head.Revision { return nil }
+		if state.Revision == head.Revision {
+			return nil
+		}
 		events, err := s.remote.Changes(ctx, state.Revision)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		if !contiguous(state.Revision, events) {
 			applied, err := s.snapshot(ctx, state)
-			if err != nil { return err }
-			if !applied { continue }
+			if err != nil {
+				return err
+			}
+			if !applied {
+				continue
+			}
 			continue
 		}
 		ids := make([]int64, 0, len(events))
 		seen := make(map[int64]struct{}, len(events))
 		for _, event := range events {
-			if event.NodeID <= 0 { return fmt.Errorf("变更事件节点 ID 不合法") }
+			if event.NodeID <= 0 {
+				return fmt.Errorf("变更事件节点 ID 不合法")
+			}
 			if _, ok := seen[event.NodeID]; !ok {
 				ids = append(ids, event.NodeID)
 				seen[event.NodeID] = struct{}{}
 			}
 		}
 		nodes, err := s.remote.Batch(ctx, ids)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		latest := make(map[int64]remote.Node, len(nodes))
 		for _, n := range nodes {
-			if _, requested := seen[n.ID]; !requested { return fmt.Errorf("批量响应包含未请求的节点 %d", n.ID) }
-			if _, exists := latest[n.ID]; exists { return fmt.Errorf("批量响应包含重复节点 %d", n.ID) }
+			if _, requested := seen[n.ID]; !requested {
+				return fmt.Errorf("批量响应包含未请求的节点 %d", n.ID)
+			}
+			if _, exists := latest[n.ID]; exists {
+				return fmt.Errorf("批量响应包含重复节点 %d", n.ID)
+			}
 			latest[n.ID] = n
 		}
 		current, err := s.remote.Head(ctx)
-		if err != nil { return err }
-		if current.Epoch != head.Epoch { continue }
+		if err != nil {
+			return err
+		}
+		if current.Epoch != head.Epoch {
+			continue
+		}
 		deleted := make([]int64, 0)
 		for _, id := range ids {
-			if _, ok := latest[id]; !ok { deleted = append(deleted, id) }
+			if _, ok := latest[id]; !ok {
+				deleted = append(deleted, id)
+			}
 		}
 		applied, err := s.local.Apply(ctx, state, store.State{
 			Epoch: head.Epoch, Revision: events[len(events)-1].Revision,
 		}, nodes, deleted, false)
-		if err != nil { return err }
-		if !applied { continue }
+		if err != nil {
+			return err
+		}
+		if !applied {
+			continue
+		}
 		// 可能还有多页变更；继续直到追平 head。
 		retries = -1
 	}
@@ -96,7 +130,9 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 // snapshot 只从权威端的一致性接口构建完整副本。
 func (s *Synchronizer) snapshot(ctx context.Context, expected store.State) (bool, error) {
 	data, err := s.remote.Full(ctx)
-	if err != nil { return false, err }
+	if err != nil {
+		return false, err
+	}
 	if data.Epoch == "" || data.Revision < 0 || data.Nodes == nil {
 		return false, fmt.Errorf("配置快照不合法")
 	}
@@ -114,10 +150,14 @@ func (s *Synchronizer) snapshot(ctx context.Context, expected store.State) (bool
 
 // contiguous 验证事件版本连续，缺失事件时必须重新拉取完整快照。
 func contiguous(after int64, events []remote.Event) bool {
-	if len(events) == 0 || len(events) > 200 { return false }
+	if len(events) == 0 || len(events) > 200 {
+		return false
+	}
 	for _, event := range events {
 		after++
-		if event.Revision != after { return false }
+		if event.Revision != after {
+			return false
+		}
 	}
 	return true
 }
@@ -125,8 +165,8 @@ func contiguous(after int64, events []remote.Event) bool {
 // Trigger 合并高频回调；执行失败由下一次通知或周期校对补偿。
 // Trigger 将多次回调合并为同步信号，并保留周期性校对能力。
 type Trigger struct {
-	sync *Synchronizer
-	period time.Duration
+	sync    *Synchronizer
+	period  time.Duration
 	pending chan struct{}
 }
 

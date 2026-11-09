@@ -2,9 +2,9 @@ package store
 
 import (
 	"context"
-	"errors"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"hitall.com/middle-platform/config-center/internal/webhook"
+	"hitall.com/middle-platform/config-center/internal/model"
 	"hitall.com/middle-platform/config-center/internal/service"
+	"hitall.com/middle-platform/config-center/internal/webhook"
 	"hitall.com/middle-platform/shared/signature"
- "hitall.com/middle-platform/config-center/internal/model"
 )
 
 // TestWriteValidation 验证创建与更新请求的基础业务约束。
@@ -30,15 +30,19 @@ func TestWriteValidation(t *testing.T) {
 		{NodeType: "game", Code: "a", Name: "A", Status: &status, Config: "not-json"},
 		{NodeType: "game", Code: "", Name: "A", Status: &status, Config: "{}"},
 	} {
-		if service.ValidateCreate(n) == nil { t.Fatalf("should reject %+v", n) }
+		if service.ValidateCreate(n) == nil {
+			t.Fatalf("should reject %+v", n)
+		}
 	}
 	for _, raw := range []string{
 		"http://user:pass@localhost/callback",
-        "http://169.254.169.254/metadata",
-        "https://metadata.google.internal/metadata",
+		"http://169.254.169.254/metadata",
+		"https://metadata.google.internal/metadata",
 		"file:///etc/passwd",
 	} {
-		if webhook.ValidateCallback(raw) == nil { t.Fatalf("should reject callback %q", raw) }
+		if webhook.ValidateCallback(raw) == nil {
+			t.Fatalf("should reject callback %q", raw)
+		}
 	}
 }
 
@@ -67,116 +71,196 @@ func TestWebhookSignature(t *testing.T) {
 	err := d.Send(context.Background(), webhook.Delivery{
 		URL: server.URL + "/internal/config/callback", Secret: secret, Epoch: "test-epoch", Revision: 17,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestDatabaseWriteAndWebhookIntegration 覆盖节点写入、版本递增及回调投递的数据库集成流程。
 func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	raw := os.Getenv("TEST_CONFIG_DB_DSN")
-	if raw == "" { t.Skip("TEST_CONFIG_DB_DSN not set") }
+	if raw == "" {
+		t.Skip("TEST_CONFIG_DB_DSN not set")
+	}
 	dsn, err := mysql.ParseDSN(raw)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Absolutely never run destructive setup against an arbitrary database.
 	if dsn.DBName != "config_center_go_test" {
 		t.Fatalf("integration database must be config_center_go_test, got %q", dsn.DBName)
 	}
 	dsn.ParseTime, dsn.Loc = true, time.UTC
 	db, err := sql.Open("mysql", dsn.FormatDSN())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	for _, statement := range integrationSchema {
-		if _, err := db.ExecContext(ctx, statement); err != nil { t.Fatalf("%s: %v", statement, err) }
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
 	}
 	defer func() {
-		for _, name := range []string{"sdk_service_channel","sdk_service","sdk_channel_app","config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
-			if _, err := db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+name); err != nil { t.Log(err) }
+		for _, name := range []string{"sdk_service_channel", "sdk_service", "sdk_channel_app", "config_subscriber_delivery_state", "config_subscriber", "config_node_change_log", "config_node", "config_revision"} {
+			if _, err := db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+name); err != nil {
+				t.Log(err)
+			}
 		}
 	}()
 	store := &Store{DB: db}
 	enabled := 1
 	game, err := store.Create(ctx, CreateNodeRequest{NodeType: "game", MarketType: func() *string { v := "overseas"; return &v }(), Code: "g1", Name: "Game", Status: &enabled, Config: `{"x":1}`})
-	if err != nil { t.Fatal(err) }
-	if game.MarketType == nil || *game.MarketType != "overseas" { t.Fatalf("game market not persisted: %+v", game) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if game.MarketType == nil || *game.MarketType != "overseas" {
+		t.Fatalf("game market not persisted: %+v", game)
+	}
 	regionEnv := "test"
 	region, err := store.Create(ctx, CreateNodeRequest{ParentID: game.ID, NodeType: "region", EnvType: &regionEnv, Code: "r1", Name: "Region", Status: &enabled, Config: "{}"})
-	if err != nil { t.Fatal(err) }
-    if region.EnvType == nil || *region.EnvType != "test" { t.Fatalf("region env not persisted: %+v", region) }
-    filtered, err := store.Children(ctx, game.ID, 1, 20, "", "test")
-    if err != nil || len(filtered.Items) != 1 || filtered.Items[0].EnvType == nil { t.Fatalf("region env filter: %+v, %v", filtered, err) }
-    rejected := "prod"
-    _, err = store.Update(ctx, region.ID, UpdateNodeRequest{EnvType: &rejected, Name: region.Name, Status: &enabled, Config: "{}"})
-    if !errorsIs(err, ErrConflict) { t.Fatalf("changing categorized region type should conflict: %v", err) }
-    group, err := store.Create(ctx, CreateNodeRequest{ParentID: region.ID, NodeType: "server_group", Code: "s1", Name: "Group", Status: &enabled, Config: "{}"})
-	if err != nil { t.Fatal(err) }
-	app, err := store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "a1", Name: "App", Status: &enabled, Config: `{"x":1}`,TestServerGroupID:&group.ID})
-    if err != nil { t.Fatal(err) }
-    if app.TestServerGroupID==nil || *app.TestServerGroupID!=group.ID { t.Fatalf("binding not saved: %+v",app) }
-    // 每个渠道包独立启用已实现的事件上报功能。
-    if _,err=db.ExecContext(ctx,`INSERT INTO sdk_service (id,code,name,enabled)
-      VALUES (501,'event_report','事件上报',1)`);err!=nil {t.Fatal(err)}
-    if err=store.UpsertSDKChannelService(ctx,app.ID,501,"test",true,json.RawMessage("{}"));err!=nil {t.Fatal(err)}
-    services,err:=store.SDKChannelServices(ctx,app.ID,"test")
-    if err!=nil||len(services)!=1||services[0].Code!="event_report"||!services[0].EffectiveEnabled {
-        t.Fatalf("channel event binding: %+v %v",services,err)
-    }
-    if err=store.UpsertSDKChannelService(ctx,app.ID,501,"invalid",true,json.RawMessage("{}"));!errors.Is(err,ErrInvalid) {
-        t.Fatalf("invalid service environment accepted: %v",err)
-    }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if region.EnvType == nil || *region.EnvType != "test" {
+		t.Fatalf("region env not persisted: %+v", region)
+	}
+	filtered, err := store.Children(ctx, game.ID, 1, 20, "", "test")
+	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].EnvType == nil {
+		t.Fatalf("region env filter: %+v, %v", filtered, err)
+	}
+	rejected := "prod"
+	_, err = store.Update(ctx, region.ID, UpdateNodeRequest{EnvType: &rejected, Name: region.Name, Status: &enabled, Config: "{}"})
+	if !errorsIs(err, ErrConflict) {
+		t.Fatalf("changing categorized region type should conflict: %v", err)
+	}
+	group, err := store.Create(ctx, CreateNodeRequest{ParentID: region.ID, NodeType: "server_group", Code: "s1", Name: "Group", Status: &enabled, Config: "{}"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "a1", Name: "App", Status: &enabled, Config: `{"x":1}`, TestServerGroupID: &group.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.TestServerGroupID == nil || *app.TestServerGroupID != group.ID {
+		t.Fatalf("binding not saved: %+v", app)
+	}
+	// 每个渠道包独立启用已实现的事件上报功能。
+	if _, err = db.ExecContext(ctx, `INSERT INTO sdk_service (id,code,name,enabled)
+      VALUES (501,'event_report','事件上报',1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.UpsertSDKChannelService(ctx, app.ID, 501, "test", true, json.RawMessage("{}")); err != nil {
+		t.Fatal(err)
+	}
+	services, err := store.SDKChannelServices(ctx, app.ID, "test")
+	if err != nil || len(services) != 1 || services[0].Code != "event_report" || !services[0].EffectiveEnabled {
+		t.Fatalf("channel event binding: %+v %v", services, err)
+	}
+	if err = store.UpsertSDKChannelService(ctx, app.ID, 501, "invalid", true, json.RawMessage("{}")); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("invalid service environment accepted: %v", err)
+	}
 
-    if _,err=store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:app.Name,Status:&enabled,Config:app.Config,ProdServerGroupID:&group.ID,TestServerGroupID:&group.ID}); !errorsIs(err,ErrInvalid) { t.Fatalf("cross-environment binding accepted: %v",err) }
+	if _, err = store.UpdateChannelApp(ctx, app.ID, model.UpdateChannelAppRequest{Name: app.Name, Status: &enabled, Config: app.Config, ProdServerGroupID: &group.ID, TestServerGroupID: &group.ID}); !errorsIs(err, ErrInvalid) {
+		t.Fatalf("cross-environment binding accepted: %v", err)
+	}
 	// 渠道绑定存在时快照仍仅包含节点，不能暴露渠道应用配置。
 	boundSnapshot, err := store.Snapshot(ctx)
-	if err != nil || len(boundSnapshot.Nodes) != 3 || boundSnapshot.Revision != 3 { t.Fatalf("snapshot: %+v %v",boundSnapshot,err) }
+	if err != nil || len(boundSnapshot.Nodes) != 3 || boundSnapshot.Revision != 3 {
+		t.Fatalf("snapshot: %+v %v", boundSnapshot, err)
+	}
 	payload, err := json.Marshal(boundSnapshot)
-	if err != nil || strings.Contains(string(payload),"channelApps") || strings.Contains(string(payload),"bindings") {
-		t.Fatalf("channel data leaked into snapshot: %s %v",payload,err)
+	if err != nil || strings.Contains(string(payload), "channelApps") || strings.Contains(string(payload), "bindings") {
+		t.Fatalf("channel data leaked into snapshot: %s %v", payload, err)
 	}
 	if _, err := store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "a1", Name: "Duplicate", Status: &enabled, Config: "{}"}); !errorsIs(err, ErrConflict) {
-		t.Fatalf("expected duplicate app conflict, got %v",err)
+		t.Fatalf("expected duplicate app conflict, got %v", err)
 	}
 	initial, err := store.Revision(ctx)
-	if err != nil || initial.Revision != 3 { t.Fatalf("revision after 3 node creates: %+v %v",initial,err) }
-	_, err = store.Update(ctx,group.ID,UpdateNodeRequest{Name:group.Name,Status:&enabled,Config:"{ }"})
-	if err != nil { t.Fatal(err) }
+	if err != nil || initial.Revision != 3 {
+		t.Fatalf("revision after 3 node creates: %+v %v", initial, err)
+	}
+	_, err = store.Update(ctx, group.ID, UpdateNodeRequest{Name: group.Name, Status: &enabled, Config: "{ }"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	same, err := store.Revision(ctx)
-	if err != nil || same.Revision != initial.Revision { t.Fatalf("node no-op changed revision: %+v %v",same,err) }
-	_, err = store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:"Updated App",Status:&enabled,Config:`{"x":3}`,TestServerGroupID:&group.ID})
-	if err != nil { t.Fatal(err) }
+	if err != nil || same.Revision != initial.Revision {
+		t.Fatalf("node no-op changed revision: %+v %v", same, err)
+	}
+	_, err = store.UpdateChannelApp(ctx, app.ID, model.UpdateChannelAppRequest{Name: "Updated App", Status: &enabled, Config: `{"x":3}`, TestServerGroupID: &group.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
 	channelRevision, err := store.Revision(ctx)
-	if err != nil || channelRevision != initial { t.Fatalf("channel write changed cursor: %+v vs %+v (%v)",channelRevision,initial,err) }
-	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected child conflict: %v",err) }
-	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected bound group conflict: %v",err) }
-	if err := store.DeleteChannelApp(ctx,app.ID); !errorsIs(err, ErrConflict) { t.Fatalf("expected bound app conflict: %v",err) }
-	if _,err:=store.UpdateChannelApp(ctx,app.ID,model.UpdateChannelAppRequest{Name:"Updated App",Status:&enabled,Config:`{"x":3}`});err!=nil { t.Fatalf("clear environment binding: %v",err) }
-    if err := store.DeleteChannelApp(ctx,app.ID); err != nil { t.Fatalf("delete app: %v",err) }
-    var remainingBindings int
-    if err=db.QueryRowContext(ctx,"SELECT COUNT(*) FROM sdk_service_channel WHERE service_id=501").Scan(&remainingBindings);err!=nil {t.Fatal(err)}
-    if remainingBindings!=0 {t.Fatalf("deleted channel still bound: %d",remainingBindings)}
+	if err != nil || channelRevision != initial {
+		t.Fatalf("channel write changed cursor: %+v vs %+v (%v)", channelRevision, initial, err)
+	}
+	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected child conflict: %v", err)
+	}
+	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected bound group conflict: %v", err)
+	}
+	if err := store.DeleteChannelApp(ctx, app.ID); !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected bound app conflict: %v", err)
+	}
+	if _, err := store.UpdateChannelApp(ctx, app.ID, model.UpdateChannelAppRequest{Name: "Updated App", Status: &enabled, Config: `{"x":3}`}); err != nil {
+		t.Fatalf("clear environment binding: %v", err)
+	}
+	if err := store.DeleteChannelApp(ctx, app.ID); err != nil {
+		t.Fatalf("delete app: %v", err)
+	}
+	var remainingBindings int
+	if err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sdk_service_channel WHERE service_id=501").Scan(&remainingBindings); err != nil {
+		t.Fatal(err)
+	}
+	if remainingBindings != 0 {
+		t.Fatalf("deleted channel still bound: %d", remainingBindings)
+	}
 
 	finalRevision, err := store.Revision(ctx)
-	if err != nil || finalRevision != initial { t.Fatalf("channel delete changed cursor: %+v vs %+v (%v)",finalRevision,initial,err) }
+	if err != nil || finalRevision != initial {
+		t.Fatalf("channel delete changed cursor: %+v vs %+v (%v)", finalRevision, initial, err)
+	}
 	changeList, err := store.Changes(ctx, 0, 100)
-	if err != nil || len(changeList) != 3 { t.Fatalf("unexpected change log: count=%d err=%v",len(changeList),err) }
+	if err != nil || len(changeList) != 3 {
+		t.Fatalf("unexpected change log: count=%d err=%v", len(changeList), err)
+	}
 	snap, err := store.Snapshot(ctx)
 	if err != nil || snap.Revision != 3 || len(snap.Nodes) != 3 {
-		t.Fatalf("snapshot: %+v %v",snap,err)
+		t.Fatalf("snapshot: %+v %v", snap, err)
 	}
 	subscribers, err := store.Subscribers(ctx)
-	if err != nil || len(subscribers) != 0 { t.Fatalf("initial subscribers: %+v %v", subscribers, err) }
+	if err != nil || len(subscribers) != 0 {
+		t.Fatalf("initial subscribers: %+v %v", subscribers, err)
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusAccepted) }))
 	defer server.Close()
-	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL+"/internal/config/callback", Secret: "test-secret"}); err != nil { t.Fatal(err) }
+	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL + "/internal/config/callback", Secret: "test-secret"}); err != nil {
+		t.Fatal(err)
+	}
 	dispatcher := webhook.NewDispatcher(db)
 	job, err := dispatcher.Claim(ctx)
-	if err != nil || job == nil { t.Fatalf("claim: %+v %v", job, err) }
+	if err != nil || job == nil {
+		t.Fatalf("claim: %+v %v", job, err)
+	}
 	duplicate, err := dispatcher.Claim(ctx)
-	if err != nil || duplicate != nil { t.Fatalf("double claim: %+v %v", duplicate, err) }
-	if err := dispatcher.Send(ctx, *job); err != nil { t.Fatal(err) }
-	if err := dispatcher.Delivered(ctx, *job); err != nil { t.Fatal(err) }
+	if err != nil || duplicate != nil {
+		t.Fatalf("double claim: %+v %v", duplicate, err)
+	}
+	if err := dispatcher.Send(ctx, *job); err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatcher.Delivered(ctx, *job); err != nil {
+		t.Fatal(err)
+	}
 	duplicate, err = dispatcher.Claim(ctx)
-	if err != nil || duplicate != nil { t.Fatalf("acknowledged claim: %+v %v", duplicate, err) }
+	if err != nil || duplicate != nil {
+		t.Fatalf("acknowledged claim: %+v %v", duplicate, err)
+	}
 	subscribers, err = store.Subscribers(ctx)
 	if err != nil || len(subscribers) != 1 || subscribers[0].AcknowledgedRevision != 3 {
 		t.Fatalf("acknowledgment: %+v %v", subscribers, err)
@@ -202,22 +286,29 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	lateDelivered := false
 	for time.Now().Before(deadline) {
 		current, readErr := store.Subscribers(ctx)
-		if readErr != nil { t.Fatal(readErr) }
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
 		for _, sub := range current {
 			if sub.Code == "access-late" && sub.AcknowledgedRevision == initial.Revision {
 				lateDelivered = true
 				break
 			}
 		}
-		if lateDelivered { break }
+		if lateDelivered {
+			break
+		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	stopWorker()
 	select {
 	case <-workerDone:
-	case <-time.After(2 * time.Second): t.Fatal("webhook worker did not shut down")
+	case <-time.After(2 * time.Second):
+		t.Fatal("webhook worker did not shut down")
 	}
-	if !lateDelivered { t.Fatal("subscriber added after worker start was never delivered") }
+	if !lateDelivered {
+		t.Fatal("subscriber added after worker start was never delivered")
+	}
 	// 不让这个额外订阅者影响下面已有的多实例领取测试。
 	if _, err := db.ExecContext(ctx, "UPDATE config_subscriber SET enabled=0 WHERE code='access-late'"); err != nil {
 		t.Fatal(err)
@@ -239,16 +330,27 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	}
 	wg.Wait()
 	close(errs)
-	for err := range errs { if err != nil { t.Fatal(err) } }
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	all, err := store.Changes(ctx, 0, 100)
-	if err != nil || len(all) != 15 { t.Fatalf("concurrent change log count = %d, err = %v", len(all), err) }
+	if err != nil || len(all) != 15 {
+		t.Fatalf("concurrent change log count = %d, err = %v", len(all), err)
+	}
 	for i, event := range all {
-		if event.Revision != int64(i+1) { t.Fatalf("revision gap at %d: %d", i, event.Revision) }
+		if event.Revision != int64(i+1) {
+			t.Fatalf("revision gap at %d: %d", i, event.Revision)
+		}
 	}
 
 	// Two Go instances must never claim the same pending subscriber concurrently.
 	first, second := webhook.NewDispatcher(db), webhook.NewDispatcher(db)
-	type claimResult struct { job *webhook.Delivery; err error }
+	type claimResult struct {
+		job *webhook.Delivery
+		err error
+	}
 	claims := make(chan claimResult, 2)
 	var claimWG sync.WaitGroup
 	for _, d := range []*webhook.Dispatcher{first, second} {
@@ -263,20 +365,30 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	close(claims)
 	successful := 0
 	for result := range claims {
-		if result.err != nil { t.Fatal(result.err) }
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
 		if result.job != nil {
 			successful++
-			if err := first.Delivered(ctx, *result.job); err != nil { t.Fatal(err) }
+			if err := first.Delivered(ctx, *result.job); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
-	if successful != 1 { t.Fatalf("expected exactly one lease holder, got %d", successful) }
-    // 渠道 Code 在不同游戏之间也不得重复，由数据库唯一索引兜底。
-    otherGame,err:=store.Create(ctx,CreateNodeRequest{NodeType:"game",Code:"g2",Name:"Other Game",Status:&enabled,Config:"{}"})
-    if err!=nil { t.Fatal(err) }
-    if _,err=store.CreateChannelApp(ctx,model.CreateChannelAppRequest{GameID:game.ID,Code:"cross-game-unique",Name:"App",Status:&enabled,Config:"{}"});err!=nil { t.Fatal(err) }
-    if _,err=store.CreateChannelApp(ctx,model.CreateChannelAppRequest{GameID:otherGame.ID,Code:"cross-game-unique",Name:"Duplicate",Status:&enabled,Config:"{}"});!errorsIs(err,ErrConflict) {
-        t.Fatalf("expected global channel code conflict, got %v",err)
-    }
+	if successful != 1 {
+		t.Fatalf("expected exactly one lease holder, got %d", successful)
+	}
+	// 渠道 Code 在不同游戏之间也不得重复，由数据库唯一索引兜底。
+	otherGame, err := store.Create(ctx, CreateNodeRequest{NodeType: "game", Code: "g2", Name: "Other Game", Status: &enabled, Config: "{}"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: game.ID, Code: "cross-game-unique", Name: "App", Status: &enabled, Config: "{}"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.CreateChannelApp(ctx, model.CreateChannelAppRequest{GameID: otherGame.ID, Code: "cross-game-unique", Name: "Duplicate", Status: &enabled, Config: "{}"}); !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected global channel code conflict, got %v", err)
+	}
 }
 
 func errorsIs(err, target error) bool {
@@ -287,8 +399,8 @@ var integrationSchema = []string{
 	`DROP TABLE IF EXISTS sdk_service_channel`,
 	`DROP TABLE IF EXISTS sdk_service`,
 	`DROP TABLE IF EXISTS sdk_channel_app_binding`,
- `DROP TABLE IF EXISTS sdk_channel_app`,
- `DROP TABLE IF EXISTS config_subscriber_delivery_state`,
+	`DROP TABLE IF EXISTS sdk_channel_app`,
+	`DROP TABLE IF EXISTS config_subscriber_delivery_state`,
 	`DROP TABLE IF EXISTS config_subscriber`,
 	`DROP TABLE IF EXISTS config_node_change_log`,
 	`DROP TABLE IF EXISTS config_node`,
@@ -322,7 +434,7 @@ var integrationSchema = []string{
 		UNIQUE KEY uq_config_node_sibling(node_type,code,((COALESCE(region_id,game_id,0)))),
 		KEY idx_config_node_game_type(game_id,node_type),KEY idx_config_node_region_type(region_id,node_type)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
-    `CREATE TABLE sdk_service (
+	`CREATE TABLE sdk_service (
         id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         code VARCHAR(64) COLLATE utf8mb4_bin NOT NULL UNIQUE,
         name VARCHAR(100) NOT NULL,
@@ -332,7 +444,7 @@ var integrationSchema = []string{
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         CONSTRAINT chk_sdk_service_enabled CHECK(enabled IN (0,1))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-    `CREATE TABLE sdk_service_channel (
+	`CREATE TABLE sdk_service_channel (
         id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         service_id BIGINT NOT NULL,
         channel_app_id BIGINT NOT NULL,

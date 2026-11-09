@@ -19,18 +19,18 @@ const maxResponseBytes = 64 << 20
 
 // Node 保留远程节点的 JSON 字段及日期格式。
 type Node struct {
-	ID            int64   `json:"id"`
-	NodeType      string  `json:"nodeType"`
-	EnvType       *string `json:"envType"`
-	GameID        *int64  `json:"gameId"`
-	RegionID      *int64  `json:"regionId"`
-	Code          string  `json:"code"`
-	Name          string  `json:"name"`
-	Status        int     `json:"status"`
-	Config        string  `json:"config"`
-	Remark        *string `json:"remark"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	ID        int64   `json:"id"`
+	NodeType  string  `json:"nodeType"`
+	EnvType   *string `json:"envType"`
+	GameID    *int64  `json:"gameId"`
+	RegionID  *int64  `json:"regionId"`
+	Code      string  `json:"code"`
+	Name      string  `json:"name"`
+	Status    int     `json:"status"`
+	Config    string  `json:"config"`
+	Remark    *string `json:"remark"`
+	CreatedAt string  `json:"createdAt"`
+	UpdatedAt string  `json:"updatedAt"`
 }
 
 // Revision 唯一标识权威数据集及其单调递增版本。
@@ -41,8 +41,8 @@ type Revision struct {
 
 // Event 只携带变更版本和节点 ID；节点最终状态需要重新获取。
 type Event struct {
-	Revision int64  `json:"revision"`
-	NodeID   int64  `json:"nodeId"`
+	Revision  int64  `json:"revision"`
+	NodeID    int64  `json:"nodeId"`
 	Operation string `json:"operation"`
 }
 
@@ -66,8 +66,8 @@ func New(base string, connectTimeout, requestTimeout time.Duration) *Client {
 		http: &http.Client{
 			Timeout: requestTimeout,
 			Transport: &http.Transport{
-				DialContext: (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext,
-				MaxIdleConns: 16,
+				DialContext:     (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext,
+				MaxIdleConns:    16,
 				IdleConnTimeout: 60 * time.Second,
 			},
 			CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -127,7 +127,9 @@ func (c *Client) Changes(ctx context.Context, after int64) ([]Event, error) {
 
 // Batch 获取指定 ID 的最新节点，已删除的 ID 不会出现在结果里。
 func (c *Client) Batch(ctx context.Context, ids []int64) ([]Node, error) {
-	body, err := json.Marshal(struct { IDs []int64 `json:"ids"` }{ids})
+	body, err := json.Marshal(struct {
+		IDs []int64 `json:"ids"`
+	}{ids})
 	if err != nil {
 		return nil, err
 	}

@@ -37,7 +37,10 @@ func Default() Config {
 
 // ApplyEnv 保证 LOG_* 环境变量可以覆盖 YAML，并拒绝错误的布尔值。
 func (c *Config) ApplyEnv() error {
-	for _, item := range []struct{ key string; dest *string }{
+	for _, item := range []struct {
+		key  string
+		dest *string
+	}{
 		{"LOG_LEVEL", &c.Level},
 		{"LOG_FORMAT", &c.Format},
 		{"LOG_OUTPUT", &c.Output},

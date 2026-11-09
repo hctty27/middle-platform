@@ -9,6 +9,7 @@ import (
 
 // ErrInvalid 标识无效的请求参数。
 var ErrInvalid = errors.New("请求参数不合法")
+
 // ErrConflict 标识重复配置或违反数据库约束。
 var ErrConflict = errors.New("配置冲突")
 
@@ -22,23 +23,23 @@ func (t LocalDateTime) MarshalJSON() ([]byte, error) {
 
 // Node 定义完整配置节点及层级字段。
 type Node struct {
-	ID            int64         `json:"id"`
-	NodeType      string        `json:"nodeType"`
+	ID       int64  `json:"id"`
+	NodeType string `json:"nodeType"`
 	// EnvType 仅大区节点使用：test 测试、review 提审、prod 正式。
-	EnvType       *string       `json:"envType"`
+	EnvType *string `json:"envType"`
 	// MarketType 仅游戏节点使用：domestic 国内、overseas 海外。
-	MarketType    *string       `json:"marketType"`
-	GameID        *int64        `json:"gameId"`
-	RegionID      *int64        `json:"regionId"`
-	Code          string        `json:"code"`
-	Name          string        `json:"name"`
-	Status        int           `json:"status"`
-	Config        string        `json:"config"`
-	Remark        *string       `json:"remark"`
-	CreatedAt     LocalDateTime `json:"createdAt"`
-	UpdatedAt     LocalDateTime `json:"updatedAt"`
+	MarketType *string       `json:"marketType"`
+	GameID     *int64        `json:"gameId"`
+	RegionID   *int64        `json:"regionId"`
+	Code       string        `json:"code"`
+	Name       string        `json:"name"`
+	Status     int           `json:"status"`
+	Config     string        `json:"config"`
+	Remark     *string       `json:"remark"`
+	CreatedAt  LocalDateTime `json:"createdAt"`
+	UpdatedAt  LocalDateTime `json:"updatedAt"`
 	// ParentID 是基于祖先 ID 推导出的接口字段，不单独作为数据库关系列维护。
-	ParentID      int64         `json:"parentId"`
+	ParentID int64 `json:"parentId"`
 }
 
 // Parent 根据节点类型返回直接父节点 ID，游戏节点返回 0。
@@ -63,16 +64,16 @@ func value(id *int64) int64 {
 
 // NodeSummary 定义轻量配置树节点。
 type NodeSummary struct {
-	ID       int64  `json:"id"`
-	ParentID int64  `json:"parentId"`
-	NodeType string `json:"nodeType"`
-	EnvType  *string `json:"envType"`
+	ID         int64   `json:"id"`
+	ParentID   int64   `json:"parentId"`
+	NodeType   string  `json:"nodeType"`
+	EnvType    *string `json:"envType"`
 	MarketType *string `json:"marketType"`
-	Code     string `json:"code"`
-	Name     string `json:"name"`
-	Status   int    `json:"status"`
+	Code       string  `json:"code"`
+	Name       string  `json:"name"`
+	Status     int     `json:"status"`
 	// Leaf 服务于管理端懒加载目录，不代表配置数据库中一定不存在更低层级。
-	Leaf     bool   `json:"leaf"`
+	Leaf bool `json:"leaf"`
 }
 
 // Summary 将节点转换为树列表摘要。

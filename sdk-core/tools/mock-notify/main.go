@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"io"
 	"log"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"encoding/json"
 )
 
 type responseMode string

@@ -2,104 +2,137 @@
 package settings
 
 import (
- "fmt"
- "net/url"
- "os"
- "strconv"
- "strings"
- "time"
+	"fmt"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 
- "hitall.com/middle-platform/shared/bootstrap"
- "hitall.com/middle-platform/shared/logging"
+	"hitall.com/middle-platform/shared/bootstrap"
+	"hitall.com/middle-platform/shared/logging"
 )
 
 // Config 保存接入服务运行参数。
 type Config struct {
- Address string
- DSN string
- CenterURL string
- WebhookSecret string
- ConnectTimeout time.Duration
- RequestTimeout time.Duration
- ReconcileInterval time.Duration
- Log logging.Config
+	Address           string
+	DSN               string
+	CenterURL         string
+	WebhookSecret     string
+	ConnectTimeout    time.Duration
+	RequestTimeout    time.Duration
+	ReconcileInterval time.Duration
+	Log               logging.Config
 }
 
 type configFile struct {
- Server struct { Address string `yaml:"address"` } `yaml:"server"`
- Database struct { DSN string `yaml:"dsn"` } `yaml:"database"`
- ConfigCenter struct { URL string `yaml:"url"` } `yaml:"configCenter"`
- Webhook struct { Secret string `yaml:"secret"` } `yaml:"webhook"`
- Sync struct {
-  ConnectTimeout string `yaml:"connectTimeout"`
-  RequestTimeout string `yaml:"requestTimeout"`
-  ReconcileInterval string `yaml:"reconcileInterval"`
- } `yaml:"sync"`
- Log logging.Config `yaml:"log"`
+	Server struct {
+		Address string `yaml:"address"`
+	} `yaml:"server"`
+	Database struct {
+		DSN string `yaml:"dsn"`
+	} `yaml:"database"`
+	ConfigCenter struct {
+		URL string `yaml:"url"`
+	} `yaml:"configCenter"`
+	Webhook struct {
+		Secret string `yaml:"secret"`
+	} `yaml:"webhook"`
+	Sync struct {
+		ConnectTimeout    string `yaml:"connectTimeout"`
+		RequestTimeout    string `yaml:"requestTimeout"`
+		ReconcileInterval string `yaml:"reconcileInterval"`
+	} `yaml:"sync"`
+	Log logging.Config `yaml:"log"`
 }
 
 // Load 使用默认 YAML 文件启动。
-func Load() (Config,error) { return LoadFile("") }
+func Load() (Config, error) { return LoadFile("") }
 
 // LoadFile 只读取指定 YAML（空路径使用 configs/config.yaml），再应用环境变量覆盖。
-func LoadFile(path string) (Config,error) {
- data:=configFile{Log:logging.Default()}
- if path=="" { path="configs/config.yaml" }
- if err:=bootstrap.ReadYAML(path,&data);err!=nil{return Config{},err}
+func LoadFile(path string) (Config, error) {
+	data := configFile{Log: logging.Default()}
+	if path == "" {
+		path = "configs/config.yaml"
+	}
+	if err := bootstrap.ReadYAML(path, &data); err != nil {
+		return Config{}, err
+	}
 
- cfg:=Config{
-  Address:":8081",
-  DSN:data.Database.DSN,
-  CenterURL:"http://127.0.0.1:8080",
-  WebhookSecret:data.Webhook.Secret,
-  ConnectTimeout:2*time.Second,
-  RequestTimeout:15*time.Second,
-  ReconcileInterval:5*time.Minute,
-  Log:data.Log,
- }
- if data.Server.Address!="" {cfg.Address=data.Server.Address}
- if data.ConfigCenter.URL!="" {cfg.CenterURL=data.ConfigCenter.URL}
- for _,item:=range []struct{name,value string; target *time.Duration; min,max time.Duration}{
-  {"sync.connectTimeout",data.Sync.ConnectTimeout,&cfg.ConnectTimeout,time.Millisecond,120*time.Second},
-  {"sync.requestTimeout",data.Sync.RequestTimeout,&cfg.RequestTimeout,time.Millisecond,120*time.Second},
-  {"sync.reconcileInterval",data.Sync.ReconcileInterval,&cfg.ReconcileInterval,time.Second,0},
- } {
-  if item.value=="" {continue}
-  parsed,err:=time.ParseDuration(item.value)
-  if err!=nil || parsed<item.min || (item.max>0 && parsed>item.max) {
-   return Config{},fmt.Errorf("%s 时间配置不合法: %q",item.name,item.value)
-  }
-  *item.target=parsed
- }
- // 环境变量可以覆盖 YAML 的数据库和连接参数。
- bootstrap.OverrideString("CONFIG_ACCESS_ADDR",&cfg.Address)
- bootstrap.OverrideString("ACCESS_DB_DSN",&cfg.DSN)
- bootstrap.OverrideString("CONFIG_CENTER_URL",&cfg.CenterURL)
- bootstrap.OverrideString("CONFIG_WEBHOOK_SECRET",&cfg.WebhookSecret)
- for _,item:=range []struct{name string; target *time.Duration}{
-  {"CONFIG_CLIENT_CONNECT_TIMEOUT_MS",&cfg.ConnectTimeout},
-  {"CONFIG_CLIENT_READ_TIMEOUT_MS",&cfg.RequestTimeout},
- } {
-  if raw,ok:=os.LookupEnv(item.name);ok {
-   ms,err:=strconv.Atoi(raw)
-   if err!=nil || ms<1 || ms>120000 {return Config{},fmt.Errorf("%s 必须是 1 到 120000 毫秒",item.name)}
-   *item.target=time.Duration(ms)*time.Millisecond
-  }
- }
- if raw,ok:=os.LookupEnv("CONFIG_RECONCILE_INTERVAL");ok {
-  duration,err:=time.ParseDuration(raw)
-  if err!=nil || duration<time.Second {return Config{},fmt.Errorf("CONFIG_RECONCILE_INTERVAL 必须是大于等于 1s 的时长")}
-  cfg.ReconcileInterval=duration
- }
- if err:=cfg.Log.ApplyEnv();err!=nil{return Config{},err}
- cfg.CenterURL=strings.TrimRight(cfg.CenterURL,"/")
- if strings.TrimSpace(cfg.DSN)=="" {return Config{},fmt.Errorf("必须配置 database.dsn 或 ACCESS_DB_DSN")}
- if strings.TrimSpace(cfg.WebhookSecret)=="" || cfg.WebhookSecret=="change-me-in-development" {
-  return Config{},fmt.Errorf("必须配置 webhook.secret 或 CONFIG_WEBHOOK_SECRET")
- }
- parsed,err:=url.Parse(cfg.CenterURL)
- if err!=nil || parsed.Host=="" || (parsed.Scheme!="http" && parsed.Scheme!="https") || parsed.User!=nil || parsed.RawQuery!="" || parsed.Fragment!="" || parsed.Path!="" {
-  return Config{},fmt.Errorf("configCenter.url 必须是没有路径的 HTTP(S) 地址")
- }
- return cfg,nil
+	cfg := Config{
+		Address:           ":8081",
+		DSN:               data.Database.DSN,
+		CenterURL:         "http://127.0.0.1:8080",
+		WebhookSecret:     data.Webhook.Secret,
+		ConnectTimeout:    2 * time.Second,
+		RequestTimeout:    15 * time.Second,
+		ReconcileInterval: 5 * time.Minute,
+		Log:               data.Log,
+	}
+	if data.Server.Address != "" {
+		cfg.Address = data.Server.Address
+	}
+	if data.ConfigCenter.URL != "" {
+		cfg.CenterURL = data.ConfigCenter.URL
+	}
+	for _, item := range []struct {
+		name, value string
+		target      *time.Duration
+		min, max    time.Duration
+	}{
+		{"sync.connectTimeout", data.Sync.ConnectTimeout, &cfg.ConnectTimeout, time.Millisecond, 120 * time.Second},
+		{"sync.requestTimeout", data.Sync.RequestTimeout, &cfg.RequestTimeout, time.Millisecond, 120 * time.Second},
+		{"sync.reconcileInterval", data.Sync.ReconcileInterval, &cfg.ReconcileInterval, time.Second, 0},
+	} {
+		if item.value == "" {
+			continue
+		}
+		parsed, err := time.ParseDuration(item.value)
+		if err != nil || parsed < item.min || (item.max > 0 && parsed > item.max) {
+			return Config{}, fmt.Errorf("%s 时间配置不合法: %q", item.name, item.value)
+		}
+		*item.target = parsed
+	}
+	// 环境变量可以覆盖 YAML 的数据库和连接参数。
+	bootstrap.OverrideString("CONFIG_ACCESS_ADDR", &cfg.Address)
+	bootstrap.OverrideString("ACCESS_DB_DSN", &cfg.DSN)
+	bootstrap.OverrideString("CONFIG_CENTER_URL", &cfg.CenterURL)
+	bootstrap.OverrideString("CONFIG_WEBHOOK_SECRET", &cfg.WebhookSecret)
+	for _, item := range []struct {
+		name   string
+		target *time.Duration
+	}{
+		{"CONFIG_CLIENT_CONNECT_TIMEOUT_MS", &cfg.ConnectTimeout},
+		{"CONFIG_CLIENT_READ_TIMEOUT_MS", &cfg.RequestTimeout},
+	} {
+		if raw, ok := os.LookupEnv(item.name); ok {
+			ms, err := strconv.Atoi(raw)
+			if err != nil || ms < 1 || ms > 120000 {
+				return Config{}, fmt.Errorf("%s 必须是 1 到 120000 毫秒", item.name)
+			}
+			*item.target = time.Duration(ms) * time.Millisecond
+		}
+	}
+	if raw, ok := os.LookupEnv("CONFIG_RECONCILE_INTERVAL"); ok {
+		duration, err := time.ParseDuration(raw)
+		if err != nil || duration < time.Second {
+			return Config{}, fmt.Errorf("CONFIG_RECONCILE_INTERVAL 必须是大于等于 1s 的时长")
+		}
+		cfg.ReconcileInterval = duration
+	}
+	if err := cfg.Log.ApplyEnv(); err != nil {
+		return Config{}, err
+	}
+	cfg.CenterURL = strings.TrimRight(cfg.CenterURL, "/")
+	if strings.TrimSpace(cfg.DSN) == "" {
+		return Config{}, fmt.Errorf("必须配置 database.dsn 或 ACCESS_DB_DSN")
+	}
+	if strings.TrimSpace(cfg.WebhookSecret) == "" || cfg.WebhookSecret == "change-me-in-development" {
+		return Config{}, fmt.Errorf("必须配置 webhook.secret 或 CONFIG_WEBHOOK_SECRET")
+	}
+	parsed, err := url.Parse(cfg.CenterURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" {
+		return Config{}, fmt.Errorf("configCenter.url 必须是没有路径的 HTTP(S) 地址")
+	}
+	return cfg, nil
 }

@@ -12,19 +12,19 @@ import (
 )
 
 type fakeOrderRoutes struct {
-	verifiedEnv, verifiedAppID string
+	verifiedEnv, verifiedAppID     string
 	registeredEnv, registeredAppID string
-	registeredOrder model.RegisterOrder
-	callbackAppID string
-	callback model.PaymentCallback
+	registeredOrder                model.RegisterOrder
+	callbackAppID                  string
+	callback                       model.PaymentCallback
 }
 
 func (f *fakeOrderRoutes) VerifyRegistration(_ *http.Request, _ []byte, env, appID string) (service.VerifiedRegistration, error) {
 	f.verifiedEnv, f.verifiedAppID = env, appID
 	return service.VerifiedRegistration{
 		AppID: appID,
-		Env: env,
-		App: model.ChannelApp{Code: appID, GameID: 1},
+		Env:   env,
+		App:   model.ChannelApp{Code: appID, GameID: 1},
 	}, nil
 }
 
@@ -79,7 +79,7 @@ func TestBusinessRoutesUseTrailingParameters(t *testing.T) {
 
 func TestOldBusinessRoutesReturnNotFound(t *testing.T) {
 	router := Router(&fakeFetcher{}, fakePinger{}, &fakeOrderRoutes{})
-	for _, tc := range []struct { method, path string }{
+	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/api/core/test/110006"},
 		{http.MethodPost, "/api/core/test/110006/orders"},
 		{http.MethodPost, "/api/core/110006/pay/notify"},

@@ -2,42 +2,50 @@
 package schema
 
 import (
- "context"
- "database/sql"
- "errors"
- "fmt"
- "strings"
- "time"
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
 
- "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 )
 
 // Validate 校验权威库所需的表、字段、索引及约束，不依赖旧迁移版本记录。
 func Validate(ctx context.Context, dsn string) error {
- cfg,err:=mysql.ParseDSN(dsn)
- if err!=nil{return err}
- if cfg.DBName=="" {return errors.New("必须配置数据库名称")}
- cfg.ParseTime=true
- cfg.Loc=time.UTC
- cfg.Timeout=5*time.Second
- cfg.ReadTimeout=10*time.Second
- db,err:=sql.Open("mysql",cfg.FormatDSN())
- if err!=nil{return err}
- defer db.Close()
- conn,err:=db.Conn(ctx)
- if err!=nil{return err}
- defer conn.Close()
- if err=validateSchema(ctx,conn);err!=nil{
-    return fmt.Errorf("数据库结构不符合要求: %w；请手动执行 config-center/db/sql 中已审核的 SQL",err)
- }
- return nil
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return err
+	}
+	if cfg.DBName == "" {
+		return errors.New("必须配置数据库名称")
+	}
+	cfg.ParseTime = true
+	cfg.Loc = time.UTC
+	cfg.Timeout = 5 * time.Second
+	cfg.ReadTimeout = 10 * time.Second
+	db, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err = validateSchema(ctx, conn); err != nil {
+		return fmt.Errorf("数据库结构不符合要求: %w；请手动执行 config-center/db/sql 中已审核的 SQL", err)
+	}
+	return nil
 }
 
-func hasTable(ctx context.Context, conn *sql.Conn, name string)(bool,error){
- var n int
- err:=conn.QueryRowContext(ctx,
- "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?",name).Scan(&n)
- return n==1,err
+func hasTable(ctx context.Context, conn *sql.Conn, name string) (bool, error) {
+	var n int
+	err := conn.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", name).Scan(&n)
+	return n == 1, err
 }
 
 func validateSchema(ctx context.Context, conn *sql.Conn) error {
@@ -61,7 +69,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 			return err
 		}
 	}
-    for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state", "sdk_service_binding"} {
+	for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state", "sdk_service_binding"} {
 		exists, err := hasTable(ctx, conn, obsolete)
 		if err != nil {
 			return err
@@ -89,7 +97,10 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		return errors.New("大区环境 CHECK 约束已过时")
 	}
 	{
-		for _, index := range []struct { name, column string; position int }{
+		for _, index := range []struct {
+			name, column string
+			position     int
+		}{
 			{"uk_app_game_order", "appid", 1},
 			{"uk_app_game_order", "game_order_id", 2},
 			{"uk_platform_order", "platform_order_no", 1},
@@ -98,9 +109,13 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 			err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
 				WHERE table_schema=DATABASE() AND table_name='game_order'
 				AND index_name=? AND column_name=? AND seq_in_index=? AND non_unique=0`,
-				index.name,index.column,index.position).Scan(&count)
-			if err != nil { return err }
-			if count != 1 { return fmt.Errorf("game_order 唯一索引 %s 缺少字段 %s",index.name,index.column) }
+				index.name, index.column, index.position).Scan(&count)
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				return fmt.Errorf("game_order 唯一索引 %s 缺少字段 %s", index.name, index.column)
+			}
 		}
 	}
 	return nil

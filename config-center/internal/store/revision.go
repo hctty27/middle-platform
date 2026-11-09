@@ -50,12 +50,20 @@ func (s *Store) Changes(ctx context.Context, after int64, limit int) ([]ChangeEv
 func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 	// 快照中的 epoch、revision 和节点列表必须来自同一事务视图。
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
-	if err != nil { return Snapshot{}, err }
+	if err != nil {
+		return Snapshot{}, err
+	}
 	defer tx.Rollback()
 	v, err := revision(ctx, tx)
-	if err != nil { return Snapshot{}, err }
+	if err != nil {
+		return Snapshot{}, err
+	}
 	found, err := nodes(ctx, tx, "SELECT "+nodeColumns+" FROM config_node ORDER BY id")
-	if err != nil { return Snapshot{}, err }
-	if err := tx.Commit(); err != nil { return Snapshot{}, err }
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Snapshot{}, err
+	}
 	return Snapshot{Epoch: v.Epoch, Revision: v.Revision, Nodes: found}, nil
 }

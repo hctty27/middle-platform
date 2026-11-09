@@ -2,18 +2,18 @@
 package main
 
 import (
-	"log/slog"
-    "flag"
-	"os"
+	"flag"
 	"hitall.com/middle-platform/config-center/internal/app"
+	"log/slog"
+	"os"
 )
 
 // main 仅负责启动进程，服务生命周期交由 app 管理。
 func main() {
-    configPath := flag.String("config", "configs/config.yaml", "YAML 配置文件")
-    flag.Parse()
-    if err := app.Run(*configPath); err != nil {
-        slog.Error("配置中心启动或运行失败", "error", err)
-        os.Exit(1)
-    }
+	configPath := flag.String("config", "configs/config.yaml", "YAML 配置文件")
+	flag.Parse()
+	if err := app.Run(*configPath); err != nil {
+		slog.Error("配置中心启动或运行失败", "error", err)
+		os.Exit(1)
+	}
 }

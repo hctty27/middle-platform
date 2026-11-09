@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strings"
 	"fmt"
+	"strings"
 	"time"
 
 	"hitall.com/middle-platform/config-center-access/internal/remote"
@@ -21,14 +21,14 @@ type State struct {
 
 // NodeView 仅展示接入服务本地副本的非敏感索引字段。
 type NodeView struct {
-	ID            int64  `json:"id"`
-	GameID        *int64 `json:"game_id"`
-	RegionID      *int64 `json:"region_id"`
-	NodeType      string `json:"node_type"`
-	EnvType       *string `json:"env_type"`
-	Code          string `json:"code"`
-	Name          string `json:"name"`
-	Status        int    `json:"status"`
+	ID       int64   `json:"id"`
+	GameID   *int64  `json:"game_id"`
+	RegionID *int64  `json:"region_id"`
+	NodeType string  `json:"node_type"`
+	EnvType  *string `json:"env_type"`
+	Code     string  `json:"code"`
+	Name     string  `json:"name"`
+	Status   int     `json:"status"`
 }
 
 // Replica 使用独立数据库，不直接修改权威配置中心。
@@ -39,14 +39,18 @@ func New(db *sql.DB) *Replica { return &Replica{DB: db} }
 
 // VerifySchema 只读检查人工创建的副本库，空库或旧结构均明确拒绝启动。
 func (s *Replica) VerifySchema(ctx context.Context) error {
-    var nodeCount,stateCount int
-    if err:=s.DB.QueryRowContext(ctx,
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='config_node'").Scan(&nodeCount);err!=nil{return err}
-    if err:=s.DB.QueryRowContext(ctx,
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='config_sync_state'").Scan(&stateCount);err!=nil{return err}
-    if nodeCount!=1||stateCount!=1 {
-        return errors.New("本地配置副本缺少表结构；请在空的 config_access 数据库手动执行 config-center-access/db/sql/initialize.sql")
-    }
+	var nodeCount, stateCount int
+	if err := s.DB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='config_node'").Scan(&nodeCount); err != nil {
+		return err
+	}
+	if err := s.DB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='config_sync_state'").Scan(&stateCount); err != nil {
+		return err
+	}
+	if nodeCount != 1 || stateCount != 1 {
+		return errors.New("本地配置副本缺少表结构；请在空的 config_access 数据库手动执行 config-center-access/db/sql/initialize.sql")
+	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,env_type,node_type,
 		code,name,status,config,remark,created_at,updated_at FROM config_node LIMIT 0`)
 	if err != nil {
@@ -152,9 +156,13 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 	}
 	for _, node := range nodes {
 		created, err := parseDate(node.CreatedAt)
-		if err != nil { return false, err }
+		if err != nil {
+			return false, err
+		}
 		updated, err := parseDate(node.UpdatedAt)
-		if err != nil { return false, err }
+		if err != nil {
+			return false, err
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO config_node
 			(id,game_id,region_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
@@ -164,19 +172,29 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 			code=VALUES(code),name=VALUES(name),status=VALUES(status),
 			config=VALUES(config),remark=VALUES(remark),
 			created_at=VALUES(created_at),updated_at=VALUES(updated_at)`,
-			node.ID,node.GameID,node.RegionID,node.NodeType,node.EnvType,node.Code,
-			node.Name,node.Status,node.Config,node.Remark,created,updated)
-		if err != nil { return false, fmt.Errorf("保存节点 %d 失败: %w", node.ID, err) }
+			node.ID, node.GameID, node.RegionID, node.NodeType, node.EnvType, node.Code,
+			node.Name, node.Status, node.Config, node.Remark, created, updated)
+		if err != nil {
+			return false, fmt.Errorf("保存节点 %d 失败: %w", node.ID, err)
+		}
 	}
 	var epoch any = next.Epoch
-	if next.Epoch == "" { epoch = nil }
+	if next.Epoch == "" {
+		epoch = nil
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE config_sync_state
 		SET epoch=?,revision=?,updated_at=UTC_TIMESTAMP(6) WHERE id=1`,
 		epoch, next.Revision)
-	if err != nil { return false, err }
+	if err != nil {
+		return false, err
+	}
 	count, err := res.RowsAffected()
-	if err != nil || count != 1 { return false, fmt.Errorf("更新同步游标失败，影响行数=%d: %w", count, err) }
-	if err := tx.Commit(); err != nil { return false, err }
+	if err != nil || count != 1 {
+		return false, fmt.Errorf("更新同步游标失败，影响行数=%d: %w", count, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -186,17 +204,22 @@ func validateNode(n remote.Node) error {
 		return fmt.Errorf("节点 ID=%d 或 JSON 配置不合法", n.ID)
 	}
 	if n.NodeType == "region" {
-        if n.EnvType != nil {
-            switch *n.EnvType {
-            case "test", "review", "prod":
-            default: return fmt.Errorf("大区环境 %q 不合法", *n.EnvType)
-            }
-        }
-    } else if n.EnvType != nil {
-        return fmt.Errorf("非大区节点不能设置环境")
-    }
-    if _, err := parseDate(n.CreatedAt); err != nil { return err }
-	if _, err := parseDate(n.UpdatedAt); err != nil { return err }
+		if n.EnvType != nil {
+			switch *n.EnvType {
+			case "test", "review", "prod":
+			default:
+				return fmt.Errorf("大区环境 %q 不合法", *n.EnvType)
+			}
+		}
+	} else if n.EnvType != nil {
+		return fmt.Errorf("非大区节点不能设置环境")
+	}
+	if _, err := parseDate(n.CreatedAt); err != nil {
+		return err
+	}
+	if _, err := parseDate(n.UpdatedAt); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -212,17 +235,27 @@ func parseDate(v string) (time.Time, error) {
 func (s *Replica) Nodes(ctx context.Context) ([]NodeView, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,node_type,env_type,code,name,status
         FROM config_node ORDER BY id`)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	out := make([]NodeView, 0)
 	for rows.Next() {
 		var n NodeView
 		var game, region sql.NullInt64
-        var envType sql.NullString
-		if err := rows.Scan(&n.ID, &game, &region, &n.NodeType, &envType, &n.Code, &n.Name, &n.Status); err != nil { return nil, err }
-		if game.Valid { n.GameID = &game.Int64 }
-		if region.Valid { n.RegionID = &region.Int64 }
-        if envType.Valid { n.EnvType = &envType.String }
+		var envType sql.NullString
+		if err := rows.Scan(&n.ID, &game, &region, &n.NodeType, &envType, &n.Code, &n.Name, &n.Status); err != nil {
+			return nil, err
+		}
+		if game.Valid {
+			n.GameID = &game.Int64
+		}
+		if region.Valid {
+			n.RegionID = &region.Int64
+		}
+		if envType.Valid {
+			n.EnvType = &envType.String
+		}
 		out = append(out, n)
 	}
 	return out, rows.Err()
@@ -235,15 +268,21 @@ func (s *Replica) Revision(ctx context.Context) (map[string]any, error) {
 	var updated time.Time
 	err := s.DB.QueryRowContext(ctx,
 		"SELECT epoch,revision,updated_at FROM config_sync_state WHERE id=1").Scan(&epoch, &rev, &updated)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	var val any
-	if epoch.Valid { val = epoch.String }
+	if epoch.Valid {
+		val = epoch.String
+	}
 	return map[string]any{"epoch": val, "revision": rev,
 		"updated_at": updated.UTC().Format("2006-01-02T15:04:05.999999")}, nil
 }
 
 // Ready 用真实数据库 Ping 校验服务是否可工作。
 func (s *Replica) Ready(ctx context.Context) error {
-	if s.DB == nil { return errors.New("未配置本地副本数据库") }
+	if s.DB == nil {
+		return errors.New("未配置本地副本数据库")
+	}
 	return s.DB.PingContext(ctx)
 }

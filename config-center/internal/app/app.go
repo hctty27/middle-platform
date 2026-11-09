@@ -6,6 +6,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/go-sql-driver/mysql"
+	"hitall.com/middle-platform/config-center/internal/api"
+	"hitall.com/middle-platform/config-center/internal/schema"
+	"hitall.com/middle-platform/config-center/internal/settings"
+	"hitall.com/middle-platform/config-center/internal/store"
+	"hitall.com/middle-platform/config-center/internal/webhook"
+	"hitall.com/middle-platform/shared/bootstrap"
+	"hitall.com/middle-platform/shared/logging"
+	"hitall.com/middle-platform/shared/signature"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,22 +22,17 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"github.com/go-sql-driver/mysql"
-	"hitall.com/middle-platform/shared/bootstrap"
-    "hitall.com/middle-platform/shared/logging"
-	"hitall.com/middle-platform/shared/signature"
-	"hitall.com/middle-platform/config-center/internal/api"
-	"hitall.com/middle-platform/config-center/internal/schema"
-	"hitall.com/middle-platform/config-center/internal/settings"
-	"hitall.com/middle-platform/config-center/internal/store"
-	"hitall.com/middle-platform/config-center/internal/webhook"
 )
 
 // Run 加载指定的 YAML 配置文件，未指定时使用 configs/config.yaml。
 func Run(configPath string) error {
-    cfg, err := settings.LoadFile(configPath)
-	if err != nil { return err }
-	if err := logging.Init("config-center", cfg.Log); err != nil { return err }
+	cfg, err := settings.LoadFile(configPath)
+	if err != nil {
+		return err
+	}
+	if err := logging.Init("config-center", cfg.Log); err != nil {
+		return err
+	}
 	dsn := cfg.DSN
 	parsed, err := mysql.ParseDSN(dsn)
 	if err != nil {
@@ -43,7 +47,9 @@ func Run(configPath string) error {
 	// 启动只读校验数据库结构；建表与升级 SQL 由管理员手动执行。
 	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer migrationCancel()
-	if err := schema.Validate(migrationCtx, parsed.FormatDSN()); err != nil { return err }
+	if err := schema.Validate(migrationCtx, parsed.FormatDSN()); err != nil {
+		return err
+	}
 
 	db, err := sql.Open("mysql", parsed.FormatDSN())
 	if err != nil {
@@ -131,4 +137,3 @@ func Run(configPath string) error {
 	slog.Info("配置中心已停止", "duration", time.Since(started))
 	return nil
 }
-

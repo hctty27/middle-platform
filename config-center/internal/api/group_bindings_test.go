@@ -1,25 +1,29 @@
 package api
 
 import (
-    "context"
-    "net/http"
-    "net/http/httptest"
-    "testing"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
-    "hitall.com/middle-platform/config-center/internal/model"
+	"hitall.com/middle-platform/config-center/internal/model"
 )
 
-type groupBindingsReader struct { Reader }
+type groupBindingsReader struct{ Reader }
 
-func (groupBindingsReader) ServerGroupBindings(_ context.Context, groupID int64) ([]model.ServerGroupBinding,error) {
-    if groupID!=88 { return nil,ErrInvalid }
-    return []model.ServerGroupBinding{{ChannelAppID:3,ServerGroupID:88,Status:1,
-        Config:`{"login":true}`,ChannelAppName:"微信应用",ChannelAppCode:"wx_app"}},nil
+func (groupBindingsReader) ServerGroupBindings(_ context.Context, groupID int64) ([]model.ServerGroupBinding, error) {
+	if groupID != 88 {
+		return nil, ErrInvalid
+	}
+	return []model.ServerGroupBinding{{ChannelAppID: 3, ServerGroupID: 88, Status: 1,
+		Config: `{"login":true}`, ChannelAppName: "微信应用", ChannelAppCode: "wx_app"}}, nil
 }
 func TestServerGroupBindingsRoute(t *testing.T) {
-    req:=httptest.NewRequest(http.MethodGet,"/api/config/admin/server-groups/88/channel-apps",nil)
-    rec:=httptest.NewRecorder()
-    Router(groupBindingsReader{}).ServeHTTP(rec,req)
-    if rec.Code!=http.StatusNotFound { t.Fatalf("unexpected status %d",rec.Code) }
+	req := httptest.NewRequest(http.MethodGet, "/api/config/admin/server-groups/88/channel-apps", nil)
+	rec := httptest.NewRecorder()
+	Router(groupBindingsReader{}).ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
 
 }

@@ -78,11 +78,15 @@ func TestAdminSignatureRejectsExpiredAndMissingKey(t *testing.T) {
 	expired.Header.Set("X-Signature", SignAdmin(testAdminSecret, expired.Method, expired.URL.EscapedPath(), "", old, expired.Header.Get("X-Nonce"), nil))
 	rec := httptest.NewRecorder()
 	guard.ServeHTTP(rec, expired)
-	if rec.Code != http.StatusUnauthorized { t.Fatalf("expired signature: %d", rec.Code) }
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expired signature: %d", rec.Code)
+	}
 
 	rec = httptest.NewRecorder()
 	AdminMiddleware(okHandler, "/api/config/admin", "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/config/admin/nodes", nil))
-	if rec.Code != http.StatusServiceUnavailable { t.Fatalf("unconfigured secret: %d", rec.Code) }
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured secret: %d", rec.Code)
+	}
 }
 
 func TestAdminSignatureBindsQueryAndMethod(t *testing.T) {
@@ -93,28 +97,31 @@ func TestAdminSignatureBindsQueryAndMethod(t *testing.T) {
 	req.URL.RawQuery = "env=test"
 	rec := httptest.NewRecorder()
 	gate.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized { t.Fatalf("tampered query: %d", rec.Code) }
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("tampered query: %d", rec.Code)
+	}
 
 	req = signedAdminRequest(http.MethodGet, "/api/core/admin/services", "", "6666666666666666")
 	req.Method = http.MethodDelete
 	rec = httptest.NewRecorder()
 	gate.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized { t.Fatalf("tampered method: %d", rec.Code) }
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("tampered method: %d", rec.Code)
+	}
 }
 
-
 func TestAdminMiddlewareAlwaysRequiresSignature(t *testing.T) {
-    next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-        w.WriteHeader(http.StatusNoContent)
-    })
-    guard := AdminMiddleware(next, "/api/config/admin", testAdminSecret)
-    for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
-        recorder := httptest.NewRecorder()
-        guard.ServeHTTP(recorder, httptest.NewRequest(method, "/api/config/admin/nodes", nil))
-        if recorder.Code != http.StatusUnauthorized {
-            t.Fatalf("unsigned %s: HTTP %d", method, recorder.Code)
-        }
-    }
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	guard := AdminMiddleware(next, "/api/config/admin", testAdminSecret)
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
+		recorder := httptest.NewRecorder()
+		guard.ServeHTTP(recorder, httptest.NewRequest(method, "/api/config/admin/nodes", nil))
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("unsigned %s: HTTP %d", method, recorder.Code)
+		}
+	}
 }
 
 // 测试管理签名不再包含固定协议标识，防止第三方签名计算不一致。

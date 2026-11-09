@@ -25,21 +25,33 @@ func TestConfigAndEnvironment(t *testing.T) {
 	cfg := Default()
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("LOG_ACCESS_ENABLED", "false")
-	if err := cfg.ApplyEnv(); err != nil { t.Fatal(err) }
-	if cfg.Level != "debug" || cfg.AccessEnabled { t.Fatalf("%+v", cfg) }
+	if err := cfg.ApplyEnv(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Level != "debug" || cfg.AccessEnabled {
+		t.Fatalf("%+v", cfg)
+	}
 	cfg.Level = "trace"
-	if cfg.Validate() == nil { t.Fatal("invalid level accepted") }
+	if cfg.Validate() == nil {
+		t.Fatal("invalid level accepted")
+	}
 	cfg = Default()
 	cfg.SlowThreshold = "0s"
-	if cfg.Validate() == nil { t.Fatal("zero threshold accepted") }
+	if cfg.Validate() == nil {
+		t.Fatal("zero threshold accepted")
+	}
 }
 
 func TestHTTPLogsWithoutQueryOrBody(t *testing.T) {
 	out := capture(t)
 	cfg := Default()
 	h := HTTP(cfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if RequestID(r.Context()) != "from-proxy" { t.Fatal("request id not propagated") }
-		if FromContext(r.Context()) == nil { t.Fatal("missing request logger") }
+		if RequestID(r.Context()) != "from-proxy" {
+			t.Fatal("request id not propagated")
+		}
+		if FromContext(r.Context()) == nil {
+			t.Fatal("missing request logger")
+		}
 		w.WriteHeader(http.StatusCreated)
 	}))
 	request := httptest.NewRequest(http.MethodPost, "/api/config/nodes?token=private", strings.NewReader("super-secret"))
@@ -54,7 +66,9 @@ func TestHTTPLogsWithoutQueryOrBody(t *testing.T) {
 		t.Fatalf("sensitive request data leaked: %s", line)
 	}
 	var event map[string]any
-	if err := json.Unmarshal(out.Bytes(), &event); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(out.Bytes(), &event); err != nil {
+		t.Fatal(err)
+	}
 	if event["request_id"] != "from-proxy" || event["status"] != float64(201) {
 		t.Fatalf("unexpected access log: %v", event)
 	}
@@ -72,9 +86,15 @@ func TestHTTPInvalidIDAndPanic(t *testing.T) {
 	if recorder.Code != 500 || !validRequestID(recorder.Header().Get(RequestIDHeader)) {
 		t.Fatalf("unexpected response: %d %v", recorder.Code, recorder.Header())
 	}
-	if strings.Contains(out.String(), "do-not-leak") { t.Fatal("panic value leaked") }
-	if !strings.Contains(recorder.Body.String(), "服务器内部错误") { t.Fatal("panic response must be Chinese") }
-	if !strings.Contains(out.String(), "HTTP 处理请求时发生 panic") { t.Fatal("panic not logged") }
+	if strings.Contains(out.String(), "do-not-leak") {
+		t.Fatal("panic value leaked")
+	}
+	if !strings.Contains(recorder.Body.String(), "服务器内部错误") {
+		t.Fatal("panic response must be Chinese")
+	}
+	if !strings.Contains(out.String(), "HTTP 处理请求时发生 panic") {
+		t.Fatal("panic not logged")
+	}
 }
 
 func TestHTTPHealthAndAccessDisabled(t *testing.T) {
@@ -82,7 +102,9 @@ func TestHTTPHealthAndAccessDisabled(t *testing.T) {
 	cfg := Default()
 	cfg.AccessEnabled = false
 	handler := HTTP(cfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/bad" { w.WriteHeader(503) }
+		if r.URL.Path == "/bad" {
+			w.WriteHeader(503)
+		}
 	}))
 	for _, path := range []string{"/health/live", "/ok", "/bad"} {
 		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
@@ -107,5 +129,7 @@ func TestHTTPLogsSlowRequests(t *testing.T) {
 }
 
 func TestRequestIDMissing(t *testing.T) {
-	if RequestID(context.Background()) != "" { t.Fatal("unexpected request id") }
+	if RequestID(context.Background()) != "" {
+		t.Fatal("unexpected request id")
+	}
 }

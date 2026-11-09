@@ -36,11 +36,21 @@ func scanNode(scanner interface{ Scan(...any) error }) (Node, error) {
 	if err != nil {
 		return Node{}, err
 	}
-	if game.Valid { n.GameID = &game.Int64 }
-	if region.Valid { n.RegionID = &region.Int64 }
-	if envType.Valid { n.EnvType = &envType.String }
-	if marketType.Valid { n.MarketType = &marketType.String }
-	if remark.Valid { n.Remark = &remark.String }
+	if game.Valid {
+		n.GameID = &game.Int64
+	}
+	if region.Valid {
+		n.RegionID = &region.Int64
+	}
+	if envType.Valid {
+		n.EnvType = &envType.String
+	}
+	if marketType.Valid {
+		n.MarketType = &marketType.String
+	}
+	if remark.Valid {
+		n.Remark = &remark.String
+	}
 	n.CreatedAt, n.UpdatedAt = LocalDateTime(created), LocalDateTime(updated)
 	n.ParentID = n.Parent()
 	return n, nil
@@ -49,12 +59,16 @@ func scanNode(scanner interface{ Scan(...any) error }) (Node, error) {
 // nodes 执行节点查询并正确关闭 SQL 结果集。
 func nodes(ctx context.Context, db queryer, statement string, args ...any) ([]Node, error) {
 	rows, err := db.QueryContext(ctx, statement, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	result := make([]Node, 0)
 	for rows.Next() {
 		n, err := scanNode(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, n)
 	}
 	return result, rows.Err()
@@ -67,17 +81,25 @@ func (s *Store) Nodes(ctx context.Context) ([]Node, error) {
 
 // Node 根据主键查询完整节点；不存在时由上层统一转换为 HTTP 错误。
 func (s *Store) Node(ctx context.Context, id int64) (Node, error) {
-	if id <= 0 { return Node{}, ErrInvalid }
+	if id <= 0 {
+		return Node{}, ErrInvalid
+	}
 	return scanNode(s.DB.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM config_node WHERE id=?", id))
 }
 
 // Batch 限制批量数量并读取指定节点集合。
 func (s *Store) Batch(ctx context.Context, ids []int64) ([]Node, error) {
-	if len(ids) > 500 { return nil, ErrInvalid }
-	if len(ids) == 0 { return []Node{}, nil }
+	if len(ids) > 500 {
+		return nil, ErrInvalid
+	}
+	if len(ids) == 0 {
+		return []Node{}, nil
+	}
 	args := make([]any, len(ids))
 	for i, id := range ids {
-		if id <= 0 { return nil, ErrInvalid }
+		if id <= 0 {
+			return nil, ErrInvalid
+		}
 		args[i] = id
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
@@ -86,8 +108,12 @@ func (s *Store) Batch(ctx context.Context, ids []int64) ([]Node, error) {
 
 // scope 根据父节点类型构造子项的 SQL 过滤条件。
 func (s *Store) scope(ctx context.Context, parentID int64) (string, []any, error) {
-	if parentID < 0 { return "", nil, ErrInvalid }
-	if parentID == 0 { return "n.node_type='game'", nil, nil }
+	if parentID < 0 {
+		return "", nil, ErrInvalid
+	}
+	if parentID == 0 {
+		return "n.node_type='game'", nil, nil
+	}
 	var kind string
 	if err := s.DB.QueryRowContext(ctx, "SELECT node_type FROM config_node WHERE id=?", parentID).Scan(&kind); err != nil {
 		return "", nil, err
@@ -107,11 +133,17 @@ func (s *Store) scope(ctx context.Context, parentID int64) (string, []any, error
 // Tree 返回当前配置层级需要的节点摘要。
 func (s *Store) Tree(ctx context.Context, parentID int64) ([]NodeSummary, error) {
 	condition, args, err := s.scope(ctx, parentID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	result, err := nodes(ctx, s.DB, "SELECT "+nodeColumns+" FROM config_node n WHERE "+condition+" AND n.node_type IN ('game','region','server_group') ORDER BY n.id", args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	out := make([]NodeSummary, 0, len(result))
-	for _, n := range result { out = append(out, summary(n)) }
+	for _, n := range result {
+		out = append(out, summary(n))
+	}
 	return out, nil
 }
 
@@ -121,16 +153,21 @@ func (s *Store) Children(ctx context.Context, parentID int64, page, size int, ke
 		return NodePage{}, ErrInvalid
 	}
 	condition, args, err := s.scope(ctx, parentID)
-    if err != nil { return NodePage{}, err }
-    if envType != "" {
-        switch envType {
-        case "test", "review", "prod":
-        default: return NodePage{}, ErrInvalid
-        }
-        if parentID == 0 { return NodePage{}, ErrInvalid }
-        condition += " AND n.node_type='region' AND n.env_type=?"
-        args = append(args, envType)
-    }
+	if err != nil {
+		return NodePage{}, err
+	}
+	if envType != "" {
+		switch envType {
+		case "test", "review", "prod":
+		default:
+			return NodePage{}, ErrInvalid
+		}
+		if parentID == 0 {
+			return NodePage{}, ErrInvalid
+		}
+		condition += " AND n.node_type='region' AND n.env_type=?"
+		args = append(args, envType)
+	}
 	if word := strings.TrimSpace(keyword); word != "" {
 		condition += " AND (n.name LIKE ? ESCAPE '!' OR n.code LIKE ? ESCAPE '!')"
 		pattern := "%" + escaped(word) + "%"
@@ -142,9 +179,13 @@ func (s *Store) Children(ctx context.Context, parentID int64, page, size int, ke
 	}
 	pageArgs := append(append([]any(nil), args...), size, int64(page-1)*int64(size))
 	found, err := nodes(ctx, s.DB, "SELECT "+nodeColumns+" FROM config_node n WHERE "+condition+" ORDER BY n.id LIMIT ? OFFSET ?", pageArgs...)
-	if err != nil { return NodePage{}, err }
+	if err != nil {
+		return NodePage{}, err
+	}
 	out := make([]NodeSummary, 0, len(found))
-	for _, n := range found { out = append(out, summary(n)) }
+	for _, n := range found {
+		out = append(out, summary(n))
+	}
 	return NodePage{Items: out, Total: total, Page: page, Size: size}, nil
 }
 
@@ -156,15 +197,23 @@ func escaped(s string) string {
 // Path 构造指定节点从游戏节点开始的祖先路径。
 func (s *Store) Path(ctx context.Context, id int64) (NodeMatch, error) {
 	n, err := s.Node(ctx, id)
-	if err != nil { return NodeMatch{}, err }
+	if err != nil {
+		return NodeMatch{}, err
+	}
 	ancestorIDs := []int64{}
 	for _, ancestor := range []*int64{n.GameID, n.RegionID} {
-		if ancestor != nil { ancestorIDs = append(ancestorIDs, *ancestor) }
+		if ancestor != nil {
+			ancestorIDs = append(ancestorIDs, *ancestor)
+		}
 	}
 	ancestors, err := s.Batch(ctx, ancestorIDs)
-	if err != nil { return NodeMatch{}, err }
+	if err != nil {
+		return NodeMatch{}, err
+	}
 	index := map[int64]Node{n.ID: n}
-	for _, ancestor := range ancestors { index[ancestor.ID] = ancestor }
+	for _, ancestor := range ancestors {
+		index[ancestor.ID] = ancestor
+	}
 	return match(n, index)
 }
 
@@ -172,9 +221,13 @@ func (s *Store) Path(ctx context.Context, id int64) (NodeMatch, error) {
 func match(n Node, index map[int64]Node) (NodeMatch, error) {
 	path := make([]NodeSummary, 0, 3)
 	for _, id := range []int64{value(n.GameID), value(n.RegionID), n.ID} {
-		if id == 0 { continue }
+		if id == 0 {
+			continue
+		}
 		item, ok := index[id]
-		if !ok { return NodeMatch{}, fmt.Errorf("缺少上级节点 %d: %w", id, errors.New("配置层级关系不一致")) }
+		if !ok {
+			return NodeMatch{}, fmt.Errorf("缺少上级节点 %d: %w", id, errors.New("配置层级关系不一致"))
+		}
 		path = append(path, summary(item))
 	}
 	return NodeMatch{Node: summary(n), Path: path}, nil
@@ -183,42 +236,67 @@ func match(n Node, index map[int64]Node) (NodeMatch, error) {
 // Search 查找匹配节点并批量补齐祖先信息。
 func (s *Store) Search(ctx context.Context, keyword string, limit int) ([]NodeMatch, error) {
 	word := strings.TrimSpace(keyword)
-	if word == "" { return []NodeMatch{}, nil }
-	if len([]rune(word)) > 128 || limit < 1 || limit > 50 { return nil, ErrInvalid }
+	if word == "" {
+		return []NodeMatch{}, nil
+	}
+	if len([]rune(word)) > 128 || limit < 1 || limit > 50 {
+		return nil, ErrInvalid
+	}
 	rows, err := s.DB.QueryContext(ctx,
 		"SELECT id FROM config_node n WHERE (LOWER(n.name) LIKE LOWER(?) ESCAPE '!' OR LOWER(n.code) LIKE LOWER(?) ESCAPE '!') ORDER BY CASE WHEN LOWER(n.code)=LOWER(?) THEN 0 WHEN LOWER(n.code) LIKE LOWER(?) ESCAPE '!' THEN 1 ELSE 2 END,n.id LIMIT ?",
 		"%"+escaped(word)+"%", "%"+escaped(word)+"%", word, escaped(word)+"%", limit)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	ids := make([]int64, 0)
 	for rows.Next() {
 		var id int64
-		if err := rows.Scan(&id); err != nil { rows.Close(); return nil, err }
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
 		ids = append(ids, id)
 	}
 	err = rows.Err()
 	rows.Close()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	found, err := s.Batch(ctx, ids)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	index := make(map[int64]Node, len(found))
 	ancestorSet := map[int64]struct{}{}
 	for _, n := range found {
 		index[n.ID] = n
 		for _, ancestor := range []*int64{n.GameID, n.RegionID} {
-			if ancestor != nil { ancestorSet[*ancestor] = struct{}{} }
+			if ancestor != nil {
+				ancestorSet[*ancestor] = struct{}{}
+			}
 		}
 	}
 	ancestorIDs := make([]int64, 0, len(ancestorSet))
-	for id := range ancestorSet { ancestorIDs = append(ancestorIDs, id) }
+	for id := range ancestorSet {
+		ancestorIDs = append(ancestorIDs, id)
+	}
 	ancestors, err := s.Batch(ctx, ancestorIDs)
-	if err != nil { return nil, err }
-	for _, n := range ancestors { index[n.ID] = n }
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range ancestors {
+		index[n.ID] = n
+	}
 	out := make([]NodeMatch, 0, len(found))
 	for _, id := range ids {
 		n, ok := index[id]
-		if !ok { return nil, sql.ErrNoRows }
+		if !ok {
+			return nil, sql.ErrNoRows
+		}
 		m, err := match(n, index)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, m)
 	}
 	return out, nil
