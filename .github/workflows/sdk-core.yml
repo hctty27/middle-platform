@@ -6,17 +6,13 @@ on:
     paths:
       - 'sdk-core/**'
       - 'config-center/db/sql/**'
-      - 'shared/logging/**'
-      - 'shared/signature/**'
-      - 'shared/bootstrap/**'
+      - 'shared/**'
       - '.github/workflows/sdk-core.yml'
   pull_request:
     paths:
       - 'sdk-core/**'
       - 'config-center/db/sql/**'
-      - 'shared/logging/**'
-      - 'shared/signature/**'
-      - 'shared/bootstrap/**'
+      - 'shared/**'
       - '.github/workflows/sdk-core.yml'
   workflow_dispatch:
 
@@ -24,6 +20,7 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     env:
+      GOWORK: off
       TEST_SDK_CORE_DB_DSN: root:sdk-core-test@tcp(127.0.0.1:3306)/sdk_core_test?parseTime=true&loc=UTC
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +33,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: sdk-core/go.mod
-          cache-dependency-path: sdk-core/go.sum
+          cache-dependency-path: |
+            sdk-core/go.sum
+            shared/go.sum
+      - name: Check module files
+        working-directory: sdk-core
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - name: Test and race check
         working-directory: sdk-core
         run: go test -race ./...

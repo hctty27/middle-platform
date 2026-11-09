@@ -5,14 +5,12 @@ on:
     branches: [main]
     paths:
       - 'sdk-service/**'
-      - 'shared/signature/**'
-      - 'shared/bootstrap/**'
+      - 'shared/**'
       - '.github/workflows/sdk-service.yml'
   pull_request:
     paths:
       - 'sdk-service/**'
-      - 'shared/signature/**'
-      - 'shared/bootstrap/**'
+      - 'shared/**'
       - 'config-center/db/sql/**'
       - '.github/workflows/sdk-service.yml'
   workflow_dispatch:
@@ -24,15 +22,21 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
+    env:
+      GOWORK: off
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
-          cache-dependency-path: sdk-service/go.sum
-      - name: Verify shared signature module
-        working-directory: shared/signature
+          cache-dependency-path: |
+            sdk-service/go.sum
+            shared/go.sum
+      - name: Verify shared module
+        working-directory: shared
         run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
           go test -race -count=1 ./...
           go vet ./...
       - name: Verify SDK Service module

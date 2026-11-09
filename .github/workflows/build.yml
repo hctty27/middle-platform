@@ -24,6 +24,7 @@ jobs:
       run:
         working-directory: config-center
     env:
+      GOWORK: off
       TEST_CONFIG_DB_DSN: root:integration-test-only@tcp(127.0.0.1:3306)/config_center_go_test?parseTime=true&loc=UTC
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +37,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
-          cache-dependency-path: config-center/go.mod
+          cache-dependency-path: |
+            config-center/go.sum
+            shared/go.sum
       - name: Check module files
         run: |
           go mod tidy
@@ -48,12 +51,13 @@ jobs:
           tar -xzf /tmp/sqlc.tar.gz -C /tmp sqlc
           /tmp/sqlc generate
           git diff --exit-code -- internal/sqlcgen
-      - name: Verify shared logging module
-        run: (cd ../shared/logging && go test -race -count=1 ./... && go vet ./...)
-      - name: Verify shared bootstrap module
-        run: (cd ../shared/bootstrap && go mod tidy && git diff --exit-code -- go.mod go.sum && go test -race -count=1 ./... && go vet ./...)
-      - name: Verify shared signature module
-        run: (cd ../shared/signature && go test -race -count=1 ./... && go vet ./...)
+      - name: Verify shared module
+        working-directory: shared
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+          go test -race -count=1 ./...
+          go vet ./...
       - run: go test -race -count=1 ./...
       - run: go vet ./...
       - run: go build ./cmd/config-center
@@ -62,6 +66,8 @@ jobs:
     name: Go access
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      GOWORK: off
     defaults:
       run:
         working-directory: config-center-access
@@ -70,7 +76,13 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
-          cache-dependency-path: config-center-access/go.mod
+          cache-dependency-path: |
+            config-center-access/go.sum
+            shared/go.sum
+      - name: Check module files
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - run: go test -race -count=1 ./...
       - run: go vet ./...
       - run: go build ./cmd/config-center-access
@@ -101,6 +113,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
+      GOWORK: off
       ACCESS_DB_DSN: root:integration-test@tcp(127.0.0.1:3306)/config_access?parseTime=true&loc=UTC
       CONFIG_CENTER_URL: http://127.0.0.1:8080
       CONFIG_WEBHOOK_SECRET: ci-signed-webhook-secret
@@ -122,7 +135,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.27.3"
-          cache-dependency-path: config-center/go.mod
+          cache-dependency-path: '**/go.sum'
       - name: Build Go services
         run: |
           (cd config-center && go build -o /tmp/config-center-ci ./cmd/config-center)

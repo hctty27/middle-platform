@@ -11,7 +11,7 @@
 | `sdk-core/` | SDK 配置与服务管理、订单登记、支付回调、异步发货 |
 | `sdk-service/` | 平台主动核验/查询/封解禁、游戏事件上报与订阅消息转发 |
 | `admin/` | Vue 3 管理端与静态接口/运维文档 |
-| `shared/` | 结构化日志和签名公共库 |
+| `shared/` | Go 公共基础能力：数据库启动、YAML 读取、结构化日志和签名 |
 | `scripts/` | 打包及 CI 测试辅助脚本 |
 
 配置结构为 `game → region → server_group`，`channel_app` 独立维护；渠道包 AppID 全局唯一，每个 `prod/test/review` 环境最多绑定一个区服组。**SDK Core、SDK Service 与配置中心使用同一个 `config_center` 权威库**；只有可选的接入端使用独立 `config_access` 副本库。
@@ -19,6 +19,8 @@
 ## 本地运行
 
 依赖 **Go 1.27.3、MySQL 8.0+**，管理端另需 Node.js 22/npm。
+
+根目录的 `go.work` 将四个服务模块与 `shared` 纳入本地开发工作区。进入各模块目录后，仍按原命令执行 `go test`、`go vet` 和 `go build`；各服务的 `go.mod` 保留本地 `replace ../shared`，确保关闭 Workspace 后也能独立构建。
 
 1. 创建空 `config_center`，手工执行 `db/full/config_center.sql`；已有库禁止重新执行初始化 SQL。
 2. 在各服务目录复制 `configs/config.yaml` 为 `configs/config-dev.yaml`，填写数据库 DSN 等必要配置。四个 Go 服务启动时均只读取**一份完整 YAML**（不传 `-config` 时读取当前工作目录下的 `configs/config.yaml`，指定时只读取该文件，不叠加其他 YAML），随后应用各自支持的环境变量覆盖；切勿提交真实密码。

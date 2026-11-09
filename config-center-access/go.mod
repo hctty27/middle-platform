@@ -4,9 +4,7 @@ go 1.27.3
 
 require (
 	github.com/go-sql-driver/mysql v1.10.1
-	hitall.com/middle-platform/shared/bootstrap v0.0.0
-	hitall.com/middle-platform/shared/logging v0.0.0
-	hitall.com/middle-platform/shared/signature v0.0.0
+	hitall.com/middle-platform/shared v0.0.0
 )
 
 require (
@@ -14,8 +12,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace hitall.com/middle-platform/shared/logging => ../shared/logging
-
-replace hitall.com/middle-platform/shared/signature => ../shared/signature
-
-replace hitall.com/middle-platform/shared/bootstrap => ../shared/bootstrap
+replace hitall.com/middle-platform/shared => ../shared

@@ -1,5 +1,5 @@
 -- sqlc 仅用于静态 SQL 分析；与 V11 基线运行态兼容。不能用于实际建表（渠道应用由 database/sql 查询）。
--- Source migrations live in config-center/internal/migration/sql.
+-- 权威全量及增量 SQL 位于仓库根目录 db/full/ 与 db/incremental/；本文件只是 SQLC 使用的结构快照。
 CREATE TABLE config_node (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     game_id BIGINT NULL,

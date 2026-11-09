@@ -97,6 +97,7 @@ New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 $originalGoOS = [Environment]::GetEnvironmentVariable('GOOS', 'Process')
 $originalGoArch = [Environment]::GetEnvironmentVariable('GOARCH', 'Process')
 $originalCgo = [Environment]::GetEnvironmentVariable('CGO_ENABLED', 'Process')
+$originalGoWork = [Environment]::GetEnvironmentVariable('GOWORK', 'Process')
 $originalConsoleOutputEncoding = [Console]::OutputEncoding
 $originalOutputEncoding = $OutputEncoding
 
@@ -110,6 +111,7 @@ try {
     $env:GOOS = 'linux'
     $env:GOARCH = $Arch
     $env:CGO_ENABLED = '0'
+    $env:GOWORK = 'off'
 
     # 四个 Go 服务使用统一的交叉编译参数；数据库由人工执行 SQL。
     $targets = @(
@@ -278,6 +280,7 @@ finally {
     [Environment]::SetEnvironmentVariable('GOOS', $originalGoOS, 'Process')
     [Environment]::SetEnvironmentVariable('GOARCH', $originalGoArch, 'Process')
     [Environment]::SetEnvironmentVariable('CGO_ENABLED', $originalCgo, 'Process')
+    [Environment]::SetEnvironmentVariable('GOWORK', $originalGoWork, 'Process')
     [Console]::OutputEncoding = $originalConsoleOutputEncoding
     $OutputEncoding = $originalOutputEncoding
     if (Test-Path -LiteralPath $stageDir) {
