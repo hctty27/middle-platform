@@ -12,6 +12,10 @@ import (
 type fakeWriter struct {
 	Writer
 	last CreateNodeRequest
+	lastSubscriberID int64
+	lastSubscriberUpdate UpdateSubscriberRequest
+	lastSubscriberEnabled *bool
+	deletedSubscriberID int64
 }
 
 func (f *fakeWriter) Create(_ context.Context, input CreateNodeRequest) (Node, error) {
@@ -23,6 +27,19 @@ func (f *fakeWriter) Update(_ context.Context, _ int64, input UpdateNodeRequest)
 }
 func (f *fakeWriter) Delete(context.Context, int64) error                             { return nil }
 func (f *fakeWriter) CreateSubscriber(context.Context, CreateSubscriberRequest) error { return nil }
+func (f *fakeWriter) UpdateSubscriber(_ context.Context, id int64, input UpdateSubscriberRequest) error {
+	f.lastSubscriberID, f.lastSubscriberUpdate = id, input
+	return nil
+}
+func (f *fakeWriter) SetSubscriberEnabled(_ context.Context, id int64, enabled bool) error {
+	f.lastSubscriberID = id
+	f.lastSubscriberEnabled = &enabled
+	return nil
+}
+func (f *fakeWriter) DeleteSubscriber(_ context.Context, id int64) error {
+	f.deletedSubscriberID = id
+	return nil
+}
 
 // TestWriteRoutesDisabledByDefault 确保仅传入读取依赖时不注册写接口。
 func TestWriteRoutesDisabledByDefault(t *testing.T) {
@@ -96,5 +113,66 @@ func TestConfigSchemaRoute(t *testing.T) {
 	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/api/config/admin/config-schema/unknown", nil))
 	if rec.Code != 404 {
 		t.Fatalf("unknown type status %d", rec.Code)
+	}
+}
+
+
+// TestSubscriberManagementRoutes 验证订阅者编辑、启停和删除路由。
+func TestSubscriberManagementRoutes(t *testing.T) {
+	writer := &fakeWriter{}
+	handler := RouterWithWrites(stubReader{}, writer)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/config/admin/subscribers/12",
+		strings.NewReader(`{"callbackUrl":"https://game.example.com/callback","secret":""}`))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent || writer.lastSubscriberID != 12 ||
+		writer.lastSubscriberUpdate.CallbackURL != "https://game.example.com/callback" {
+		t.Fatalf("update: status=%d writer=%+v body=%s", rec.Code, writer, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPatch, "/api/config/admin/subscribers/12/enabled",
+		strings.NewReader(`{"enabled":false}`))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent || writer.lastSubscriberEnabled == nil || *writer.lastSubscriberEnabled {
+		t.Fatalf("disable: status=%d writer=%+v body=%s", rec.Code, writer, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/config/admin/subscribers/12", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent || writer.deletedSubscriberID != 12 {
+		t.Fatalf("delete: status=%d writer=%+v", rec.Code, writer)
+	}
+
+	req = httptest.NewRequest(http.MethodPatch, "/api/config/admin/subscribers/12/enabled", strings.NewReader(`{}`))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing enabled should be rejected, got %d", rec.Code)
+	}
+}
+
+// TestSubscriberWriteRoutesDisabledWithoutWriter 确保只读实例不注册订阅者写接口。
+func TestSubscriberWriteRoutesDisabledWithoutWriter(t *testing.T) {
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		path := "/api/config/admin/subscribers"
+		if method != http.MethodPost {
+			path = "/api/config/admin/subscribers/12"
+			if method == http.MethodPatch {
+				path += "/enabled"
+			}
+		}
+		req := httptest.NewRequest(method, path, strings.NewReader(`{}`))
+		rec := httptest.NewRecorder()
+		Router(stubReader{}).ServeHTTP(rec, req)
+		expectedStatus := http.StatusNotFound
+		if method == http.MethodPost {
+			expectedStatus = http.StatusMethodNotAllowed
+		}
+		if rec.Code != expectedStatus {
+			t.Fatalf("%s %s: expected %d, got %d", method, path, expectedStatus, rec.Code)
+		}
 	}
 }

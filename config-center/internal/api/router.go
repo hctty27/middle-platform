@@ -21,9 +21,12 @@ type Subscriber = model.Subscriber
 type CreateNodeRequest = model.CreateNodeRequest
 type UpdateNodeRequest = model.UpdateNodeRequest
 type CreateSubscriberRequest = model.CreateSubscriberRequest
+type UpdateSubscriberRequest = model.UpdateSubscriberRequest
+type SetSubscriberEnabledRequest = model.SetSubscriberEnabledRequest
 
 var ErrInvalid = model.ErrInvalid
 var ErrConflict = model.ErrConflict
+var ErrSubscriberNotFound = model.ErrSubscriberNotFound
 
 // Reader 定义只读接口所依赖的存储能力。
 type Reader interface {
@@ -47,6 +50,9 @@ type Writer interface {
 	Update(context.Context, int64, UpdateNodeRequest) (Node, error)
 	Delete(context.Context, int64) error
 	CreateSubscriber(context.Context, CreateSubscriberRequest) error
+	UpdateSubscriber(context.Context, int64, UpdateSubscriberRequest) error
+	SetSubscriberEnabled(context.Context, int64, bool) error
+	DeleteSubscriber(context.Context, int64) error
 }
 
 // api 保存 HTTP 路由处理所需的读写依赖。
@@ -98,6 +104,9 @@ func router(reader Reader, writer Writer) http.Handler {
 		r.Put("/api/config/admin/nodes/{id}", h.update)
 		r.Delete("/api/config/admin/nodes/{id}", h.delete)
 		r.Post("/api/config/admin/subscribers", h.createSubscriber)
+		r.Put("/api/config/admin/subscribers/{id}", h.updateSubscriber)
+		r.Patch("/api/config/admin/subscribers/{id}/enabled", h.setSubscriberEnabled)
+		r.Delete("/api/config/admin/subscribers/{id}", h.deleteSubscriber)
 	}
 	return r
 }
