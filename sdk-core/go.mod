@@ -2,11 +2,7 @@ module hitall.com/middle-platform/sdk-core
 
 go 1.27.3
 
-require (
-	hitall.com/middle-platform/shared/bootstrap v0.0.0
-	hitall.com/middle-platform/shared/logging v0.0.0
-	hitall.com/middle-platform/shared/signature v0.0.0
-)
+require hitall.com/middle-platform/shared v0.0.0
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
@@ -14,8 +10,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace hitall.com/middle-platform/shared/logging => ../shared/logging
-
-replace hitall.com/middle-platform/shared/signature => ../shared/signature
-
-replace hitall.com/middle-platform/shared/bootstrap => ../shared/bootstrap
+replace hitall.com/middle-platform/shared => ../shared

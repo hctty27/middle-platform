@@ -1,4 +1,4 @@
-module hitall.com/middle-platform/shared/bootstrap
+module hitall.com/middle-platform/shared
 
 go 1.27.3
 
