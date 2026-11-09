@@ -1,4 +1,7 @@
 // 与 shared/signature/admin.go 一致的管理请求签名规则。
+import { sha1 } from '@noble/hashes/legacy.js'
+import { sha256 } from '@noble/hashes/sha2.js'
+
 const encoder = new TextEncoder()
 
 function toHex(data: ArrayBuffer | Uint8Array): string {
@@ -7,7 +10,11 @@ function toHex(data: ArrayBuffer | Uint8Array): string {
 }
 
 async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<string> {
-  return toHex(await crypto.subtle.digest(algorithm, encoder.encode(text)))
+  const bytes = encoder.encode(text)
+  if (globalThis.crypto?.subtle) {
+    return toHex(await globalThis.crypto.subtle.digest(algorithm, bytes))
+  }
+  return toHex(algorithm === 'SHA-1' ? sha1(bytes) : sha256(bytes))
 }
 
 function byteOrder(a: string, b: string): number {
@@ -41,11 +48,11 @@ export function canonicalQuery(url: URL): string {
 export async function signAdminRequest(
   secret: string, method: string, path: string, query: string, body: string
 ): Promise<Record<string, string>> {
-  if (!crypto?.subtle || !crypto?.getRandomValues) {
-    throw new Error('当前浏览器无法生成签名，请使用 HTTPS 或 localhost 访问')
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error('当前浏览器不支持安全随机数，无法生成签名')
   }
   const timestamp = String(Math.floor(Date.now() / 1000))
-  const nonce = toHex(crypto.getRandomValues(new Uint8Array(8)))
+  const nonce = toHex(globalThis.crypto.getRandomValues(new Uint8Array(8)))
   const bodyHash = await digest('SHA-256', body)
   const values = [
     secret,
