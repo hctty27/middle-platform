@@ -167,8 +167,12 @@ func TestSubscriberWriteRoutesDisabledWithoutWriter(t *testing.T) {
 		req := httptest.NewRequest(method, path, strings.NewReader(`{}`))
 		rec := httptest.NewRecorder()
 		Router(stubReader{}).ServeHTTP(rec, req)
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("%s %s: expected 404, got %d", method, path, rec.Code)
+		expectedStatus := http.StatusNotFound
+		if method == http.MethodPost {
+			expectedStatus = http.StatusMethodNotAllowed
+		}
+		if rec.Code != expectedStatus {
+			t.Fatalf("%s %s: expected %d, got %d", method, path, expectedStatus, rec.Code)
 		}
 	}
 }
