@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hctty27/middle-platform/sdk-core/internal/model"
-	"github.com/hctty27/middle-platform/shared/signature"
+	"hitall.com/middle-platform/sdk-core/internal/model"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 // ErrSignature 表示支付平台 V1 签名或回调时间戳不合法。

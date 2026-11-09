@@ -9,7 +9,7 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 type fakeTrigger struct { count atomic.Int64 }

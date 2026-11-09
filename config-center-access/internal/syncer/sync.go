@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/hctty27/middle-platform/config-center-access/internal/remote"
-	"github.com/hctty27/middle-platform/config-center-access/internal/store"
+	"hitall.com/middle-platform/config-center-access/internal/remote"
+	"hitall.com/middle-platform/config-center-access/internal/store"
 )
 
 // Client 只依赖远程同步协议，便于使用 httptest 测试。

@@ -3,8 +3,8 @@ package rolecontrol
 import (
     "context"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/adapter"
+    "hitall.com/middle-platform/sdk-service/internal/model"
 )
 
 type Adapter interface {

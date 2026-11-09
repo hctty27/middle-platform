@@ -5,8 +5,8 @@ import (
     "net/http"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/auth"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/auth"
+    "hitall.com/middle-platform/sdk-service/internal/model"
 )
 
 // PlatformSender 定义向上游平台发送业务消息的能力。

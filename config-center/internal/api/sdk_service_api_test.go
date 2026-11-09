@@ -8,7 +8,7 @@ import (
     "strings"
     "testing"
 
-    "github.com/hctty27/middle-platform/config-center/internal/model"
+    "hitall.com/middle-platform/config-center/internal/model"
 )
 
 type sdkServiceReader struct { stubReader }

@@ -1,4 +1,4 @@
-module github.com/hctty27/middle-platform/shared/bootstrap
+module hitall.com/middle-platform/shared/bootstrap
 
 go 1.27.3
 

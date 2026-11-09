@@ -3,7 +3,7 @@ package api
 import (
     "net/http"
     "github.com/go-chi/chi/v5"
-    "github.com/hctty27/middle-platform/config-center/internal/configschema"
+    "hitall.com/middle-platform/config-center/internal/configschema"
 )
 
 // configSchema 供管理端及第三方读取基础配置字段定义。

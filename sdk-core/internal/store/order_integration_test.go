@@ -11,7 +11,7 @@ import (
     "database/sql"
 
     _ "github.com/go-sql-driver/mysql"
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 // 使用 CI Runner 的隔离 MySQL，测试数据库唯一约束与条件更新。

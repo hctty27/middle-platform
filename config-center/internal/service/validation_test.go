@@ -2,7 +2,7 @@ package service
 
 import (
     "testing"
-    "github.com/hctty27/middle-platform/config-center/internal/model"
+    "hitall.com/middle-platform/config-center/internal/model"
 )
 
 // TestRegionEnvironmentValidation 覆盖测试服、提审服、正式服枚举以及非法环境分类。

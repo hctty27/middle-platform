@@ -18,8 +18,8 @@ import (
     "strings"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/auth"
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/auth"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 var ErrTarget = errors.New("游戏发货通知目标地址不合法")

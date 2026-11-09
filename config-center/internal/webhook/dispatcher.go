@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hctty27/middle-platform/shared/signature"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 // Delivery 描述一次待发送的签名回调及其数据库租约。

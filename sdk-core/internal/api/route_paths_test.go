@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hctty27/middle-platform/sdk-core/internal/model"
-	"github.com/hctty27/middle-platform/sdk-core/internal/service"
+	"hitall.com/middle-platform/sdk-core/internal/model"
+	"hitall.com/middle-platform/sdk-core/internal/service"
 )
 
 type fakeOrderRoutes struct {

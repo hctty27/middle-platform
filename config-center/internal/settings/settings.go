@@ -4,8 +4,8 @@ import (
  "errors"
  "strings"
 
- "github.com/hctty27/middle-platform/shared/bootstrap"
- "github.com/hctty27/middle-platform/shared/logging"
+ "hitall.com/middle-platform/shared/bootstrap"
+ "hitall.com/middle-platform/shared/logging"
 )
 
 // Settings 保存配置中心运行参数。

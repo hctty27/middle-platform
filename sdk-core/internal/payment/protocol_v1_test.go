@@ -10,7 +10,7 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 func TestVerifyV1(t *testing.T){
     cb:=model.PaymentCallback{OrderNo:"p100",GameOrderID:"g100"}

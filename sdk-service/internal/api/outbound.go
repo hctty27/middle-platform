@@ -9,10 +9,10 @@ import (
     "net/http"
     "strings"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/auth"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
-    "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/sdk-service/internal/auth"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 // EventReporter 定义事件上报的业务入口。

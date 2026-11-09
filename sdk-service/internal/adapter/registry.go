@@ -4,7 +4,7 @@ import (
     "fmt"
     "reflect"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/model"
 )
 
 // Registry 按名称解析某一类业务适配器；注册后不允许修改内部映射。

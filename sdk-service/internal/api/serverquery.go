@@ -8,8 +8,8 @@ import (
     "strconv"
     "strings"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 // ServerQuerier 定义平台区服查询接口使用的业务能力。

@@ -4,7 +4,7 @@ import (
     "errors"
     "testing"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 func TestCallbackDetailsMatchRegistration(t *testing.T) {

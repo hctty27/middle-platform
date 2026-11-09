@@ -6,7 +6,7 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 func TestGameRequestSignature(t *testing.T) {

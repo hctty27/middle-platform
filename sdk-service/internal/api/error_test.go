@@ -6,8 +6,8 @@ import (
     "net/http"
     "testing"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
 )
 
 func TestMapServiceError(t *testing.T) {

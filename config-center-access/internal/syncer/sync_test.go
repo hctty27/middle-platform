@@ -2,7 +2,7 @@ package syncer
 
 import (
 	"testing"
-	"github.com/hctty27/middle-platform/config-center-access/internal/remote"
+	"hitall.com/middle-platform/config-center-access/internal/remote"
 )
 
 // TestContiguous 覆盖版本连续、断档、重复及空事件等同步边界。

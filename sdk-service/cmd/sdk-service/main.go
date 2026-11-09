@@ -13,17 +13,17 @@ import (
     "syscall"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/usercheck"
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolequery"
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolecontrol"
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/serverquery"
-    "github.com/hctty27/middle-platform/sdk-service/internal/api"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
-    "github.com/hctty27/middle-platform/sdk-service/internal/service"
-    "github.com/hctty27/middle-platform/sdk-service/internal/settings"
-    "github.com/hctty27/middle-platform/sdk-service/internal/store"
-    "github.com/hctty27/middle-platform/shared/bootstrap"
-    "github.com/hctty27/middle-platform/shared/logging"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/usercheck"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/rolequery"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/rolecontrol"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/serverquery"
+    "hitall.com/middle-platform/sdk-service/internal/api"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/sdk-service/internal/service"
+    "hitall.com/middle-platform/sdk-service/internal/settings"
+    "hitall.com/middle-platform/sdk-service/internal/store"
+    "hitall.com/middle-platform/shared/bootstrap"
+    "hitall.com/middle-platform/shared/logging"
 )
 
 func main() {

@@ -9,8 +9,8 @@ import (
  "strings"
  "time"
 
- "github.com/hctty27/middle-platform/shared/bootstrap"
- "github.com/hctty27/middle-platform/shared/logging"
+ "hitall.com/middle-platform/shared/bootstrap"
+ "hitall.com/middle-platform/shared/logging"
 )
 
 // Config 保存接入服务运行参数。

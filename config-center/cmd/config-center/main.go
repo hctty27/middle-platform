@@ -5,7 +5,7 @@ import (
 	"log/slog"
     "flag"
 	"os"
-	"github.com/hctty27/middle-platform/config-center/internal/app"
+	"hitall.com/middle-platform/config-center/internal/app"
 )
 
 // main 仅负责启动进程，服务生命周期交由 app 管理。

@@ -7,7 +7,7 @@ import (
     "net/http/httptest"
     "testing"
 
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 func TestPublisherForwardsBothServices(t *testing.T) {

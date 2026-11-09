@@ -9,8 +9,8 @@ import (
     "testing"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/auth"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/auth"
+    "hitall.com/middle-platform/sdk-service/internal/model"
 )
 
 type fakeOutboundRoutes struct {

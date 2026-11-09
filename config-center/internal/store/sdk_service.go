@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/hctty27/middle-platform/config-center/internal/model"
+	"hitall.com/middle-platform/config-center/internal/model"
 )
 
 func validSDKEnv(env string) bool {

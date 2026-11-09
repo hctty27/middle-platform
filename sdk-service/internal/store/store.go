@@ -10,8 +10,8 @@ import (
     "net/url"
     "strings"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/adapter"
+    "hitall.com/middle-platform/sdk-service/internal/model"
 )
 
 // Store 只读访问配置中心数据库，为各业务服务提供环境绑定与路由信息。

@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/hctty27/middle-platform/config-center/internal/webhook"
-	"github.com/hctty27/middle-platform/config-center/internal/service"
-	"github.com/hctty27/middle-platform/shared/signature"
- "github.com/hctty27/middle-platform/config-center/internal/model"
+	"hitall.com/middle-platform/config-center/internal/webhook"
+	"hitall.com/middle-platform/config-center/internal/service"
+	"hitall.com/middle-platform/shared/signature"
+ "hitall.com/middle-platform/config-center/internal/model"
 )
 
 // TestWriteValidation 验证创建与更新请求的基础业务约束。

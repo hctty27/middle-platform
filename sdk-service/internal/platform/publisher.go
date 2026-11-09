@@ -15,7 +15,7 @@ import (
     "strings"
     "time"
 
-    "github.com/hctty27/middle-platform/shared/signature"
+    "hitall.com/middle-platform/shared/signature"
 )
 
 // ErrPublishEndpointMissing 表示当前平台服务尚未配置接收地址。

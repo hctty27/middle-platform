@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hctty27/middle-platform/shared/signature"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 var ErrUnauthorized = errors.New("游戏请求签名验证失败")

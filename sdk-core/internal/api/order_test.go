@@ -3,7 +3,7 @@ package api
 import (
     "testing"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 func TestDecodeStrict(t *testing.T){
     cases:=[]string{

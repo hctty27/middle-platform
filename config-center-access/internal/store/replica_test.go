@@ -3,7 +3,7 @@ package store
 import (
     "testing"
     "time"
-    "github.com/hctty27/middle-platform/config-center-access/internal/remote"
+    "hitall.com/middle-platform/config-center-access/internal/remote"
 )
 
 // TestValidateNodeEnvironment 验证副本节点只允许大区设置合法的环境类型。

@@ -4,9 +4,9 @@ import (
     "net/http"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/serverquery"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/serverquery"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
 )
 
 // ServerQueryService 负责区服查询的服务路由、平台验签与适配器调用。

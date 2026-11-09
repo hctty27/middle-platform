@@ -5,9 +5,9 @@ import (
     "net/http"
     "time"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/adapter/rolequery"
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/sdk-service/internal/adapter/rolequery"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
 )
 
 // ServiceRouteReader 按渠道环境与服务代码提供业务转发目标。

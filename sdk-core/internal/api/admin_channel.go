@@ -8,7 +8,7 @@ import (
     "strconv"
     "strings"
     "time"
-    "github.com/hctty27/middle-platform/sdk-core/internal/configschema"
+    "hitall.com/middle-platform/sdk-core/internal/configschema"
 )
 
 // channelApp 是管理接口返回的渠道包及环境绑定视图。

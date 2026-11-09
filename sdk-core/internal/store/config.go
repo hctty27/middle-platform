@@ -8,7 +8,7 @@ import (
     "errors"
     "fmt"
 
-    "github.com/hctty27/middle-platform/sdk-core/internal/model"
+    "hitall.com/middle-platform/sdk-core/internal/model"
 )
 
 // Store 通过共享的数据库连接池读取配置中心的权威数据。

@@ -7,8 +7,8 @@ import (
     "strings"
     "testing"
 
-    "github.com/hctty27/middle-platform/sdk-service/internal/model"
-    "github.com/hctty27/middle-platform/sdk-service/internal/platform"
+    "hitall.com/middle-platform/sdk-service/internal/model"
+    "hitall.com/middle-platform/sdk-service/internal/platform"
 )
 
 type fakeRoleController struct {
