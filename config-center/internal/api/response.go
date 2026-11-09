@@ -34,6 +34,8 @@ func respond(w http.ResponseWriter, value any, err error) {
 	switch {
 	case errors.Is(err, ErrInvalid):
 		writeError(w, http.StatusBadRequest, "请求参数不合法")
+	case errors.Is(err, ErrSubscriberNotFound):
+		writeError(w, http.StatusNotFound, "订阅不存在")
 	case errors.Is(err, sql.ErrNoRows):
 		writeError(w, http.StatusNotFound, "节点不存在")
 	case errors.Is(err, ErrConflict):

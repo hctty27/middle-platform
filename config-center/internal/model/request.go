@@ -34,3 +34,16 @@ type CreateSubscriberRequest struct {
 	// 回调密钥只用于服务端签名，不应通过查询接口返回。
 	Secret string `json:"secret"`
 }
+
+
+// UpdateSubscriberRequest 定义修改订阅者允许更新的字段。
+type UpdateSubscriberRequest struct {
+	CallbackURL string `json:"callbackUrl"`
+	// 密钥留空时保留当前密钥；密钥不会通过查询接口回显。
+	Secret string `json:"secret"`
+}
+
+// SetSubscriberEnabledRequest 定义订阅者启停请求。
+type SetSubscriberEnabledRequest struct {
+	Enabled *bool `json:"enabled"`
+}

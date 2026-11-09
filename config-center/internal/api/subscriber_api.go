@@ -24,3 +24,56 @@ func (h *api) createSubscriber(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 }
+
+
+// updateSubscriber 修改订阅者回调地址及可选签名密钥。
+func (h *api) updateSubscriber(w http.ResponseWriter, r *http.Request) {
+	subscriberID, err := id(r)
+	if err != nil {
+		respond(w, nil, err)
+		return
+	}
+	var input UpdateSubscriberRequest
+	if err := decodeBody(w, r, &input); err != nil {
+		respond(w, nil, err)
+		return
+	}
+	if err := h.writer.UpdateSubscriber(r.Context(), subscriberID, input); err != nil {
+		respond(w, nil, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// setSubscriberEnabled 单独修改订阅者启用状态。
+func (h *api) setSubscriberEnabled(w http.ResponseWriter, r *http.Request) {
+	subscriberID, err := id(r)
+	if err != nil {
+		respond(w, nil, err)
+		return
+	}
+	var input SetSubscriberEnabledRequest
+	if err := decodeBody(w, r, &input); err != nil || input.Enabled == nil {
+		respond(w, nil, ErrInvalid)
+		return
+	}
+	if err := h.writer.SetSubscriberEnabled(r.Context(), subscriberID, *input.Enabled); err != nil {
+		respond(w, nil, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteSubscriber 删除订阅者及其关联投递状态。
+func (h *api) deleteSubscriber(w http.ResponseWriter, r *http.Request) {
+	subscriberID, err := id(r)
+	if err != nil {
+		respond(w, nil, err)
+		return
+	}
+	if err := h.writer.DeleteSubscriber(r.Context(), subscriberID); err != nil {
+		respond(w, nil, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

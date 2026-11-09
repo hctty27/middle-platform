@@ -18,9 +18,11 @@ type LocalDateTime = model.LocalDateTime
 type CreateNodeRequest = model.CreateNodeRequest
 type UpdateNodeRequest = model.UpdateNodeRequest
 type CreateSubscriberRequest = model.CreateSubscriberRequest
+type UpdateSubscriberRequest = model.UpdateSubscriberRequest
 
 var ErrInvalid = model.ErrInvalid
 var ErrConflict = model.ErrConflict
+var ErrSubscriberNotFound = model.ErrSubscriberNotFound
 
 // summary 统一生成管理端列表摘要，避免在各 SQL 查询中重复构造结构。
 func summary(n Node) NodeSummary { return model.Summary(n) }

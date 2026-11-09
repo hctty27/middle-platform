@@ -18,7 +18,22 @@ export interface CreateSubscriberRequest {
   secret: string
 }
 
+/** UpdateSubscriberRequest 不允许修改接入方编码；secret 为空时保持原密钥。 */
+export interface UpdateSubscriberRequest {
+  callbackUrl: string
+  secret?: string
+}
+
 export const listSubscribers = () => api.get<Subscriber[]>('/admin/subscribers')
 
 export const createSubscriber = (request: CreateSubscriberRequest) =>
   api.post('/admin/subscribers', request)
+
+export const updateSubscriber = (id: number, request: UpdateSubscriberRequest) =>
+  api.put<void>('/admin/subscribers/' + id, request)
+
+export const setSubscriberEnabled = (id: number, enabled: boolean) =>
+  api.patch<void>('/admin/subscribers/' + id + '/enabled', { enabled })
+
+export const deleteSubscriber = (id: number) =>
+  api.delete<void>('/admin/subscribers/' + id)

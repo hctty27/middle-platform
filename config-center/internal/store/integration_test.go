@@ -242,6 +242,73 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL + "/internal/config/callback", Secret: "test-secret"}); err != nil {
 		t.Fatal(err)
 	}
+	var subscriberID int64
+	if err := db.QueryRowContext(ctx, "SELECT id FROM config_subscriber WHERE code='access-1'").Scan(&subscriberID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateSubscriber(ctx, subscriberID, UpdateSubscriberRequest{
+		CallbackURL: server.URL + "/updated",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var storedSecret, storedURL string
+	if err := db.QueryRowContext(ctx, "SELECT webhook_secret,callback_url FROM config_subscriber WHERE id=?", subscriberID).
+		Scan(&storedSecret, &storedURL); err != nil {
+		t.Fatal(err)
+	}
+	if storedSecret != "test-secret" || storedURL != server.URL+"/updated" {
+		t.Fatalf("blank secret must be retained: secret=%q url=%q", storedSecret, storedURL)
+	}
+	if err := store.UpdateSubscriber(ctx, subscriberID, UpdateSubscriberRequest{
+		CallbackURL: server.URL + "/updated", Secret: "rotated-secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT webhook_secret FROM config_subscriber WHERE id=?", subscriberID).Scan(&storedSecret); err != nil {
+		t.Fatal(err)
+	}
+	if storedSecret != "rotated-secret" {
+		t.Fatalf("secret rotation failed: %q", storedSecret)
+	}
+	if err := store.SetSubscriberEnabled(ctx, subscriberID, false); err != nil {
+		t.Fatal(err)
+	}
+	disabledJob, err := webhook.NewDispatcher(db).Claim(ctx)
+	if err != nil || disabledJob != nil {
+		t.Fatalf("disabled subscriber must not be claimed: %+v %v", disabledJob, err)
+	}
+	if err := store.SetSubscriberEnabled(ctx, subscriberID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateSubscriber(ctx, subscriberID, UpdateSubscriberRequest{CallbackURL: "file:///etc/passwd"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("invalid callback URL accepted: %v", err)
+	}
+	if err := store.UpdateSubscriber(ctx, 999999, UpdateSubscriberRequest{CallbackURL: server.URL + "/missing"}); !errors.Is(err, model.ErrSubscriberNotFound) {
+		t.Fatalf("missing subscriber update should return not found: %v", err)
+	}
+	if err := store.SetSubscriberEnabled(ctx, 999999, false); !errors.Is(err, model.ErrSubscriberNotFound) {
+		t.Fatalf("missing subscriber status update should return not found: %v", err)
+	}
+	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-delete", CallbackURL: server.URL + "/delete", Secret: "delete-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	var deleteID int64
+	if err := db.QueryRowContext(ctx, "SELECT id FROM config_subscriber WHERE code='access-delete'").Scan(&deleteID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteSubscriber(ctx, deleteID); err != nil {
+		t.Fatal(err)
+	}
+	var orphanStates int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_subscriber_delivery_state WHERE subscriber_id=?", deleteID).Scan(&orphanStates); err != nil {
+		t.Fatal(err)
+	}
+	if orphanStates != 0 {
+		t.Fatalf("delivery state was not cascaded: %d", orphanStates)
+	}
+	if err := store.DeleteSubscriber(ctx, deleteID); !errors.Is(err, model.ErrSubscriberNotFound) {
+		t.Fatalf("missing subscriber delete should return not found: %v", err)
+	}
 	dispatcher := webhook.NewDispatcher(db)
 	job, err := dispatcher.Claim(ctx)
 	if err != nil || job == nil {
