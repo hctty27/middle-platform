@@ -108,6 +108,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <ul>
 <li><code>sdk_service</code> 管理已实现功能的全局开关，<code>sdk_service_channel</code> 按服务、渠道包、环境唯一绑定；当前功能包括 <code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code> 和 <code>role_control</code>。</li>
 <li>游戏侧用 <code>sdk_node_config(game).config.gameSecret</code> 验签，平台侧用 <code>sdk_channel_app.config.appSecret</code> 验签；两套签名密钥不能混用。</li>
+<li>配置同步按 <code>config_subscriber.code</code> 识别接入端，每条订阅记录保存唯一的 <code>signing_secret</code>；接入端使用匹配的 <code>subscriber.code</code> / <code>subscriber.secret</code>。同一密钥用于配置拉取、本地只读接口和 Webhook，且与 <code>adminAuth.secret</code> 完全独立。</li>
 <li>订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。</li>
 <li>对外协议及签名细节以 <a href="index.html#g-start">游戏 HTML</a> 和 <a href="index.html#p-start">平台 HTML</a> 为准，避免维护多份相同字段表。</li>
 </ul>
@@ -169,7 +170,7 @@ SELECT COUNT(*) FROM config_center.config_node;</code></pre></div>
 <li><code>sdk_channel_app</code>：SDK Core 管理，全局唯一 AppID、共享 JSON 配置、三环境绑定</li>
 <li><code>sdk_node_config</code>：SDK Core 管理，node_id 引用 <code>config_node.id</code>，游戏/大区/区服组的 SDK 专属 JSON</li>
 <li><code>config_revision</code>、<code>config_node_change_log</code>：同步游标和变更日志</li>
-<li><code>config_subscriber</code>、<code>config_subscriber_delivery_state</code>：Webhook 订阅者和投递状态</li>
+<li><code>config_subscriber</code>、<code>config_subscriber_delivery_state</code>：接入端身份、唯一的 <code>signing_secret</code> 与 Webhook 投递状态</li>
 <li><code>game_order</code>：SDK Core 充值订单、支付状态、通知租约和补偿</li>
 <li><code>sdk_service</code>：SDK 功能目录与全局开关，新库初始化预置已实现的 <code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code>、<code>role_control</code>，不包含 <code>scope_type</code>、<code>sort_order</code></li>
 <li><code>sdk_service_channel</code>：按 <code>service_id + channel_app_id + env</code> 唯一的渠道包服务绑定</li>
@@ -214,7 +215,7 @@ CREATE DATABASE IF NOT EXISTS config_access
 <p>打开第一个 PowerShell 终端：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml</code></pre></div>
-<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code> 和 <code>adminAuth.secret</code>。管理密钥须与 SDK Core 的 <code>adminAuth.secret</code> 一致；配置同步密钥不再配置为全局项，而是从 <code>config_subscriber</code> 中按接入端编码读取。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终验签。Vue 管理页面输入管理密钥后自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问。
+<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code> 和 <code>adminAuth.secret</code>。管理密钥须与 SDK Core 的 <code>adminAuth.secret</code> 一致；配置同步密钥不再配置为全局项，而是从 <code>config_subscriber.signing_secret</code> 中按接入端编码读取；每条记录必须使用唯一的 32–255 字节密钥。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终验签。Vue 管理页面输入管理密钥后自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问。
 <p>对<strong>新空库先手动执行 SQL，再启动</strong>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 先在数据库工具中执行 db/full/config_center.sql（仅新库）
 go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
@@ -225,7 +226,7 @@ go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
 Copy-Item configs/config.yaml configs/config-dev.yaml
 # 修改 YAML 中 database.dsn / configCenter.url / subscriber.code / subscriber.secret
 go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></div>
-<p><code>database.dsn</code> 指向 <code>config_access</code>，<code>configCenter.url</code> 通常是 <code>http://127.0.0.1:8080</code>。<code>subscriber.code</code> 与 <code>subscriber.secret</code> 必须与配置中心 <code>config_subscriber</code> 中同一条记录的 <code>code</code>、<code>signing_secret</code> 完全一致。这个接入端密钥同时用于主动拉取、本地只读查询和 Webhook；每个接入端独立，至少 32 字节。环境变量 <code>CONFIG_SUBSCRIBER_CODE</code>、<code>CONFIG_SUBSCRIBER_SECRET</code> 可覆盖 YAML。轮换密钥必须同步更新配置中心订阅记录和接入端配置，再重启接入端；只更新一侧会导致主动拉取和 Webhook 验签失败。首次启动前须对空 <code>config_access</code> 执行 <code>db/full/config_access.sql</code>，随后服务会全量拉取节点，再执行增量同步；旧副本库参见 <a href="#database">数据库文档</a>。</p>
+<p><code>database.dsn</code> 指向 <code>config_access</code>，<code>configCenter.url</code> 通常是 <code>http://127.0.0.1:8080</code>。<code>subscriber.code</code> 与 <code>subscriber.secret</code> 必须与配置中心 <code>config_subscriber</code> 中同一条记录的 <code>code</code>、<code>signing_secret</code> 完全一致。这个接入端密钥同时用于主动拉取、本地只读查询和 Webhook；每个接入端必须使用唯一密钥，长度为 32–255 字节且不得包含首尾空格。环境变量 <code>CONFIG_SUBSCRIBER_CODE</code>、<code>CONFIG_SUBSCRIBER_SECRET</code> 可覆盖 YAML。轮换密钥必须同步更新配置中心订阅记录和接入端配置，再重启接入端；只更新一侧会导致主动拉取和 Webhook 验签失败。首次启动前须对空 <code>config_access</code> 执行 <code>db/full/config_access.sql</code>，随后服务会全量拉取节点，再执行增量同步；旧副本库参见 <a href="#database">数据库文档</a>。</p>
 <p>在运行中的配置中心注册订阅者时，使用配置中心的 <code>adminAuth.secret</code> 对管理请求签名；请求 Body 中的 <code>secret</code> 必须与接入端 <code>subscriber.secret</code> 一致，并保存在对应订阅记录的 <code>signing_secret</code> 字段。下面示例适用于 PowerShell 5.1+，签名和发送使用同一份 UTF-8 Body 字节。<code>Path</code> 必须与 Go 服务端收到的 <code>URL.EscapedPath()</code> 一致；非空 Query 必须先按 Go <code>url.Values.Encode()</code> 规范化。本例不带 Query：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制代码</button></div><pre><code class="language-powershell">function Invoke-HmacRequest {
     param([string]$BaseUrl, [string]$Method, [string]$Path, [string]$Secret, [string]$Body = "", [string]$Query = "", [string]$SubscriberCode = "")
@@ -284,7 +285,7 @@ npm ci
 npm run dev</code></pre></div>
 <p>按 Vite 控制台显示的地址打开管理端。需要其他局域网设备访问时可运行 <code>npm run dev -- --host 0.0.0.0</code>，并配置相应防火墙与后端访问策略；切勿将无认证的管理端直接开放公网。</p>
 <h2 id="development-7">6. 检查与排障</h2>
-<div class="table-scroll"><table><thead><tr><th scope="col">现象</th><th scope="col">检查项</th></tr></thead><tbody><tr><td><code>database.dsn ... is required</code></td><td>指定 YAML 中是否填 DSN；也可使用对应环境变量</td></tr><tr><td><code>database structure invalid</code></td><td>检查表、关键索引以及手动 SQL 是否执行</td></tr><tr><td><code>obsolete replica schema</code></td><td>接入端表结构不兼容；先备份并确认真实结构，禁止对非空库直接初始化</td></tr><tr><td>SDK Core 返回 404</td><td>AppID、<code>env</code>、三个绑定字段、节点启用状态</td></tr><tr><td>Webhook 不生效</td><td>订阅者密钥、回调 URL 可达性、反向代理访问和同步游标</td></tr><tr><td>前端接口失败</td><td>Vite 代理、配置中心端口及网关允许访问管理接口的规则</td></tr></tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th scope="col">现象</th><th scope="col">检查项</th></tr></thead><tbody><tr><td><code>database.dsn ... is required</code></td><td>指定 YAML 中是否填 DSN；也可使用对应环境变量</td></tr><tr><td><code>database structure invalid</code></td><td>检查表、关键索引以及手动 SQL 是否执行</td></tr><tr><td><code>obsolete replica schema</code></td><td>接入端表结构不兼容；先备份并确认真实结构，禁止对非空库直接初始化</td></tr><tr><td>SDK Core 返回 404</td><td>AppID、<code>env</code>、三个绑定字段、节点启用状态</td></tr><tr><td>Webhook 不生效</td><td>订阅者编码与两端密钥是否匹配、回调 URL 可达性、反向代理访问和同步游标</td></tr><tr><td>前端接口失败</td><td>Vite 代理、配置中心端口及网关允许访问管理接口的规则</td></tr></tbody></table></div>
 <p>配置优先级为：<strong>程序默认值 &lt; 指定的单个 YAML &lt; 该服务支持的环境变量</strong>。不再合并公共 YAML 与环境 YAML；四个 Go 服务未指定 <code>-config</code> 时统一读取 <code>configs/config.yaml</code>；环境变量可以覆盖 YAML 中支持的字段，但无法代替缺失的 YAML 文件。线上发布请转到 <a href="#production">生产运维</a>。</p>
 <p>旧版 YAML 可能包含已废弃字段，必须以当前各服务 <code>configs/config.yaml</code> 模板为准更新，避免严格解析失败；不要在生产库运行开发或模拟支付脚本。</p>
 <h2 id="development-8">7. 测试与 CI</h2>
@@ -346,10 +347,11 @@ sql/
     V0001__add_game_order.sql
     ...
     V0011__add_game_market_type.sql
+    V0012__rename_webhook_secret_to_signing_secret.sql
 admin/                     # -SkipFrontend 时不存在</code></pre></div>
 <p>归档不包含生产密钥、YAML、Nginx/Supervisor 配置。Linux 可执行文件保存 0755 权限，可在上传后执行 <code>tar -tzf</code>、<code>file bin/*</code> 校验。GitHub Actions <code>.github/workflows/package.yml</code> 使用同一脚本并检查 ELF 架构与权限。打包不会自动部署、执行 SQL 或管理 Supervisor。</p>
 <h2 id="production-3">3. 手动 SQL 先于启动</h2>
-<p>备份并核对目标数据库，<strong>只执行对应场景的 SQL</strong>。现有 V0001～V0011 为不同历史场景的编号归档，不可以不经检查而依次执行：</p>
+<p>备份并核对目标数据库，<strong>只执行对应场景的 SQL</strong>。现有 V0001～V0012 为不同历史场景的编号归档，不可以不经检查而依次执行：</p>
 <ul>
 <li>SDK 拆分升级：停所有旧实例并备份后执行 <code>sql/incremental/V0009__migrate_sdk_node_config.sql</code>，验证新版后单独执行 <code>sql/incremental/V0010__cleanup_legacy_sdk_fields.sql</code>。详见 <a href="#database">数据库文档</a>。</li>
 <li>全新、空的 <code>config_center</code>：<code>sql/full/config_center.sql</code>。</li>
@@ -358,6 +360,7 @@ admin/                     # -SkipFrontend 时不存在</code></pre></div>
 <li>已有功能表但缺少 <code>user_check</code> 服务目录：<code>sql/incremental/V0004__add_sdk_user_check.sql</code>。</li>
 <li>已有服务表但缺少角色查询、区服查询或封解禁目录：分别手工执行 <code>sql/incremental/V0005__add_sdk_role_query.sql</code>、<code>sql/incremental/V0006__add_sdk_server_query.sql</code>、<code>sql/incremental/V0007__add_sdk_role_control.sql</code>，在部署新版 sdk-service 前完成。</li>
 <li>已有服务表但缺少订阅消息目录：手动执行 <code>sql/incremental/V0008__add_sdk_subscribe_message.sql</code>，在部署新版 sdk-service 前完成。</li>
+<li>已有旧版订阅者表（含 <code>webhook_secret</code>）的 <code>config_center</code>：备份后先检查并确保每条密钥唯一、32–255 字节且无首尾空格，再执行 <code>sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql</code>。该脚本将旧 Webhook 密钥列改为双向同步签名密钥并添加唯一索引；重复密钥会导致迁移失败，短密钥会导致新版服务拒绝启动。</li>
 <li>全新、空的 <code>config_access</code>：<code>sql/full/config_access.sql</code>。</li>
 </ul>
 <p>例如在 Linux 发布包解压目录（已有库补建订单表）：</p>
