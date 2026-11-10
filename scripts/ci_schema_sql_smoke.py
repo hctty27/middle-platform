@@ -120,6 +120,10 @@ VALUES(901,'game','legacy','Legacy',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""
     assert_sql("""SELECT COUNT(*) FROM information_schema.columns
       WHERE table_schema='manual_subscriber_upgrade' AND table_name='config_subscriber'
         AND column_name='webhook_secret'""", "0")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.statistics
+      WHERE table_schema='manual_subscriber_upgrade' AND table_name='config_subscriber'
+        AND index_name='uq_config_subscriber_signing_secret'
+        AND column_name='signing_secret' AND non_unique=0""", "1")
     mysql(database="manual_subscriber_upgrade", script=subscriber_migration, ok=False)
 
     # 模拟从历史 V11 权威库升级：保留旧版本表与真实业务节点，手动添加订单表。
