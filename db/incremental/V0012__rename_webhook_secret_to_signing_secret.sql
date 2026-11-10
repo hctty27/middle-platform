@@ -3,5 +3,5 @@
 -- 每个接入端必须使用唯一密钥；若旧订阅者密钥重复，先逐个轮换为不同的随机密钥。
 -- 执行后需确认所有 signing_secret 至少 32 字节，并同步配置对应接入端的 subscriber.secret。
 ALTER TABLE config_subscriber
-    CHANGE COLUMN webhook_secret signing_secret VARCHAR(255) NOT NULL,
+    CHANGE COLUMN webhook_secret signing_secret VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     ADD UNIQUE KEY uq_config_subscriber_signing_secret (signing_secret);
