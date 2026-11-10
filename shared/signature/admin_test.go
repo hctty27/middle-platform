@@ -1,6 +1,8 @@
 package signature
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
