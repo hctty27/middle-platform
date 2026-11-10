@@ -16,7 +16,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 
 ## 同步协议
 
-- 配置中心为每个 `config_subscriber.code` 保存一条独立的 `signing_secret`。本接入端配置的 `subscriber.code`、`subscriber.secret` 必须与该记录匹配。
+- 配置中心为每个 `config_subscriber.code` 保存一条唯一且独立的 `signing_secret`。本接入端配置的 `subscriber.code`、`subscriber.secret` 必须与该记录匹配。
 - 接入端主动拉取 revision、changes、snapshot、节点详情和 batch-get 时，发送 `X-Subscriber-Code`，并使用该接入端自己的密钥执行 HMAC-SHA256 签名。
 - `GET /api/access/nodes` 与 `GET /api/access/revision` 本地查询接口使用相同的接入端身份和密钥签名。
 - 配置中心发送 Webhook 时使用该订阅记录的同一密钥；接入端回调校验接入端编码、方法、路径、规范化 Query、时间戳、nonce 和原始 Body。
