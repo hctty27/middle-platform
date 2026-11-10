@@ -204,7 +204,7 @@ func TestRequestSubscriberHMACMiddleware(t *testing.T) {
 	if status := call(valid); status != http.StatusNoContent || received != `{"afterRevision":7}` {
 		t.Fatalf("valid subscriber request: status=%d body=%q", status, received)
 	}
-	if status := call(valid); status != http.StatusConflict {
+	if status := call(newRequest(code, "0123456789abcdef")); status != http.StatusConflict {
 		t.Fatalf("subscriber nonce replay: %d", status)
 	}
 	wrongIdentity := newRequest(code, "1111111111111111")
