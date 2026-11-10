@@ -278,9 +278,9 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if storedSecret != "rotated-subscriber-secret-0123456789abcdef" {
 		t.Fatalf("secret rotation failed: %q", storedSecret)
 	}
-	resolvedSecret, enabled, err := store.SubscriberSecret(ctx, "access-1")
-	if err != nil || !enabled || resolvedSecret != storedSecret {
-		t.Fatalf("subscriber signing credential lookup: enabled=%v secret=%q err=%v", enabled, resolvedSecret, err)
+	resolvedSecret, subscriberEnabled, err := store.SubscriberSecret(ctx, "access-1")
+	if err != nil || !subscriberEnabled || resolvedSecret != storedSecret {
+		t.Fatalf("subscriber signing credential lookup: enabled=%v secret=%q err=%v", subscriberEnabled, resolvedSecret, err)
 	}
 	if _, active, err := store.SubscriberSecret(ctx, "missing-access"); err != nil || active {
 		t.Fatalf("unknown subscriber should be inactive: active=%v err=%v", active, err)
