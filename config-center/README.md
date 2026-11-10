@@ -18,7 +18,7 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 ## 安全与参考
 
-`/api/config/admin/**` 始终使用 HMAC-SHA256，密钥为 `adminAuth.secret`，须与 SDK Core 的管理密钥一致。`/api/config/sync/**`、`/api/config/nodes/**` 根据请求头 `X-Subscriber-Code` 查找 `config_subscriber` 对应记录，并使用该记录的 `signing_secret` 验签。配置中心发送 Webhook 时也使用同一条订阅记录的密钥。每个接入端拥有独立密钥，至少 32 字节；停用订阅者会同时拒绝该接入端的同步读取请求并停止新的 Webhook 投递。
+`/api/config/admin/**` 始终使用 HMAC-SHA256，密钥为 `adminAuth.secret`，须与 SDK Core 的管理密钥一致。`/api/config/sync/**`、`/api/config/nodes/**` 根据请求头 `X-Subscriber-Code` 查找 `config_subscriber` 对应记录，并使用该记录的 `signing_secret` 验签。配置中心发送 Webhook 时也使用同一条订阅记录的密钥。每个接入端拥有独立密钥，至少 32 字节；停用订阅者会拒绝该接入端的同步读取请求并停止新的 Webhook 投递。已有数据库升级时先手工执行 `db/incremental/V0012__rename_webhook_secret_to_signing_secret.sql`；如果原密钥不足 32 字节，需先轮换为至少 32 字节的密钥。密钥轮换必须同步更新接入端 `subscriber.secret` 并重启接入端。
 
 所有签名均绑定接入端编码、方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。密钥不能提交到仓库；生产必须使用 HTTPS 并限制网关访问范围。
 
