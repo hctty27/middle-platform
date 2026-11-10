@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"hitall.com/middle-platform/shared/signature"
@@ -91,8 +92,8 @@ func (c *Client) get(ctx context.Context, path string, target any) error {
 
 // call 统一签署请求，并处理 HTTP 状态、响应大小和严格 JSON 解码。
 func (c *Client) call(ctx context.Context, method, path string, body []byte, target any) error {
-	if c.subscriberCode == "" || len([]byte(c.secret)) < 32 {
-		return fmt.Errorf("配置同步 HMAC-SHA256 密钥至少需要 32 字节")
+	if c.subscriberCode == "" || len([]rune(c.subscriberCode)) > 128 || strings.TrimSpace(c.subscriberCode) != c.subscriberCode || strings.ContainsAny(c.subscriberCode, "\\r\\n") || len([]byte(c.secret)) < 32 || len([]byte(c.secret)) > 255 || strings.TrimSpace(c.secret) != c.secret {
+		return fmt.Errorf("接入端编码不合法，签名密钥必须为 32 至 255 字节且不能包含首尾空格")
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, bytes.NewReader(body))
 	if err != nil {
