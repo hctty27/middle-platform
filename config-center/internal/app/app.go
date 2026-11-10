@@ -72,14 +72,14 @@ func Run(configPath string) error {
 
 	address := cfg.Address
 	repository := &store.Store{DB: db}
-	// 管理接口与配置同步读取接口使用独立密钥执行 HMAC-SHA256 验签。
+	// 管理接口使用管理密钥；配置同步接口根据接入端编码读取订阅者独立密钥。
 	var handler http.Handler = signature.AdminMiddleware(
 		api.RouterWithWrites(repository, repository), "/api/config/admin", cfg.AdminSecret,
 	)
-	handler = signature.RequestHMACMiddleware(
+	handler = signature.RequestSubscriberHMACMiddleware(
 		handler,
 		[]string{"/api/config/sync", "/api/config/nodes"},
-		cfg.ConfigSyncSecret,
+		repository.SubscriberSecret,
 	)
 	var ready atomic.Bool
 	ready.Store(true)
