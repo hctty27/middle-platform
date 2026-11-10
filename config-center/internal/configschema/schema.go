@@ -14,8 +14,16 @@ type Field struct {
 }
 
 var fields = map[string][]Field{
-	"game":         {},
-	"region":       {},
+	"game": {},
+	"region": {
+		{Key: "loginServerIp", Title: "登录服 IP", Description: "登录服 IP，最长 64 个字符", Group: "区服接入", Placeholder: "请输入登录服 IP", Order: 1},
+		{Key: "loginDomain", Title: "登录服域名", Description: "登录服域名，最长 255 个字符", Group: "区服接入", Placeholder: "请输入登录服域名", Order: 2},
+		{Key: "chatDomain", Title: "聊天服域名", Description: "聊天服域名，最长 255 个字符", Group: "区服接入", Placeholder: "请输入聊天服域名", Order: 3},
+		{Key: "loginUrl", Title: "登录地址", Description: "登录地址，最长 500 个字符", Group: "区服接入", Placeholder: "请输入登录地址", Order: 4},
+		{Key: "jumpIp", Title: "跳板机 IP", Description: "跳板机 IP，最长 32 个字符", Group: "区服接入", Placeholder: "请输入跳板机 IP", Order: 5},
+		{Key: "regionAlias", Title: "大区别名", Description: "大区别名，最长 32 个字符", Group: "区服接入", Placeholder: "请输入大区别名", Order: 6},
+		{Key: "mergeDomain", Title: "合服域名", Description: "合服域名，最长 500 个字符", Group: "区服接入", Placeholder: "请输入合服域名", Order: 7},
+	},
 	"server_group": {},
 	"channel_app": {
 		{Key: "tsKey", Title: "TS Key", Description: "SDK Core 公开配置接口可返回该字段（可选）", Group: "公开配置", Placeholder: "请输入 TS Key", Order: 1},
