@@ -5,7 +5,7 @@
 ## 本地启动
 
 1. 创建完全空的 `config_access` 数据库。
-2. 将 `configs/config.yaml` 复制为完整独立的 `configs/config-dev.yaml`；填写 `database.dsn`（副本库）、`configCenter.url`（权威配置中心地址）、`webhook.secret`（Webhook 接收密钥）、`configSync.secret`（主动拉取配置的 HMAC-SHA256 密钥）。启动只读取指定 YAML，不继承同目录的公共配置；不传 `-config` 时默认读取当前工作目录下的 `configs/config.yaml`。环境变量仍可覆盖指定字段：`CONFIG_SYNC_SECRET` 覆盖配置同步密钥，`CONFIG_WEBHOOK_SECRET` 覆盖 Webhook 密钥。
+2. 将 `configs/config.yaml` 复制为完整独立的 `configs/config-dev.yaml`；填写 `database.dsn`（副本库）、`configCenter.url`（权威配置中心地址）、`subscriber.code` 和 `subscriber.secret`。其中编码和密钥必须与配置中心 `config_subscriber` 中同一条记录一致。启动只读取指定 YAML，不继承同目录的公共配置；不传 `-config` 时默认读取当前工作目录下的 `configs/config.yaml`。环境变量 `CONFIG_SUBSCRIBER_CODE`、`CONFIG_SUBSCRIBER_SECRET` 可分别覆盖接入端编码和密钥。
 3. 在本目录执行：
 
 ```powershell
@@ -16,13 +16,14 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 
 ## 同步协议
 
-- `POST /internal/config/callback` 使用订阅者密钥执行 HMAC-SHA256 验签，签名覆盖 HTTP 方法、实际路径、规范化 Query、时间戳、nonce 和原始 Body，成功返回 HTTP 202。接入端在单进程内拒绝重复 nonce。
-- 主动拉取配置中心的 revision、changes、snapshot、节点详情和 batch-get 请求均使用 `configSync.secret` 执行 HMAC-SHA256 签名；该密钥必须与配置中心 `configSync.secret` 完全一致，至少 32 字节。
-- `GET /api/access/nodes` 与 `GET /api/access/revision` 查询本地副本，也必须使用 `configSync.secret` 执行 HMAC-SHA256 签名。
+- 配置中心为每个 `config_subscriber.code` 保存一条独立的 `signing_secret`。本接入端配置的 `subscriber.code`、`subscriber.secret` 必须与该记录匹配。
+- 接入端主动拉取 revision、changes、snapshot、节点详情和 batch-get 时，发送 `X-Subscriber-Code`，并使用该接入端自己的密钥执行 HMAC-SHA256 签名。
+- `GET /api/access/nodes` 与 `GET /api/access/revision` 本地查询接口使用相同的接入端身份和密钥签名。
+- 配置中心发送 Webhook 时使用该订阅记录的同一密钥；接入端回调校验接入端编码、方法、路径、规范化 Query、时间戳、nonce 和原始 Body。
 - 首次启动、epoch 变化或 revision 断档时执行完整快照；常规更新按日志增量获取节点 ID 并批量拉取。
 - 节点和游标在同一事务内写入；周期性 revision 校对补偿丢失通知。
-- 订阅者在配置中心注册，`secret` 必须和本进程一致；内部回调不可直接开放公网。
-- 旧版 SHA-1 排序签名 Webhook 不再兼容；配置中心和接入端必须同步升级。多实例场景应通过共享存储实现全局 nonce 去重。
+- 停用订阅者会拒绝该接入端的同步读取请求，并停止新的 Webhook 投递。
+- 旧版固定 `configSync.secret` 和未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。多实例场景应通过共享存储实现全局 nonce 去重。
 
 ```bash
 go test -race ./...
