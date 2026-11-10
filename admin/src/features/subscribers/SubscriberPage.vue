@@ -23,6 +23,11 @@ const deletingSubscriberId = ref<number | null>(null)
 const newSubscriber = reactive({ code: '', callbackUrl: '', secret: '' })
 const editForm = reactive({ id: 0, code: '', callbackUrl: '', secret: '' })
 
+function isValidSubscriberSecret(secret: string): boolean {
+  const length = new TextEncoder().encode(secret).length
+  return length >= 32 && length <= 255 && secret === secret.trim()
+}
+
 async function loadSubscribers() {
   loadingSubscribers.value = true
   try {
@@ -39,8 +44,8 @@ async function addSubscriber() {
     ElMessage.warning('请填写接入方编码、回调地址和签名密钥')
     return
   }
-  if (newSubscriber.code !== newSubscriber.code.trim() || newSubscriber.secret !== newSubscriber.secret.trim() || newSubscriber.secret.length < 32) {
-    ElMessage.warning('接入方编码不能包含首尾空格，签名密钥至少 32 字节且不能包含首尾空格')
+  if (newSubscriber.code !== newSubscriber.code.trim() || !isValidSubscriberSecret(newSubscriber.secret)) {
+    ElMessage.warning('接入方编码不能包含首尾空格，签名密钥须为 32–255 字节且不能包含首尾空格')
     return
   }
   creatingSubscriber.value = true
@@ -67,7 +72,7 @@ async function saveSubscriber() {
     ElMessage.warning('请填写 Webhook 回调地址')
     return
   }
-  if (editForm.secret && (editForm.secret !== editForm.secret.trim() || editForm.secret.length < 32)) {
+  if (editForm.secret && (!isValidSubscriberSecret(editForm.secret))) {
     ElMessage.warning('签名密钥至少 32 字节且不能包含首尾空格')
     return
   }
@@ -197,7 +202,7 @@ onMounted(() => void loadSubscribers())
         <el-form-item label="Webhook 回调地址">
           <el-input v-model="newSubscriber.callbackUrl" autocomplete="off" />
         </el-form-item>
-        <el-form-item label="接入端签名密钥（至少 32 字节）">
+        <el-form-item label="接入端签名密钥（32–255 字节）">
           <el-input v-model="newSubscriber.secret" type="password" show-password autocomplete="new-password" />
         </el-form-item>
         <p class="muted">支持 HTTP / HTTPS 回调地址，服务端会校验目标地址安全性。</p>
@@ -225,7 +230,7 @@ onMounted(() => void loadSubscribers())
             placeholder="留空表示不修改当前密钥"
           />
         </el-form-item>
-        <p class="muted">接入方编码创建后不可修改；密钥不会回显，留空即可保留原密钥。轮换密钥后，必须同步更新对应接入端的 subscriber.secret 并重启接入端。</p>
+        <p class="muted">接入方编码创建后不可修改；密钥不会回显；每个订阅者的密钥必须唯一，留空即可保留原密钥。轮换密钥后，必须同步更新对应接入端的 subscriber.secret 并重启接入端。</p>
       </el-form>
       <template #footer>
         <el-button @click="showEditSubscriber = false">取消</el-button>
