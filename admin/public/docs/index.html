@@ -583,7 +583,7 @@ Content-Type: application/json
 <div class="table-wrap"><table><thead><tr><th>场景 / 方向</th><th>算法</th><th>参与字段或规则</th></tr></thead><tbody><tr><td>游戏 ↔ SDK Core / SDK Service</td><td>HMAC-SHA-256</td><td>方法、编码路径、AppID、timestamp、nonce 和原始 Body</td></tr><tr><td>第三方 → 管理 API</td><td>HMAC-SHA-256</td><td>方法、路径、规范化 Query、timestamp、nonce 和原始 Body</td></tr><tr><td>接入端 → 配置中心同步 API</td><td>HMAC-SHA-256</td><td>接入端编码、方法、路径、规范化 Query、timestamp、nonce 和原始 Body</td></tr><tr><td>配置中心 → Access / 第三方 Webhook</td><td>HMAC-SHA-256</td><td>同一接入端编码和独立密钥、方法、路径、Query、timestamp、nonce 和原始 Body</td></tr><tr><td>平台 → SDK Core（支付 V1）</td><td>SHA-1</td><td><code>appSecret</code>、order_no、game_order_id、nonce、timestamp；<strong>空值保留</strong></td></tr><tr><td>平台 → SDK Service</td><td>SHA-1</td><td><code>appSecret</code>、AppID、timestamp、nonce 与接口定义的 Body 值</td></tr><tr><td>SDK Service → 平台</td><td>SHA-1</td><td><code>appSecret</code>、AppID、timestamp、nonce；事件与订阅上报<strong>不签 Body</strong></td></tr></tbody></table></div>
 <h3>通用约定</h3>
 <ul class="points">
-<li>HMAC-SHA256 请求使用 <code>HITALK-HMAC-SHA256</code> 前缀，按换行符分隔方法、转义路径、规范化 Query、时间戳和 nonce，最后追加原始 Body 字节。</li>
+<li>管理 HMAC 使用 <code>HITALK-HMAC-SHA256</code> 前缀；配置同步 HMAC 额外加入 <code>SUBSCRIBER</code> 和接入端编码。随后按换行符分隔方法、转义路径、规范化 Query、时间戳和 nonce，最后追加原始 Body 字节。</li>
 <li>管理请求使用 <code>adminAuth.secret</code>；每个接入端的配置拉取、本地只读查询和 Webhook 共用该订阅记录的 <code>signing_secret</code>。每条订阅记录的密钥必须唯一，长度为 32–255 字节且不得包含首尾空格；不同接入端不能共用密钥。</li>
 <li>HMAC Header 为 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>；Unix 秒时间戳允许前后 5 分钟，nonce 为 8 字节安全随机数的 16 位小写 hex，签名为 64 位小写 hex。</li>
 <li>历史平台协议仍按各接口定义使用 SHA-1 排序签名，输出 40 位小写 hex；平台支付回调 V1 的空值处理是特例，不要将其与 HMAC 混用。</li>
