@@ -214,7 +214,7 @@ CREATE DATABASE IF NOT EXISTS config_access
 <p>打开第一个 PowerShell 终端：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml</code></pre></div>
-<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code>，例如 <code>root:your-password@tcp(127.0.0.1:3306)/config_center?parseTime=true&amp;loc=UTC</code>。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终使用 <code>adminAuth.secret</code> 验签；下文未携带签名的管理请求仅用于展示参数，实际执行必须按 <a href="index.html#sig-admin">管理签名规范</a> 添加请求头。Vue 管理页面直接输入该密钥解锁并自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问；新增订阅者无需重启。回调支持公网/内网的域名与 IP（HTTP/HTTPS），无需配置域名白名单。</p>
+<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code>、<code>adminAuth.secret</code> 和 <code>configSync.secret</code>。管理密钥须与 SDK Core 的 <code>adminAuth.secret</code> 一致；配置同步密钥须与接入端的 <code>configSync.secret</code> 一致，且至少 32 字节。环境变量 <code>ADMIN_AUTH_SECRET</code>、<code>CONFIG_SYNC_SECRET</code> 可分别覆盖 YAML。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终验签。Vue 管理页面输入管理密钥后自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问。
 <p>对<strong>新空库先手动执行 SQL，再启动</strong>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 先在数据库工具中执行 db/full/config_center.sql（仅新库）
 go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
@@ -223,17 +223,41 @@ go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
 <p>新终端进入 <code>config-center-access</code>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center-access
 Copy-Item configs/config.yaml configs/config-dev.yaml
-# 修改 YAML 中 database.dsn / configCenter.url / webhook.secret
+# 修改 YAML 中 database.dsn / configCenter.url / webhook.secret / configSync.secret
 go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></div>
-<p><code>database.dsn</code> 指向 <code>config_access</code>，<code>configCenter.url</code> 通常是 <code>http://127.0.0.1:8080</code>，<code>webhook.secret</code> 必须是足够长的随机密钥。首次启动前须对空 <code>config_access</code> 执行 <code>db/full/config_access.sql</code>，随后全量拉取节点，随后增量同步；旧副本库参见 <a href="#database">数据库文档</a>。</p>
-<p>在运行中的配置中心注册订阅者（示例密钥需与接入端一致，且管理写接口必须在受保护的网络上启用）；无需重启 Worker：</p>
-<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">$body = @{
-    code = &quot;access-local&quot;
-    callbackUrl = &quot;http://127.0.0.1:8081/internal/config/callback&quot;
-    secret = &quot;replace-with-a-strong-local-secret&quot;
-} | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri &quot;http://127.0.0.1:8080/api/config/admin/subscribers&quot; -ContentType &quot;application/json&quot; -Body $body</code></pre></div>
-<p>检查 <code>http://127.0.0.1:8081/api/access/revision</code>。Webhook 使用订阅者独立密钥执行 HMAC-SHA256；接入端主动拉取配置中心 revision、changes、snapshot、节点详情和 batch-get 时，使用两端一致的 <code>configSync.secret</code> 签名。接入端本地的 <code>/api/access/nodes</code> 与 <code>/api/access/revision</code> 也要求该密钥签名。签名验证成功只代表 Webhook 已受理，真正的节点更新以副本游标和节点结果为准。配置中心与接入端必须同步升级。</p>
+<p><code>database.dsn</code> 指向 <code>config_access</code>，<code>configCenter.url</code> 通常是 <code>http://127.0.0.1:8080</code>。<code>configSync.secret</code> 必须与配置中心的同名密钥完全一致且至少 32 字节；<code>webhook.secret</code> 必须与配置中心订阅者记录中的 <code>secret</code> 一致，两者是不同用途的密钥。环境变量 <code>CONFIG_SYNC_SECRET</code>、<code>CONFIG_WEBHOOK_SECRET</code> 可分别覆盖 YAML。首次启动前须对空 <code>config_access</code> 执行 <code>db/full/config_access.sql</code>，随后服务会全量拉取节点，再执行增量同步；旧副本库参见 <a href="#database">数据库文档</a>。</p>
+<p>在运行中的配置中心注册订阅者时，使用配置中心的 <code>adminAuth.secret</code> 对管理请求签名；请求 Body 中的 <code>secret</code> 必须与接入端的 <code>webhook.secret</code> 一致。下面示例适用于 PowerShell 5.1+，签名和发送使用同一份 UTF-8 Body 字节：</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制代码</button></div><pre><code class="language-powershell">function Invoke-HmacRequest {
+    param([string]$BaseUrl, [string]$Method, [string]$Path, [string]$Secret, [string]$Body = "", [string]$Query = "")
+    $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
+    $nonceBytes = New-Object byte[] 8
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($nonceBytes) } finally { $rng.Dispose() }
+    $nonce = [BitConverter]::ToString($nonceBytes).Replace("-", "").ToLowerInvariant()
+    $bodyBytes = [Text.Encoding]::UTF8.GetBytes($Body)
+    $prefix = "HITALK-HMAC-SHA256`n$($Method.ToUpperInvariant())`n$Path`n$Query`n$timestamp`n$nonce`n"
+    $prefixBytes = [Text.Encoding]::UTF8.GetBytes($prefix)
+    $messageBytes = New-Object byte[] ($prefixBytes.Length + $bodyBytes.Length)
+    [Buffer]::BlockCopy($prefixBytes, 0, $messageBytes, 0, $prefixBytes.Length)
+    [Buffer]::BlockCopy($bodyBytes, 0, $messageBytes, $prefixBytes.Length, $bodyBytes.Length)
+    $hmac = [Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($Secret))
+    try { $signature = [BitConverter]::ToString($hmac.ComputeHash($messageBytes)).Replace("-", "").ToLowerInvariant() } finally { $hmac.Dispose() }
+    $headers = @{ "X-Timestamp" = $timestamp; "X-Nonce" = $nonce; "X-Signature" = $signature }
+    $uri = $BaseUrl.TrimEnd("/") + $Path
+    if ($Query) { $uri += "?" + $Query }
+    if ($Method.ToUpperInvariant() -eq "GET") { return Invoke-RestMethod -Method Get -Uri $uri -Headers $headers }
+    return Invoke-RestMethod -Method $Method -Uri $uri -Headers $headers -ContentType "application/json" -Body $bodyBytes
+}
+
+$adminSecret = "replace-with-adminAuth.secret"
+$webhookSecret = "replace-with-the-same-value-as-webhook.secret"
+$configSyncSecret = "replace-with-configSync.secret"
+$subscriberBody = @{ code = "access-local"; callbackUrl = "http://127.0.0.1:8081/internal/config/callback"; secret = $webhookSecret } | ConvertTo-Json -Compress
+Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8080" -Method "POST" -Path "/api/config/admin/subscribers" -Secret $adminSecret -Body $subscriberBody
+Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8081" -Method "GET" -Path "/api/access/revision" -Secret $configSyncSecret
+# Query 非空时，先按 Go url.Values.Encode() 规范化，再同时传入 -Query 和实际 URL。
+</code></pre></div>
+<p>最后一条命令会签名读取接入端的 <code>/api/access/revision</code>；不能直接在浏览器地址栏打开该 URL，因为它始终要求 HMAC-SHA256 Header。Webhook 使用订阅者独立密钥验签，配置中心主动拉取 revision、changes、snapshot、节点详情和 batch-get 时使用两端一致的 <code>configSync.secret</code>。签名验证成功只代表 Webhook 已受理，真正的节点更新以副本游标和节点结果为准。配置中心与接入端必须同步升级。</p>
 <h2 id="development-4">3. SDK Core</h2>
 <p>新终端进入 <code>sdk-core</code>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd sdk-core
