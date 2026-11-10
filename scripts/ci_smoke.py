@@ -88,7 +88,7 @@ def request_secret(port, path):
             return os.environ["CONFIG_SUBSCRIBER_SECRET"], os.environ["CONFIG_SUBSCRIBER_CODE"]
     if port == 8081:
         if request_path in {"/api/access/nodes", "/api/access/revision"}:
-            return os.environ["CONFIG_SYNC_SECRET"]
+            return os.environ["CONFIG_SUBSCRIBER_SECRET"], os.environ["CONFIG_SUBSCRIBER_CODE"]
         if request_path == "/internal/config/callback":
             return os.environ["CONFIG_SUBSCRIBER_SECRET"], os.environ["CONFIG_SUBSCRIBER_CODE"]
     return None, None
