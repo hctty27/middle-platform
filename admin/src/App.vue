@@ -4,7 +4,6 @@ import { ElMessage } from 'element-plus'
 import axios from 'axios'
 import { api, apiErrorMessage } from './api/http'
 import { adminAuthenticated, clearAdminSecret, setAdminSecret, unlockAdmin } from './api/adminAuth'
-import { getRevision } from './api/syncApi'
 import { confirmDiscardChanges, preventUnloadWithUnsavedChanges } from './app/unsavedChanges'
 import { currentGameId, focusNodeId, games, gamesLoading, loadGames } from './app/gameContext'
 import { gameMarketLabels } from './features/nodes/types'
@@ -21,8 +20,6 @@ const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'sdk_node_config',
 const navigation = ref<Page>('overview')
 const sdkFocusNodeId = ref<number | null>(null)
 const sidebarCollapsed = ref(false)
-const revision = ref(0)
-const epoch = ref('')
 const titles: Record<Page, string> = {
   overview: '工作台', nodes: '配置管理', channel_apps: '渠道应用', sdk_node_config: 'SDK 配置', sdk_services: '服务管理',
   subscribers: '接入同步', recharge: '充值模拟', about: '系统说明'
@@ -61,18 +58,9 @@ async function switchGame(gameId: number) {
   if (gameId === currentGameId.value || !(await confirmDiscardChanges())) return
   currentGameId.value = gameId
 }
-async function refreshRevision() {
-  try {
-    const result = await getRevision()
-    revision.value = result.data.revision
-    epoch.value = result.data.epoch
-  } catch {
-    ElMessage.error('读取配置版本失败')
-  }
-}
 async function refreshAll() {
   updating.value = true
-  try { await Promise.all([loadGames(), refreshRevision()]) }
+  try { await loadGames() }
   catch { ElMessage.error('刷新游戏列表失败') }
   finally { updating.value = false }
 }
@@ -199,7 +187,6 @@ onUnmounted(() => {
                        :label="game.name + (game.marketType ? ' · ' + gameMarketLabels[game.marketType] : '')" />
           </el-select>
           <el-tag v-if="activeGame?.marketType" type="info" effect="plain">{{ gameMarketLabels[activeGame.marketType] }}</el-tag>
-          <el-tag type="success" effect="plain">Revision {{ revision }}</el-tag>
           <el-button :loading="updating" @click="refreshAll">刷新</el-button>
           <el-button @click="logout">退出</el-button>
         </div>
@@ -217,8 +204,6 @@ onUnmounted(() => {
         <main v-if="navigation === 'about'" class="content-panel">
           <h2>系统说明</h2>
           <p>当前游戏：{{ activeGame?.name ?? '未选择' }}</p>
-          <p>当前权威数据集：{{ epoch }}</p>
-          <p>当前配置版本：{{ revision }}</p>
           <p>配置树：游戏 → 大区 → 区服组；渠道应用归属游戏，通过绑定关联区服组，公共配置支持环境覆盖。</p>
           <el-alert title="管理页面使用密钥签名认证；仍需通过 HTTPS 和受控网关访问。"
                     type="warning" show-icon :closable="false" />
