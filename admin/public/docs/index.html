@@ -584,7 +584,7 @@ Content-Type: application/json
 <h3>通用约定</h3>
 <ul class="points">
 <li>HMAC-SHA256 请求使用 <code>HITALK-HMAC-SHA256</code> 前缀，按换行符分隔方法、转义路径、规范化 Query、时间戳和 nonce，最后追加原始 Body 字节。</li>
-<li>管理请求使用 <code>adminAuth.secret</code>；每个接入端的配置拉取、本地只读查询和 Webhook 共用该订阅记录的 <code>signing_secret</code>。不同接入端密钥互相独立，至少 32 字节。</li>
+<li>管理请求使用 <code>adminAuth.secret</code>；每个接入端的配置拉取、本地只读查询和 Webhook 共用该订阅记录的 <code>signing_secret</code>。每条订阅记录的密钥必须唯一，长度为 32–255 字节且不得包含首尾空格；不同接入端不能共用密钥。</li>
 <li>HMAC Header 为 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>；Unix 秒时间戳允许前后 5 分钟，nonce 为 8 字节安全随机数的 16 位小写 hex，签名为 64 位小写 hex。</li>
 <li>历史平台协议仍按各接口定义使用 SHA-1 排序签名，输出 40 位小写 hex；平台支付回调 V1 的空值处理是特例，不要将其与 HMAC 混用。</li>
 <li>签名用于身份认证和完整性校验，不会加密 HTTP Body；生产仍必须使用 HTTPS。</li>
