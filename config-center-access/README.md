@@ -22,7 +22,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 - 配置中心发送 Webhook 时使用该订阅记录的同一密钥；接入端回调校验接入端编码、方法、路径、规范化 Query、时间戳、nonce 和原始 Body。
 - 首次启动、epoch 变化或 revision 断档时执行完整快照；常规更新按日志增量获取节点 ID 并批量拉取。
 - 节点和游标在同一事务内写入；周期性 revision 校对补偿丢失通知。
-- 停用订阅者会拒绝该接入端的同步读取请求，并停止新的 Webhook 投递。
+- 停用订阅者会拒绝该接入端向配置中心发起的同步读取请求，并停止新的 Webhook 投递；接入端本地只读接口仍按本地配置密钥验签。\n- 轮换密钥时，必须同步更新配置中心订阅记录和本接入端 `subscriber.secret`，再重启接入端，不能只改其中一侧。
 - 旧版固定 `configSync.secret` 和未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。多实例场景应通过共享存储实现全局 nonce 去重。
 
 ```bash
