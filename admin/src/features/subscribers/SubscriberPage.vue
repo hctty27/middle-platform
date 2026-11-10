@@ -225,7 +225,7 @@ onMounted(() => void loadSubscribers())
             placeholder="留空表示不修改当前密钥"
           />
         </el-form-item>
-        <p class="muted">接入方编码创建后不可修改；密钥不会回显，留空即可保留原密钥。</p>
+        <p class="muted">接入方编码创建后不可修改；密钥不会回显，留空即可保留原密钥。轮换密钥后，必须同步更新对应接入端的 subscriber.secret 并重启接入端。</p>
       </el-form>
       <template #footer>
         <el-button @click="showEditSubscriber = false">取消</el-button>
