@@ -32,7 +32,7 @@ func (s *Store) Subscribers(ctx context.Context) ([]Subscriber, error) {
 
 // CreateSubscriber 原子创建订阅者与初始投递状态。
 func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequest) error {
-	if strings.TrimSpace(input.Code) == "" || strings.TrimSpace(input.Code) != input.Code || len([]rune(input.Code)) > 128 || strings.ContainsAny(input.Code, "\\r\\n") ||
+	if strings.TrimSpace(input.Code) == "" || strings.TrimSpace(input.Code) != input.Code || len([]rune(input.Code)) > 128 || strings.ContainsAny(input.Code, "\r\n") ||
 		len([]byte(input.Secret)) < 32 || len(input.Secret) > 255 || strings.TrimSpace(input.Secret) != input.Secret ||
 		webhook.ValidateCallback(input.CallbackURL) != nil {
 		return ErrInvalid
@@ -143,7 +143,7 @@ func (s *Store) DeleteSubscriber(ctx context.Context, id int64) error {
 
 // SubscriberSecret 按接入端编码读取启用订阅者的独立签名密钥。
 func (s *Store) SubscriberSecret(ctx context.Context, code string) (string, bool, error) {
-	if code == "" || len([]rune(code)) > 128 || strings.TrimSpace(code) != code || strings.ContainsAny(code, "\\r\\n") {
+	if code == "" || len([]rune(code)) > 128 || strings.TrimSpace(code) != code || strings.ContainsAny(code, "\r\n") {
 		return "", false, nil
 	}
 	var secret string
