@@ -69,6 +69,15 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 			return err
 		}
 	}
+	var invalidSubscriberSecrets int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM config_subscriber
+		WHERE OCTET_LENGTH(signing_secret)<32 OR TRIM(signing_secret)<>signing_secret
+			OR TRIM(code)<>code OR code=''`).Scan(&invalidSubscriberSecrets); err != nil {
+		return err
+	}
+	if invalidSubscriberSecrets > 0 {
+		return errors.New("所有启用及停用的 config_subscriber 密钥都必须至少 32 字节且无首尾空格；请先更新订阅密钥")
+	}
 	for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state", "sdk_service_binding"} {
 		exists, err := hasTable(ctx, conn, obsolete)
 		if err != nil {
