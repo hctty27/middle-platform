@@ -32,7 +32,7 @@ func (s *Store) Subscribers(ctx context.Context) ([]Subscriber, error) {
 
 // CreateSubscriber 原子创建订阅者与初始投递状态。
 func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequest) error {
-	if strings.TrimSpace(input.Code) == "" || len([]rune(input.Code)) > 128 ||
+	if strings.TrimSpace(input.Code) == "" || strings.TrimSpace(input.Code) != input.Code || len([]rune(input.Code)) > 128 || strings.ContainsAny(input.Code, "\\r\\n") ||
 		len([]byte(input.Secret)) < 32 || len(input.Secret) > 255 || strings.TrimSpace(input.Secret) != input.Secret ||
 		webhook.ValidateCallback(input.CallbackURL) != nil {
 		return ErrInvalid
@@ -92,7 +92,7 @@ func (s *Store) UpdateSubscriber(ctx context.Context, id int64, input UpdateSubs
 			SET callback_url=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`, input.CallbackURL, id)
 	} else {
 		_, err = tx.ExecContext(ctx, `UPDATE config_subscriber
-			SET callback_url=?,webhook_secret=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`,
+			SET callback_url=?,signing_secret=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`,
 			input.CallbackURL, input.Secret, id)
 	}
 	if err != nil {
