@@ -5,7 +5,7 @@
 ## 本地启动
 
 1. 创建完全空的 `config_access` 数据库。
-2. 将 `configs/config.yaml` 复制为完整独立的 `configs/config-dev.yaml`；填写 `database.dsn`（副本库）、`configCenter.url`（权威配置中心地址）、`subscriber.code` 和 `subscriber.secret`。其中编码和密钥必须与配置中心 `config_subscriber` 中同一条记录一致。启动只读取指定 YAML，不继承同目录的公共配置；不传 `-config` 时默认读取当前工作目录下的 `configs/config.yaml`。环境变量 `CONFIG_SUBSCRIBER_CODE`、`CONFIG_SUBSCRIBER_SECRET` 可分别覆盖接入端编码和密钥。
+2. 将 `configs/config.yaml` 复制为完整独立的 `configs/config-dev.yaml`；填写 `database.dsn`（副本库）、`configCenter.url`（权威配置中心地址）、`subscriber.code` 和 `subscriber.secret`。其中编码和密钥必须与配置中心 `config_subscriber` 中同一条记录一致。编码最多 128 个字符；密钥必须唯一、长度为 32–255 字节且不得包含首尾空格。启动只读取指定 YAML，不继承同目录的公共配置；不传 `-config` 时默认读取当前工作目录下的 `configs/config.yaml`。环境变量 `CONFIG_SUBSCRIBER_CODE`、`CONFIG_SUBSCRIBER_SECRET` 可分别覆盖接入端编码和密钥。
 3. 在本目录执行：
 
 ```powershell
@@ -23,7 +23,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 - 首次启动、epoch 变化或 revision 断档时执行完整快照；常规更新按日志增量获取节点 ID 并批量拉取。
 - 节点和游标在同一事务内写入；周期性 revision 校对补偿丢失通知。
 - 停用订阅者会拒绝该接入端向配置中心发起的同步读取请求，并停止新的 Webhook 投递；接入端本地只读接口仍按本地配置密钥验签。\n- 轮换密钥时，必须同步更新配置中心订阅记录和本接入端 `subscriber.secret`，再重启接入端，不能只改其中一侧。
-- 旧版固定 `configSync.secret` 和未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。多实例场景应通过共享存储实现全局 nonce 去重。
+- 旧版全局 `configSync.secret`、独立 `webhook.secret` 及未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。多实例场景应通过共享存储实现全局 nonce 去重。
 
 ```bash
 go test -race ./...
