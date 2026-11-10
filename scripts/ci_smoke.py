@@ -2,6 +2,7 @@
 """Go 配置中心双实例、Webhook 与 Go 接入端 MySQL 端到端回归。"""
 
 import hashlib
+import hmac
 import json
 import os
 import pathlib
@@ -17,27 +18,73 @@ PROCESSES = []
 LOGS = []
 
 
-def request(port, path, method="GET", data=None, expected=200, extra_headers=None):
-    """发送 HTTP 请求并校验响应状态与 JSON 数据。"""
+def canonical_query(raw_query):
+    """与 Go url.Values.Encode 保持一致：按键排序，重复值保留原顺序。"""
+    values = {}
+    for key, value in urllib.parse.parse_qsl(raw_query, keep_blank_values=True):
+        values.setdefault(key, []).append(value)
+    return "&".join(
+        f"{urllib.parse.quote_plus(key, safe='')}={urllib.parse.quote_plus(value, safe='')}"
+        for key in sorted(values)
+        for value in values[key]
+    )
+
+
+def signature_headers(secret, method, path, payload, timestamp=None, nonce=None):
+    """生成与 shared/signature.SignHMACRequest 完全一致的请求签名。"""
+    parsed = urllib.parse.urlsplit(path)
+    request_path = parsed.path or "/"
+    canonical = canonical_query(parsed.query)
+    timestamp = timestamp or str(int(time.time()))
+    nonce = nonce or secrets.token_hex(8)
+    message = (
+        "HITALK-HMAC-SHA256\n"
+        + method.upper() + "\n"
+        + request_path + "\n"
+        + canonical + "\n"
+        + timestamp + "\n"
+        + nonce + "\n"
+    ).encode("utf-8") + (payload or b"")
+    digest = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+    return {
+        "X-Timestamp": timestamp,
+        "X-Nonce": nonce,
+        "X-Signature": digest,
+    }
+
+
+def request_secret(port, path):
+    """根据服务和接口前缀选择对应的独立 HMAC 密钥。"""
+    request_path = urllib.parse.urlsplit(path).path
+
+    def matches(prefix):
+        return request_path == prefix or request_path.startswith(prefix + "/")
+
+    if port == 8080:
+        if matches("/api/config/admin"):
+            return os.environ["ADMIN_AUTH_SECRET"]
+        if matches("/api/config/sync") or matches("/api/config/nodes"):
+            return os.environ["CONFIG_SYNC_SECRET"]
+    if port == 8081:
+        if request_path in {"/api/access/nodes", "/api/access/revision"}:
+            return os.environ["CONFIG_SYNC_SECRET"]
+        if request_path == "/internal/config/callback":
+            return os.environ["CONFIG_WEBHOOK_SECRET"]
+    return None
+
+
+def request(port, path, method="GET", data=None, expected=200, extra_headers=None,
+            signature_timestamp=None, signature_nonce=None):
+    """发送 HTTP 请求；所有受保护接口均按原始 Body 执行 HMAC-SHA256 签名。"""
     payload = None if data is None else json.dumps(data).encode("utf-8")
     headers = {"Content-Type": "application/json"} if payload is not None else {}
-    headers.update(extra_headers or {})
-    if path == "/api/config/admin" or path.startswith("/api/config/admin/"):
-        secret = os.environ["ADMIN_AUTH_SECRET"]
-        stamp = str(int(time.time()))
-        nonce = secrets.token_hex(8)
-        parsed = urllib.parse.urlsplit(path)
-        query = urllib.parse.urlencode(sorted(
-            urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    secret = request_secret(port, path)
+    if secret:
+        headers.update(signature_headers(
+            secret, method, path, payload or b"",
+            timestamp=signature_timestamp, nonce=signature_nonce,
         ))
-        values = [
-            secret, "method:" + method.upper(),
-            "path:" + parsed.path, "query:" + query,
-            "body:" + hashlib.sha256(payload or b"").hexdigest(),
-            "timestamp:" + stamp, "nonce:" + nonce,
-        ]
-        signature = hashlib.sha1("_".join(sorted(values)).encode("utf-8")).hexdigest()
-        headers.update({"X-Timestamp": stamp, "X-Nonce": nonce, "X-Signature": signature})
+    headers.update(extra_headers or {})
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}", data=payload, headers=headers, method=method
     )
@@ -56,7 +103,6 @@ def request(port, path, method="GET", data=None, expected=200, extra_headers=Non
         return json.loads(body)
     except json.JSONDecodeError:
         return body
-
 
 def wait_until(label, predicate, seconds=75):
     """轮询异步条件，超时后报告最后一次失败原因。"""
@@ -156,23 +202,18 @@ def main():
         "secret": os.environ["CONFIG_WEBHOOK_SECRET"]
     }, 201)
 
-    # Webhook 使用共享 SHA-1 排序签名；同一个 nonce 不允许重放。
+    # Webhook 使用订阅者密钥执行 HMAC-SHA256；同一个 nonce 不允许重放。
     initial = request(8080, "/api/config/sync/revision")
     timestamp = str(int(time.time()))
     nonce = secrets.token_hex(8)
-    values = [os.environ["CONFIG_WEBHOOK_SECRET"], timestamp, nonce,
-              initial["epoch"], str(initial["revision"])]
-    signed = hashlib.sha1("_".join(sorted(values)).encode("utf-8")).hexdigest()
     notification = {"epoch": initial["epoch"], "revision": initial["revision"]}
     request(8081, "/internal/config/callback", "POST", notification, 401,
-            extra_headers={"X-Timestamp": timestamp, "X-Nonce": nonce,
-                           "X-Signature": "invalid"})
+            signature_timestamp=timestamp, signature_nonce=nonce,
+            extra_headers={"X-Signature": "invalid"})
     request(8081, "/internal/config/callback", "POST", notification, 202,
-            extra_headers={"X-Timestamp": timestamp, "X-Nonce": nonce,
-                           "X-Signature": signed})
+            signature_timestamp=timestamp, signature_nonce=nonce)
     request(8081, "/internal/config/callback", "POST", notification, 409,
-            extra_headers={"X-Timestamp": timestamp, "X-Nonce": nonce,
-                           "X-Signature": signed})
+            signature_timestamp=timestamp, signature_nonce=nonce)
     print("通过：拒绝无效签名与 nonce 重放，并确认有效回调", flush=True)
 
     # 三层配置树与跨实例的同步。
