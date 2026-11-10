@@ -556,7 +556,8 @@ var integrationSchema = []string{
 	) ENGINE=InnoDB`,
 	`CREATE TABLE config_subscriber(
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL UNIQUE,
-		callback_url VARCHAR(1024) NOT NULL,signing_secret VARCHAR(255) NOT NULL,enabled TINYINT NOT NULL DEFAULT 1,\n        UNIQUE KEY uq_config_subscriber_signing_secret(signing_secret),
+		callback_url VARCHAR(1024) NOT NULL,signing_secret VARCHAR(255) NOT NULL,enabled TINYINT NOT NULL DEFAULT 1,
+        UNIQUE KEY uq_config_subscriber_signing_secret(signing_secret),
 		created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	`CREATE TABLE config_subscriber_delivery_state(
