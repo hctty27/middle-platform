@@ -2,17 +2,16 @@ package webhook
 
 import (
 	"context"
-	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
 	"hitall.com/middle-platform/shared/signature"
 )
 
-func TestSendUsesSharedSignature(t *testing.T) {
+func TestSendUsesHMACSHA256Signature(t *testing.T) {
 	handled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -21,25 +20,15 @@ func TestSendUsesSharedSignature(t *testing.T) {
 		if r.Header.Get("X-Config-Timestamp") != "" || r.Header.Get("X-Config-Signature") != "" {
 			t.Error("仍发送旧版 HMAC Header")
 		}
-		stamp := r.Header.Get("X-Timestamp")
-		nonce := r.Header.Get("X-Nonce")
-		signed := r.Header.Get("X-Signature")
-		if !signature.ValidHeaders(stamp, nonce, signed, time.Now()) {
-			t.Error("Webhook Header 无效")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("读取 Webhook Body 失败: %v", err)
 		}
-		var payload struct {
-			Epoch    string `json:"epoch"`
-			Revision int64  `json:"revision"`
+		if !signature.VerifyHMACRequest(r, "webhook-test-secret", body, time.Now()) {
+			t.Error("Webhook HMAC-SHA256 签名验证失败")
 		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Errorf("Webhook JSON 解码失败: %v", err)
-		}
-		if payload.Epoch != "epoch-1" || payload.Revision != 42 {
-			t.Errorf("Webhook 内容错误: %+v", payload)
-		}
-		expected := signature.SignValues("webhook-test-secret", stamp, nonce, payload.Epoch, strconv.FormatInt(payload.Revision, 10))
-		if !signature.EqualHex(expected, signed) {
-			t.Errorf("Webhook 签名错误: got %s, want %s", signed, expected)
+		if string(body) != `{"epoch":"epoch-1","revision":42}` {
+			t.Errorf("Webhook 内容错误: %s", body)
 		}
 		handled = true
 		w.WriteHeader(http.StatusAccepted)
@@ -47,7 +36,7 @@ func TestSendUsesSharedSignature(t *testing.T) {
 	defer server.Close()
 
 	dispatcher := &Dispatcher{Client: server.Client()}
-	err := dispatcher.Send(context.Background(), Delivery{
+	err := dispatcher.send(context.Background(), Delivery{
 		URL: server.URL, Secret: "webhook-test-secret", Epoch: "epoch-1", Revision: 42,
 	})
 	if err != nil {
@@ -60,7 +49,7 @@ func TestSendUsesSharedSignature(t *testing.T) {
 
 func TestSendRejectsEmptyWebhookSecret(t *testing.T) {
 	dispatcher := &Dispatcher{Client: http.DefaultClient}
-	if err := dispatcher.Send(context.Background(), Delivery{URL: "http://localhost:8081/notify"}); err == nil {
+	if err := dispatcher.send(context.Background(), Delivery{URL: "http://localhost:8081/notify"}); err == nil {
 		t.Fatal("空 Secret 不应发送回调")
 	}
 }

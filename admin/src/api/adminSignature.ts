@@ -1,5 +1,5 @@
-// 与 shared/signature/admin.go 一致的管理请求签名规则。
-import { sha1 } from '@noble/hashes/legacy.js'
+// 与 shared/signature/admin.go 一致的 HMAC-SHA256 管理请求签名规则。
+import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 
 const encoder = new TextEncoder()
@@ -7,14 +7,6 @@ const encoder = new TextEncoder()
 function toHex(data: ArrayBuffer | Uint8Array): string {
   return Array.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data,
     byte => byte.toString(16).padStart(2, '0')).join('')
-}
-
-async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<string> {
-  const bytes = encoder.encode(text)
-  if (globalThis.crypto?.subtle) {
-    return toHex(await globalThis.crypto.subtle.digest(algorithm, bytes))
-  }
-  return toHex(algorithm === 'SHA-1' ? sha1(bytes) : sha256(bytes))
 }
 
 function byteOrder(a: string, b: string): number {
@@ -45,25 +37,44 @@ export function canonicalQuery(url: URL): string {
     .join('&')
 }
 
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const size = parts.reduce((total, part) => total + part.length, 0)
+  const result = new Uint8Array(size)
+  let offset = 0
+  for (const part of parts) {
+    result.set(part, offset)
+    offset += part.length
+  }
+  return result
+}
+
+async function signHmac(secret: string, message: Uint8Array): Promise<string> {
+  const keyBytes = encoder.encode(secret)
+  if (globalThis.crypto?.subtle) {
+    const key = await globalThis.crypto.subtle.importKey(
+      'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    )
+    return toHex(await globalThis.crypto.subtle.sign('HMAC', key, new Uint8Array(message)))
+  }
+  return toHex(hmac(sha256, keyBytes, message))
+}
+
 export async function signAdminRequest(
   secret: string, method: string, path: string, query: string, body: string
 ): Promise<Record<string, string>> {
   if (!globalThis.crypto?.getRandomValues) {
     throw new Error('当前浏览器不支持安全随机数，无法生成签名')
   }
+  if (new TextEncoder().encode(secret).length < 32) {
+    throw new Error('管理密钥至少需要 32 字节')
+  }
   const timestamp = String(Math.floor(Date.now() / 1000))
   const nonce = toHex(globalThis.crypto.getRandomValues(new Uint8Array(8)))
-  const bodyHash = await digest('SHA-256', body)
-  const values = [
-    secret,
-    'method:' + method.toUpperCase(),
-    'path:' + path,
-    'query:' + query,
-    'body:' + bodyHash,
-    'timestamp:' + timestamp,
-    'nonce:' + nonce
-  ].filter(Boolean).sort(byteOrder)
-  const signature = await digest('SHA-1', values.join('_'))
+  const prefix = encoder.encode(
+    'HITALK-HMAC-SHA256\n' + method.toUpperCase() + '\n' +
+    path + '\n' + query + '\n' + timestamp + '\n' + nonce + '\n'
+  )
+  const signature = await signHmac(secret, concatBytes(prefix, encoder.encode(body)))
   return {
     'X-Timestamp': timestamp,
     'X-Nonce': nonce,

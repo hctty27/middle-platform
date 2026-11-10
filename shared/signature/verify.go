@@ -10,7 +10,7 @@ import (
 
 const requestWindow = 5 * time.Minute
 
-// ValidHeaders 验证现有平台/游戏协议的秒级时间戳、16 位小写 nonce 和 40 位小写签名。
+// ValidHeaders 验证历史平台 SHA-1 协议的秒级时间戳、16 位小写 nonce 和 40 位小写签名。
 // 不改变业务层的 AppID、环境、请求方法及字段集合校验。
 func ValidHeaders(timestamp, nonce, signed string, now time.Time) bool {
 	if len(nonce) != 16 || len(signed) != 40 ||

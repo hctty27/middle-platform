@@ -90,7 +90,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <h2 id="architecture-3">节点变更与同步一致性</h2>
 <ol>
 <li>配置中心写入三级节点时，在同一 MySQL 事务中更新节点、全局 <code>revision</code> 和 <code>config_node_change_log</code>，确保版本提交次序一致；无变化写入不增加 revision。</li>
-<li>Webhook 仅携带 <code>epoch</code>、<code>revision</code>，使用订阅者密钥参与 SHA-1 排序签名，并校验时间窗口和 nonce，不在通知内传输完整配置。接入端收到有效通知后异步拉取。</li>
+<li>Webhook 仅携带 <code>epoch</code>、<code>revision</code>，使用订阅者密钥对方法、路径、Query、时间戳、nonce 和原始 Body 执行 HMAC-SHA256 签名；接入端收到有效通知后异步拉取。</li>
 <li>接入端按 <code>revision</code> 获取变更节点 ID，再批量查询最新节点；节点内容与游标在本地同一事务提交。初始化、epoch 变化或变更日志断档时使用一致性快照。</li>
 <li>接入端定时校对版本（默认 5 分钟）补偿丢失的 Webhook；HTTP 202 表示通知已受理，<strong>不等于节点已完成同步</strong>。</li>
 <li><code>sdk_channel_app</code> 的增删改及三环境绑定不推进三级节点的 <code>revision</code>，SDK Core 直接从权威库读取，不依赖接入副本同步。</li>
@@ -112,7 +112,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li>对外协议及签名细节以 <a href="index.html#g-start">游戏 HTML</a> 和 <a href="index.html#p-start">平台 HTML</a> 为准，避免维护多份相同字段表。</li>
 </ul>
 <h3>共享签名模块与业务边界</h3>
-<p><code>shared/signature</code> 仅提供通用签名计算与格式校验，不负责读取数据库、选择业务签名字段或执行鉴权。<code>SignValues</code> 过滤空字符串、按值排序并计算 SHA-1；<code>SignAllValues</code> 保留空字符串，兼容支付回调 V1；<code>BodyValues</code> 负责提取业务 JSON 值；<code>SignAdmin</code> 组装管理请求的七个签名值。业务模块负责密钥归属、AppID、权限和幂等性，不能将时间戳及 nonce 的格式检查当成跨实例全局防重放。</p>
+<p><code>shared/signature</code> 提供两类协议：<code>SignValues</code>/<code>SignAllValues</code> 保留历史平台 SHA-1 排序签名（支付回调 V1 不过滤空值）；<code>SignHMACRequest</code>/<code>VerifyHMACRequest</code> 统一处理管理、配置同步和 Webhook 的 HMAC-SHA256 请求签名，绑定方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。业务模块仍负责密钥归属、AppID、权限和幂等性；进程内 nonce 缓存不等于多实例全局防重放。</p>
 <p>各接口具体签名字段、测试向量和 Java / Go / Node.js 示例统一见 <a href="index.html#sig-overview">签名接入规范</a>；新增业务应复用共享计算函数，但明确指定各自参与签名的字段。</p>
 <h2 id="architecture-6">SDK Core 与 SDK Service 职责</h2>
 <ul>
@@ -128,7 +128,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <ul>
 <li>业务接口、管理接口、请求字段与签名规则统一维护于 <a href="index.html">接口文档</a>；本文件不重复完整 HTTP 契约。</li>
 <li>配置中心的节点读取与同步内部入口包括 <code>GET /api/config/nodes/{id}</code>、<code>POST /api/config/nodes/batch-get</code>、<code>GET /api/config/sync/revision</code>、<code>GET /api/config/sync/changes</code>、<code>GET /api/config/sync/snapshot</code>。</li>
-<li>接入端提供 <code>GET /api/access/nodes</code>、<code>GET /api/access/revision</code>，通过 <code>POST /internal/config/callback</code> 接受 Webhook 后异步同步。</li>
+<li>接入端提供 <code>GET /api/access/nodes</code>、<code>GET /api/access/revision</code> 本地只读接口，使用 <code>configSync.secret</code> 执行 HMAC-SHA256；通过 <code>POST /internal/config/callback</code> 接受订阅者密钥签名的 HMAC-SHA256 Webhook 后异步同步。</li>
 <li>各 Go 服务提供 <code>GET /health/live</code>（进程存活）和 <code>GET /health/ready</code>（依赖就绪）；本地验证方式见 <a href="#development">开发指南</a>，生产探针见 <a href="#production">运维指南</a>。</li>
 </ul></article>
 <article class="doc-pane" id="database" data-pane="database" aria-labelledby="tab-database" hidden><div class="eyebrow">DEVELOPER GUIDE / DATABASE</div><p class="pane-subtitle">数据模型、全量 SQL、增量升级与迁移</p><h1>数据库结构与手动 SQL</h1>
@@ -233,7 +233,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></
     secret = &quot;replace-with-a-strong-local-secret&quot;
 } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri &quot;http://127.0.0.1:8080/api/config/admin/subscribers&quot; -ContentType &quot;application/json&quot; -Body $body</code></pre></div>
-<p>检查 <code>http://127.0.0.1:8081/api/access/revision</code>。Webhook 使用 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>，将订阅者密钥、时间戳、nonce、epoch、revision 按值排序计算 SHA-1。签名验证成功只代表已接受异步同步，真正的节点更新以副本游标和节点结果为准。旧 HMAC-SHA256 接入端不再兼容，新旧服务端必须同步升级。</p>
+<p>检查 <code>http://127.0.0.1:8081/api/access/revision</code>。Webhook 使用订阅者独立密钥执行 HMAC-SHA256；接入端主动拉取配置中心 revision、changes、snapshot、节点详情和 batch-get 时，使用两端一致的 <code>configSync.secret</code> 签名。接入端本地的 <code>/api/access/nodes</code> 与 <code>/api/access/revision</code> 也要求该密钥签名。签名验证成功只代表 Webhook 已受理，真正的节点更新以副本游标和节点结果为准。配置中心与接入端必须同步升级。</p>
 <h2 id="development-4">3. SDK Core</h2>
 <p>新终端进入 <code>sdk-core</code>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd sdk-core

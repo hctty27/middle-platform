@@ -9,7 +9,7 @@ database:
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 管理接口单独验签；与配置中心填写同一密钥。始终验签，密钥至少 32 字节。
+# 管理接口使用 HMAC-SHA256；与 config-center 的 adminAuth.secret 保持一致。始终验签，密钥至少 32 字节。
 adminAuth:
   secret: ""
 

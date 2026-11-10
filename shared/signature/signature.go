@@ -1,4 +1,4 @@
-// Package signature 提供平台兼容的按值排序 SHA-1 签名算法。
+// Package signature 提供平台兼容的 SHA-1 排序签名和统一 HMAC-SHA256 请求签名。
 package signature
 
 import (

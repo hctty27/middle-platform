@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHash, webcrypto } from 'node:crypto'
+import { createHmac, webcrypto } from 'node:crypto'
 import { test } from 'node:test'
 import { canonicalQuery, signAdminRequest } from '../src/api/adminSignature.ts'
 
@@ -12,11 +12,8 @@ function setCrypto(value) {
 }
 
 function expectedSignature(secret, method, path, query, body) {
-  const bodyHash = createHash('sha256').update(body).digest('hex')
-  const values = [secret, `method:${method}`, `path:${path}`, `query:${query}`,
-    `body:${bodyHash}`, 'timestamp:1700000000', `nonce:${nonce}`]
-  values.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
-  return createHash('sha1').update(values.join('_')).digest('hex')
+  const prefix = `HITALK-HMAC-SHA256\n${method}\n${path}\n${query}\n1700000000\n${nonce}\n`
+  return createHmac('sha256', secret).update(prefix, 'utf8').update(body, 'utf8').digest('hex')
 }
 
 test('admin signatures match with and without SubtleCrypto', async () => {
@@ -47,6 +44,16 @@ test('signing fails when secure random numbers are unavailable', async () => {
   try {
     setCrypto(undefined)
     await assert.rejects(signAdminRequest('secret', 'get', '/api/config/admin/test', '', ''), /安全随机数/)
+  } finally {
+    if (originalCrypto) Object.defineProperty(globalThis, 'crypto', originalCrypto)
+    else delete globalThis.crypto
+  }
+})
+
+test('signing rejects short management keys', async () => {
+  try {
+    setCrypto({ getRandomValues: array => array.fill(1) })
+    await assert.rejects(signAdminRequest('short-secret', 'get', '/api/config/admin/test', '', ''), /32 字节/)
   } finally {
     if (originalCrypto) Object.defineProperty(globalThis, 'crypto', originalCrypto)
     else delete globalThis.crypto

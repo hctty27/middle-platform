@@ -4,6 +4,8 @@ package remote
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +14,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"hitall.com/middle-platform/shared/signature"
 )
 
 // 限制权威端响应体，避免错误网关或异常配置耗尽接入进程内存。
@@ -53,16 +57,18 @@ type Snapshot struct {
 	Nodes    []Node `json:"nodes"`
 }
 
-// Client 不跟随 HTTP 重定向，避免在网关误配置时请求错误的服务。
+// Client 对配置中心的所有同步读取请求执行 HMAC-SHA256 签名。
 type Client struct {
-	base string
-	http *http.Client
+	base   string
+	secret string
+	http   *http.Client
 }
 
-// New 创建配置中心 HTTP 客户端，使用独立的连接超时和请求总超时。
-func New(base string, connectTimeout, requestTimeout time.Duration) *Client {
+// New 创建带请求签名的配置中心 HTTP 客户端。
+func New(base string, connectTimeout, requestTimeout time.Duration, secret string) *Client {
 	return &Client{
-		base: base,
+		base:   base,
+		secret: secret,
 		http: &http.Client{
 			Timeout: requestTimeout,
 			Transport: &http.Transport{
@@ -81,8 +87,11 @@ func (c *Client) get(ctx context.Context, path string, target any) error {
 	return c.call(ctx, http.MethodGet, path, nil, target)
 }
 
-// call 统一处理 HTTP 状态、响应大小和严格 JSON 解码，阻止不完整结果进入同步流程。
+// call 统一签署请求，并处理 HTTP 状态、响应大小和严格 JSON 解码。
 func (c *Client) call(ctx context.Context, method, path string, body []byte, target any) error {
+	if len([]byte(c.secret)) < 32 {
+		return fmt.Errorf("配置同步 HMAC-SHA256 密钥至少需要 32 字节")
+	}
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -90,6 +99,22 @@ func (c *Client) call(ctx context.Context, method, path string, body []byte, tar
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	var random [8]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return fmt.Errorf("生成配置同步 nonce 失败: %w", err)
+	}
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := hex.EncodeToString(random[:])
+	query, err := url.ParseQuery(req.URL.RawQuery)
+	if err != nil {
+		return fmt.Errorf("配置同步查询参数不合法: %w", err)
+	}
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Nonce", nonce)
+	req.Header.Set("X-Signature", signature.SignHMACRequest(
+		c.secret, req.Method, req.URL.EscapedPath(), query.Encode(), timestamp, nonce, body,
+	))
+
 	response, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("请求配置中心失败: %w", err)

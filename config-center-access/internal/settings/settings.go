@@ -19,6 +19,7 @@ type Config struct {
 	DSN               string
 	CenterURL         string
 	WebhookSecret     string
+	ConfigSyncSecret  string
 	ConnectTimeout    time.Duration
 	RequestTimeout    time.Duration
 	ReconcileInterval time.Duration
@@ -38,6 +39,9 @@ type configFile struct {
 	Webhook struct {
 		Secret string `yaml:"secret"`
 	} `yaml:"webhook"`
+	ConfigSync struct {
+		Secret string `yaml:"secret"`
+	} `yaml:"configSync"`
 	Sync struct {
 		ConnectTimeout    string `yaml:"connectTimeout"`
 		RequestTimeout    string `yaml:"requestTimeout"`
@@ -64,6 +68,7 @@ func LoadFile(path string) (Config, error) {
 		DSN:               data.Database.DSN,
 		CenterURL:         "http://127.0.0.1:8080",
 		WebhookSecret:     data.Webhook.Secret,
+		ConfigSyncSecret:  data.ConfigSync.Secret,
 		ConnectTimeout:    2 * time.Second,
 		RequestTimeout:    15 * time.Second,
 		ReconcileInterval: 5 * time.Minute,
@@ -98,6 +103,7 @@ func LoadFile(path string) (Config, error) {
 	bootstrap.OverrideString("ACCESS_DB_DSN", &cfg.DSN)
 	bootstrap.OverrideString("CONFIG_CENTER_URL", &cfg.CenterURL)
 	bootstrap.OverrideString("CONFIG_WEBHOOK_SECRET", &cfg.WebhookSecret)
+	bootstrap.OverrideString("CONFIG_SYNC_SECRET", &cfg.ConfigSyncSecret)
 	for _, item := range []struct {
 		name   string
 		target *time.Duration
@@ -129,6 +135,9 @@ func LoadFile(path string) (Config, error) {
 	}
 	if strings.TrimSpace(cfg.WebhookSecret) == "" || cfg.WebhookSecret == "change-me-in-development" {
 		return Config{}, fmt.Errorf("必须配置 webhook.secret 或 CONFIG_WEBHOOK_SECRET")
+	}
+	if len([]byte(cfg.ConfigSyncSecret)) < 32 || strings.TrimSpace(cfg.ConfigSyncSecret) != cfg.ConfigSyncSecret {
+		return Config{}, fmt.Errorf("必须配置至少 32 字节的 configSync.secret 或 CONFIG_SYNC_SECRET")
 	}
 	parsed, err := url.Parse(cfg.CenterURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" {

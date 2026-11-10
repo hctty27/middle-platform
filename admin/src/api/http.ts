@@ -28,7 +28,7 @@ export const api = axios.create({
   timeout: 10000
 })
 
-// 管理请求复用第三方 SHA-1 协议，签名密钥仅存在页面内存中。
+// 管理请求统一使用 HMAC-SHA256，签名密钥仅存在页面内存中。
 function attachAdminSigning(client: AxiosInstance): void {
   client.interceptors.request.use(async config => {
     const fullURL = new URL(client.getUri(config), window.location.href)
