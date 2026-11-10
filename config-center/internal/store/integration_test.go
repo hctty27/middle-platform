@@ -22,6 +22,26 @@ import (
 	"hitall.com/middle-platform/shared/signature"
 )
 
+// TestDatabaseErrorMapsUniqueConstraints 验证唯一索引冲突转换为明确的业务错误。
+func TestDatabaseErrorMapsUniqueConstraints(t *testing.T) {
+	cases := []struct {
+		message string
+		target  error
+	}{
+		{"Duplicate entry 'x' for key 'uq_config_node_sibling'", ErrDuplicateCode},
+		{"Duplicate entry 'x' for key 'uq_channel_app_code'", ErrDuplicateCode},
+		{"Duplicate entry 'x' for key 'code'", ErrDuplicateCode},
+		{"Duplicate entry 'x' for key 'uq_config_subscriber_signing_secret'", ErrDuplicateSecret},
+		{"Duplicate entry 'x' for key 'other_unique'", ErrDuplicateValue},
+	}
+	for _, test := range cases {
+		err := databaseError(&mysql.MySQLError{Number: 1062, Message: test.message})
+		if !errors.Is(err, ErrConflict) || !errors.Is(err, test.target) {
+			t.Fatalf("databaseError(%q) = %v, want conflict and %v", test.message, err, test.target)
+		}
+	}
+}
+
 // TestWriteValidation 验证创建与更新请求的基础业务约束。
 func TestWriteValidation(t *testing.T) {
 	status := 1
@@ -206,11 +226,14 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err != nil || channelRevision != initial {
 		t.Fatalf("channel write changed cursor: %+v vs %+v (%v)", channelRevision, initial, err)
 	}
-	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrConflict) {
-		t.Fatalf("expected child conflict: %v", err)
+	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrGameHasRegions) || !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected game region constraint, got: %v", err)
 	}
-	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrConflict) {
-		t.Fatalf("expected bound group conflict: %v", err)
+	if err := store.Delete(ctx, region.ID); !errorsIs(err, ErrRegionHasServerGroups) || !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected region server-group constraint, got: %v", err)
+	}
+	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrServerGroupInUse) || !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected bound group constraint, got: %v", err)
 	}
 	if err := store.DeleteChannelApp(ctx, app.ID); !errorsIs(err, ErrConflict) {
 		t.Fatalf("expected bound app conflict: %v", err)

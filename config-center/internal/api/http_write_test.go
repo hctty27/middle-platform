@@ -16,6 +16,7 @@ type fakeWriter struct {
 	lastSubscriberUpdate UpdateSubscriberRequest
 	lastSubscriberEnabled *bool
 	deletedSubscriberID int64
+	deleteErr           error
 }
 
 func (f *fakeWriter) Create(_ context.Context, input CreateNodeRequest) (Node, error) {
@@ -25,7 +26,7 @@ func (f *fakeWriter) Create(_ context.Context, input CreateNodeRequest) (Node, e
 func (f *fakeWriter) Update(_ context.Context, _ int64, input UpdateNodeRequest) (Node, error) {
 	return Node{ID: 5, NodeType: "game", Name: input.Name, Status: *input.Status, Config: input.Config}, nil
 }
-func (f *fakeWriter) Delete(context.Context, int64) error                             { return nil }
+func (f *fakeWriter) Delete(context.Context, int64) error                             { return f.deleteErr }
 func (f *fakeWriter) CreateSubscriber(context.Context, CreateSubscriberRequest) error { return nil }
 func (f *fakeWriter) UpdateSubscriber(_ context.Context, id int64, input UpdateSubscriberRequest) error {
 	f.lastSubscriberID, f.lastSubscriberUpdate = id, input
@@ -76,6 +77,55 @@ func TestCreateAndDeleteWriteRoutes(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d", rec.Code)
+	}
+}
+
+// TestDeleteNodeReturnsSpecificBusinessError 验证删除限制返回可识别的业务错误。
+func TestDeleteNodeReturnsSpecificBusinessError(t *testing.T) {
+	cases := []struct {
+		err     error
+		code    string
+		message string
+	}{
+		{ErrGameHasRegions, "GAME_HAS_REGIONS", ErrGameHasRegions.Error()},
+		{ErrGameHasChannelApps, "GAME_HAS_CHANNEL_APPS", ErrGameHasChannelApps.Error()},
+		{ErrRegionHasServerGroups, "REGION_HAS_SERVER_GROUPS", ErrRegionHasServerGroups.Error()},
+		{ErrServerGroupInUse, "SERVER_GROUP_IN_USE", ErrServerGroupInUse.Error()},
+	}
+	for _, test := range cases {
+		writer := &fakeWriter{deleteErr: test.err}
+		handler := RouterWithWrites(stubReader{}, writer)
+		req := httptest.NewRequest(http.MethodDelete, "/api/config/admin/nodes/5", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		var payload struct {
+			Code  string `json:"code"`
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if rec.Code != http.StatusConflict || payload.Code != test.code || payload.Error != test.message {
+			t.Fatalf("status=%d payload=%+v, expected code=%s", rec.Code, payload, test.code)
+		}
+	}
+}
+
+// TestDuplicateCodeErrorResponse 验证重复编码返回明确的错误码和提示。
+func TestDuplicateCodeErrorResponse(t *testing.T) {
+	rec := httptest.NewRecorder()
+	respond(rec, nil, ErrDuplicateCode)
+
+	var payload struct {
+		Code  string `json:"code"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusConflict || payload.Code != "DUPLICATE_CODE" || payload.Error != ErrDuplicateCode.Error() {
+		t.Fatalf("status=%d payload=%+v", rec.Code, payload)
 	}
 }
 

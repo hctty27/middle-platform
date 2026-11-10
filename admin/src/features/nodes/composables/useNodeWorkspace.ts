@@ -371,11 +371,7 @@ async function save() {
     emit('changed')
     ElMessage.success('配置保存成功，等待接入方同步')
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 409) {
-      ElMessage.error('数据存在冲突，请刷新后重试')
-    } else {
-      ElMessage.error(apiErrorMessage(error, '保存配置失败'))
-    }
+    ElMessage.error(apiErrorMessage(error, '保存配置失败'))
   } finally {
     saving.value = false
   }
@@ -391,7 +387,7 @@ async function chooseAfterSave(node: NodeSummary, path: NodeSummary[]) {
 
 async function removeNode(node: NodeSummary) {
   try {
-    await ElMessageBox.confirm('确定删除「' + node.name + '」？存在子项时不能删除。', '删除节点', { type: 'warning' })
+    await ElMessageBox.confirm('确定删除「' + node.name + '」？如果仍有下级节点或被渠道应用引用，系统会阻止删除。', '删除节点', { type: 'warning' })
   } catch { return }
   try {
     await nodeApi.deleteNode(node.id)

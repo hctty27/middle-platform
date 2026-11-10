@@ -10,11 +10,21 @@ import (
 // ErrInvalid 标识无效的请求参数。
 var ErrInvalid = errors.New("请求参数不合法")
 
-// ErrConflict 标识重复配置或违反数据库约束。
-var ErrConflict = errors.New("配置冲突")
+// ErrConflict 标识业务数据冲突。
+var ErrConflict = errors.New("数据冲突")
 
 // ErrSubscriberNotFound 标识同步订阅不存在。
 var ErrSubscriberNotFound = errors.New("订阅不存在")
+
+var (
+	ErrDuplicateCode          = errors.New("编码已存在，请更换编码")
+	ErrDuplicateSecret        = errors.New("签名密钥已被其他接入端使用，请更换密钥")
+	ErrDuplicateValue         = errors.New("唯一字段已存在，请检查输入内容")
+	ErrGameHasRegions         = errors.New("该游戏下还有大区，请先删除所属大区")
+	ErrGameHasChannelApps     = errors.New("该游戏下还有渠道应用，请先删除渠道应用")
+	ErrRegionHasServerGroups  = errors.New("该大区下还有区服组，请先删除所属区服组")
+	ErrServerGroupInUse       = errors.New("该区服组仍被渠道应用绑定，请先解除绑定")
+)
 
 // LocalDateTime 实现与已有服务一致的时间序列化格式。
 type LocalDateTime time.Time

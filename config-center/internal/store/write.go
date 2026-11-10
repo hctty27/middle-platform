@@ -5,21 +5,34 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/go-sql-driver/mysql"
 	"hitall.com/middle-platform/config-center/internal/model"
 	"hitall.com/middle-platform/config-center/internal/service"
 )
 
-// databaseError 将已知的 MySQL 错误转换为业务冲突。
+// databaseError 将已知的 MySQL 错误转换为可识别的业务错误。
 func databaseError(err error) error {
 	var mysqlErr *mysql.MySQLError
-	if errors.As(err, &mysqlErr) {
-		if mysqlErr.Number == 1062 {
-			return fmt.Errorf("%w: 编码重复，违反唯一约束", ErrConflict)
+	if !errors.As(err, &mysqlErr) {
+		return err
+	}
+	if mysqlErr.Number == 1062 {
+		switch {
+		case strings.Contains(mysqlErr.Message, "uq_config_node_sibling"),
+			strings.Contains(mysqlErr.Message, "uq_channel_app_code"),
+			strings.Contains(mysqlErr.Message, "for key 'code'"),
+			strings.Contains(mysqlErr.Message, "for key `code`"):
+			return fmt.Errorf("%w: %w", ErrConflict, ErrDuplicateCode)
+		case strings.Contains(mysqlErr.Message, "uq_config_subscriber_signing_secret"):
+			return fmt.Errorf("%w: %w", ErrConflict, ErrDuplicateSecret)
+		default:
+			return fmt.Errorf("%w: %w", ErrConflict, ErrDuplicateValue)
 		}
-		if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 {
-			return fmt.Errorf("%w: 违反数据库约束", ErrConflict)
-		}
+	}
+	if mysqlErr.Number == 3819 || mysqlErr.Number == 1451 || mysqlErr.Number == 1452 {
+		return fmt.Errorf("%w: 违反数据库约束", ErrConflict)
 	}
 	return err
 }
@@ -214,7 +227,10 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 			return err
 		}
 		if count > 0 {
-			return ErrConflict
+			if current.NodeType == "game" {
+				return fmt.Errorf("%w: %w", ErrConflict, ErrGameHasRegions)
+			}
+			return fmt.Errorf("%w: %w", ErrConflict, ErrRegionHasServerGroups)
 		}
 	}
 	// 不能删除仍有渠道应用的游戏或仍有绑定的区服组。
@@ -223,7 +239,7 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 			return err
 		}
 		if count > 0 {
-			return ErrConflict
+			return fmt.Errorf("%w: %w", ErrConflict, ErrGameHasChannelApps)
 		}
 	}
 	if current.NodeType == "server_group" {
@@ -231,7 +247,7 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 			return err
 		}
 		if count > 0 {
-			return ErrConflict
+			return fmt.Errorf("%w: %w", ErrConflict, ErrServerGroupInUse)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM config_node WHERE id=?", id); err != nil {
