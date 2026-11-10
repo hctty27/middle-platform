@@ -338,7 +338,7 @@ async function save() {
   }
   try {
     const definition = await getConfigSchema('base', form.nodeType)
-    validateConfigAgainstSchema(form.config, definition.schema)
+    validateConfigAgainstSchema(form.config, definition.schema, true)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '配置校验失败')
     return
