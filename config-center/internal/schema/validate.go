@@ -106,6 +106,18 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		return errors.New("大区环境 CHECK 约束已过时")
 	}
 	{
+		var count int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
+			WHERE table_schema=DATABASE() AND table_name='config_subscriber'
+			AND index_name='uq_config_subscriber_signing_secret'
+			AND column_name='signing_secret' AND seq_in_index=1 AND non_unique=0`).Scan(&count); err != nil {
+			return err
+		}
+		if count != 1 {
+			return errors.New("config_subscriber.signing_secret 必须具有唯一索引")
+		}
+	}
+	{
 		for _, index := range []struct {
 			name, column string
 			position     int
