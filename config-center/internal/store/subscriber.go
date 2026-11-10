@@ -33,7 +33,7 @@ func (s *Store) Subscribers(ctx context.Context) ([]Subscriber, error) {
 // CreateSubscriber 原子创建订阅者与初始投递状态。
 func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequest) error {
 	if strings.TrimSpace(input.Code) == "" || len([]rune(input.Code)) > 128 ||
-		strings.TrimSpace(input.Secret) == "" || len(input.Secret) > 255 ||
+		len([]byte(input.Secret)) < 32 || len(input.Secret) > 255 || strings.TrimSpace(input.Secret) != input.Secret ||
 		webhook.ValidateCallback(input.CallbackURL) != nil {
 		return ErrInvalid
 	}
@@ -43,7 +43,7 @@ func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequ
 		return err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `INSERT INTO config_subscriber(code,callback_url,webhook_secret,enabled,created_at,updated_at)
+	result, err := tx.ExecContext(ctx, `INSERT INTO config_subscriber(code,callback_url,signing_secret,enabled,created_at,updated_at)
 		VALUES(?,?,?,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`, input.Code, input.CallbackURL, input.Secret)
 	if err != nil {
 		return databaseError(err)
@@ -76,7 +76,7 @@ func lockSubscriber(ctx context.Context, tx *sql.Tx, id int64) error {
 
 // UpdateSubscriber 修改回调地址；密钥为空时保留现有值。
 func (s *Store) UpdateSubscriber(ctx context.Context, id int64, input UpdateSubscriberRequest) error {
-	if id <= 0 || webhook.ValidateCallback(input.CallbackURL) != nil || len(input.Secret) > 255 {
+	if id <= 0 || webhook.ValidateCallback(input.CallbackURL) != nil || (input.Secret != "" && (len([]byte(input.Secret)) < 32 || len(input.Secret) > 255 || strings.TrimSpace(input.Secret) != input.Secret)) {
 		return ErrInvalid
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -87,7 +87,7 @@ func (s *Store) UpdateSubscriber(ctx context.Context, id int64, input UpdateSubs
 	if err := lockSubscriber(ctx, tx, id); err != nil {
 		return err
 	}
-	if strings.TrimSpace(input.Secret) == "" {
+	if input.Secret == "" {
 		_, err = tx.ExecContext(ctx, `UPDATE config_subscriber
 			SET callback_url=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`, input.CallbackURL, id)
 	} else {
@@ -138,4 +138,22 @@ func (s *Store) DeleteSubscriber(ctx context.Context, id int64) error {
 		return databaseError(err)
 	}
 	return tx.Commit()
+}
+
+
+// SubscriberSecret 按接入端编码读取启用订阅者的独立签名密钥。
+func (s *Store) SubscriberSecret(ctx context.Context, code string) (string, bool, error) {
+	if code == "" || len([]rune(code)) > 128 || strings.TrimSpace(code) != code || strings.ContainsAny(code, "\\r\\n") {
+		return "", false, nil
+	}
+	var secret string
+	var enabled bool
+	err := s.DB.QueryRowContext(ctx, `SELECT signing_secret,enabled FROM config_subscriber WHERE code=?`, code).Scan(&secret, &enabled)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return secret, enabled, nil
 }
