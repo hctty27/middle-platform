@@ -206,11 +206,14 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err != nil || channelRevision != initial {
 		t.Fatalf("channel write changed cursor: %+v vs %+v (%v)", channelRevision, initial, err)
 	}
-	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrConflict) {
-		t.Fatalf("expected child conflict: %v", err)
+	if err := store.Delete(ctx, game.ID); !errorsIs(err, ErrGameHasRegions) || !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected game region constraint, got: %v", err)
 	}
-	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrConflict) {
-		t.Fatalf("expected bound group conflict: %v", err)
+	if err := store.Delete(ctx, region.ID); !errorsIs(err, ErrRegionHasServerGroups) || !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected region server-group constraint, got: %v", err)
+	}
+	if err := store.Delete(ctx, group.ID); !errorsIs(err, ErrServerGroupInUse) || !errorsIs(err, ErrConflict) {
+		t.Fatalf("expected bound group constraint, got: %v", err)
 	}
 	if err := store.DeleteChannelApp(ctx, app.ID); !errorsIs(err, ErrConflict) {
 		t.Fatalf("expected bound app conflict: %v", err)
