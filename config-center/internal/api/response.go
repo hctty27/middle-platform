@@ -20,9 +20,14 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
-// writeError 返回稳定的错误响应格式。
+// writeError 返回兼容旧客户端的错误响应。
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// writeCodedError 返回包含稳定业务错误码的响应。
+func writeCodedError(w http.ResponseWriter, status int, code, message string) {
+	writeJSON(w, status, map[string]string{"code": code, "error": message})
 }
 
 // respond 根据业务错误选择相应 HTTP 状态码。
@@ -33,16 +38,30 @@ func respond(w http.ResponseWriter, value any, err error) {
 	}
 	switch {
 	case errors.Is(err, ErrInvalid):
-		writeError(w, http.StatusBadRequest, "请求参数不合法")
+		writeCodedError(w, http.StatusBadRequest, "INVALID_ARGUMENT", "请求参数不合法")
 	case errors.Is(err, ErrSubscriberNotFound):
-		writeError(w, http.StatusNotFound, "订阅不存在")
+		writeCodedError(w, http.StatusNotFound, "SUBSCRIBER_NOT_FOUND", "订阅不存在")
 	case errors.Is(err, sql.ErrNoRows):
-		writeError(w, http.StatusNotFound, "节点不存在")
+		writeCodedError(w, http.StatusNotFound, "RESOURCE_NOT_FOUND", "节点不存在")
+	case errors.Is(err, ErrDuplicateCode):
+		writeCodedError(w, http.StatusConflict, "DUPLICATE_CODE", ErrDuplicateCode.Error())
+	case errors.Is(err, ErrDuplicateSecret):
+		writeCodedError(w, http.StatusConflict, "DUPLICATE_SECRET", ErrDuplicateSecret.Error())
+	case errors.Is(err, ErrDuplicateValue):
+		writeCodedError(w, http.StatusConflict, "DUPLICATE_VALUE", ErrDuplicateValue.Error())
+	case errors.Is(err, ErrGameHasRegions):
+		writeCodedError(w, http.StatusConflict, "GAME_HAS_REGIONS", ErrGameHasRegions.Error())
+	case errors.Is(err, ErrGameHasChannelApps):
+		writeCodedError(w, http.StatusConflict, "GAME_HAS_CHANNEL_APPS", ErrGameHasChannelApps.Error())
+	case errors.Is(err, ErrRegionHasServerGroups):
+		writeCodedError(w, http.StatusConflict, "REGION_HAS_SERVER_GROUPS", ErrRegionHasServerGroups.Error())
+	case errors.Is(err, ErrServerGroupInUse):
+		writeCodedError(w, http.StatusConflict, "SERVER_GROUP_IN_USE", ErrServerGroupInUse.Error())
 	case errors.Is(err, ErrConflict):
-		writeError(w, http.StatusConflict, "配置冲突")
+		writeCodedError(w, http.StatusConflict, "CONFLICT", "数据存在冲突，请检查后重试")
 	default:
 		slog.Error("配置查询失败", "error", err)
-		writeError(w, http.StatusInternalServerError, "服务器内部错误")
+		writeCodedError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "服务器内部错误")
 	}
 }
 
