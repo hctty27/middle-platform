@@ -686,7 +686,7 @@ X-Signature: &lt;64 位 HMAC-SHA256 小写 hex&gt;
 <p>生产必须使用 HTTPS 或可信内网，并限制配置同步接口的网络访问范围。</p></section>
 <section id="sig-examples" class="section"><div class="section-title"><h2>Go / Node.js HMAC-SHA256 示例</h2></div><div class="summary">管理接口使用 adminAuth.secret；配置同步与 Webhook 使用每个接入端独立的 signing_secret。</div>
 <p>以下示例签署实际 HTTP 请求的原始 Body 字节。<code>path</code> 必须与 Go 服务端收到的 <code>URL.EscapedPath()</code> 一致，<code>query</code> 必须按 Go <code>url.Values.Encode()</code> 规范化。</p>
-<div class="codebox"><div class="codehead"><span>Go · SignHMACRequest</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>package signature
+<div class="codebox"><div class="codehead"><span>Go · SignSubscriberHMACRequest</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>package signature
 
 import (
     "crypto/hmac"
@@ -723,12 +723,13 @@ function signRequest(secret, subscriberCode, method, path, query, body, timestam
     .digest('hex');
 }
 
+const subscriberCode = process.env.CONFIG_SUBSCRIBER_CODE;
 const timestamp = String(Math.floor(Date.now() / 1000));
 const nonce = randomBytes(8).toString('hex');
 const body = Buffer.from(JSON.stringify({ ids: [1, 2] }), 'utf8');
 const signature = signRequest(
   process.env.CONFIG_SUBSCRIBER_SECRET,
-  process.env.CONFIG_SUBSCRIBER_CODE,
+  subscriberCode,
   'POST',
   '/api/config/nodes/batch-get',
   '',
@@ -736,7 +737,12 @@ const signature = signRequest(
   timestamp,
   nonce
 );
-console.log({ timestamp, nonce, signature });</code></pre></div>
+console.log({
+  'X-Subscriber-Code': subscriberCode,
+  'X-Timestamp': timestamp,
+  'X-Nonce': nonce,
+  'X-Signature': signature
+});</code></pre></div>
 <div class="notice info">平台支付回调、平台用户核验等历史第三方协议仍保留各自的 SHA-1 字段规则；不要将平台协议的 <code>SignValues</code> 与这里的 HMAC-SHA256 混用。</div>
 <h3>联调核对顺序</h3>
 <ul class="points"><li>确认密钥用途：管理 API 使用 <code>adminAuth.secret</code>；同步 API 和 Webhook 使用对应接入端的 <code>signing_secret</code>，不得混用。</li><li>核对方法、服务端实际转义路径、规范化 Query、时间戳、nonce。</li><li>确保签名时的 Body 字节与 HTTP 实际发送字节完全相同；不要重新格式化 JSON。</li><li>确认签名是 64 位小写 hex，时间戳为 Unix 秒，nonce 为 16 位小写 hex。</li><li>签名通过不代表业务成功；仍需校验权限、配置版本、业务幂等和响应状态。</li></ul></section>
