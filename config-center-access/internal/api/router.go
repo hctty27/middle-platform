@@ -2,12 +2,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -19,7 +19,7 @@ import (
 type SyncTrigger interface{ Request() }
 
 // Router 同时提供本地只读查询和仅限可信网络的内部 Webhook。
-func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handler {
+func Router(local *store.Replica, trigger SyncTrigger, webhookSecret, configSyncSecret string) http.Handler {
 	mux := http.NewServeMux()
 	nonces := &nonceCache{used: make(map[string]time.Time)}
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
@@ -51,7 +51,12 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 			Epoch    string `json:"epoch"`
 			Revision int64  `json:"revision"`
 		}
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON 格式不合法"})
+			return
+		}
+		decoder := json.NewDecoder(bytes.NewReader(body))
 		if err := decoder.Decode(&payload); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON 格式不合法"})
 			return
@@ -61,13 +66,15 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON 格式不合法"})
 			return
 		}
-		timestamp := r.Header.Get("X-Timestamp")
-		nonce := r.Header.Get("X-Nonce")
-		signed := r.Header.Get("X-Signature")
-		if !verify(timestamp, nonce, signed, payload.Epoch, payload.Revision, secret) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "同步回调签名验证失败"})
+		if payload.Epoch == "" || payload.Revision < 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "同步回调版本参数不合法"})
 			return
 		}
+		if !signature.VerifyHMACRequest(r, webhookSecret, body, time.Now()) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "同步回调 HMAC-SHA256 签名验证失败"})
+			return
+		}
+		nonce := r.Header.Get("X-Nonce")
 		if !nonces.accept(nonce, time.Now()) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "同步回调 nonce 已使用或请求过于频繁"})
 			return
@@ -75,7 +82,7 @@ func Router(local *store.Replica, trigger SyncTrigger, secret string) http.Handl
 		trigger.Request()
 		w.WriteHeader(http.StatusAccepted)
 	})
-	return mux
+	return signature.RequestHMACMiddleware(mux, []string{"/api/access/nodes", "/api/access/revision"}, configSyncSecret)
 }
 
 // nonceCache 仅对当前进程中的签名请求进行去重。
@@ -103,16 +110,6 @@ func (c *nonceCache) accept(nonce string, now time.Time) bool {
 	}
 	c.used[nonce] = now.Add(10 * time.Minute)
 	return true
-}
-
-// verify 复用共享 SHA-1 签名，校验前后五分钟时间窗口与 nonce 格式。
-func verify(timestamp, nonce, signed, epoch string, revision int64, secret string) bool {
-	if secret == "" || epoch == "" || revision < 0 ||
-		!signature.ValidHeaders(timestamp, nonce, signed, time.Now()) {
-		return false
-	}
-	want := signature.SignValues(secret, timestamp, nonce, epoch, strconv.FormatInt(revision, 10))
-	return signature.EqualHex(want, signed)
 }
 
 // writeJSON 统一接入侧的 JSON 返回格式。

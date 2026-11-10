@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,20 +49,27 @@ func TestWriteValidation(t *testing.T) {
 
 // TestWebhookSignature 验证回调消息复用 SHA-1 排序签名协议。
 func TestWebhookSignature(t *testing.T) {
-	const secret = "integration-secret"
+	const secret = "integration-secret-0123456789abcdef0123456789abcdef"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/internal/config/callback" {
 			t.Errorf("invalid webhook request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		timestamp := r.Header.Get("X-Timestamp")
-		nonce := r.Header.Get("X-Nonce")
-		provided := r.Header.Get("X-Signature")
-		if !signature.ValidHeaders(timestamp, nonce, provided, time.Now()) ||
-			!signature.EqualHex(signature.SignValues(secret, timestamp, nonce, "test-epoch", "17"), provided) {
-			t.Errorf("invalid signature")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read webhook body: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if !signature.VerifyHMACRequest(r, secret, body, time.Now()) {
+			t.Errorf("invalid HMAC-SHA256 signature")
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if string(body) != `{"epoch":"test-epoch","revision":17}` {
+			t.Errorf("unexpected webhook body: %s", body)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)

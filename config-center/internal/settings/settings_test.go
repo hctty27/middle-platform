@@ -14,15 +14,16 @@ func TestYAMLAndEnvironmentOverride(t *testing.T) {
 	if err := os.WriteFile(base, []byte("server:\n  address: ':9999'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dev, []byte("server:\n  address: ':8080'\ndatabase:\n  dsn: from-file\n"), 0600); err != nil {
+	if err := os.WriteFile(dev, []byte("server:\n  address: ':8080'\ndatabase:\n  dsn: from-file\nconfigSync:\n  secret: file-sync-secret-0123456789abcdef0123456789abcdef\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("CONFIG_DB_DSN", "from-env")
+	t.Setenv("CONFIG_SYNC_SECRET", "env-sync-secret-0123456789abcdef0123456789abcdef")
 	cfg, err := LoadFile(dev)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DSN != "from-env" || cfg.Address != ":8080" {
+	if cfg.DSN != "from-env" || cfg.Address != ":8080" || cfg.ConfigSyncSecret != "env-sync-secret-0123456789abcdef0123456789abcdef" {
 		t.Fatalf("%+v", cfg)
 	}
 }
@@ -45,7 +46,7 @@ func TestObsoleteSwitchesRejected(t *testing.T) {
 		"admin:\n  writesEnabled: true\n",
 	} {
 		path := filepath.Join(t.TempDir(), "config.yaml")
-		data := "database:\n  dsn: test-dsn\n" + extra
+		data := "database:\n  dsn: test-dsn\nconfigSync:\n  secret: valid-sync-secret-0123456789abcdef0123456789abcdef\n" + extra
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +58,7 @@ func TestObsoleteSwitchesRejected(t *testing.T) {
 
 func TestRemovedWebhookWhitelistRejected(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	data := "database:\n  dsn: test-dsn\nwebhook:\n  allowedHosts: [localhost]\n"
+	data := "database:\n  dsn: test-dsn\nconfigSync:\n  secret: valid-sync-secret-0123456789abcdef0123456789\nwebhook:\n  allowedHosts: [localhost]\n"
 	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func TestRemovedWebhookWhitelistRejected(t *testing.T) {
 
 func TestAdminSecretConfiguration(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	data := "database:\n  dsn: test\nadminAuth:\n  secret: file-secret-0123456789abcdef0123456789\n"
+	data := "database:\n  dsn: test\nadminAuth:\n  secret: file-secret-0123456789abcdef0123456789\nconfigSync:\n  secret: valid-sync-secret-0123456789abcdef0123456789\n"
 	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func TestAdminSecretConfiguration(t *testing.T) {
 func TestRemovedAdminAuthEnabledRejected(t *testing.T) {
 	for _, enabled := range []string{"true", "false"} {
 		path := filepath.Join(t.TempDir(), "config.yaml")
-		data := "database:\n  dsn: test-dsn\nadminAuth:\n  enabled: " + enabled + "\n"
+		data := "database:\n  dsn: test-dsn\nconfigSync:\n  secret: valid-sync-secret-0123456789abcdef0123456789\nadminAuth:\n  enabled: " + enabled + "\n"
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -109,14 +110,14 @@ func TestConfigFileDoesNotInheritBaseConfig(t *testing.T) {
 	if err := os.WriteFile(base, []byte("server:\n  address: ':9999'\nadminAuth:\n  secret: base-only-secret\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dev, []byte("database:\n  dsn: test\n"), 0600); err != nil {
+	if err := os.WriteFile(dev, []byte("database:\n  dsn: test\nconfigSync:\n  secret: dev-sync-secret-0123456789abcdef0123456789abcdef\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadFile(dev)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.AdminSecret != "" || cfg.Address != "127.0.0.1:8080" {
+	if cfg.AdminSecret != "" || cfg.Address != "127.0.0.1:8080" || cfg.ConfigSyncSecret != "dev-sync-secret-0123456789abcdef0123456789abcdef" {
 		t.Fatalf("指定文件不应继承同目录的 config.yaml: %+v", cfg)
 	}
 }
@@ -127,14 +128,14 @@ func TestLoadReadsDefaultYAML(t *testing.T) {
 	if err := os.MkdirAll("configs", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join("configs", "config.yaml"), []byte("server:\n  address: ':8095'\ndatabase:\n  dsn: file-dsn\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join("configs", "config.yaml"), []byte("server:\n  address: ':8095'\ndatabase:\n  dsn: file-dsn\nconfigSync:\n  secret: default-sync-secret-0123456789abcdef0123456789abcdef\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != ":8095" || cfg.DSN != "file-dsn" {
+	if cfg.Address != ":8095" || cfg.DSN != "file-dsn" || cfg.ConfigSyncSecret != "default-sync-secret-0123456789abcdef0123456789abcdef" {
 		t.Fatalf("未读取默认配置文件: %+v", cfg)
 	}
 	t.Setenv("CONFIG_GO_ADDR", "127.0.0.1:8255")
@@ -152,5 +153,16 @@ func TestLoadRequiresDefaultYAML(t *testing.T) {
 	t.Setenv("CONFIG_DB_DSN", "test-dsn")
 	if _, err := LoadFile(""); err == nil || !strings.Contains(err.Error(), "configs/config.yaml") {
 		t.Fatalf("缺少默认 YAML 时不应退回纯环境变量启动: %v", err)
+	}
+}
+
+func TestLoadRejectsMissingSyncSecret(t *testing.T) {
+	t.Setenv("CONFIG_SYNC_SECRET", "")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("database:\n  dsn: test-dsn\nconfigSync:\n  secret: ''\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFile(path); err == nil || !strings.Contains(err.Error(), "configSync.secret") {
+		t.Fatalf("缺少配置同步密钥必须拒绝启动: %v", err)
 	}
 }

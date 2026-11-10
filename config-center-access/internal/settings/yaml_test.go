@@ -18,11 +18,12 @@ func TestYAMLFileAndEnvironmentOverride(t *testing.T) {
 	}
 	t.Setenv("ACCESS_DB_DSN", "env-dsn")
 	t.Setenv("CONFIG_WEBHOOK_SECRET", "env-secret")
+	t.Setenv("CONFIG_SYNC_SECRET", "env-sync-secret-0123456789abcdef0123456789")
 	cfg, err := LoadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != ":8092" || cfg.DSN != "env-dsn" || cfg.WebhookSecret != "env-secret" || cfg.ConnectTimeout != 4*time.Second {
+	if cfg.Address != ":8092" || cfg.DSN != "env-dsn" || cfg.WebhookSecret != "env-secret" || cfg.ConfigSyncSecret != "env-sync-secret-0123456789abcdef0123456789" || cfg.ConnectTimeout != 4*time.Second {
 		t.Fatalf("%+v", cfg)
 	}
 }
@@ -44,7 +45,7 @@ func TestConfigFileDoesNotInheritBase(t *testing.T) {
 	if err := os.WriteFile(base, []byte("server:\n  typo: ignored\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dev, []byte("database:\n  dsn: test\nwebhook:\n  secret: valid-secret\n"), 0600); err != nil {
+	if err := os.WriteFile(dev, []byte("database:\n  dsn: test\nwebhook:\n  secret: valid-secret\nconfigSync:\n  secret: valid-sync-secret-0123456789abcdef0123456789abcdef\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadFile(dev)

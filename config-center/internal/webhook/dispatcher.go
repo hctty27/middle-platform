@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -106,7 +107,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	return delivery, nil
 }
 
-// send 使用共享 SHA-1 排序签名并发出回调通知。
+// send 使用订阅者密钥对回调请求执行 HMAC-SHA256 签名。
 // send 校验回调目标并发送签名通知，不把配置内容直接传给接入端。
 func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err := ValidateCallback(job.URL); err != nil {
@@ -121,7 +122,6 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	}
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	nonce := hex.EncodeToString(random[:])
-	signed := signature.SignValues(job.Secret, timestamp, nonce, job.Epoch, strconv.FormatInt(job.Revision, 10))
 	body, err := json.Marshal(struct {
 		Epoch    string `json:"epoch"`
 		Revision int64  `json:"revision"`
@@ -133,10 +133,20 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err != nil {
 		return err
 	}
+	query, err := url.ParseQuery(req.URL.RawQuery)
+	if err != nil {
+		return fmt.Errorf("Webhook 查询参数不合法: %w", err)
+	}
+	requestPath := req.URL.EscapedPath()
+	if requestPath == "" {
+		requestPath = "/"
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Timestamp", timestamp)
 	req.Header.Set("X-Nonce", nonce)
-	req.Header.Set("X-Signature", signed)
+	req.Header.Set("X-Signature", signature.SignHMACRequest(
+		job.Secret, req.Method, requestPath, query.Encode(), timestamp, nonce, body,
+	))
 	response, err := d.Client.Do(req)
 	if err != nil {
 		return err

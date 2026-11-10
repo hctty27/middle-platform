@@ -124,11 +124,43 @@ func TestAdminMiddlewareAlwaysRequiresSignature(t *testing.T) {
 	}
 }
 
-// 测试管理签名不再包含固定协议标识，防止第三方签名计算不一致。
-func TestSignAdminKnownVector(t *testing.T) {
+// 固定测试向量锁定管理接口 HMAC-SHA256 协议。
+func TestSignAdminHMACSHA256KnownVector(t *testing.T) {
 	got := SignAdmin(testAdminSecret, http.MethodGet, "/api/core/admin/services", "", "1793865600", "0123456789abcdef", nil)
-	const want = "0058c35dc2f4d20c909b333faeebbf661dde26c2"
+	const want = "bddff8f8d31b4b4a220740c6f112502badad53a3c912bb745fd70e9e1db9ec1d"
 	if got != want {
-		t.Fatalf("管理接口 SHA-1 签名不匹配: got=%s want=%s", got, want)
+		t.Fatalf("管理接口 HMAC-SHA256 签名不匹配: got=%s want=%s", got, want)
+	}
+}
+
+func TestRequestHMACMiddlewareProtectsMultiplePrefixes(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	guard := RequestHMACMiddleware(next, []string{"/api/config/sync", "/api/config/nodes"}, testAdminSecret)
+	for i, item := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/config/sync/revision"},
+		{http.MethodGet, "/api/config/sync/snapshot"},
+		{http.MethodGet, "/api/config/nodes/12"},
+		{http.MethodPost, "/api/config/nodes/batch-get"},
+	} {
+		nonce := strconv.FormatInt(int64(i+1), 16)
+		nonce = strings.Repeat("0", 16-len(nonce)) + nonce
+		req := signedAdminRequest(item.method, item.path, "", nonce)
+		rec := httptest.NewRecorder()
+		guard.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("signed request %s rejected: %d", item.path, rec.Code)
+		}
+	}
+	for _, path := range []string{"/api/config/sync-other", "/api/config/nodes-other"} {
+		rec := httptest.NewRecorder()
+		guard.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("unmatched path %s was protected: %d", path, rec.Code)
+		}
 	}
 }
