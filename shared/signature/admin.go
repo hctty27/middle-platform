@@ -36,7 +36,7 @@ func SignAdmin(secret, method, path, canonicalQuery, timestamp, nonce string, bo
 
 // VerifyHMACRequest 验证完整 HTTP 请求签名。body 必须是实际接收的原始请求字节。
 func VerifyHMACRequest(r *http.Request, secret string, body []byte, now time.Time) bool {
-	if secret == "" || r == nil || r.URL == nil || r.Method == "" || r.URL.EscapedPath() == "" {
+	if secret == "" || r == nil || r.URL == nil || r.Method == "" {
 		return false
 	}
 	timestamp := r.Header.Get("X-Timestamp")
@@ -65,8 +65,12 @@ func VerifyHMACRequest(r *http.Request, secret string, body []byte, now time.Tim
 	if err != nil {
 		return false
 	}
+	path := r.URL.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
 	expected, err := hex.DecodeString(SignHMACRequest(
-		secret, r.Method, r.URL.EscapedPath(), query.Encode(), timestamp, nonce, body,
+		secret, r.Method, path, query.Encode(), timestamp, nonce, body,
 	))
 	if err != nil {
 		return false
