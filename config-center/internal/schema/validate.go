@@ -54,7 +54,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		"SELECT revision,epoch FROM config_revision WHERE id=1",
 		"SELECT id,game_id,region_id,env_type,node_type FROM config_node LIMIT 0",
 		"SELECT revision,node_id,operation FROM config_node_change_log LIMIT 0",
-		"SELECT id,code,webhook_secret FROM config_subscriber LIMIT 0",
+		"SELECT id,code,signing_secret FROM config_subscriber LIMIT 0",
 		"SELECT acknowledged_revision,acknowledged_epoch FROM config_subscriber_delivery_state LIMIT 0",
 	}
 	{
