@@ -131,7 +131,7 @@ func LoadFile(path string) (Config, error) {
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return Config{}, fmt.Errorf("必须配置 database.dsn 或 ACCESS_DB_DSN")
 	}
-	if strings.TrimSpace(cfg.SubscriberCode) == "" || len([]rune(cfg.SubscriberCode)) > 128 || strings.TrimSpace(cfg.SubscriberCode) != cfg.SubscriberCode || strings.ContainsAny(cfg.SubscriberCode, "\\r\\n") {
+	if strings.TrimSpace(cfg.SubscriberCode) == "" || len([]rune(cfg.SubscriberCode)) > 128 || strings.TrimSpace(cfg.SubscriberCode) != cfg.SubscriberCode || strings.ContainsAny(cfg.SubscriberCode, "\r\n") {
 		return Config{}, fmt.Errorf("必须配置合法的 subscriber.code 或 CONFIG_SUBSCRIBER_CODE")
 	}
 	if len([]byte(cfg.SubscriberSecret)) < 32 || strings.TrimSpace(cfg.SubscriberSecret) != cfg.SubscriberSecret {
