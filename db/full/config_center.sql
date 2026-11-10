@@ -71,7 +71,8 @@ CREATE TABLE config_subscriber (
     signing_secret VARCHAR(255) NOT NULL,
     enabled TINYINT NOT NULL DEFAULT 1,
     created_at DATETIME(6) NOT NULL,
-    updated_at DATETIME(6) NOT NULL
+    updated_at DATETIME(6) NOT NULL,
+    UNIQUE KEY uq_config_subscriber_signing_secret(signing_secret)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='配置订阅者与回调接入信息';
 
 CREATE TABLE config_subscriber_delivery_state (
