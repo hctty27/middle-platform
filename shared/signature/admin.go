@@ -2,6 +2,7 @@ package signature
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,13 +21,30 @@ const (
 	adminNonceLimit = 10000
 )
 
-// SignHMACRequest 对方法、转义路径、规范化查询串、时间戳、nonce 和原始 Body 计算 HMAC-SHA256。
-func SignHMACRequest(secret, method, path, canonicalQuery, timestamp, nonce string, body []byte) string {
+// SubscriberSecretLookup 根据接入端编码读取其启用状态和独立签名密钥。
+type SubscriberSecretLookup func(context.Context, string) (secret string, enabled bool, err error)
+
+// signHMACRequest 统一计算 HMAC；identity 模式使用独立协议域并绑定接入端编码。
+func signHMACRequest(secret, identity, method, path, canonicalQuery, timestamp, nonce string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte("HITALK-HMAC-SHA256\n" + strings.ToUpper(method) + "\n" +
+	prefix := "HITALK-HMAC-SHA256\n"
+	if identity != "" {
+		prefix += "SUBSCRIBER\n" + identity + "\n"
+	}
+	mac.Write([]byte(prefix + strings.ToUpper(method) + "\n" +
 		path + "\n" + canonicalQuery + "\n" + timestamp + "\n" + nonce + "\n"))
 	mac.Write(body)
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// SignHMACRequest 对方法、转义路径、规范化查询串、时间戳、nonce 和原始 Body 计算 HMAC-SHA256。
+func SignHMACRequest(secret, method, path, canonicalQuery, timestamp, nonce string, body []byte) string {
+	return signHMACRequest(secret, "", method, path, canonicalQuery, timestamp, nonce, body)
+}
+
+// SignSubscriberHMACRequest 在标准请求字段之外绑定接入端编码，防止身份头被替换。
+func SignSubscriberHMACRequest(secret, code, method, path, canonicalQuery, timestamp, nonce string, body []byte) string {
+	return signHMACRequest(secret, code, method, path, canonicalQuery, timestamp, nonce, body)
 }
 
 // SignAdmin 保留管理签名入口，底层统一使用 HMAC-SHA256。
@@ -34,8 +52,7 @@ func SignAdmin(secret, method, path, canonicalQuery, timestamp, nonce string, bo
 	return SignHMACRequest(secret, method, path, canonicalQuery, timestamp, nonce, body)
 }
 
-// VerifyHMACRequest 验证完整 HTTP 请求签名。body 必须是实际接收的原始请求字节。
-func VerifyHMACRequest(r *http.Request, secret string, body []byte, now time.Time) bool {
+func verifyHMACRequest(r *http.Request, secret, identity string, body []byte, now time.Time) bool {
 	if secret == "" || r == nil || r.URL == nil || r.Method == "" {
 		return false
 	}
@@ -69,13 +86,31 @@ func VerifyHMACRequest(r *http.Request, secret string, body []byte, now time.Tim
 	if path == "" {
 		path = "/"
 	}
-	expected, err := hex.DecodeString(SignHMACRequest(
-		secret, r.Method, path, query.Encode(), timestamp, nonce, body,
+	expected, err := hex.DecodeString(signHMACRequest(
+		secret, identity, r.Method, path, query.Encode(), timestamp, nonce, body,
 	))
 	if err != nil {
 		return false
 	}
 	return hmac.Equal(actual, expected)
+}
+
+// VerifyHMACRequest 验证完整 HTTP 请求签名。body 必须是实际接收的原始请求字节。
+func VerifyHMACRequest(r *http.Request, secret string, body []byte, now time.Time) bool {
+	return verifyHMACRequest(r, secret, "", body, now)
+}
+
+// VerifySubscriberHMACRequest 验证绑定接入端编码的完整 HTTP 请求签名。
+func VerifySubscriberHMACRequest(r *http.Request, secret string, body []byte, now time.Time) bool {
+	if r == nil {
+		return false
+	}
+	code := r.Header.Get("X-Subscriber-Code")
+	if code == "" || len(code) > 128 || strings.TrimSpace(code) != code ||
+		strings.ContainsAny(code, "\r\n") {
+		return false
+	}
+	return verifyHMACRequest(r, secret, code, body, now)
 }
 
 type adminNonceCache struct {
@@ -108,18 +143,43 @@ func (c *adminNonceCache) use(nonce string, expiresAt int64, now time.Time) bool
 	return true
 }
 
-// RequestHMACMiddleware 对指定路径前缀执行 HMAC-SHA256 验签和进程内 nonce 去重。
+func protectedPath(path string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if prefix != "" && (path == prefix || strings.HasPrefix(path, prefix+"/")) {
+			return true
+		}
+	}
+	return false
+}
+
+func readSignedBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	var body []byte
+	var err error
+	if r.Body != nil {
+		body, err = io.ReadAll(io.LimitReader(r.Body, adminBodyLimit+1))
+		_ = r.Body.Close()
+		if err != nil {
+			rejectAdminSignature(w)
+			return nil, false
+		}
+		if len(body) > adminBodyLimit {
+			http.Error(w, "签名请求体过大", http.StatusRequestEntityTooLarge)
+			return nil, false
+		}
+	}
+	return body, true
+}
+
+func restoreSignedBody(r *http.Request, body []byte) {
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+}
+
+// RequestHMACMiddleware 对指定路径前缀执行固定密钥 HMAC-SHA256 验签和进程内 nonce 去重。
 func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) http.Handler {
 	cache := &adminNonceCache{}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		protected := false
-		for _, prefix := range prefixes {
-			if prefix != "" && (r.URL.Path == prefix || strings.HasPrefix(r.URL.Path, prefix+"/")) {
-				protected = true
-				break
-			}
-		}
-		if !protected {
+		if !protectedPath(r.URL.Path, prefixes) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -135,20 +195,11 @@ func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) 
 			rejectAdminSignature(w)
 			return
 		}
-		now := time.Now()
-		var body []byte
-		if r.Body != nil {
-			body, err = io.ReadAll(io.LimitReader(r.Body, adminBodyLimit+1))
-			_ = r.Body.Close()
-			if err != nil {
-				rejectAdminSignature(w)
-				return
-			}
-			if len(body) > adminBodyLimit {
-				http.Error(w, "签名请求体过大", http.StatusRequestEntityTooLarge)
-				return
-			}
+		body, ok := readSignedBody(w, r)
+		if !ok {
+			return
 		}
+		now := time.Now()
 		if !VerifyHMACRequest(r, secret, body, now) {
 			rejectAdminSignature(w)
 			return
@@ -161,8 +212,60 @@ func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) 
 			http.Error(w, "请求 nonce 已使用或过于频繁", http.StatusConflict)
 			return
 		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		r.ContentLength = int64(len(body))
+		restoreSignedBody(r, body)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequestSubscriberHMACMiddleware 按 X-Subscriber-Code 查询独立密钥并验签。
+func RequestSubscriberHMACMiddleware(next http.Handler, prefixes []string, lookup SubscriberSecretLookup) http.Handler {
+	cache := &adminNonceCache{}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !protectedPath(r.URL.Path, prefixes) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		code := r.Header.Get("X-Subscriber-Code")
+		if code == "" || len(code) > 128 || strings.TrimSpace(code) != code ||
+			strings.ContainsAny(code, "\r\n") || lookup == nil {
+			rejectAdminSignature(w)
+			return
+		}
+		secret, enabled, err := lookup(r.Context(), code)
+		if err != nil {
+			http.Error(w, "签名认证服务暂不可用", http.StatusServiceUnavailable)
+			return
+		}
+		if !enabled || len([]byte(secret)) < 32 || strings.TrimSpace(secret) != secret {
+			rejectAdminSignature(w)
+			return
+		}
+		timestamp := r.Header.Get("X-Timestamp")
+		nonce := r.Header.Get("X-Nonce")
+		stamp, err := strconv.ParseInt(timestamp, 10, 64)
+		if err != nil || strconv.FormatInt(stamp, 10) != timestamp {
+			rejectAdminSignature(w)
+			return
+		}
+		body, ok := readSignedBody(w, r)
+		if !ok {
+			return
+		}
+		now := time.Now()
+		if !VerifySubscriberHMACRequest(r, secret, body, now) {
+			rejectAdminSignature(w)
+			return
+		}
+		expiresAt := now.Unix() + int64(adminWindow.Seconds())
+		if futureExpiry := stamp + int64(adminWindow.Seconds()); futureExpiry > expiresAt {
+			expiresAt = futureExpiry
+		}
+		if !cache.use(code+"\x00"+nonce, expiresAt, now) {
+			http.Error(w, "请求 nonce 已使用或过于频繁", http.StatusConflict)
+			return
+		}
+		restoreSignedBody(r, body)
 		next.ServeHTTP(w, r)
 	})
 }
