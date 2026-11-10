@@ -30,15 +30,20 @@ def canonical_query(raw_query):
     )
 
 
-def signature_headers(secret, method, path, payload, timestamp=None, nonce=None):
-    """生成与 shared/signature.SignHMACRequest 完全一致的请求签名。"""
+def signature_headers(secret, method, path, payload, timestamp=None, nonce=None, subscriber_code=None):
+    """生成与共享 HMAC 签名协议一致的请求头。"""
     parsed = urllib.parse.urlsplit(path)
     request_path = parsed.path or "/"
     canonical = canonical_query(parsed.query)
     timestamp = timestamp or str(int(time.time()))
     nonce = nonce or secrets.token_hex(8)
+    prefix = "HITALK-HMAC-SHA256\n"
+    headers = {}
+    if subscriber_code:
+        prefix += "SUBSCRIBER\n" + subscriber_code + "\n"
+        headers["X-Subscriber-Code"] = subscriber_code
     message = (
-        "HITALK-HMAC-SHA256\n"
+        prefix
         + method.upper() + "\n"
         + request_path + "\n"
         + canonical + "\n"
@@ -46,11 +51,12 @@ def signature_headers(secret, method, path, payload, timestamp=None, nonce=None)
         + nonce + "\n"
     ).encode("utf-8") + (payload or b"")
     digest = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
-    return {
+    headers.update({
         "X-Timestamp": timestamp,
         "X-Nonce": nonce,
         "X-Signature": digest,
-    }
+    })
+    return headers
 
 
 def verify_signature_vector():
@@ -69,7 +75,7 @@ def verify_signature_vector():
 
 
 def request_secret(port, path):
-    """根据服务和接口前缀选择对应的独立 HMAC 密钥。"""
+    """根据服务和接口前缀选择管理密钥或接入端独立密钥。"""
     request_path = urllib.parse.urlsplit(path).path
 
     def matches(prefix):
@@ -77,15 +83,15 @@ def request_secret(port, path):
 
     if port in {8080, 8082}:
         if matches("/api/config/admin"):
-            return os.environ["ADMIN_AUTH_SECRET"]
+            return os.environ["ADMIN_AUTH_SECRET"], None
         if matches("/api/config/sync") or matches("/api/config/nodes"):
-            return os.environ["CONFIG_SYNC_SECRET"]
+            return os.environ["CONFIG_SUBSCRIBER_SECRET"], os.environ["CONFIG_SUBSCRIBER_CODE"]
     if port == 8081:
         if request_path in {"/api/access/nodes", "/api/access/revision"}:
             return os.environ["CONFIG_SYNC_SECRET"]
         if request_path == "/internal/config/callback":
-            return os.environ["CONFIG_WEBHOOK_SECRET"]
-    return None
+            return os.environ["CONFIG_SUBSCRIBER_SECRET"], os.environ["CONFIG_SUBSCRIBER_CODE"]
+    return None, None
 
 
 def request(port, path, method="GET", data=None, expected=200, extra_headers=None,
@@ -93,11 +99,12 @@ def request(port, path, method="GET", data=None, expected=200, extra_headers=Non
     """发送 HTTP 请求；所有受保护接口均按原始 Body 执行 HMAC-SHA256 签名。"""
     payload = None if data is None else json.dumps(data).encode("utf-8")
     headers = {"Content-Type": "application/json"} if payload is not None else {}
-    secret = request_secret(port, path)
+    secret, subscriber_code = request_secret(port, path)
     if secret:
         headers.update(signature_headers(
             secret, method, path, payload or b"",
             timestamp=signature_timestamp, nonce=signature_nonce,
+            subscriber_code=subscriber_code,
         ))
     headers.update(extra_headers or {})
     req = urllib.request.Request(
@@ -216,7 +223,7 @@ def main():
     request(8080, "/api/config/admin/subscribers", "POST", {
         "code": "ci-access",
         "callbackUrl": "http://127.0.0.1:8081/internal/config/callback",
-        "secret": os.environ["CONFIG_WEBHOOK_SECRET"]
+        "secret": os.environ["CONFIG_SUBSCRIBER_SECRET"]
     }, 201)
 
     # Webhook 使用订阅者密钥执行 HMAC-SHA256；同一个 nonce 不允许重放。
