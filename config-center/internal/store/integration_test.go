@@ -250,6 +250,9 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL + "/internal/config/callback", Secret: "test-subscriber-secret-0123456789abcdef"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-duplicate", CallbackURL: server.URL + "/duplicate", Secret: "test-subscriber-secret-0123456789abcdef"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate subscriber signing secret should conflict: %v", err)
+	}
 	var subscriberID int64
 	if err := db.QueryRowContext(ctx, "SELECT id FROM config_subscriber WHERE code='access-1'").Scan(&subscriberID); err != nil {
 		t.Fatal(err)
