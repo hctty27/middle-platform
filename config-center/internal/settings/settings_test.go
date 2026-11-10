@@ -156,8 +156,8 @@ func TestLoadRequiresDefaultYAML(t *testing.T) {
 	}
 }
 
-
 func TestLoadRejectsMissingSyncSecret(t *testing.T) {
+	t.Setenv("CONFIG_SYNC_SECRET", "")
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("database:\n  dsn: test-dsn\nconfigSync:\n  secret: ''\n"), 0600); err != nil {
 		t.Fatal(err)

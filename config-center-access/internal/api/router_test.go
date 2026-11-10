@@ -90,7 +90,6 @@ func TestCallbackRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-
 func TestAccessReadEndpointsRequireHMAC(t *testing.T) {
 	handler := Router(nil, &fakeTrigger{}, "webhook-secret", testAccessSyncSecret)
 	for _, path := range []string{"/api/access/nodes", "/api/access/revision"} {
