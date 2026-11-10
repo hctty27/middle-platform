@@ -242,7 +242,8 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></
     [Buffer]::BlockCopy($bodyBytes, 0, $messageBytes, $prefixBytes.Length, $bodyBytes.Length)
     $hmac = [Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($Secret))
     try { $signature = [BitConverter]::ToString($hmac.ComputeHash($messageBytes)).Replace("-", "").ToLowerInvariant() } finally { $hmac.Dispose() }
-    $headers = @{ "X-Timestamp" = $timestamp; "X-Nonce" = $nonce; "X-Signature" = $signature }\n    if ($SubscriberCode) { $headers["X-Subscriber-Code"] = $SubscriberCode }
+    $headers = @{ "X-Timestamp" = $timestamp; "X-Nonce" = $nonce; "X-Signature" = $signature }
+    if ($SubscriberCode) { $headers["X-Subscriber-Code"] = $SubscriberCode }
     $uri = $BaseUrl.TrimEnd("/") + $Path
     if ($Query) { $uri += "?" + $Query }
     if ($Method.ToUpperInvariant() -eq "GET") { return Invoke-RestMethod -Method Get -Uri $uri -Headers $headers }
@@ -250,11 +251,11 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></
 }
 
 $adminSecret = "replace-with-adminAuth.secret"
-$webhookSecret = "replace-with-the-same-value-as-webhook.secret"
-$configSyncSecret = "replace-with-configSync.secret"
-$subscriberBody = @{ code = "access-local"; callbackUrl = "http://127.0.0.1:8081/internal/config/callback"; secret = $webhookSecret } | ConvertTo-Json -Compress
+$subscriberCode = "access-local"
+$subscriberSecret = "replace-with-config_subscriber.signing_secret"
+$subscriberBody = @{ code = $subscriberCode; callbackUrl = "http://127.0.0.1:8081/internal/config/callback"; secret = $subscriberSecret } | ConvertTo-Json -Compress
 Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8080" -Method "POST" -Path "/api/config/admin/subscribers" -Secret $adminSecret -Body $subscriberBody
-Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8081" -Method "GET" -Path "/api/access/revision" -Secret $configSyncSecret
+Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8081" -Method "GET" -Path "/api/access/revision" -Secret $subscriberSecret -SubscriberCode $subscriberCode
 # Query 非空时，先按 Go url.Values.Encode() 规范化，再同时传入 -Query 和实际 URL。
 </code></pre></div>
 <p>最后一条命令会签名读取接入端的 <code>/api/access/revision</code>；不能直接在浏览器地址栏打开该 URL，因为它始终要求 HMAC-SHA256 Header。Webhook、配置拉取和接入端本地只读查询统一使用该接入端的 <code>signing_secret</code>；配置中心根据 <code>X-Subscriber-Code</code> 找到启用的订阅记录并验签。签名验证成功只代表 Webhook 已受理，真正的节点更新以副本游标和节点结果为准。配置中心与接入端必须同步升级。</p>
