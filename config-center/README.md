@@ -4,7 +4,7 @@
 
 ## 本地启动
 
-复制 YAML 后，必须为 `configSync.secret` 和 `adminAuth.secret` 配置至少 32 字节的高熵密钥；`CONFIG_SYNC_SECRET` 可覆盖配置同步密钥，`ADMIN_AUTH_SECRET` 可覆盖管理密钥。配置同步密钥必须与接入端一致。
+复制 YAML 后，为 `adminAuth.secret` 配置至少 32 字节的高熵密钥；`ADMIN_AUTH_SECRET` 可覆盖管理密钥。
 
 1. 新建空库时手工执行 `../db/full/config_center.sql`；已有库按 [数据库文档](../admin/public/docs/guide.html#database) 核对后选择增量 SQL，禁止重新执行全量初始化。
 2. 将 `configs/config.yaml` 复制为**完整独立**的 `configs/config-dev.yaml` 并填写 `database.dsn`。启动时只读取指定文件；不传 `-config` 时默认读取当前工作目录下的 `configs/config.yaml`。环境变量仍可覆盖指定字段。
@@ -18,7 +18,9 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 ## 安全与参考
 
-`/api/config/admin/**` 始终使用 HMAC-SHA256，密钥为 `adminAuth.secret`，须与 SDK Core 的管理密钥一致。`/api/config/sync/**`、`/api/config/nodes/**` 使用独立的 `configSync.secret`，至少 32 字节，须与 config-center-access 的配置一致。Webhook 使用各订阅者独立的 `webhook_secret`，同样采用 HMAC-SHA256。所有签名均绑定方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。密钥不能提交到仓库；生产必须使用 HTTPS 并限制网关访问范围。
+`/api/config/admin/**` 始终使用 HMAC-SHA256，密钥为 `adminAuth.secret`，须与 SDK Core 的管理密钥一致。`/api/config/sync/**`、`/api/config/nodes/**` 根据请求头 `X-Subscriber-Code` 查找 `config_subscriber` 对应记录，并使用该记录的 `signing_secret` 验签。配置中心发送 Webhook 时也使用同一条订阅记录的密钥。每个接入端拥有独立密钥，至少 32 字节；停用订阅者会同时拒绝该接入端的同步读取请求并停止新的 Webhook 投递。
+
+所有签名均绑定接入端编码、方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。密钥不能提交到仓库；生产必须使用 HTTPS 并限制网关访问范围。
 
 - [统一接口与签名规范](../admin/public/docs/index.html)
 - [架构与内部路由](../admin/public/docs/guide.html#architecture)
