@@ -27,6 +27,13 @@ type SetSubscriberEnabledRequest = model.SetSubscriberEnabledRequest
 var ErrInvalid = model.ErrInvalid
 var ErrConflict = model.ErrConflict
 var ErrSubscriberNotFound = model.ErrSubscriberNotFound
+var ErrDuplicateCode = model.ErrDuplicateCode
+var ErrDuplicateSecret = model.ErrDuplicateSecret
+var ErrDuplicateValue = model.ErrDuplicateValue
+var ErrGameHasRegions = model.ErrGameHasRegions
+var ErrGameHasChannelApps = model.ErrGameHasChannelApps
+var ErrRegionHasServerGroups = model.ErrRegionHasServerGroups
+var ErrServerGroupInUse = model.ErrServerGroupInUse
 
 // Reader 定义只读接口所依赖的存储能力。
 type Reader interface {
