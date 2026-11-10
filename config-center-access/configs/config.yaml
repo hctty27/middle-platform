@@ -11,6 +11,7 @@ configCenter:
   url: "http://127.0.0.1:8080"
 
 # 接入端身份与密钥必须与配置中心 config_subscriber 中同一条记录一致。
+# 每个接入端使用唯一密钥，长度为 32–255 字节且不得包含首尾空格。
 # 该密钥同时用于主动拉取配置、本地只读查询和接收 Webhook。
 subscriber:
   code: ""
