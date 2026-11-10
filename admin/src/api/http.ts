@@ -64,6 +64,7 @@ attachAdminSigning(api)
 attachAdminSigning(sdkApi)
 
 interface ApiErrorPayload {
+  code?: unknown
   message?: unknown
   error?: unknown
 }
@@ -75,7 +76,10 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
   const data = error.response?.data as ApiErrorPayload | undefined
   const detail = typeof data?.message === 'string' ? data.message
     : typeof data?.error === 'string' ? data.error : ''
-  if (detail.trim()) return `${fallback}：${detail}`
+  if (detail.trim()) {
+    if (typeof data?.code === 'string' && data.code.trim()) return detail
+    return `${fallback}：${detail}`
+  }
 
   if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
     return `${fallback}：请求超时`
