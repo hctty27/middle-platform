@@ -137,11 +137,15 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err != nil {
 		return fmt.Errorf("Webhook 查询参数不合法: %w", err)
 	}
+	requestPath := req.URL.EscapedPath()
+	if requestPath == "" {
+		requestPath = "/"
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Timestamp", timestamp)
 	req.Header.Set("X-Nonce", nonce)
 	req.Header.Set("X-Signature", signature.SignHMACRequest(
-		job.Secret, req.Method, req.URL.EscapedPath(), query.Encode(), timestamp, nonce, body,
+		job.Secret, req.Method, requestPath, query.Encode(), timestamp, nonce, body,
 	))
 	response, err := d.Client.Do(req)
 	if err != nil {
