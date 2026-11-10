@@ -59,7 +59,7 @@
 
 ## 生产发布行为
 
-本地完成构建和归档校验后上传到服务器临时目录，验证 SHA-256、文件类型、架构与选定服务，再直接更新固定的 `bin/`、`admin/`、`sql/`。生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；SQL 仅分发，不会自动执行。
+本地完成构建和归档校验后上传到服务器临时目录，验证 SHA-256、文件类型、架构与选定服务，再直接更新固定的 `bin/`、`admin/`、`sql/`。生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；SQL 仅分发，不会自动执行。升级旧版配置同步协议时，必须先备份 `config_center`，检查并处理重复或短于 32 字节的旧 `webhook_secret`，再由管理员手工执行 `sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql`。随后为每个接入端配置匹配的 `subscriber.code` / `subscriber.secret`，并同步发布配置中心与接入端；不要只更新一侧。
 
 默认按 `publish.config.json` 中的 `services` 逐实例执行 Supervisor 重启与 `/health/ready` 验活；未列出的实例不会被重启。本发布流程**不提供自动回滚或零中断保证**，失败时需人工处置。完整的部署目录、Nginx、数据库升级与故障处理以 [生产运维](../admin/public/docs/guide.html#production) 为准。
 
