@@ -86,7 +86,10 @@ func Validate(nodeType, raw string) error {
 			continue
 		}
 		var content string
-		if string(value) == "null" || json.Unmarshal(value, &content) != nil {
+		if string(value) == "null" {
+			continue
+		}
+		if json.Unmarshal(value, &content) != nil {
 			return fmt.Errorf("%s 必须是字符串", field.Key)
 		}
 	}

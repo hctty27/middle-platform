@@ -14,6 +14,7 @@ func TestValidateBusinessConfig(t *testing.T) {
 		{"region fields", "region", `{"loginServerIp":"10.0.0.1","loginDomain":"login.example.com","chatDomain":"chat.example.com","loginUrl":"https://login.example.com","jumpIp":"10.0.0.2","regionAlias":"cn-1","mergeDomain":"merge.example.com"}`, false},
 		{"region field optional", "region", `{}`, false},
 		{"wrong login domain type", "region", `{"loginDomain":1}`, true},
+		{"region null", "region", `{"jumpIp":null,"loginDomain":null}`, false},
 		{"server group", "server_group", `{"extra":123}`, false},
 		{"app", "channel_app", `{"tsKey":"","appSecret":"secret","extra":false}`, false},
 		{"unset", "game", `{}`, false},

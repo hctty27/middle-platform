@@ -71,7 +71,7 @@ const groups = computed(() => {
 })
 const validationError = computed(() => {
   try {
-    if (schema.value) validateConfigAgainstSchema(props.modelValue, schema.value.schema)
+    if (schema.value) validateConfigAgainstSchema(props.modelValue, schema.value.schema, props.scope === 'base')
     else parseConfigObject(props.modelValue)
     return ''
   } catch (error) { return error instanceof Error ? error.message : '配置格式错误' }

@@ -49,7 +49,7 @@ export function parseConfigObject(raw: string): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-function validateField(value: unknown, field: FieldSchema, name: string): void {
+function validateField(value: unknown, field: FieldSchema, name: string, allowNull: boolean): void {
   if (field.type === 'object') {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error(name + ' 必须是 JSON 对象')
@@ -57,11 +57,12 @@ function validateField(value: unknown, field: FieldSchema, name: string): void {
     for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
       const rule = field.properties?.[key] ??
         (typeof field.additionalProperties === 'object' ? field.additionalProperties : undefined)
-      if (rule) validateField(nested, rule, name + '.' + key)
+      if (rule) validateField(nested, rule, name + '.' + key, allowNull)
     }
     return
   }
   if (field.type === 'string') {
+    if (value === null && allowNull) return
     if (typeof value !== 'string') throw new Error(name + ' 必须是字符串')
     if (field.enum && !field.enum.includes(value)) throw new Error(name + ' 不在可选范围内')
     if (field.format === 'uri' && value.trim()) {
@@ -79,15 +80,15 @@ function validateField(value: unknown, field: FieldSchema, name: string): void {
   }
 }
 
-export function validateConfigAgainstSchema(raw: string, schema: ConfigSchema): void {
+export function validateConfigAgainstSchema(raw: string, schema: ConfigSchema, allowNull = false): void {
   const value = parseConfigObject(raw)
   for (const name of schema.required ?? []) {
-    if (!(name in value)) throw new Error(name + ' 为必填字段')
+    if (!(name in value) || (allowNull && value[name] === null)) throw new Error(name + ' 为必填字段')
   }
   for (const [key, item] of Object.entries(value)) {
     const rule = schema.properties[key] ??
       (typeof schema.additionalProperties === 'object' ? schema.additionalProperties : undefined)
-    if (rule) validateField(item, rule, key)
+    if (rule) validateField(item, rule, key, allowNull)
   }
 }
 function lookup(object: Record<string, unknown>, path: string): unknown {
