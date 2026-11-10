@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"hitall.com/middle-platform/sdk-core/internal/auth"
 	"hitall.com/middle-platform/sdk-core/internal/model"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 var ErrTarget = errors.New("游戏发货通知目标地址不合法")
@@ -129,8 +129,7 @@ func (c *Client) ValidateTarget(raw string) error {
 	return nil
 }
 
-// Send 使用平台风格的 SHA-1 游戏签名，不转发支付平台密钥。
-// 签名由 auth.SignGame 统一封装，不依赖通知 URL。
+// Send 使用游戏密钥对通知方法、路径和原始请求体签名。
 func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
 	if err := c.ValidateTarget(o.GameNotifyURL); err != nil {
 		return err
@@ -151,19 +150,21 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
 	}
 	nonce := hex.EncodeToString(nonceBytes[:])
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	signature, err := auth.SignGame(key, o.AppID, timestamp, nonce, body)
-	if err != nil {
-		return err
+	if o.AppID == "" || strings.ContainsAny(o.AppID, "\r\n") {
+		return errors.New("发货通知 AppID 不合法")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.GameNotifyURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
+	if req.URL.Path == "" {
+		req.URL.Path = "/"
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-app-id", o.AppID)
 	req.Header.Set("x-timestamp", timestamp)
 	req.Header.Set("x-nonce", nonce)
-	req.Header.Set("x-signature", signature)
+	req.Header.Set("x-signature", signature.SignGameRequest(key, req.Method, req.URL.EscapedPath(), o.AppID, timestamp, nonce, body))
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("发货通知请求失败: %w", err)

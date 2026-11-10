@@ -25,7 +25,7 @@ func (a *Standard) Query(ctx context.Context, target model.Target, in model.Serv
 	if err != nil {
 		return model.ServerQueryResult{}, fmt.Errorf("%w: 序列化区服查询请求失败: %v", model.ErrInvalidConfig, err)
 	}
-	raw, err := transport.PostJSON(ctx, a.Client, target.ServerQueryURL, target, payload, in.ForwardSignatureValues(), maxServerResponseBytes)
+	raw, err := transport.PostJSON(ctx, a.Client, target.ServerQueryURL, target, payload, maxServerResponseBytes)
 	if err != nil {
 		return model.ServerQueryResult{}, err
 	}

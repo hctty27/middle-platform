@@ -22,7 +22,7 @@ func (a *Standard) Check(ctx context.Context, target model.Target, in model.User
 	if err != nil {
 		return model.UserCheckResult{}, err
 	}
-	raw, err := transport.PostJSON(ctx, a.Client, target.UserCheckURL, target, payload, []string{in.OpenID}, 64*1024)
+	raw, err := transport.PostJSON(ctx, a.Client, target.UserCheckURL, target, payload, 64*1024)
 	if err != nil {
 		return model.UserCheckResult{}, err
 	}

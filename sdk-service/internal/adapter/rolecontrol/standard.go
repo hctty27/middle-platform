@@ -25,7 +25,7 @@ func (a *Standard) Execute(ctx context.Context, target model.Target, input model
 	if err != nil {
 		return fmt.Errorf("%w: 序列化封解禁请求失败: %v", model.ErrInvalidConfig, err)
 	}
-	raw, err := transport.PostJSON(ctx, a.Client, target.RoleControlURL, target, payload, input.SignatureValues(), maxControlResponseBytes)
+	raw, err := transport.PostJSON(ctx, a.Client, target.RoleControlURL, target, payload, maxControlResponseBytes)
 	if err != nil {
 		return err
 	}

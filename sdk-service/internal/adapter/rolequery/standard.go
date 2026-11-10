@@ -26,7 +26,7 @@ func (a *Standard) Query(ctx context.Context, target model.Target, in model.Role
 	if err != nil {
 		return nil, fmt.Errorf("%w: 序列化角色查询请求失败: %v", model.ErrInvalidConfig, err)
 	}
-	raw, err := transport.PostJSON(ctx, a.Client, target.RoleQueryURL, target, payload, in.SignatureValues(), maxRoleResponseBytes)
+	raw, err := transport.PostJSON(ctx, a.Client, target.RoleQueryURL, target, payload, maxRoleResponseBytes)
 	if err != nil {
 		return nil, err
 	}

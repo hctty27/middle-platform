@@ -2,20 +2,17 @@ package notify
 
 import (
 	"context"
-	"crypto/sha1"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
-	"sort"
-	"strings"
 	"testing"
 	"time"
 
 	"hitall.com/middle-platform/sdk-core/internal/model"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 func TestNotificationTargets(t *testing.T) {
@@ -83,7 +80,7 @@ func TestNotificationDialRejectsMetadata(t *testing.T) {
 	}
 }
 
-func TestNotifySignatureUsesPlatformStyleSHA1(t *testing.T) {
+func TestNotifySignatureUsesHMAC(t *testing.T) {
 	secret := []byte("game-secret")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/arbitrary/game/notify" {
@@ -116,23 +113,8 @@ func TestNotifySignatureUsesPlatformStyleSHA1(t *testing.T) {
 		if message.Amount != 600 || message.GameOrderID != "G100" {
 			t.Error("bad body")
 		}
-		values := []string{
-			string(secret), "110006", r.Header.Get("x-timestamp"), r.Header.Get("x-nonce"),
-			message.OrderNo, message.GameOrderID,
-			"600", message.Attach, message.PaidAt,
-		}
-		filtered := make([]string, 0, len(values))
-		for _, v := range values {
-			if v != "" {
-				filtered = append(filtered, v)
-			}
-		}
-		sort.Strings(filtered)
-		sum := sha1.Sum([]byte(strings.Join(filtered, "_")))
-		got := r.Header.Get("x-signature")
-		expected := fmt.Sprintf("%x", sum)
-		if got != expected {
-			t.Errorf("invalid game notification sign: %s, want %s", got, expected)
+		if !signature.VerifyGameHMAC(r, secret, "110006", body, time.Now()) {
+			t.Error("invalid game notification signature")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}

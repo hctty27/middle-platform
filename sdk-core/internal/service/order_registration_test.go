@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"hitall.com/middle-platform/sdk-core/internal/auth"
 	"hitall.com/middle-platform/sdk-core/internal/model"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 const registrationTestAppID = "app1001"
@@ -102,18 +102,14 @@ func prepareRegistrationTest(t *testing.T, existing *model.Order) (
 	body := []byte(`{"game_order_id":"order-001","amount":600,"attach":"purchase"}`)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	nonce := "0123456789abcdef"
-	signature, err := auth.SignGame([]byte("game-secret"), registrationTestAppID, timestamp, nonce, body)
-	if err != nil {
-		t.Fatalf("生成测试签名失败: %v", err)
-	}
-
 	request := httptest.NewRequest(http.MethodPost, "/api/core/orders/prod/"+registrationTestAppID, nil)
+	signed := signature.SignGameRequest([]byte("game-secret"), request.Method, request.URL.EscapedPath(), registrationTestAppID, timestamp, nonce, body)
 	request.SetPathValue("env", "prod")
 	request.SetPathValue("appid", registrationTestAppID)
 	request.Header.Set("x-app-id", registrationTestAppID)
 	request.Header.Set("x-timestamp", timestamp)
 	request.Header.Set("x-nonce", nonce)
-	request.Header.Set("x-signature", signature)
+	request.Header.Set("x-signature", signed)
 
 	verified, err := svc.VerifyRegistration(request, body, "prod", registrationTestAppID)
 	if err != nil {

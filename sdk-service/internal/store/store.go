@@ -145,7 +145,7 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
 	}
 	u, err := url.Parse(targetURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
-		u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+		u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery {
 		return model.Target{}, model.ErrInvalidConfig
 	}
 	switch serviceCode {

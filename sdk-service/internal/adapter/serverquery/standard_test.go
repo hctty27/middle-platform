@@ -3,6 +3,7 @@ package serverquery
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,17 +34,20 @@ func TestStandardServerQuery(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			game := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				raw, readErr := io.ReadAll(r.Body)
+				if readErr != nil {
+					t.Error(readErr)
+				}
 				var in model.ServerQueryRequest
-				if err := json.NewDecoder(r.Body).Decode(&in); err != nil ||
+				if err := json.Unmarshal(raw, &in); err != nil ||
 					in.Page != 2 || in.PageSize != 1000 || in.Zonekey != "zone" {
 					t.Errorf("游戏区服查询字段错误: %v %+v", err, in)
 				}
 				if r.Method != http.MethodPost || r.Header.Get("x-app-id") != "110006" {
 					t.Error("请求方式或 AppID 错误")
 				}
-				values := append([]string{"game-secret", "110006", r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}, in.ForwardSignatureValues()...)
-				if signature.SignValues(values...) != r.Header.Get("x-signature") {
-					t.Error("游戏区服查询签名错误")
+				if !signature.VerifyGameHMAC(r, []byte("game-secret"), "110006", raw, time.Now()) {
+					t.Error("游戏请求签名错误")
 				}
 				_, _ = w.Write([]byte(tc.body))
 			}))

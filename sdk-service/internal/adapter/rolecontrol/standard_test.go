@@ -3,6 +3,7 @@ package rolecontrol
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -32,8 +33,12 @@ func TestStandardExecute(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			game := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				raw, readErr := io.ReadAll(r.Body)
+				if readErr != nil {
+					t.Error(readErr)
+				}
 				var in model.RoleControlRequest
-				if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				if err := json.Unmarshal(raw, &in); err != nil {
 					t.Errorf("无法解析请求: %v", err)
 				}
 				if in.Type != tc.action || in.RoleID != "r1" || r.Method != http.MethodPost ||
@@ -44,9 +49,7 @@ func TestStandardExecute(t *testing.T) {
 					(tc.duration != nil && *in.Duration != *tc.duration) {
 					t.Errorf("duration 传递错误: %+v", in)
 				}
-				values := append([]string{"game-secret", "110006", r.Header.Get("x-timestamp"),
-					r.Header.Get("x-nonce")}, in.SignatureValues()...)
-				if signature.SignValues(values...) != r.Header.Get("x-signature") {
+				if !signature.VerifyGameHMAC(r, []byte("game-secret"), "110006", raw, time.Now()) {
 					t.Error("游戏请求签名错误")
 				}
 				w.WriteHeader(tc.status)

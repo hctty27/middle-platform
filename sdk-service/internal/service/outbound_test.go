@@ -11,6 +11,7 @@ import (
 
 	"hitall.com/middle-platform/sdk-service/internal/auth"
 	"hitall.com/middle-platform/sdk-service/internal/model"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 type fakeOutboundRoutes struct {
@@ -52,10 +53,7 @@ func TestOutboundServiceChecksSignatureAndSwitch(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/service/events/test", nil)
 		ts := strconv.FormatInt(time.Now().Unix(), 10)
 		nonce := "0011223344556677"
-		sig, err := auth.SignGame("game-secret", "110006", ts, nonce, body)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sig := signature.SignGameRequest([]byte("game-secret"), req.Method, req.URL.EscapedPath(), "110006", ts, nonce, body)
 		req.Header.Set("x-app-id", "110006")
 		req.Header.Set("x-timestamp", ts)
 		req.Header.Set("x-nonce", nonce)

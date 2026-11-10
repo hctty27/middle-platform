@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"hitall.com/middle-platform/sdk-service/internal/model"
@@ -20,9 +21,9 @@ type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-// PostJSON 使用统一的游戏侧签名协议发送业务请求；调用方保留各自的签名字段和响应校验。
+// PostJSON 对游戏请求的实际路径和原始请求体签名。
 func PostJSON(ctx context.Context, client HTTPDoer, url string, target model.Target,
-	payload []byte, businessValues []string, maxResponseBytes int64) ([]byte, error) {
+	payload []byte, maxResponseBytes int64) ([]byte, error) {
 	if client == nil {
 		return nil, fmt.Errorf("%w: HTTP 客户端未配置", model.ErrInvalidConfig)
 	}
@@ -36,12 +37,18 @@ func PostJSON(ctx context.Context, client HTTPDoer, url string, target model.Tar
 	if err != nil {
 		return nil, fmt.Errorf("%w: 创建游戏请求失败: %v", model.ErrInvalidConfig, err)
 	}
+	if req.URL.RawQuery != "" || req.URL.ForceQuery || req.URL.Fragment != "" ||
+		(target.GameSecret == "" || target.AppID == "" || strings.ContainsAny(target.AppID, "\r\n")) {
+		return nil, fmt.Errorf("%w: 游戏请求签名配置不合法", model.ErrInvalidConfig)
+	}
+	if req.URL.Path == "" {
+		req.URL.Path = "/"
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-app-id", target.AppID)
 	req.Header.Set("x-timestamp", timestamp)
 	req.Header.Set("x-nonce", nonce)
-	values := append([]string{target.GameSecret, target.AppID, timestamp, nonce}, businessValues...)
-	req.Header.Set("x-signature", signature.SignValues(values...))
+	req.Header.Set("x-signature", signature.SignGameRequest([]byte(target.GameSecret), req.Method, req.URL.EscapedPath(), target.AppID, timestamp, nonce, payload))
 
 	resp, err := client.Do(req)
 	if err != nil {

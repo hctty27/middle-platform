@@ -3,6 +3,7 @@ package rolequery
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,13 +34,16 @@ func TestStandardRoleQuery(t *testing.T) {
 				if r.Method != http.MethodPost || r.Header.Get("x-app-id") != "110006" {
 					t.Error("请求方法或 AppID 错误")
 				}
+				raw, readErr := io.ReadAll(r.Body)
+				if readErr != nil {
+					t.Error(readErr)
+				}
 				var body model.RoleQueryRequest
-				if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RoleID != "100" {
+				if err := json.Unmarshal(raw, &body); err != nil || body.RoleID != "100" {
 					t.Errorf("游戏请求字段不正确: %v %+v", err, body)
 				}
-				values := append([]string{"game-secret", "110006", r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}, body.SignatureValues()...)
-				if signature.SignValues(values...) != r.Header.Get("x-signature") {
-					t.Error("角色查询签名错误")
+				if !signature.VerifyGameHMAC(r, []byte("game-secret"), "110006", raw, time.Now()) {
+					t.Error("游戏请求签名错误")
 				}
 				_, _ = w.Write([]byte(tc.body))
 			}))

@@ -17,6 +17,8 @@ AppID 来自请求头 `x-app-id`。游戏节点的 `gameSecret`、`serviceAdapte
 
 用户核验、角色查询、区服查询和封解禁均默认使用内置 `standard` 适配器，无需额外配置。只有特殊游戏需要在对应游戏 SDK 节点配置中显式选择已注册适配器。功能生效还依赖全局及渠道环境开关。
 
+游戏与中台之间的事件、订阅及游戏业务回调使用 HMAC-SHA-256，绑定方法、编码路径、AppID、时间戳、nonce 和原始请求体；平台方向仍使用其现有协议。游戏回调 URL 不允许查询串。代理不得改写签名路径；时间窗口不等于 nonce 防重放。
+
 协议参数、签名算法、请求示例及响应结构不在此 README 重复，统一见 [游戏接口](../admin/public/docs/index.html#g-start)、[平台接口](../admin/public/docs/index.html#p-start)、[签名规范](../admin/public/docs/index.html#sig-overview)。
 
 ## 本地启动

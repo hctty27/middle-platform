@@ -13,6 +13,8 @@
 | GET/POST | `/api/core/admin/channel-apps` | 渠道包查询与新增 |
 | GET/PUT | `/api/core/admin/services[/{id}]` | 服务开关查询与更新 |
 
+游戏主动登记订单及中台发货通知均使用 HMAC-SHA-256，绑定方法、编码路径、AppID、时间戳、nonce 和原始请求体。代理不得改写签名路径；时间窗口不等于 nonce 防重放。
+
 上述表格仅用于快速定位；完整字段、全部管理路由、签名、错误码和请求示例统一以 [接口文档](../admin/public/docs/index.html) 为准。
 
 ## 本地启动

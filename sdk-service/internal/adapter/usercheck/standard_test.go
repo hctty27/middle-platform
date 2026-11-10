@@ -3,9 +3,11 @@ package usercheck
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"hitall.com/middle-platform/sdk-service/internal/model"
 	"hitall.com/middle-platform/shared/signature"
@@ -29,15 +31,17 @@ func TestStandardUserCheck(t *testing.T) {
 				if r.Method != http.MethodPost || r.Header.Get("x-app-id") != "110006" {
 					t.Error("游戏请求方法或 AppID 错误")
 				}
+				raw, readErr := io.ReadAll(r.Body)
+				if readErr != nil {
+					t.Error(readErr)
+				}
 				var in struct {
 					OpenID string `json:"open_id"`
 				}
-				if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.OpenID != "u100" {
+				if err := json.Unmarshal(raw, &in); err != nil || in.OpenID != "u100" {
 					t.Errorf("游戏请求参数错误: %v, %+v", err, in)
 				}
-				expected := signature.SignValues("game-secret", "110006",
-					r.Header.Get("x-timestamp"), r.Header.Get("x-nonce"), "u100")
-				if expected != r.Header.Get("x-signature") {
+				if !signature.VerifyGameHMAC(r, []byte("game-secret"), "110006", raw, time.Now()) {
 					t.Error("游戏请求签名错误")
 				}
 				_, _ = w.Write([]byte(item.body))

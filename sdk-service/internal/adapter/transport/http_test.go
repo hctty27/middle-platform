@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"hitall.com/middle-platform/sdk-service/internal/model"
 	"hitall.com/middle-platform/shared/signature"
@@ -20,9 +21,7 @@ func TestPostJSONPreservesSignatureFields(t *testing.T) {
 			r.Header.Get("x-app-id") != "app" {
 			t.Fatalf("request mismatch: %s", body)
 		}
-		expected := signature.SignValues("game-key", "app", r.Header.Get("x-timestamp"),
-			r.Header.Get("x-nonce"), "1")
-		if r.Header.Get("x-signature") != expected {
+		if !signature.VerifyGameHMAC(r, []byte("game-key"), "app", body, time.Now()) {
 			t.Fatal("signature mismatch")
 		}
 		_, _ = w.Write([]byte(`{"code":0}`))
@@ -30,9 +29,16 @@ func TestPostJSONPreservesSignatureFields(t *testing.T) {
 	defer server.Close()
 	raw, err := PostJSON(context.Background(), server.Client(), server.URL, model.Target{
 		AppID: "app", GameSecret: "game-key",
-	}, []byte(`{"role_id":"1"}`), []string{"1"}, 1024)
+	}, []byte(`{"role_id":"1"}`), 1024)
 	if err != nil || string(raw) != `{"code":0}` {
 		t.Fatalf("response=%s err=%v", raw, err)
+	}
+}
+
+func TestPostJSONRejectsQuery(t *testing.T) {
+	_, err := PostJSON(context.Background(), http.DefaultClient, "http://example.test/notify?x=1", model.Target{AppID: "app", GameSecret: "game-key"}, []byte("{}"), 1024)
+	if !errors.Is(err, model.ErrInvalidConfig) {
+		t.Fatalf("expected invalid config, got %v", err)
 	}
 }
 
@@ -52,7 +58,7 @@ func TestPostJSONResponseLimits(t *testing.T) {
 			}))
 			defer server.Close()
 			_, err := PostJSON(context.Background(), server.Client(), server.URL,
-				model.Target{}, []byte("{}"), nil, 5)
+				model.Target{AppID: "app", GameSecret: "game-key"}, []byte("{}"), 5)
 			if !errors.Is(err, model.ErrUpstream) {
 				t.Fatalf("expected upstream error, got %v", err)
 			}
