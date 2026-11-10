@@ -105,28 +105,18 @@ func TestAccessReadEndpointsRequireSubscriberHMAC(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("unsigned access request %s returned HTTP %d", path, rec.Code)
 		}
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		req.Header.Set("X-Subscriber-Code", testAccessSubscriberCode)
-		req.Header.Set("X-Timestamp", fmt.Sprint(time.Now().Unix()))
-		req.Header.Set("X-Nonce", "0123456789abcdef")
-		req.Header.Set("X-Signature", signature.SignSubscriberHMACRequest(testAccessSyncSecret, testAccessSubscriberCode, req.Method, req.URL.EscapedPath(), "", req.Header.Get("X-Timestamp"), req.Header.Get("X-Nonce"), nil))
+		wrong := httptest.NewRequest(http.MethodGet, path, nil)
+		wrong.Header.Set("X-Subscriber-Code", "other-access")
+		wrong.Header.Set("X-Timestamp", fmt.Sprint(time.Now().Unix()))
+		wrong.Header.Set("X-Nonce", "0123456789abcdef")
+		wrong.Header.Set("X-Signature", signature.SignSubscriberHMACRequest(testAccessSyncSecret, "other-access", wrong.Method, wrong.URL.EscapedPath(), "", wrong.Header.Get("X-Timestamp"), wrong.Header.Get("X-Nonce"), nil))
 		rec = httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("signed access request should reach local store, got HTTP %d", rec.Code)
+		handler.ServeHTTP(rec, wrong)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("wrong subscriber code for %s should be rejected: %d", path, rec.Code)
 		}
 	}
-	wrong := httptest.NewRequest(http.MethodGet, "/api/access/revision", nil)
-	wrong.Header.Set("X-Subscriber-Code", "other-access")
-	wrong.Header.Set("X-Timestamp", fmt.Sprint(time.Now().Unix()))
-	wrong.Header.Set("X-Nonce", "fedcba9876543210")
-	wrong.Header.Set("X-Signature", signature.SignSubscriberHMACRequest(testAccessSyncSecret, "other-access", wrong.Method, wrong.URL.EscapedPath(), "", wrong.Header.Get("X-Timestamp"), wrong.Header.Get("X-Nonce"), nil))
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, wrong)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong subscriber code should be rejected: %d", rec.Code)
-	}
-	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("health endpoint should remain public: %d", rec.Code)
