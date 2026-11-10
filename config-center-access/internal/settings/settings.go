@@ -134,7 +134,7 @@ func LoadFile(path string) (Config, error) {
 	if strings.TrimSpace(cfg.SubscriberCode) == "" || len([]rune(cfg.SubscriberCode)) > 128 || strings.TrimSpace(cfg.SubscriberCode) != cfg.SubscriberCode || strings.ContainsAny(cfg.SubscriberCode, "\r\n") {
 		return Config{}, fmt.Errorf("必须配置合法的 subscriber.code 或 CONFIG_SUBSCRIBER_CODE")
 	}
-	if len([]byte(cfg.SubscriberSecret)) < 32 || strings.TrimSpace(cfg.SubscriberSecret) != cfg.SubscriberSecret {
+	if len([]byte(cfg.SubscriberSecret)) < 32 || len([]byte(cfg.SubscriberSecret)) > 255 || strings.TrimSpace(cfg.SubscriberSecret) != cfg.SubscriberSecret {
 		return Config{}, fmt.Errorf("必须配置至少 32 字节的 subscriber.secret 或 CONFIG_SUBSCRIBER_SECRET")
 	}
 	parsed, err := url.Parse(cfg.CenterURL)
