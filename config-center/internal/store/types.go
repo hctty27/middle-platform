@@ -23,6 +23,13 @@ type UpdateSubscriberRequest = model.UpdateSubscriberRequest
 var ErrInvalid = model.ErrInvalid
 var ErrConflict = model.ErrConflict
 var ErrSubscriberNotFound = model.ErrSubscriberNotFound
+var ErrDuplicateCode = model.ErrDuplicateCode
+var ErrDuplicateSecret = model.ErrDuplicateSecret
+var ErrDuplicateValue = model.ErrDuplicateValue
+var ErrGameHasRegions = model.ErrGameHasRegions
+var ErrGameHasChannelApps = model.ErrGameHasChannelApps
+var ErrRegionHasServerGroups = model.ErrRegionHasServerGroups
+var ErrServerGroupInUse = model.ErrServerGroupInUse
 
 // summary 统一生成管理端列表摘要，避免在各 SQL 查询中重复构造结构。
 func summary(n Node) NodeSummary { return model.Summary(n) }
