@@ -13,7 +13,10 @@ import (
 	"hitall.com/middle-platform/shared/signature"
 )
 
-const testSyncSecret = "config-sync-secret-0123456789abcdef0123456789"
+const (
+	testSubscriberCode = "access-test"
+	testSyncSecret = "config-sync-secret-0123456789abcdef0123456789"
+)
 
 func TestClientSignsAllSyncRequests(t *testing.T) {
 	var calls atomic.Int64
@@ -26,7 +29,8 @@ func TestClientSignsAllSyncRequests(t *testing.T) {
 				t.Errorf("read request body: %v", err)
 			}
 		}
-		if !signature.VerifyHMACRequest(r, testSyncSecret, body, time.Now()) {
+		if r.Header.Get("X-Subscriber-Code") != testSubscriberCode ||
+			!signature.VerifySubscriberHMACRequest(r, testSyncSecret, body, time.Now()) {
 			t.Errorf("request signature invalid: %s %s", r.Method, r.URL.RequestURI())
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -52,14 +56,16 @@ func TestClientSignsAllSyncRequests(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	server := httptest.NewServer(signature.RequestHMACMiddleware(
+	server := httptest.NewServer(signature.RequestSubscriberHMACMiddleware(
 		serverHandler,
 		[]string{"/api/config/sync", "/api/config/nodes"},
-		testSyncSecret,
+		func(_ context.Context, code string) (string, bool, error) {
+			return testSyncSecret, code == testSubscriberCode, nil
+		},
 	))
 	defer server.Close()
 
-	client := New(server.URL, time.Second, 3*time.Second, testSyncSecret)
+	client := New(server.URL, time.Second, 3*time.Second, testSubscriberCode, testSyncSecret)
 	ctx := context.Background()
 	head, err := client.Head(ctx)
 	if err != nil || head.Epoch != "epoch-1" || head.Revision != 7 {
@@ -82,8 +88,15 @@ func TestClientSignsAllSyncRequests(t *testing.T) {
 }
 
 func TestClientRejectsShortSyncSecret(t *testing.T) {
-	client := New("http://127.0.0.1:1", time.Second, time.Second, "short")
+	client := New("http://127.0.0.1:1", time.Second, time.Second, testSubscriberCode, "short")
 	if _, err := client.Head(context.Background()); err == nil {
-		t.Fatal("short config sync secret should be rejected")
+		t.Fatal("short subscriber secret should be rejected")
+	}
+}
+
+func TestClientRejectsMissingSubscriberCode(t *testing.T) {
+	client := New("http://127.0.0.1:1", time.Second, time.Second, "", testSyncSecret)
+	if _, err := client.Head(context.Background()); err == nil {
+		t.Fatal("missing subscriber code should be rejected")
 	}
 }

@@ -18,8 +18,8 @@ type Config struct {
 	Address           string
 	DSN               string
 	CenterURL         string
-	WebhookSecret     string
-	ConfigSyncSecret  string
+	SubscriberCode    string
+	SubscriberSecret  string
 	ConnectTimeout    time.Duration
 	RequestTimeout    time.Duration
 	ReconcileInterval time.Duration
@@ -36,12 +36,10 @@ type configFile struct {
 	ConfigCenter struct {
 		URL string `yaml:"url"`
 	} `yaml:"configCenter"`
-	Webhook struct {
+	Subscriber struct {
+		Code   string `yaml:"code"`
 		Secret string `yaml:"secret"`
-	} `yaml:"webhook"`
-	ConfigSync struct {
-		Secret string `yaml:"secret"`
-	} `yaml:"configSync"`
+	} `yaml:"subscriber"`
 	Sync struct {
 		ConnectTimeout    string `yaml:"connectTimeout"`
 		RequestTimeout    string `yaml:"requestTimeout"`
@@ -67,8 +65,8 @@ func LoadFile(path string) (Config, error) {
 		Address:           ":8081",
 		DSN:               data.Database.DSN,
 		CenterURL:         "http://127.0.0.1:8080",
-		WebhookSecret:     data.Webhook.Secret,
-		ConfigSyncSecret:  data.ConfigSync.Secret,
+		SubscriberCode:    data.Subscriber.Code,
+		SubscriberSecret:  data.Subscriber.Secret,
 		ConnectTimeout:    2 * time.Second,
 		RequestTimeout:    15 * time.Second,
 		ReconcileInterval: 5 * time.Minute,
@@ -102,8 +100,8 @@ func LoadFile(path string) (Config, error) {
 	bootstrap.OverrideString("CONFIG_ACCESS_ADDR", &cfg.Address)
 	bootstrap.OverrideString("ACCESS_DB_DSN", &cfg.DSN)
 	bootstrap.OverrideString("CONFIG_CENTER_URL", &cfg.CenterURL)
-	bootstrap.OverrideString("CONFIG_WEBHOOK_SECRET", &cfg.WebhookSecret)
-	bootstrap.OverrideString("CONFIG_SYNC_SECRET", &cfg.ConfigSyncSecret)
+	bootstrap.OverrideString("CONFIG_SUBSCRIBER_CODE", &cfg.SubscriberCode)
+	bootstrap.OverrideString("CONFIG_SUBSCRIBER_SECRET", &cfg.SubscriberSecret)
 	for _, item := range []struct {
 		name   string
 		target *time.Duration
@@ -133,11 +131,11 @@ func LoadFile(path string) (Config, error) {
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return Config{}, fmt.Errorf("必须配置 database.dsn 或 ACCESS_DB_DSN")
 	}
-	if strings.TrimSpace(cfg.WebhookSecret) == "" || cfg.WebhookSecret == "change-me-in-development" {
-		return Config{}, fmt.Errorf("必须配置 webhook.secret 或 CONFIG_WEBHOOK_SECRET")
+	if strings.TrimSpace(cfg.SubscriberCode) == "" || len([]rune(cfg.SubscriberCode)) > 128 || strings.TrimSpace(cfg.SubscriberCode) != cfg.SubscriberCode || strings.ContainsAny(cfg.SubscriberCode, "\r\n") {
+		return Config{}, fmt.Errorf("必须配置合法的 subscriber.code 或 CONFIG_SUBSCRIBER_CODE")
 	}
-	if len([]byte(cfg.ConfigSyncSecret)) < 32 || strings.TrimSpace(cfg.ConfigSyncSecret) != cfg.ConfigSyncSecret {
-		return Config{}, fmt.Errorf("必须配置至少 32 字节的 configSync.secret 或 CONFIG_SYNC_SECRET")
+	if len([]byte(cfg.SubscriberSecret)) < 32 || len([]byte(cfg.SubscriberSecret)) > 255 || strings.TrimSpace(cfg.SubscriberSecret) != cfg.SubscriberSecret {
+		return Config{}, fmt.Errorf("必须配置至少 32 字节的 subscriber.secret 或 CONFIG_SUBSCRIBER_SECRET")
 	}
 	parsed, err := url.Parse(cfg.CenterURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" {

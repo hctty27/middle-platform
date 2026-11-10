@@ -12,48 +12,54 @@ import (
 	"hitall.com/middle-platform/shared/signature"
 )
 
-const testAccessSyncSecret = "config-sync-secret-0123456789abcdef0123456789"
+const (
+	testAccessSubscriberCode = "access-test"
+	testAccessSyncSecret = "config-sync-secret-0123456789abcdef0123456789"
+)
 
 type fakeTrigger struct{ count atomic.Int64 }
 
 func (f *fakeTrigger) Request() { f.count.Add(1) }
 
-func signedCallback(secret, timestamp, nonce string, body []byte) string {
+func signedCallback(code, secret, timestamp, nonce string, body []byte) string {
 	req := httptest.NewRequest(http.MethodPost, "/internal/config/callback", nil)
-	return signature.SignHMACRequest(secret, req.Method, req.URL.EscapedPath(), "", timestamp, nonce, body)
+	return signature.SignSubscriberHMACRequest(secret, code, req.Method, req.URL.EscapedPath(), "", timestamp, nonce, body)
 }
 
 func TestCallbackHMACSignatureAndAcceptance(t *testing.T) {
 	trigger := &fakeTrigger{}
-	const secret = "test-webhook-secret"
-	handler := Router(nil, trigger, secret, testAccessSyncSecret)
+	handler := Router(nil, trigger, testAccessSubscriberCode, testAccessSyncSecret)
 	body := []byte(`{"epoch":"an-epoch","revision":42}`)
 	timestamp := fmt.Sprint(time.Now().Unix())
 	nonce := "0123456789abcdef"
-	signed := signedCallback(secret, timestamp, nonce, body)
+	signed := signedCallback(testAccessSubscriberCode, testAccessSyncSecret, timestamp, nonce, body)
 	freshNonce := "fedcba9876543210"
-	fresh := signedCallback(secret, timestamp, freshNonce, body)
-	tamperedBodySignature := signedCallback(secret, timestamp, "0011223344556677", body)
+	fresh := signedCallback(testAccessSubscriberCode, testAccessSyncSecret, timestamp, freshNonce, body)
+	tamperedBodySignature := signedCallback(testAccessSubscriberCode, testAccessSyncSecret, timestamp, "0011223344556677", body)
 	expiredTimestamp := fmt.Sprint(time.Now().Add(-10 * time.Minute).Unix())
-	expired := signedCallback(secret, expiredTimestamp, "0011223344556677", body)
+	expired := signedCallback(testAccessSubscriberCode, testAccessSyncSecret, expiredTimestamp, "0011223344556677", body)
+	wrongIdentity := signedCallback("other-access", testAccessSyncSecret, timestamp, "1021324354657687", body)
 	tests := []struct {
-		name                    string
-		body                    []byte
+		name                     string
+		body                     []byte
+		code                     string
 		timestamp, nonce, signed string
-		want                    int
+		want                     int
 	}{
-		{"valid", body, timestamp, nonce, signed, http.StatusAccepted},
-		{"replay", body, timestamp, nonce, signed, http.StatusConflict},
-		{"invalid", body, timestamp, "0011223344556677", "bad", http.StatusUnauthorized},
-		{"old-sha1", body, timestamp, "0011223344556677", "a95aee794bee55d020586fd60c8b0fe860779636", http.StatusUnauthorized},
-		{"expired", body, expiredTimestamp, "0011223344556677", expired, http.StatusUnauthorized},
-		{"missing-nonce", body, timestamp, "", signed, http.StatusUnauthorized},
-		{"tampered-body", []byte(`{"epoch":"changed","revision":42}`), timestamp, "0011223344556677", tamperedBodySignature, http.StatusUnauthorized},
-		{"fresh-retry", body, timestamp, freshNonce, fresh, http.StatusAccepted},
+		{"valid", body, testAccessSubscriberCode, timestamp, nonce, signed, http.StatusAccepted},
+		{"replay", body, testAccessSubscriberCode, timestamp, nonce, signed, http.StatusConflict},
+		{"invalid", body, testAccessSubscriberCode, timestamp, "0011223344556677", "bad", http.StatusUnauthorized},
+		{"old-sha1", body, testAccessSubscriberCode, timestamp, "0011223344556677", "a95aee794bee55d020586fd60c8b0fe860779636", http.StatusUnauthorized},
+		{"expired", body, testAccessSubscriberCode, expiredTimestamp, "0011223344556677", expired, http.StatusUnauthorized},
+		{"missing-nonce", body, testAccessSubscriberCode, timestamp, "", signed, http.StatusUnauthorized},
+		{"tampered-body", []byte(`{"epoch":"changed","revision":42}`), testAccessSubscriberCode, timestamp, "0011223344556677", tamperedBodySignature, http.StatusUnauthorized},
+		{"wrong-identity", body, "other-access", timestamp, "1021324354657687", wrongIdentity, http.StatusUnauthorized},
+		{"fresh-retry", body, testAccessSubscriberCode, timestamp, freshNonce, fresh, http.StatusAccepted},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/internal/config/callback", bytes.NewReader(tc.body))
+			req.Header.Set("X-Subscriber-Code", tc.code)
 			req.Header.Set("X-Timestamp", tc.timestamp)
 			req.Header.Set("X-Nonce", tc.nonce)
 			req.Header.Set("X-Signature", tc.signed)
@@ -71,8 +77,8 @@ func TestCallbackHMACSignatureAndAcceptance(t *testing.T) {
 
 func TestConfigWebhookHMACSignatureFixture(t *testing.T) {
 	body := []byte(`{"epoch":"550e8400-e29b-41d4-a716-446655440000","revision":12}`)
-	got := signedCallback("demo-webhook-secret", "1793865600", "0123456789abcdef", body)
-	if want := "a8673ae1c4b85d5788ca1f9c00f0a22799e023ca492073c3b574d8e07a4f9846"; got != want {
+	got := signedCallback(testAccessSubscriberCode, "demo-subscriber-secret-0123456789abcdef", "1793865600", "0123456789abcdef", body)
+	if want := "cb00b3b9869452bdea8846fc381d94a569dec6e796e682763a27221129e8c7d5"; got != want {
 		t.Fatalf("HMAC-SHA256 签名向量错误: got %s, want %s", got, want)
 	}
 }
@@ -81,7 +87,7 @@ func TestCallbackRejectsMalformedJSON(t *testing.T) {
 	trigger := &fakeTrigger{}
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/internal/config/callback", bytes.NewBufferString("{bad"))
-	Router(nil, trigger, "secret", testAccessSyncSecret).ServeHTTP(w, req)
+	Router(nil, trigger, testAccessSubscriberCode, testAccessSyncSecret).ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || trigger.count.Load() != 0 {
 		t.Fatal(w.Code)
 	}
@@ -90,13 +96,23 @@ func TestCallbackRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestAccessReadEndpointsRequireHMAC(t *testing.T) {
-	handler := Router(nil, &fakeTrigger{}, "webhook-secret", testAccessSyncSecret)
+func TestAccessReadEndpointsRequireSubscriberHMAC(t *testing.T) {
+	handler := Router(nil, &fakeTrigger{}, testAccessSubscriberCode, testAccessSyncSecret)
 	for _, path := range []string{"/api/access/nodes", "/api/access/revision"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("unsigned access request %s returned HTTP %d", path, rec.Code)
+		}
+		wrong := httptest.NewRequest(http.MethodGet, path, nil)
+		wrong.Header.Set("X-Subscriber-Code", "other-access")
+		wrong.Header.Set("X-Timestamp", fmt.Sprint(time.Now().Unix()))
+		wrong.Header.Set("X-Nonce", "0123456789abcdef")
+		wrong.Header.Set("X-Signature", signature.SignSubscriberHMACRequest(testAccessSyncSecret, "other-access", wrong.Method, wrong.URL.EscapedPath(), "", wrong.Header.Get("X-Timestamp"), wrong.Header.Get("X-Nonce"), nil))
+		rec = httptest.NewRecorder()
+		handler.ServeHTTP(rec, wrong)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("wrong subscriber code for %s should be rejected: %d", path, rec.Code)
 		}
 	}
 	rec := httptest.NewRecorder()

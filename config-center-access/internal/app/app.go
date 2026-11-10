@@ -58,7 +58,7 @@ func Run(configPath string) error {
 		return err
 	}
 
-	center := remote.New(cfg.CenterURL, cfg.ConnectTimeout, cfg.RequestTimeout, cfg.ConfigSyncSecret)
+	center := remote.New(cfg.CenterURL, cfg.ConnectTimeout, cfg.RequestTimeout, cfg.SubscriberCode, cfg.SubscriberSecret)
 	synchronizer := syncer.New(replica, center)
 	trigger := syncer.NewTrigger(synchronizer, cfg.ReconcileInterval)
 
@@ -74,7 +74,7 @@ func Run(configPath string) error {
 	ready.Store(true)
 	server := &http.Server{
 		Addr:              cfg.Address,
-		Handler:           logging.HTTP(cfg.Log, bootstrap.ReadinessMiddleware(api.Router(replica, trigger, cfg.WebhookSecret, cfg.ConfigSyncSecret), &ready)),
+		Handler:           logging.HTTP(cfg.Log, bootstrap.ReadinessMiddleware(api.Router(replica, trigger, cfg.SubscriberCode, cfg.SubscriberSecret), &ready)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

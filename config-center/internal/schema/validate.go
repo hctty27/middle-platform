@@ -54,7 +54,7 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		"SELECT revision,epoch FROM config_revision WHERE id=1",
 		"SELECT id,game_id,region_id,env_type,node_type FROM config_node LIMIT 0",
 		"SELECT revision,node_id,operation FROM config_node_change_log LIMIT 0",
-		"SELECT id,code,webhook_secret FROM config_subscriber LIMIT 0",
+		"SELECT id,code,signing_secret FROM config_subscriber LIMIT 0",
 		"SELECT acknowledged_revision,acknowledged_epoch FROM config_subscriber_delivery_state LIMIT 0",
 	}
 	{
@@ -68,6 +68,15 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 		if err := rows.Close(); err != nil {
 			return err
 		}
+	}
+	var invalidSubscriberSecrets int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM config_subscriber
+		WHERE OCTET_LENGTH(signing_secret)<32 OR TRIM(signing_secret)<>signing_secret
+			OR TRIM(code)<>code OR code=''`).Scan(&invalidSubscriberSecrets); err != nil {
+		return err
+	}
+	if invalidSubscriberSecrets > 0 {
+		return errors.New("所有启用及停用的 config_subscriber 密钥都必须至少 32 字节且无首尾空格；请先更新订阅密钥")
 	}
 	for _, obsolete := range []string{"config_channel_app_binding", "config_change_log", "config_delivery_state", "sdk_service_binding"} {
 		exists, err := hasTable(ctx, conn, obsolete)
@@ -95,6 +104,18 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 	}
 	if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
 		return errors.New("大区环境 CHECK 约束已过时")
+	}
+	{
+		var count int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
+			WHERE table_schema=DATABASE() AND table_name='config_subscriber'
+			AND index_name='uq_config_subscriber_signing_secret'
+			AND column_name='signing_secret' AND seq_in_index=1 AND non_unique=0`).Scan(&count); err != nil {
+			return err
+		}
+		if count != 1 {
+			return errors.New("config_subscriber.signing_secret 必须具有唯一索引")
+		}
 	}
 	{
 		for _, index := range []struct {

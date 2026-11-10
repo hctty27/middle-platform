@@ -31,7 +31,7 @@ type UpdateNodeRequest struct {
 type CreateSubscriberRequest struct {
 	Code        string `json:"code"`
 	CallbackURL string `json:"callbackUrl"`
-	// 回调密钥只用于服务端签名，不应通过查询接口返回。
+	// 接入端独立签名密钥用于双向同步认证，不应通过查询接口返回。
 	Secret string `json:"secret"`
 }
 

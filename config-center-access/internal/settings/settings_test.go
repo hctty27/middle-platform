@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const validSubscriberSecret = "subscriber-secret-0123456789abcdef0123456789"
+
 func testDefaultYAML(t *testing.T, yaml string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -20,12 +22,11 @@ func testDefaultYAML(t *testing.T, yaml string) {
 	}
 }
 
-// 默认读取 YAML，环境变量覆盖指定值。
 func TestLoad(t *testing.T) {
-	testDefaultYAML(t, "server:\n  address: ':8089'\ndatabase:\n  dsn: file-dsn\nwebhook:\n  secret: file-secret\nconfigSync:\n  secret: file-sync-secret-0123456789abcdef0123456789\n")
+	testDefaultYAML(t, "server:\n  address: ':8089'\ndatabase:\n  dsn: file-dsn\nsubscriber:\n  code: access-file\n  secret: file-subscriber-secret-0123456789abcdef\n")
 	t.Setenv("ACCESS_DB_DSN", "root:secret@tcp(127.0.0.1:3306)/access?parseTime=true")
-	t.Setenv("CONFIG_WEBHOOK_SECRET", "safe-secret")
-	t.Setenv("CONFIG_SYNC_SECRET", "env-sync-secret-0123456789abcdef0123456789")
+	t.Setenv("CONFIG_SUBSCRIBER_CODE", "access-env")
+	t.Setenv("CONFIG_SUBSCRIBER_SECRET", validSubscriberSecret)
 	t.Setenv("CONFIG_CENTER_URL", "http://127.0.0.1:8080")
 	t.Setenv("CONFIG_CLIENT_CONNECT_TIMEOUT_MS", "2000")
 	t.Setenv("CONFIG_CLIENT_READ_TIMEOUT_MS", "15000")
@@ -33,37 +34,36 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != ":8089" || cfg.ConnectTimeout.Milliseconds() != 2000 || cfg.ConfigSyncSecret != "env-sync-secret-0123456789abcdef0123456789" {
+	if cfg.Address != ":8089" || cfg.ConnectTimeout.Milliseconds() != 2000 ||
+		cfg.SubscriberCode != "access-env" || cfg.SubscriberSecret != validSubscriberSecret {
 		t.Fatalf("%+v", cfg)
 	}
 }
 
-// 不再允许仅靠环境变量而缺少默认配置文件启动。
 func TestLoadRequiresDefaultYAML(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("ACCESS_DB_DSN", "test-dsn")
-	t.Setenv("CONFIG_WEBHOOK_SECRET", "valid-secret")
-	t.Setenv("CONFIG_SYNC_SECRET", "valid-sync-secret-0123456789abcdef0123456789")
+	t.Setenv("CONFIG_SUBSCRIBER_CODE", "access-test")
+	t.Setenv("CONFIG_SUBSCRIBER_SECRET", validSubscriberSecret)
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "configs/config.yaml") {
 		t.Fatalf("缺少默认 YAML 应拒绝启动: %v", err)
 	}
 }
 
-func TestLoadRejectsMissingSecret(t *testing.T) {
-	testDefaultYAML(t, "database:\n  dsn: file-dsn\nwebhook:\n  secret: ''\nconfigSync:\n  secret: valid-sync-secret-0123456789abcdef0123456789abcdef\n")
+func TestLoadRejectsMissingSubscriberCode(t *testing.T) {
+	testDefaultYAML(t, "database:\n  dsn: file-dsn\nsubscriber:\n  code: ''\n  secret: " + validSubscriberSecret + "\n")
 	t.Setenv("ACCESS_DB_DSN", "root:secret@tcp(127.0.0.1:3306)/access")
-	t.Setenv("CONFIG_WEBHOOK_SECRET", "")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "webhook.secret") {
-		t.Fatalf("缺少回调密钥必须拒绝启动: %v", err)
+	t.Setenv("CONFIG_SUBSCRIBER_CODE", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "subscriber.code") {
+		t.Fatalf("缺少接入端编码必须拒绝启动: %v", err)
 	}
 }
 
-func TestLoadRejectsMissingSyncSecret(t *testing.T) {
-	testDefaultYAML(t, "database:\n  dsn: file-dsn\nwebhook:\n  secret: valid-webhook-secret\nconfigSync:\n  secret: ''\n")
+func TestLoadRejectsShortSubscriberSecret(t *testing.T) {
+	testDefaultYAML(t, "database:\n  dsn: file-dsn\nsubscriber:\n  code: access-test\n  secret: short\n")
 	t.Setenv("ACCESS_DB_DSN", "test-dsn")
-	t.Setenv("CONFIG_WEBHOOK_SECRET", "valid-webhook-secret")
-	t.Setenv("CONFIG_SYNC_SECRET", "")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "configSync.secret") {
-		t.Fatalf("缺少配置同步密钥必须拒绝启动: %v", err)
+	t.Setenv("CONFIG_SUBSCRIBER_SECRET", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "subscriber.secret") {
+		t.Fatalf("缺少或过短的接入端密钥必须拒绝启动: %v", err)
 	}
 }

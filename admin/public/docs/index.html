@@ -412,10 +412,11 @@ x-signature: &lt;使用 appSecret、Header、Body 计算的 SHA-1&gt;
 <div class="footnote">研发中台 middle-platform · 协议核对日期 2026-11-10。示例地址为占位值；对外发布前需确认实际域名与密钥。<a href="#p-start">返回接入说明</a></div></main>
 <main class="main doc-panel" id="panel-sync" data-doc="sync" role="tabpanel" aria-labelledby="tab-sync" hidden>
 <div class="hero"><div class="eyebrow">CONFIGURATION SYNC API</div><h1>第三方配置同步接入文档</h1><p>面向第三方游戏服务端与业务系统的配置同步协议。通过 HMAC-SHA256 签名 Webhook 获知变更，主动拉取三级节点配置，支持全量快照和可选增量同步。</p><div class="pills"><span class="pill">纯 HTML · 无外部依赖</span><span class="pill gray">基于 main 路由及数据模型</span><span class="pill gray">9 个章节</span></div></div>
-<section id="s-intro" class="section"><div class="section-title"><h2>接入流程</h2></div><div class="summary">Webhook 通知 + 主动拉取；优先采用全量快照</div><p>第三方系统提供可接收通知的回调地址，由中台管理员注册订阅者。配置中心的游戏、大区或区服组发生变更时会发送签名 Webhook。第三方收到通知后快速应答，在后台主动拉取配置并更新自己的缓存或数据库。</p><div class="notice warn">安全要求：Webhook 与所有配置拉取接口均使用 HMAC-SHA256。拉取请求必须携带 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>，密钥为独立的 <code>configSync.secret</code>（至少 32 字节）；Webhook 使用订阅者自己的 <code>secret</code>。两类密钥不可与管理密钥共用。</div><h3>配置拉取请求的统一 Header</h3><div class="codebox"><div class="codehead"><span>所有配置拉取接口</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>X-Timestamp: &lt;当前 Unix 秒时间戳&gt;
+<section id="s-intro" class="section"><div class="section-title"><h2>接入流程</h2></div><div class="summary">Webhook 通知 + 主动拉取；优先采用全量快照</div><p>第三方系统提供可接收通知的回调地址，由中台管理员注册订阅者。配置中心的游戏、大区或区服组发生变更时会发送签名 Webhook。第三方收到通知后快速应答，在后台主动拉取配置并更新自己的缓存或数据库。</p><div class="notice warn">安全要求：配置拉取请求与 Webhook 通知统一使用该接入端在 <code>config_subscriber.signing_secret</code> 中配置的独立密钥。请求必须携带 <code>X-Subscriber-Code</code>、<code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>；接入端编码也参与签名。每个接入端使用唯一且独立的至少 32 字节密钥，不与 <code>adminAuth.secret</code> 共用。</div><h3>配置拉取请求的统一 Header</h3><div class="codebox"><div class="codehead"><span>所有配置拉取接口</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>X-Subscriber-Code: &lt;配置中心登记的接入端编码&gt;
+X-Timestamp: &lt;当前 Unix 秒时间戳&gt;
 X-Nonce: &lt;每次请求新生成的 16 位小写 hex&gt;
-X-Signature: &lt;64 位小写 HMAC-SHA256 hex&gt;</code></pre></div><p>这些 Header 适用于 revision、changes、snapshot、节点详情和 batch-get。使用 <code>configSync.secret</code> 签名；GET 的 Body 为空字节串，POST 必须签署并发送完全相同的原始 JSON 字节。路径使用服务端收到的 <code>URL.EscapedPath()</code>，Query 使用 Go <code>url.Values.Encode()</code> 规范化。</p><h3>推荐的最简接入流程</h3><ul class="points"><li>第三方准备 <code>callbackUrl</code>，与中台管理员安全交换 <code>secret</code> 和配置中心 API 地址。</li><li>管理员在配置中心创建订阅者（第三方不需要自行调用管理 API）。</li><li>中台变更配置后 POST Webhook；第三方校验签名和时间戳，立即返回 HTTP 2xx。</li><li>第三方在后台调用 <code>GET /api/config/sync/snapshot</code> 获取一致性全量快照，将节点与 <code>epoch/revision</code> 同时保存。</li><li>建议每 5 分钟主动调用版本接口，补偿通知丢失；配置量很大时才考虑增量同步。</li></ul><h3>同步范围</h3><div class="table-wrap"><table><thead><tr><th>节点类型</th><th>含义</th><th>是否同步</th></tr></thead><tbody><tr><td><code>game</code></td><td>游戏</td><td>是</td></tr><tr><td><code>region</code></td><td>大区（测试/正式/提审）</td><td>是</td></tr><tr><td><code>server_group</code></td><td>区服组</td><td>是</td></tr><tr><td><code>channel_app</code></td><td>渠道应用、渠道绑定、AppID 配置</td><td>否</td></tr><tr><td><code>game_order</code></td><td>充值订单</td><td>否</td></tr></tbody></table></div><div class="notice info"><strong>推荐：</strong>第三方优先实现 Webhook + 全量快照 + 周期版本校对。无需使用中台的 MySQL 副本，也不需要对接管理写 API。</div></section>
-<section id="s-config" class="section"><div class="section-title"><h2>接入参数</h2></div><div class="summary">双方交换的最小配置项</div><div class="table-wrap"><table><thead><tr><th>参数</th><th>提供方</th><th>含义 / 示例</th></tr></thead><tbody><tr><td><code>code</code></td><td>第三方</td><td>订阅者唯一标识，例如 <code>game-service-a</code></td></tr><tr><td><code>callbackUrl</code></td><td>第三方</td><td>中台可访问的回调，例如 <code>https://game.example.com/internal/config/callback</code></td></tr><tr><td><code>secret</code></td><td>双方安全交换</td><td>Webhook HMAC-SHA256 密钥；每个订阅者独立设置，建议至少 32 字节高熵随机值</td></tr><tr><td><code>configSync.secret</code></td><td>中台安全交换</td><td>拉取配置接口的 HMAC-SHA256 密钥；需与配置中心配置一致，至少 32 字节</td></tr><tr><td><code>configCenterBaseUrl</code></td><td>中台</td><td>配置中心 API 根地址，例如 <code>https://config.example.com</code></td></tr></tbody></table></div><p>文档接口路径均不包含 <code>/sdk</code> 前缀。实际部署若使用公网 <code>/sdk/api/...</code>，应以管理员提供的网关地址为准。</p><div class="notice warn">Webhook 回调地址可为公网或内网 HTTP/HTTPS 域名或 IP；生产优先 HTTPS。平台拒绝元数据服务及部分特殊网络地址，不代表任意地址都能直接访问。</div></section>
+X-Signature: &lt;64 位小写 HMAC-SHA256 hex&gt;</code></pre></div><p>这些 Header 适用于 revision、changes、snapshot、节点详情和 batch-get。使用该接入端自己的 <code>signing_secret</code> 签名，并将 <code>X-Subscriber-Code</code> 纳入签名原文；GET 的 Body 为空字节串，POST 必须签署并发送完全相同的原始 JSON 字节。路径使用服务端收到的 <code>URL.EscapedPath()</code>，Query 使用 Go <code>url.Values.Encode()</code> 规范化。</p><h3>推荐的最简接入流程</h3><ul class="points"><li>第三方准备 <code>callbackUrl</code>，与中台管理员确认 <code>subscriber.code</code>，并安全获取该订阅记录对应的独立签名密钥。</li><li>管理员在配置中心创建订阅者（第三方不需要自行调用管理 API）。</li><li>中台变更配置后 POST Webhook；第三方校验签名和时间戳，立即返回 HTTP 2xx。</li><li>第三方在后台调用 <code>GET /api/config/sync/snapshot</code> 获取一致性全量快照，将节点与 <code>epoch/revision</code> 同时保存。</li><li>建议每 5 分钟主动调用版本接口，补偿通知丢失；配置量很大时才考虑增量同步。</li></ul><h3>同步范围</h3><div class="table-wrap"><table><thead><tr><th>节点类型</th><th>含义</th><th>是否同步</th></tr></thead><tbody><tr><td><code>game</code></td><td>游戏</td><td>是</td></tr><tr><td><code>region</code></td><td>大区（测试/正式/提审）</td><td>是</td></tr><tr><td><code>server_group</code></td><td>区服组</td><td>是</td></tr><tr><td><code>channel_app</code></td><td>渠道应用、渠道绑定、AppID 配置</td><td>否</td></tr><tr><td><code>game_order</code></td><td>充值订单</td><td>否</td></tr></tbody></table></div><div class="notice info"><strong>推荐：</strong>第三方优先实现 Webhook + 全量快照 + 周期版本校对。无需使用中台的 MySQL 副本，也不需要对接管理写 API。</div></section>
+<section id="s-config" class="section"><div class="section-title"><h2>接入参数</h2></div><div class="summary">双方交换的最小配置项</div><div class="table-wrap"><table><thead><tr><th>参数</th><th>提供方</th><th>含义 / 示例</th></tr></thead><tbody><tr><td><code>code</code></td><td>中台分配</td><td>接入端唯一标识，必须与配置中心 <code>config_subscriber.code</code> 一致</td></tr><tr><td><code>callbackUrl</code></td><td>第三方</td><td>中台可访问的回调，例如 <code>https://game.example.com/internal/config/callback</code></td></tr><tr><td><code>secret</code></td><td>中台安全分发</td><td>该接入端唯一的 HMAC-SHA256 密钥；同时用于配置拉取、本地只读查询和 Webhook，至少 32 字节。配置中心保存于 <code>config_subscriber.signing_secret</code>，接入端配置为 <code>subscriber.secret</code></td></tr><tr><td><code>configCenterBaseUrl</code></td><td>中台</td><td>配置中心 API 根地址，例如 <code>https://config.example.com</code></td></tr></tbody></table></div><p>文档接口路径均不包含 <code>/sdk</code> 前缀。实际部署若使用公网 <code>/sdk/api/...</code>，应以管理员提供的网关地址为准。</p><div class="notice warn">Webhook 回调地址可为公网或内网 HTTP/HTTPS 域名或 IP；生产优先 HTTPS。平台拒绝元数据服务及部分特殊网络地址，不代表任意地址都能直接访问。</div></section>
 <section id="s-webhook" class="section"><div class="section-title"><h2>接收 Webhook 回调</h2></div><div class="summary">配置变更通知；签名通过后尽快返回 2xx</div><p>签名公式与测试向量见 <a href="#sig-sync">签名规范 · 配置同步签名</a>。</p><div class="route"><span class="verb post">POST</span><code>{callbackUrl}</code></div><p>配置中心向第三方预先提供的 <code>callbackUrl</code> 发起请求，Body 只包含 <code>epoch</code>、<code>revision</code>，不包含完整配置。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>类型/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr><tr><td><code>X-Timestamp</code></td><td>Unix 秒级时间戳</td></tr><tr><td><code>X-Nonce</code></td><td>16 位小写十六进制随机数</td></tr><tr><td><code>X-Signature</code></td><td>64 位小写十六进制 HMAC-SHA256</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>epoch</code></td><td>string</td><td>是</td><td>数据集标识，发生变化需重新全量同步</td></tr><tr><td><code>revision</code></td><td>integer</td><td>是</td><td>该 epoch 内的版本游标</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /internal/config/callback HTTP/1.1
 Host: game.example.com
 Content-Type: application/json
@@ -578,11 +579,11 @@ Content-Type: application/json
 <main class="main doc-panel" id="panel-sign" data-doc="sign" role="tabpanel" aria-labelledby="tab-sign" hidden>
 <div class="hero"><div class="eyebrow">SIGNATURE REFERENCE</div><h1>签名接入规范</h1><p>中台业务、管理接口和配置同步的签名约定，按调用方向选择对应协议。</p></div>
 <section id="sig-overview" class="section"><div class="section-title"><h2>签名接入规范</h2></div><div class="summary">按调用方向选择协议；统一的是 HMAC 请求格式，不是所有平台接口都使用相同算法。</div>
-<div class="table-wrap"><table><thead><tr><th>场景 / 方向</th><th>算法</th><th>参与字段或规则</th></tr></thead><tbody><tr><td>游戏 ↔ SDK Core / SDK Service</td><td>HMAC-SHA-256</td><td>方法、编码路径、AppID、timestamp、nonce 和原始 Body</td></tr><tr><td>第三方 → 管理 API</td><td>HMAC-SHA-256</td><td>方法、路径、规范化 Query、timestamp、nonce 和原始 Body</td></tr><tr><td>接入端 → 配置中心同步 API</td><td>HMAC-SHA-256</td><td>方法、路径、规范化 Query、timestamp、nonce 和原始 Body</td></tr><tr><td>配置中心 → Access / 第三方 Webhook</td><td>HMAC-SHA-256</td><td>订阅者独立密钥、方法、路径、Query、timestamp、nonce 和原始 Body</td></tr><tr><td>平台 → SDK Core（支付 V1）</td><td>SHA-1</td><td><code>appSecret</code>、order_no、game_order_id、nonce、timestamp；<strong>空值保留</strong></td></tr><tr><td>平台 → SDK Service</td><td>SHA-1</td><td><code>appSecret</code>、AppID、timestamp、nonce 与接口定义的 Body 值</td></tr><tr><td>SDK Service → 平台</td><td>SHA-1</td><td><code>appSecret</code>、AppID、timestamp、nonce；事件与订阅上报<strong>不签 Body</strong></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>场景 / 方向</th><th>算法</th><th>参与字段或规则</th></tr></thead><tbody><tr><td>游戏 ↔ SDK Core / SDK Service</td><td>HMAC-SHA-256</td><td>方法、编码路径、AppID、timestamp、nonce 和原始 Body</td></tr><tr><td>第三方 → 管理 API</td><td>HMAC-SHA-256</td><td>方法、路径、规范化 Query、timestamp、nonce 和原始 Body</td></tr><tr><td>接入端 → 配置中心同步 API</td><td>HMAC-SHA-256</td><td>接入端编码、方法、路径、规范化 Query、timestamp、nonce 和原始 Body</td></tr><tr><td>配置中心 → Access / 第三方 Webhook</td><td>HMAC-SHA-256</td><td>同一接入端编码和独立密钥、方法、路径、Query、timestamp、nonce 和原始 Body</td></tr><tr><td>平台 → SDK Core（支付 V1）</td><td>SHA-1</td><td><code>appSecret</code>、order_no、game_order_id、nonce、timestamp；<strong>空值保留</strong></td></tr><tr><td>平台 → SDK Service</td><td>SHA-1</td><td><code>appSecret</code>、AppID、timestamp、nonce 与接口定义的 Body 值</td></tr><tr><td>SDK Service → 平台</td><td>SHA-1</td><td><code>appSecret</code>、AppID、timestamp、nonce；事件与订阅上报<strong>不签 Body</strong></td></tr></tbody></table></div>
 <h3>通用约定</h3>
 <ul class="points">
 <li>HMAC-SHA256 请求使用 <code>HITALK-HMAC-SHA256</code> 前缀，按换行符分隔方法、转义路径、规范化 Query、时间戳和 nonce，最后追加原始 Body 字节。</li>
-<li>管理请求使用 <code>adminAuth.secret</code>；配置拉取使用独立的 <code>configSync.secret</code>；Webhook 使用订阅者独立密钥。各密钥至少 32 字节且不得混用。</li>
+<li>管理请求使用 <code>adminAuth.secret</code>；每个接入端的配置拉取、本地只读查询和 Webhook 共用该订阅记录的 <code>signing_secret</code>。不同接入端密钥互相独立，至少 32 字节。</li>
 <li>HMAC Header 为 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>；Unix 秒时间戳允许前后 5 分钟，nonce 为 8 字节安全随机数的 16 位小写 hex，签名为 64 位小写 hex。</li>
 <li>历史平台协议仍按各接口定义使用 SHA-1 排序签名，输出 40 位小写 hex；平台支付回调 V1 的空值处理是特例，不要将其与 HMAC 混用。</li>
 <li>签名用于身份认证和完整性校验，不会加密 HTTP Body；生产仍必须使用 HTTPS。</li>
@@ -653,36 +654,39 @@ public final class AdminSigner {
 }</code></pre></div>
 <div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>原因</th></tr></thead><tbody><tr><td>401</td><td>缺失、过期、格式错误或签名不匹配</td></tr><tr><td>409</td><td>当前进程内 nonce 已使用或缓存达到上限</td></tr><tr><td>413</td><td>Body 超过 1 MiB</td></tr><tr><td>503</td><td>管理密钥缺失或不足 32 字节</td></tr></tbody></table></div>
 <div class="notice warn">Nonce 目前仅在单进程内去重，多实例不保证全局防重放。生产仍需使用 HTTPS、限制管理路由网络访问，并确保管理写操作具备业务幂等性。</div></section>
-<section id="sig-sync" class="section"><div class="section-title"><h2>配置同步签名（HMAC-SHA256）</h2></div><div class="summary">Webhook 通知与配置拉取统一使用 HMAC-SHA256；同步密钥与管理密钥分离。</div>
+<section id="sig-sync" class="section"><div class="section-title"><h2>配置同步签名（HMAC-SHA256）</h2></div><div class="summary">每个接入端使用自己的 HMAC-SHA256 密钥完成双向同步认证；管理密钥保持独立。</div>
 <p>配置同步包含两个方向：配置中心向订阅者发送 Webhook 通知；接入端向配置中心拉取 revision、changes、snapshot 和节点数据。两个方向都必须签名，不能因为 Webhook 已验签就认为后续拉取接口也已受保护。</p>
 <h3>密钥配置</h3>
-<div class="table-wrap"><table><thead><tr><th>密钥</th><th>配置位置</th><th>用途</th></tr></thead><tbody><tr><td><code>configSync.secret</code></td><td>config-center 与 config-center-access</td><td>接入端 → 配置中心的同步读取请求，以及 Access 本地只读接口；两端必须完全一致，至少 32 字节</td></tr><tr><td>订阅者 <code>secret</code></td><td>配置中心订阅者记录 / 接入端 <code>webhook.secret</code></td><td>配置中心 → Webhook 接收方；每个订阅者独立设置</td></tr><tr><td><code>adminAuth.secret</code></td><td>config-center 与 sdk-core</td><td>管理 API；与以上密钥分开</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>密钥</th><th>配置位置</th><th>用途</th></tr></thead><tbody><tr><td><code>config_subscriber.signing_secret</code></td><td>配置中心订阅记录 / 接入端 <code>subscriber.secret</code></td><td>该接入端双向同步密钥：接入端请求配置中心、查询本地副本、接收 Webhook；每个接入端独立设置，至少 32 字节</td></tr><tr><td><code>adminAuth.secret</code></td><td>config-center 与 sdk-core</td><td>管理 API；与以上密钥分开</td></tr></tbody></table></div>
 <h3>统一签名格式</h3>
 <div class="codebox"><div class="codehead"><span>HMAC-SHA256 请求原文</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>HITALK-HMAC-SHA256
+SUBSCRIBER
+{接入端编码}
 {大写 HTTP 方法}
 {URL.EscapedPath()}
 {规范化 Query（Go url.Values.Encode()）}
 {Unix 秒时间戳}
 {16 位小写 hex nonce}
 {实际发送的原始 Body 字节}</code></pre></div>
-<p><code>X-Signature = lower_hex(HMAC-SHA256(secret, message))</code>。Header 使用 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>；时间戳允许前后 5 分钟，签名为 64 位小写十六进制。GET 请求没有 Body 时使用空字节串。</p>
+<p><code>X-Signature = lower_hex(HMAC-SHA256(signing_secret, message))</code>。请求必须携带 <code>X-Subscriber-Code</code>，其值也包含在签名原文中。Header 使用 <code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>；时间戳允许前后 5 分钟，签名为 64 位小写十六进制。GET 请求没有 Body 时使用空字节串。</p>
 <h3>接入端 → 配置中心</h3>
-<p>以下所有接口均要求使用 <code>configSync.secret</code> 签名：<code>GET /api/config/sync/revision</code>、<code>GET /api/config/sync/changes</code>、<code>GET /api/config/sync/snapshot</code>、<code>GET /api/config/nodes/{id}</code>、<code>POST /api/config/nodes/batch-get</code>。</p>
+<p>以下所有接口均要求携带 <code>X-Subscriber-Code</code>，并使用该接入端对应的 <code>config_subscriber.signing_secret</code> 签名：<code>GET /api/config/sync/revision</code>、<code>GET /api/config/sync/changes</code>、<code>GET /api/config/sync/snapshot</code>、<code>GET /api/config/nodes/{id}</code>、<code>POST /api/config/nodes/batch-get</code>。</p>
 <h3>Access 本地只读接口</h3>
-<p><code>GET /api/access/nodes</code> 与 <code>GET /api/access/revision</code> 同样要求使用 <code>configSync.secret</code> 签名，避免本地副本数据被未授权读取。</p>
+<p><code>GET /api/access/nodes</code> 与 <code>GET /api/access/revision</code> 同样要求使用该接入端对应的 <code>signing_secret</code> 签名，避免本地副本数据被未授权读取。</p>
 <h3>配置中心 → Webhook 接收方</h3>
-<p>配置中心调用订阅者 <code>callbackUrl</code>，Body 只包含 <code>epoch</code> 和 <code>revision</code>。使用该订阅者独立的 <code>webhook_secret</code> 对 POST 方法、实际路径、规范化 Query、时间戳、nonce 和完整原始 Body 计算 HMAC-SHA256。</p>
+<p>配置中心调用订阅者 <code>callbackUrl</code>，Body 只包含 <code>epoch</code> 和 <code>revision</code>。使用该订阅者独立的 <code>signing_secret</code> 对接入端编码、POST 方法、实际路径、规范化 Query、时间戳、nonce 和完整原始 Body 计算 HMAC-SHA256。</p>
 <div class="codebox"><div class="codehead"><span>Webhook Header 与 Body（结构示例）</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /internal/config/callback HTTP/1.1
+X-Subscriber-Code: access-a
 X-Timestamp: 1793865600
 X-Nonce: 0123456789abcdef
 X-Signature: &lt;64 位 HMAC-SHA256 小写 hex&gt;
 
 {&quot;epoch&quot;:&quot;550e8400-e29b-41d4-a716-446655440000&quot;,&quot;revision&quot;:12}</code></pre></div>
-<ul class="points"><li>Webhook 发送端每次投递和重试都会重新生成时间戳、nonce 与签名。</li><li>接入端先限制 Body 大小并保留原始字节，验签通过后再解析 JSON；时间戳窗口为前后 5 分钟。</li><li>重复 nonce 在同一进程内返回 409；多实例部署若要求全局防重放，需要共享 nonce 存储。</li><li>Webhook 可能重复或乱序，接收后仍须根据 <code>epoch + revision</code> 拉取并校验配置版本。</li><li>旧 SHA-1 排序签名 Webhook 与未签名的配置拉取请求不再兼容；配置中心和接入端必须同步升级。</li></ul>
+<ul class="points"><li>Webhook 发送端每次投递和重试都会重新生成时间戳、nonce 与签名。</li><li>接入端先限制 Body 大小并保留原始字节，验签通过后再解析 JSON；时间戳窗口为前后 5 分钟。</li><li>重复 nonce 在同一进程内返回 409；多实例部署若要求全局防重放，需要共享 nonce 存储。</li><li>Webhook 可能重复或乱序，接收后仍须根据 <code>epoch + revision</code> 拉取并校验配置版本。</li><li>旧版固定 configSync 密钥及未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。</li></ul>
 <p>生产必须使用 HTTPS 或可信内网，并限制配置同步接口的网络访问范围。</p></section>
-<section id="sig-examples" class="section"><div class="section-title"><h2>Go / Node.js HMAC-SHA256 示例</h2></div><div class="summary">管理接口、配置同步与 Webhook 使用同一消息格式；各场景使用独立密钥。</div>
+<section id="sig-examples" class="section"><div class="section-title"><h2>Go / Node.js HMAC-SHA256 示例</h2></div><div class="summary">管理接口使用 adminAuth.secret；配置同步与 Webhook 使用每个接入端独立的 signing_secret。</div>
 <p>以下示例签署实际 HTTP 请求的原始 Body 字节。<code>path</code> 必须与 Go 服务端收到的 <code>URL.EscapedPath()</code> 一致，<code>query</code> 必须按 Go <code>url.Values.Encode()</code> 规范化。</p>
-<div class="codebox"><div class="codehead"><span>Go · SignHMACRequest</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>package signature
+<div class="codebox"><div class="codehead"><span>Go · SignSubscriberHMACRequest</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>package signature
 
 import (
     "crypto/hmac"
@@ -691,9 +695,9 @@ import (
     "strings"
 )
 
-func SignHMACRequest(secret, method, path, query, timestamp, nonce string, body []byte) string {
+func SignSubscriberHMACRequest(secret, subscriberCode, method, path, query, timestamp, nonce string, body []byte) string {
     mac := hmac.New(sha256.New, []byte(secret))
-    prefix := "HITALK-HMAC-SHA256\n" + strings.ToUpper(method) + "\n" +
+    prefix := "HITALK-HMAC-SHA256\nSUBSCRIBER\n" + subscriberCode + "\n" + strings.ToUpper(method) + "\n" +
         path + "\n" + query + "\n" + timestamp + "\n" + nonce + "\n"
     mac.Write([]byte(prefix))
     mac.Write(body)
@@ -701,9 +705,11 @@ func SignHMACRequest(secret, method, path, query, timestamp, nonce string, body 
 }</code></pre></div>
 <div class="codebox"><div class="codehead"><span>Node.js 18+ · node:crypto</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>const { createHmac, randomBytes } = require('node:crypto');
 
-function signRequest(secret, method, path, query, body, timestamp, nonce) {
+function signRequest(secret, subscriberCode, method, path, query, body, timestamp, nonce) {
   const prefix = [
     'HITALK-HMAC-SHA256',
+    'SUBSCRIBER',
+    subscriberCode,
     method.toUpperCase(),
     path,
     query,
@@ -717,11 +723,13 @@ function signRequest(secret, method, path, query, body, timestamp, nonce) {
     .digest('hex');
 }
 
+const subscriberCode = process.env.CONFIG_SUBSCRIBER_CODE;
 const timestamp = String(Math.floor(Date.now() / 1000));
 const nonce = randomBytes(8).toString('hex');
 const body = Buffer.from(JSON.stringify({ ids: [1, 2] }), 'utf8');
 const signature = signRequest(
-  process.env.CONFIG_SYNC_SECRET,
+  process.env.CONFIG_SUBSCRIBER_SECRET,
+  subscriberCode,
   'POST',
   '/api/config/nodes/batch-get',
   '',
@@ -729,10 +737,15 @@ const signature = signRequest(
   timestamp,
   nonce
 );
-console.log({ timestamp, nonce, signature });</code></pre></div>
+console.log({
+  'X-Subscriber-Code': subscriberCode,
+  'X-Timestamp': timestamp,
+  'X-Nonce': nonce,
+  'X-Signature': signature
+});</code></pre></div>
 <div class="notice info">平台支付回调、平台用户核验等历史第三方协议仍保留各自的 SHA-1 字段规则；不要将平台协议的 <code>SignValues</code> 与这里的 HMAC-SHA256 混用。</div>
 <h3>联调核对顺序</h3>
-<ul class="points"><li>确认密钥用途：<code>adminAuth.secret</code>、<code>configSync.secret</code> 或订阅者 <code>webhook_secret</code>，不得混用。</li><li>核对方法、服务端实际转义路径、规范化 Query、时间戳、nonce。</li><li>确保签名时的 Body 字节与 HTTP 实际发送字节完全相同；不要重新格式化 JSON。</li><li>确认签名是 64 位小写 hex，时间戳为 Unix 秒，nonce 为 16 位小写 hex。</li><li>签名通过不代表业务成功；仍需校验权限、配置版本、业务幂等和响应状态。</li></ul></section>
+<ul class="points"><li>确认密钥用途：管理 API 使用 <code>adminAuth.secret</code>；同步 API 和 Webhook 使用对应接入端的 <code>signing_secret</code>，不得混用。</li><li>核对方法、服务端实际转义路径、规范化 Query、时间戳、nonce。</li><li>确保签名时的 Body 字节与 HTTP 实际发送字节完全相同；不要重新格式化 JSON。</li><li>确认签名是 64 位小写 hex，时间戳为 Unix 秒，nonce 为 16 位小写 hex。</li><li>签名通过不代表业务成功；仍需校验权限、配置版本、业务幂等和响应状态。</li></ul></section>
 </main></div></div>
 <button class="side-overlay" id="sideOverlay" type="button" aria-label="关闭目录" hidden></button><button class="backTop" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ 顶部</button><script>
 (function(){

@@ -19,7 +19,7 @@ import (
 type SyncTrigger interface{ Request() }
 
 // Router 同时提供本地只读查询和仅限可信网络的内部 Webhook。
-func Router(local *store.Replica, trigger SyncTrigger, webhookSecret, configSyncSecret string) http.Handler {
+func Router(local *store.Replica, trigger SyncTrigger, subscriberCode, subscriberSecret string) http.Handler {
 	mux := http.NewServeMux()
 	nonces := &nonceCache{used: make(map[string]time.Time)}
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
@@ -70,7 +70,7 @@ func Router(local *store.Replica, trigger SyncTrigger, webhookSecret, configSync
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "同步回调版本参数不合法"})
 			return
 		}
-		if !signature.VerifyHMACRequest(r, webhookSecret, body, time.Now()) {
+		if r.Header.Get("X-Subscriber-Code") != subscriberCode || !signature.VerifySubscriberHMACRequest(r, subscriberSecret, body, time.Now()) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "同步回调 HMAC-SHA256 签名验证失败"})
 			return
 		}
@@ -82,7 +82,12 @@ func Router(local *store.Replica, trigger SyncTrigger, webhookSecret, configSync
 		trigger.Request()
 		w.WriteHeader(http.StatusAccepted)
 	})
-	return signature.RequestHMACMiddleware(mux, []string{"/api/access/nodes", "/api/access/revision"}, configSyncSecret)
+	return signature.RequestSubscriberHMACMiddleware(mux, []string{"/api/access/nodes", "/api/access/revision"}, func(_ context.Context, code string) (string, bool, error) {
+		if code != subscriberCode {
+			return "", false, nil
+		}
+		return subscriberSecret, true, nil
+	})
 }
 
 // nonceCache 仅对当前进程中的签名请求进行去重。

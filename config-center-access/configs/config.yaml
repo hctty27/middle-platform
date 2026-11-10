@@ -10,12 +10,10 @@ database:
 configCenter:
   url: "http://127.0.0.1:8080"
 
-# 与配置中心订阅者设置的 Webhook 密钥一致。
-webhook:
-  secret: ""
-
-# 配置中心同步读取接口的 HMAC-SHA256 密钥，必须与 config-center.configSync.secret 一致。
-configSync:
+# 接入端身份与密钥必须与配置中心 config_subscriber 中同一条记录一致。
+# 该密钥同时用于主动拉取配置、本地只读查询和接收 Webhook。
+subscriber:
+  code: ""
   secret: ""
 
 # 网络超时与定期全量校对周期；收到有效回调仍会立即同步。

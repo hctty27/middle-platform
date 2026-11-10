@@ -47,7 +47,7 @@ func TestWriteValidation(t *testing.T) {
 	}
 }
 
-// TestWebhookSignature 验证回调消息复用 SHA-1 排序签名协议。
+// TestWebhookSignature 验证回调消息使用订阅者独立 HMAC-SHA256 密钥。
 func TestWebhookSignature(t *testing.T) {
 	const secret = "integration-secret-0123456789abcdef0123456789abcdef"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func TestWebhookSignature(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if !signature.VerifyHMACRequest(r, secret, body, time.Now()) {
+		if !signature.VerifySubscriberHMACRequest(r, secret, body, time.Now()) {
 			t.Errorf("invalid HMAC-SHA256 signature")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -77,7 +77,7 @@ func TestWebhookSignature(t *testing.T) {
 	defer server.Close()
 	d := webhook.NewDispatcher(nil)
 	err := d.Send(context.Background(), webhook.Delivery{
-		URL: server.URL + "/internal/config/callback", Secret: secret, Epoch: "test-epoch", Revision: 17,
+		Code: "access-integration", URL: server.URL + "/internal/config/callback", Secret: secret, Epoch: "test-epoch", Revision: 17,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -247,8 +247,11 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusAccepted) }))
 	defer server.Close()
-	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL + "/internal/config/callback", Secret: "test-secret"}); err != nil {
+	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-1", CallbackURL: server.URL + "/internal/config/callback", Secret: "test-subscriber-secret-0123456789abcdef"}); err != nil {
 		t.Fatal(err)
+	}
+	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-duplicate", CallbackURL: server.URL + "/duplicate", Secret: "test-subscriber-secret-0123456789abcdef"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate subscriber signing secret should conflict: %v", err)
 	}
 	var subscriberID int64
 	if err := db.QueryRowContext(ctx, "SELECT id FROM config_subscriber WHERE code='access-1'").Scan(&subscriberID); err != nil {
@@ -260,23 +263,30 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	var storedSecret, storedURL string
-	if err := db.QueryRowContext(ctx, "SELECT webhook_secret,callback_url FROM config_subscriber WHERE id=?", subscriberID).
+	if err := db.QueryRowContext(ctx, "SELECT signing_secret,callback_url FROM config_subscriber WHERE id=?", subscriberID).
 		Scan(&storedSecret, &storedURL); err != nil {
 		t.Fatal(err)
 	}
-	if storedSecret != "test-secret" || storedURL != server.URL+"/updated" {
+	if storedSecret != "test-subscriber-secret-0123456789abcdef" || storedURL != server.URL+"/updated" {
 		t.Fatalf("blank secret must be retained: secret=%q url=%q", storedSecret, storedURL)
 	}
 	if err := store.UpdateSubscriber(ctx, subscriberID, UpdateSubscriberRequest{
-		CallbackURL: server.URL + "/updated", Secret: "rotated-secret",
+		CallbackURL: server.URL + "/updated", Secret: "rotated-subscriber-secret-0123456789abcdef",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRowContext(ctx, "SELECT webhook_secret FROM config_subscriber WHERE id=?", subscriberID).Scan(&storedSecret); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT signing_secret FROM config_subscriber WHERE id=?", subscriberID).Scan(&storedSecret); err != nil {
 		t.Fatal(err)
 	}
-	if storedSecret != "rotated-secret" {
+	if storedSecret != "rotated-subscriber-secret-0123456789abcdef" {
 		t.Fatalf("secret rotation failed: %q", storedSecret)
+	}
+	resolvedSecret, subscriberEnabled, err := store.SubscriberSecret(ctx, "access-1")
+	if err != nil || !subscriberEnabled || resolvedSecret != storedSecret {
+		t.Fatalf("subscriber signing credential lookup: enabled=%v secret=%q err=%v", subscriberEnabled, resolvedSecret, err)
+	}
+	if _, active, err := store.SubscriberSecret(ctx, "missing-access"); err != nil || active {
+		t.Fatalf("unknown subscriber should be inactive: active=%v err=%v", active, err)
 	}
 	if err := store.SetSubscriberEnabled(ctx, subscriberID, false); err != nil {
 		t.Fatal(err)
@@ -284,6 +294,9 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	disabledJob, err := webhook.NewDispatcher(db).Claim(ctx)
 	if err != nil || disabledJob != nil {
 		t.Fatalf("disabled subscriber must not be claimed: %+v %v", disabledJob, err)
+	}
+	if _, active, err := store.SubscriberSecret(ctx, "access-1"); err != nil || active {
+		t.Fatalf("disabled subscriber must not authenticate: active=%v err=%v", active, err)
 	}
 	if err := store.SetSubscriberEnabled(ctx, subscriberID, true); err != nil {
 		t.Fatal(err)
@@ -297,7 +310,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if err := store.SetSubscriberEnabled(ctx, 999999, false); !errors.Is(err, model.ErrSubscriberNotFound) {
 		t.Fatalf("missing subscriber status update should return not found: %v", err)
 	}
-	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-delete", CallbackURL: server.URL + "/delete", Secret: "delete-secret"}); err != nil {
+	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{Code: "access-delete", CallbackURL: server.URL + "/delete", Secret: "delete-subscriber-secret-0123456789abcdef"}); err != nil {
 		t.Fatal(err)
 	}
 	var deleteID int64
@@ -351,7 +364,7 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	}()
 	time.Sleep(150 * time.Millisecond) // 让常驻 Worker 先完成一次空队列检查。
 	if err := store.CreateSubscriber(ctx, CreateSubscriberRequest{
-		Code: "access-late", CallbackURL: server.URL + "/internal/config/callback", Secret: "late-secret",
+		Code: "access-late", CallbackURL: server.URL + "/internal/config/callback", Secret: "late-subscriber-secret-0123456789abcdef",
 	}); err != nil {
 		stopWorker()
 		<-workerDone
@@ -546,8 +559,9 @@ var integrationSchema = []string{
 	) ENGINE=InnoDB`,
 	`CREATE TABLE config_subscriber(
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL UNIQUE,
-		callback_url VARCHAR(1024) NOT NULL,webhook_secret VARCHAR(255) NOT NULL,enabled TINYINT NOT NULL DEFAULT 1,
-		created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL
+		callback_url VARCHAR(1024) NOT NULL,signing_secret VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,enabled TINYINT NOT NULL DEFAULT 1,
+		created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
+		UNIQUE KEY uq_config_subscriber_signing_secret(signing_secret)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	`CREATE TABLE config_subscriber_delivery_state(
 		subscriber_id BIGINT NOT NULL PRIMARY KEY,acknowledged_revision BIGINT NOT NULL DEFAULT 0,

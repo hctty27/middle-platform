@@ -98,6 +98,34 @@ VALUES(901,'game','legacy','Legacy',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""
     assert_sql("SELECT market_type FROM manual_market_upgrade.config_node WHERE id=901", "domestic")
     mysql(database="manual_market_upgrade", script=market_migration, ok=False)
 
+    # 模拟历史订阅表升级：将原 Webhook 专用密钥列改为双向同步签名密钥列。
+    mysql("CREATE DATABASE manual_subscriber_upgrade CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
+    mysql(database="manual_subscriber_upgrade", script="""CREATE TABLE config_subscriber (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      code VARCHAR(128) NOT NULL UNIQUE,
+      callback_url VARCHAR(1024) NOT NULL,
+      webhook_secret VARCHAR(255) NOT NULL,
+      enabled TINYINT NOT NULL DEFAULT 1,
+      created_at DATETIME(6) NOT NULL,
+      updated_at DATETIME(6) NOT NULL
+    );
+    INSERT INTO config_subscriber
+      (code,callback_url,webhook_secret,created_at,updated_at)
+      VALUES ('access-a','https://access.example.com/callback',
+              'subscriber-secret-0123456789abcdef',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+    subscriber_migration = source("db/incremental/V0012__rename_webhook_secret_to_signing_secret.sql")
+    mysql(database="manual_subscriber_upgrade", script=subscriber_migration)
+    assert_sql("""SELECT signing_secret FROM manual_subscriber_upgrade.config_subscriber
+      WHERE code='access-a'""", "subscriber-secret-0123456789abcdef")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema='manual_subscriber_upgrade' AND table_name='config_subscriber'
+        AND column_name='webhook_secret'""", "0")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.statistics
+      WHERE table_schema='manual_subscriber_upgrade' AND table_name='config_subscriber'
+        AND index_name='uq_config_subscriber_signing_secret'
+        AND column_name='signing_secret' AND non_unique=0""", "1")
+    mysql(database="manual_subscriber_upgrade", script=subscriber_migration, ok=False)
+
     # 模拟从历史 V11 权威库升级：保留旧版本表与真实业务节点，手动添加订单表。
     mysql(database="manual_existing", script=init)
     mysql("""DROP TABLE manual_existing.game_order;

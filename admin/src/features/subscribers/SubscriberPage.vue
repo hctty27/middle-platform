@@ -39,6 +39,10 @@ async function addSubscriber() {
     ElMessage.warning('请填写接入方编码、回调地址和签名密钥')
     return
   }
+  if (newSubscriber.code !== newSubscriber.code.trim() || newSubscriber.secret !== newSubscriber.secret.trim() || newSubscriber.secret.length < 32) {
+    ElMessage.warning('接入方编码不能包含首尾空格，签名密钥至少 32 字节且不能包含首尾空格')
+    return
+  }
   creatingSubscriber.value = true
   try {
     await createSubscriber(newSubscriber)
@@ -63,6 +67,10 @@ async function saveSubscriber() {
     ElMessage.warning('请填写 Webhook 回调地址')
     return
   }
+  if (editForm.secret && (editForm.secret !== editForm.secret.trim() || editForm.secret.length < 32)) {
+    ElMessage.warning('签名密钥至少 32 字节且不能包含首尾空格')
+    return
+  }
   savingSubscriber.value = true
   try {
     await updateSubscriber(editForm.id, {
@@ -85,7 +93,7 @@ async function toggleSubscriber(row: Subscriber) {
   if (!enabled) {
     try {
       await ElMessageBox.confirm(
-        `停用「${row.code}」后，配置中心将不再发送新的 Webhook 通知。已经领取的投递任务可能继续完成。`,
+        `停用「${row.code}」后，配置中心将停止新的 Webhook 通知，并拒绝该接入端的配置同步请求。已经领取的投递任务可能继续完成。`,
         '确认停用',
         { type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消' }
       )
@@ -135,7 +143,7 @@ onMounted(() => void loadSubscribers())
     <div class="panel-title">
       <div>
         <h2>接入平台与同步状态</h2>
-        <p class="muted">接入方接收 Webhook 版本通知，再主动拉取变更节点。</p>
+        <p class="muted">每个接入方使用独立密钥，统一认证 Webhook 通知、配置拉取和本地只读查询。</p>
       </div>
       <div class="panel-actions">
         <el-button @click="loadSubscribers">刷新</el-button>
@@ -189,7 +197,7 @@ onMounted(() => void loadSubscribers())
         <el-form-item label="Webhook 回调地址">
           <el-input v-model="newSubscriber.callbackUrl" autocomplete="off" />
         </el-form-item>
-        <el-form-item label="共享签名密钥">
+        <el-form-item label="接入端签名密钥（至少 32 字节）">
           <el-input v-model="newSubscriber.secret" type="password" show-password autocomplete="new-password" />
         </el-form-item>
         <p class="muted">支持 HTTP / HTTPS 回调地址，服务端会校验目标地址安全性。</p>
@@ -208,7 +216,7 @@ onMounted(() => void loadSubscribers())
         <el-form-item label="Webhook 回调地址">
           <el-input v-model="editForm.callbackUrl" autocomplete="off" />
         </el-form-item>
-        <el-form-item label="更新共享签名密钥">
+        <el-form-item label="更新接入端签名密钥">
           <el-input
             v-model="editForm.secret"
             type="password"
@@ -217,7 +225,7 @@ onMounted(() => void loadSubscribers())
             placeholder="留空表示不修改当前密钥"
           />
         </el-form-item>
-        <p class="muted">接入方编码创建后不可修改；密钥不会回显，留空即可保留原密钥。</p>
+        <p class="muted">接入方编码创建后不可修改；密钥不会回显，留空即可保留原密钥。轮换密钥后，必须同步更新对应接入端的 subscriber.secret 并重启接入端。</p>
       </el-form>
       <template #footer>
         <el-button @click="showEditSubscriber = false">取消</el-button>

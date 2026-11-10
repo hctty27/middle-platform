@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"hitall.com/middle-platform/shared/signature"
@@ -59,16 +60,18 @@ type Snapshot struct {
 
 // Client 对配置中心的所有同步读取请求执行 HMAC-SHA256 签名。
 type Client struct {
-	base   string
-	secret string
-	http   *http.Client
+	base           string
+	subscriberCode string
+	secret         string
+	http           *http.Client
 }
 
 // New 创建带请求签名的配置中心 HTTP 客户端。
-func New(base string, connectTimeout, requestTimeout time.Duration, secret string) *Client {
+func New(base string, connectTimeout, requestTimeout time.Duration, subscriberCode, secret string) *Client {
 	return &Client{
-		base:   base,
-		secret: secret,
+		base:           base,
+		subscriberCode: subscriberCode,
+		secret:         secret,
 		http: &http.Client{
 			Timeout: requestTimeout,
 			Transport: &http.Transport{
@@ -89,8 +92,8 @@ func (c *Client) get(ctx context.Context, path string, target any) error {
 
 // call 统一签署请求，并处理 HTTP 状态、响应大小和严格 JSON 解码。
 func (c *Client) call(ctx context.Context, method, path string, body []byte, target any) error {
-	if len([]byte(c.secret)) < 32 {
-		return fmt.Errorf("配置同步 HMAC-SHA256 密钥至少需要 32 字节")
+	if c.subscriberCode == "" || len([]rune(c.subscriberCode)) > 128 || strings.TrimSpace(c.subscriberCode) != c.subscriberCode || strings.ContainsAny(c.subscriberCode, "\r\n") || len([]byte(c.secret)) < 32 || len([]byte(c.secret)) > 255 || strings.TrimSpace(c.secret) != c.secret {
+		return fmt.Errorf("接入端编码不合法，签名密钥必须为 32 至 255 字节且不能包含首尾空格")
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, bytes.NewReader(body))
 	if err != nil {
@@ -109,10 +112,11 @@ func (c *Client) call(ctx context.Context, method, path string, body []byte, tar
 	if err != nil {
 		return fmt.Errorf("配置同步查询参数不合法: %w", err)
 	}
+	req.Header.Set("X-Subscriber-Code", c.subscriberCode)
 	req.Header.Set("X-Timestamp", timestamp)
 	req.Header.Set("X-Nonce", nonce)
-	req.Header.Set("X-Signature", signature.SignHMACRequest(
-		c.secret, req.Method, req.URL.EscapedPath(), query.Encode(), timestamp, nonce, body,
+	req.Header.Set("X-Signature", signature.SignSubscriberHMACRequest(
+		c.secret, c.subscriberCode, req.Method, req.URL.EscapedPath(), query.Encode(), timestamp, nonce, body,
 	))
 
 	response, err := c.http.Do(req)

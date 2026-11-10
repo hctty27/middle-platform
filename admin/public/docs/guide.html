@@ -112,7 +112,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li>对外协议及签名细节以 <a href="index.html#g-start">游戏 HTML</a> 和 <a href="index.html#p-start">平台 HTML</a> 为准，避免维护多份相同字段表。</li>
 </ul>
 <h3>共享签名模块与业务边界</h3>
-<p><code>shared/signature</code> 提供两类协议：<code>SignValues</code>/<code>SignAllValues</code> 保留历史平台 SHA-1 排序签名（支付回调 V1 不过滤空值）；<code>SignHMACRequest</code>/<code>VerifyHMACRequest</code> 统一处理管理、配置同步和 Webhook 的 HMAC-SHA256 请求签名，绑定方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。业务模块仍负责密钥归属、AppID、权限和幂等性；进程内 nonce 缓存不等于多实例全局防重放。</p>
+<p><code>shared/signature</code> 提供两类协议：<code>SignValues</code>/<code>SignAllValues</code> 保留历史平台 SHA-1 排序签名（支付回调 V1 不过滤空值）；<code>SignHMACRequest</code>/<code>VerifyHMACRequest</code> 处理管理接口 HMAC；<code>SignSubscriberHMACRequest</code>/<code>VerifySubscriberHMACRequest</code> 处理按接入端身份隔离的配置同步与 Webhook HMAC，绑定接入端编码、方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。业务模块仍负责密钥归属、AppID、权限和幂等性；进程内 nonce 缓存不等于多实例全局防重放。</p>
 <p>各接口具体签名字段、测试向量和 Java / Go / Node.js 示例统一见 <a href="index.html#sig-overview">签名接入规范</a>；新增业务应复用共享计算函数，但明确指定各自参与签名的字段。</p>
 <h2 id="architecture-6">SDK Core 与 SDK Service 职责</h2>
 <ul>
@@ -128,18 +128,18 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <ul>
 <li>业务接口、管理接口、请求字段与签名规则统一维护于 <a href="index.html">接口文档</a>；本文件不重复完整 HTTP 契约。</li>
 <li>配置中心的节点读取与同步内部入口包括 <code>GET /api/config/nodes/{id}</code>、<code>POST /api/config/nodes/batch-get</code>、<code>GET /api/config/sync/revision</code>、<code>GET /api/config/sync/changes</code>、<code>GET /api/config/sync/snapshot</code>。</li>
-<li>接入端提供 <code>GET /api/access/nodes</code>、<code>GET /api/access/revision</code> 本地只读接口，使用 <code>configSync.secret</code> 执行 HMAC-SHA256；通过 <code>POST /internal/config/callback</code> 接受订阅者密钥签名的 HMAC-SHA256 Webhook 后异步同步。</li>
+<li>接入端提供 <code>GET /api/access/nodes</code>、<code>GET /api/access/revision</code> 本地只读接口，使用本接入端对应的 <code>config_subscriber.signing_secret</code> 执行 HMAC-SHA256；通过 <code>POST /internal/config/callback</code> 接受同一订阅密钥签名的 Webhook 后异步同步。所有请求均携带并签署 <code>X-Subscriber-Code</code>。</li>
 <li>各 Go 服务提供 <code>GET /health/live</code>（进程存活）和 <code>GET /health/ready</code>（依赖就绪）；本地验证方式见 <a href="#development">开发指南</a>，生产探针见 <a href="#production">运维指南</a>。</li>
 </ul></article>
 <article class="doc-pane" id="database" data-pane="database" aria-labelledby="tab-database" hidden><div class="eyebrow">DEVELOPER GUIDE / DATABASE</div><p class="pane-subtitle">数据模型、全量 SQL、增量升级与迁移</p><h1>数据库结构与手动 SQL</h1>
 <h2 id="database-1">核心约定</h2>
 <p><strong>所有建表和升级都由管理员人工执行 SQL。</strong> 四个 Go 服务不会在启动时执行 DDL；只校验实际表结构。SQL 随 Linux 发布包一起交付，也可从源码中获取：</p>
-<div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_center.sql">config_center.sql</a></td></tr><tr><td>新建空的 <code>config_access</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_access.sql">config_access.sql</a></td></tr><tr><td>已有库缺少订单表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0001__add_game_order.sql">V0001__add_game_order.sql</a></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0002__add_sdk_services.sql">V0002__add_sdk_services.sql</a></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0003__migrate_sdk_service_channel.sql">V0003__migrate_sdk_service_channel.sql</a></td></tr><tr><td>已有服务表缺少核验用户信息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0004__add_sdk_user_check.sql">V0004__add_sdk_user_check.sql</a></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0005__add_sdk_role_query.sql">V0005__add_sdk_role_query.sql</a></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0006__add_sdk_server_query.sql">V0006__add_sdk_server_query.sql</a></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0007__add_sdk_role_control.sql">V0007__add_sdk_role_control.sql</a></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0008__add_sdk_subscribe_message.sql">V0008__add_sdk_subscribe_message.sql</a></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0009__migrate_sdk_node_config.sql">V0009__migrate_sdk_node_config.sql</a></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0010__cleanup_legacy_sdk_fields.sql">V0010__cleanup_legacy_sdk_fields.sql</a></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0011__add_game_market_type.sql">V0011__add_game_market_type.sql</a></td></tr></tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_center.sql">config_center.sql</a></td></tr><tr><td>新建空的 <code>config_access</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_access.sql">config_access.sql</a></td></tr><tr><td>已有库缺少订单表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0001__add_game_order.sql">V0001__add_game_order.sql</a></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0002__add_sdk_services.sql">V0002__add_sdk_services.sql</a></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0003__migrate_sdk_service_channel.sql">V0003__migrate_sdk_service_channel.sql</a></td></tr><tr><td>已有服务表缺少核验用户信息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0004__add_sdk_user_check.sql">V0004__add_sdk_user_check.sql</a></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0005__add_sdk_role_query.sql">V0005__add_sdk_role_query.sql</a></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0006__add_sdk_server_query.sql">V0006__add_sdk_server_query.sql</a></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0007__add_sdk_role_control.sql">V0007__add_sdk_role_control.sql</a></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0008__add_sdk_subscribe_message.sql">V0008__add_sdk_subscribe_message.sql</a></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0009__migrate_sdk_node_config.sql">V0009__migrate_sdk_node_config.sql</a></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0010__cleanup_legacy_sdk_fields.sql">V0010__cleanup_legacy_sdk_fields.sql</a></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0011__add_game_market_type.sql">V0011__add_game_market_type.sql</a></td></tr><tr><td>将订阅者 Webhook 密钥升级为双向同步签名密钥</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0012__rename_webhook_secret_to_signing_secret.sql">V0012__rename_webhook_secret_to_signing_secret.sql</a></td></tr></tbody></table></div>
 <p>不得对已有配置数据的库再次执行 <code>db/full/</code> 中的全量 SQL。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 <code>DROP TABLE</code>。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。</p>
 <h2 id="database-2">SQL 目录与增量编号</h2>
 <ul>
 <li>根目录 <code>db/full/</code>：<code>config_center.sql</code> 与 <code>config_access.sql</code> 是<strong>当前完整结构快照</strong>，仅用于新建对应空库，不包含生产业务数据。</li>
-<li>根目录 <code>db/incremental/</code>：文件命名为 <code>V0001__description.sql</code>，序号全局连续递增，历史存量脚本为 <strong>V0001～V0011</strong>；下一份增量是 <strong>V0012</strong>。跨数据库时在文件名中注明 <code>config_center</code> 或 <code>config_access</code>。</li>
+<li>根目录 <code>db/incremental/</code>：文件命名为 <code>V0001__description.sql</code>，序号全局连续递增，历史存量脚本为 <strong>V0001～V0012</strong>；下一份增量是 <strong>V0013</strong>。跨数据库时在文件名中注明 <code>config_center</code> 或 <code>config_access</code>。</li>
 <li><strong>新增数据库变更时，创建新编号的增量 SQL，并同步更新对应的全量 SQL</strong>，以及本文和 CI、发布相关检查。已经发布的增量 SQL 不允许修改、删除或重新编号。</li>
 <li>新增增量 SQL 头部注明目标数据库、适用旧结构与前置条件；所有 SQL 仍由管理员手工检查并执行。</li>
 <li><strong>注意：V0001～V0011 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。</strong> 例如 <code>V0003</code> 只适用于仍有旧 <code>sdk_service_binding</code> / <code>scope_type</code> 的库，<code>V0009</code> 仅适用于旧渠道表结构。已升级的库不得重跑。</li>
@@ -214,7 +214,7 @@ CREATE DATABASE IF NOT EXISTS config_access
 <p>打开第一个 PowerShell 终端：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml</code></pre></div>
-<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code>、<code>adminAuth.secret</code> 和 <code>configSync.secret</code>。管理密钥须与 SDK Core 的 <code>adminAuth.secret</code> 一致；配置同步密钥须与接入端的 <code>configSync.secret</code> 一致。两种密钥均至少 32 字节。环境变量 <code>ADMIN_AUTH_SECRET</code>、<code>CONFIG_SYNC_SECRET</code> 可分别覆盖 YAML。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终验签。Vue 管理页面输入管理密钥后自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问。
+<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code> 和 <code>adminAuth.secret</code>。管理密钥须与 SDK Core 的 <code>adminAuth.secret</code> 一致；配置同步密钥不再配置为全局项，而是从 <code>config_subscriber</code> 中按接入端编码读取。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终验签。Vue 管理页面输入管理密钥后自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问。
 <p>对<strong>新空库先手动执行 SQL，再启动</strong>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 先在数据库工具中执行 db/full/config_center.sql（仅新库）
 go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
@@ -223,19 +223,19 @@ go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
 <p>新终端进入 <code>config-center-access</code>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center-access
 Copy-Item configs/config.yaml configs/config-dev.yaml
-# 修改 YAML 中 database.dsn / configCenter.url / webhook.secret / configSync.secret
+# 修改 YAML 中 database.dsn / configCenter.url / subscriber.code / subscriber.secret
 go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></div>
-<p><code>database.dsn</code> 指向 <code>config_access</code>，<code>configCenter.url</code> 通常是 <code>http://127.0.0.1:8080</code>。<code>configSync.secret</code> 必须与配置中心的同名密钥完全一致且至少 32 字节；<code>webhook.secret</code> 必须与配置中心订阅者记录中的 <code>secret</code> 一致，两者是不同用途的密钥。环境变量 <code>CONFIG_SYNC_SECRET</code>、<code>CONFIG_WEBHOOK_SECRET</code> 可分别覆盖 YAML。首次启动前须对空 <code>config_access</code> 执行 <code>db/full/config_access.sql</code>，随后服务会全量拉取节点，再执行增量同步；旧副本库参见 <a href="#database">数据库文档</a>。</p>
-<p>在运行中的配置中心注册订阅者时，使用配置中心的 <code>adminAuth.secret</code> 对管理请求签名；请求 Body 中的 <code>secret</code> 必须与接入端的 <code>webhook.secret</code> 一致。下面示例适用于 PowerShell 5.1+，签名和发送使用同一份 UTF-8 Body 字节。<code>Path</code> 必须与 Go 服务端收到的 <code>URL.EscapedPath()</code> 一致；非空 Query 必须先按 Go <code>url.Values.Encode()</code> 规范化。本例不带 Query：</p>
+<p><code>database.dsn</code> 指向 <code>config_access</code>，<code>configCenter.url</code> 通常是 <code>http://127.0.0.1:8080</code>。<code>subscriber.code</code> 与 <code>subscriber.secret</code> 必须与配置中心 <code>config_subscriber</code> 中同一条记录的 <code>code</code>、<code>signing_secret</code> 完全一致。这个接入端密钥同时用于主动拉取、本地只读查询和 Webhook；每个接入端独立，至少 32 字节。环境变量 <code>CONFIG_SUBSCRIBER_CODE</code>、<code>CONFIG_SUBSCRIBER_SECRET</code> 可覆盖 YAML。轮换密钥必须同步更新配置中心订阅记录和接入端配置，再重启接入端；只更新一侧会导致主动拉取和 Webhook 验签失败。首次启动前须对空 <code>config_access</code> 执行 <code>db/full/config_access.sql</code>，随后服务会全量拉取节点，再执行增量同步；旧副本库参见 <a href="#database">数据库文档</a>。</p>
+<p>在运行中的配置中心注册订阅者时，使用配置中心的 <code>adminAuth.secret</code> 对管理请求签名；请求 Body 中的 <code>secret</code> 必须与接入端 <code>subscriber.secret</code> 一致，并保存在对应订阅记录的 <code>signing_secret</code> 字段。下面示例适用于 PowerShell 5.1+，签名和发送使用同一份 UTF-8 Body 字节。<code>Path</code> 必须与 Go 服务端收到的 <code>URL.EscapedPath()</code> 一致；非空 Query 必须先按 Go <code>url.Values.Encode()</code> 规范化。本例不带 Query：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制代码</button></div><pre><code class="language-powershell">function Invoke-HmacRequest {
-    param([string]$BaseUrl, [string]$Method, [string]$Path, [string]$Secret, [string]$Body = "", [string]$Query = "")
+    param([string]$BaseUrl, [string]$Method, [string]$Path, [string]$Secret, [string]$Body = "", [string]$Query = "", [string]$SubscriberCode = "")
     $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString([Globalization.CultureInfo]::InvariantCulture)
     $nonceBytes = New-Object byte[] 8
     $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
     try { $rng.GetBytes($nonceBytes) } finally { $rng.Dispose() }
     $nonce = [BitConverter]::ToString($nonceBytes).Replace("-", "").ToLowerInvariant()
     $bodyBytes = [Text.Encoding]::UTF8.GetBytes($Body)
-    $prefix = "HITALK-HMAC-SHA256`n$($Method.ToUpperInvariant())`n$Path`n$Query`n$timestamp`n$nonce`n"
+    $prefix = if ($SubscriberCode) { "HITALK-HMAC-SHA256`nSUBSCRIBER`n$SubscriberCode`n$($Method.ToUpperInvariant())`n$Path`n$Query`n$timestamp`n$nonce`n" } else { "HITALK-HMAC-SHA256`n$($Method.ToUpperInvariant())`n$Path`n$Query`n$timestamp`n$nonce`n" }
     $prefixBytes = [Text.Encoding]::UTF8.GetBytes($prefix)
     $messageBytes = New-Object byte[] ($prefixBytes.Length + $bodyBytes.Length)
     [Buffer]::BlockCopy($prefixBytes, 0, $messageBytes, 0, $prefixBytes.Length)
@@ -243,6 +243,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></
     $hmac = [Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($Secret))
     try { $signature = [BitConverter]::ToString($hmac.ComputeHash($messageBytes)).Replace("-", "").ToLowerInvariant() } finally { $hmac.Dispose() }
     $headers = @{ "X-Timestamp" = $timestamp; "X-Nonce" = $nonce; "X-Signature" = $signature }
+    if ($SubscriberCode) { $headers["X-Subscriber-Code"] = $SubscriberCode }
     $uri = $BaseUrl.TrimEnd("/") + $Path
     if ($Query) { $uri += "?" + $Query }
     if ($Method.ToUpperInvariant() -eq "GET") { return Invoke-RestMethod -Method Get -Uri $uri -Headers $headers }
@@ -250,14 +251,14 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml</code></pre></
 }
 
 $adminSecret = "replace-with-adminAuth.secret"
-$webhookSecret = "replace-with-the-same-value-as-webhook.secret"
-$configSyncSecret = "replace-with-configSync.secret"
-$subscriberBody = @{ code = "access-local"; callbackUrl = "http://127.0.0.1:8081/internal/config/callback"; secret = $webhookSecret } | ConvertTo-Json -Compress
+$subscriberCode = "access-local"
+$subscriberSecret = "replace-with-config_subscriber.signing_secret"
+$subscriberBody = @{ code = $subscriberCode; callbackUrl = "http://127.0.0.1:8081/internal/config/callback"; secret = $subscriberSecret } | ConvertTo-Json -Compress
 Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8080" -Method "POST" -Path "/api/config/admin/subscribers" -Secret $adminSecret -Body $subscriberBody
-Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8081" -Method "GET" -Path "/api/access/revision" -Secret $configSyncSecret
+Invoke-HmacRequest -BaseUrl "http://127.0.0.1:8081" -Method "GET" -Path "/api/access/revision" -Secret $subscriberSecret -SubscriberCode $subscriberCode
 # Query 非空时，先按 Go url.Values.Encode() 规范化，再同时传入 -Query 和实际 URL。
 </code></pre></div>
-<p>最后一条命令会签名读取接入端的 <code>/api/access/revision</code>；不能直接在浏览器地址栏打开该 URL，因为它始终要求 HMAC-SHA256 Header。Webhook 使用订阅者独立密钥验签，配置中心主动拉取 revision、changes、snapshot、节点详情和 batch-get 时使用两端一致的 <code>configSync.secret</code>。签名验证成功只代表 Webhook 已受理，真正的节点更新以副本游标和节点结果为准。配置中心与接入端必须同步升级。</p>
+<p>最后一条命令会签名读取接入端的 <code>/api/access/revision</code>；不能直接在浏览器地址栏打开该 URL，因为它始终要求 HMAC-SHA256 Header。Webhook、配置拉取和接入端本地只读查询统一使用该接入端的 <code>signing_secret</code>；配置中心根据 <code>X-Subscriber-Code</code> 找到启用的订阅记录并验签。签名验证成功只代表 Webhook 已受理，真正的节点更新以副本游标和节点结果为准。配置中心与接入端必须同步升级。</p>
 <h2 id="development-4">3. SDK Core</h2>
 <p>新终端进入 <code>sdk-core</code>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd sdk-core

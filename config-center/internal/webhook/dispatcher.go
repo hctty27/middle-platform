@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 // Delivery 保存一次待投递的订阅通知及其版本和租约信息。
 type Delivery struct {
 	SubscriberID int64
+	Code         string
 	URL          string
 	Secret       string
 	Epoch        string
@@ -68,7 +70,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 	defer tx.Rollback()
 	delivery := &Delivery{}
 	// SKIP LOCKED 让多实例跳过已被领取的任务，避免相互阻塞与重复投递。
-	err = tx.QueryRowContext(ctx, `SELECT d.subscriber_id,s.callback_url,s.webhook_secret,r.epoch,r.revision
+	err = tx.QueryRowContext(ctx, `SELECT d.subscriber_id,s.code,s.callback_url,s.signing_secret,r.epoch,r.revision
 		FROM config_subscriber_delivery_state d
 		JOIN config_subscriber s ON s.id=d.subscriber_id
 		JOIN config_revision r ON r.id=1
@@ -78,7 +80,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*Delivery, error) {
 			AND (d.lease_until IS NULL OR d.lease_until<UTC_TIMESTAMP(6))
 		ORDER BY d.next_attempt_at,d.subscriber_id
 		LIMIT 1 FOR UPDATE OF d SKIP LOCKED`).Scan(
-		&delivery.SubscriberID, &delivery.URL, &delivery.Secret, &delivery.Epoch, &delivery.Revision)
+		&delivery.SubscriberID, &delivery.Code, &delivery.URL, &delivery.Secret, &delivery.Epoch, &delivery.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -113,8 +115,10 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err := ValidateCallback(job.URL); err != nil {
 		return fmt.Errorf("Webhook 通知目标不安全: %w", err)
 	}
-	if job.Secret == "" {
-		return errors.New("Webhook 订阅者密钥不能为空")
+	if job.Code == "" || len([]rune(job.Code)) > 128 || strings.TrimSpace(job.Code) != job.Code ||
+		strings.ContainsAny(job.Code, "\r\n") || len([]byte(job.Secret)) < 32 ||
+		len([]byte(job.Secret)) > 255 || strings.TrimSpace(job.Secret) != job.Secret {
+		return errors.New("接入端编码不合法，签名密钥必须为 32 至 255 字节且不能包含首尾空格")
 	}
 	var random [8]byte
 	if _, err := rand.Read(random[:]); err != nil {
@@ -142,10 +146,11 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 		requestPath = "/"
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Subscriber-Code", job.Code)
 	req.Header.Set("X-Timestamp", timestamp)
 	req.Header.Set("X-Nonce", nonce)
-	req.Header.Set("X-Signature", signature.SignHMACRequest(
-		job.Secret, req.Method, requestPath, query.Encode(), timestamp, nonce, body,
+	req.Header.Set("X-Signature", signature.SignSubscriberHMACRequest(
+		job.Secret, job.Code, req.Method, requestPath, query.Encode(), timestamp, nonce, body,
 	))
 	response, err := d.Client.Do(req)
 	if err != nil {

@@ -1,6 +1,8 @@
 package signature
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -162,5 +164,73 @@ func TestRequestHMACMiddlewareProtectsMultiplePrefixes(t *testing.T) {
 		if rec.Code != http.StatusNoContent {
 			t.Fatalf("unmatched path %s was protected: %d", path, rec.Code)
 		}
+	}
+}
+
+
+func TestRequestSubscriberHMACMiddleware(t *testing.T) {
+	const code = "access-a"
+	const secret = "subscriber-secret-0123456789abcdef0123456789"
+	var received string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		received = string(body)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	lookup := func(_ context.Context, requested string) (string, bool, error) {
+		return secret, requested == code, nil
+	}
+	guard := RequestSubscriberHMACMiddleware(next, []string{"/api/config/sync"}, lookup)
+
+	newRequest := func(requestCode, nonce string) *http.Request {
+		body := `{"afterRevision":7}`
+		req := httptest.NewRequest(http.MethodPost, "/api/config/sync/changes", strings.NewReader(body))
+		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+		req.Header.Set("X-Subscriber-Code", requestCode)
+		req.Header.Set("X-Timestamp", timestamp)
+		req.Header.Set("X-Nonce", nonce)
+		req.Header.Set("X-Signature", SignSubscriberHMACRequest(
+			secret, requestCode, req.Method, req.URL.EscapedPath(), "", timestamp, nonce, []byte(body),
+		))
+		return req
+	}
+	call := func(req *http.Request) int {
+		recorder := httptest.NewRecorder()
+		guard.ServeHTTP(recorder, req)
+		return recorder.Code
+	}
+
+	valid := newRequest(code, "0123456789abcdef")
+	if status := call(valid); status != http.StatusNoContent || received != `{"afterRevision":7}` {
+		t.Fatalf("valid subscriber request: status=%d body=%q", status, received)
+	}
+	if status := call(newRequest(code, "0123456789abcdef")); status != http.StatusConflict {
+		t.Fatalf("subscriber nonce replay: %d", status)
+	}
+	wrongIdentity := newRequest(code, "1111111111111111")
+	wrongIdentity.Header.Set("X-Subscriber-Code", "access-b")
+	if status := call(wrongIdentity); status != http.StatusUnauthorized {
+		t.Fatalf("tampered subscriber identity: %d", status)
+	}
+	missingIdentity := newRequest(code, "2222222222222222")
+	missingIdentity.Header.Del("X-Subscriber-Code")
+	if status := call(missingIdentity); status != http.StatusUnauthorized {
+		t.Fatalf("missing subscriber identity: %d", status)
+	}
+	disabled := RequestSubscriberHMACMiddleware(next, []string{"/api/config/sync"}, func(context.Context, string) (string, bool, error) {
+		return secret, false, nil
+	})
+	recorder := httptest.NewRecorder()
+	disabled.ServeHTTP(recorder, newRequest(code, "3333333333333333"))
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("disabled subscriber: %d", recorder.Code)
+	}
+	unavailable := RequestSubscriberHMACMiddleware(next, []string{"/api/config/sync"}, func(context.Context, string) (string, bool, error) {
+		return "", false, errors.New("database unavailable")
+	})
+	recorder = httptest.NewRecorder()
+	unavailable.ServeHTTP(recorder, newRequest(code, "4444444444444444"))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("subscriber lookup failure: %d", recorder.Code)
 	}
 }
