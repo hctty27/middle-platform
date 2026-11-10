@@ -109,8 +109,8 @@ jobs:
       GOWORK: off
       ACCESS_DB_DSN: root:integration-test@tcp(127.0.0.1:3306)/config_access?parseTime=true&loc=UTC
       CONFIG_CENTER_URL: http://127.0.0.1:8080
-      CONFIG_WEBHOOK_SECRET: ci-config-webhook-secret-0123456789abcdef0123456789abcdef
-      CONFIG_SYNC_SECRET: ci-config-sync-secret-0123456789abcdef0123456789abcdef
+      CONFIG_SUBSCRIBER_CODE: ci-access
+      CONFIG_SUBSCRIBER_SECRET: ci-subscriber-secret-0123456789abcdef0123456789
       ADMIN_AUTH_SECRET: ci-admin-signing-secret-0123456789abcdef
     steps:
       - uses: actions/checkout@v4
