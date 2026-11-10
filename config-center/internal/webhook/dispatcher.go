@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -114,8 +115,10 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	if err := ValidateCallback(job.URL); err != nil {
 		return fmt.Errorf("Webhook 通知目标不安全: %w", err)
 	}
-	if job.Code == "" || len([]byte(job.Secret)) < 32 {
-		return errors.New("Webhook 订阅者密钥不能为空")
+	if job.Code == "" || len([]rune(job.Code)) > 128 || strings.TrimSpace(job.Code) != job.Code ||
+		strings.ContainsAny(job.Code, "\r\n") || len([]byte(job.Secret)) < 32 ||
+		len([]byte(job.Secret)) > 255 || strings.TrimSpace(job.Secret) != job.Secret {
+		return errors.New("接入端编码不合法，签名密钥必须为 32 至 255 字节且不能包含首尾空格")
 	}
 	var random [8]byte
 	if _, err := rand.Read(random[:]); err != nil {
