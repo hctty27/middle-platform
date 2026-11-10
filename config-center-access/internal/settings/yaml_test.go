@@ -7,23 +7,29 @@ import (
 	"time"
 )
 
+const yamlSubscriberSecret = "subscriber-secret-0123456789abcdef0123456789"
+
 func TestYAMLFileAndEnvironmentOverride(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("server:\n  address: ':8091'\nsync:\n  connectTimeout: 3s\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "config-dev.yaml")
-	if err := os.WriteFile(path, []byte("server:\n  address: ':8092'\nsync:\n  connectTimeout: 4s\ndatabase:\n  dsn: yaml-dsn\nconfigCenter:\n  url: http://localhost:8080\nwebhook:\n  secret: file-secret\n"), 0600); err != nil {
+	yaml := "server:\n  address: ':8092'\nsync:\n  connectTimeout: 4s\ndatabase:\n  dsn: yaml-dsn\nconfigCenter:\n  url: http://localhost:8080\nsubscriber:\n  code: access-file\n  secret: " + yamlSubscriberSecret + "\n"
+	if err := os.WriteFile(path, []byte(yaml), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("ACCESS_DB_DSN", "env-dsn")
-	t.Setenv("CONFIG_WEBHOOK_SECRET", "env-secret")
-	t.Setenv("CONFIG_SYNC_SECRET", "env-sync-secret-0123456789abcdef0123456789")
+	t.Setenv("CONFIG_SUBSCRIBER_CODE", "access-env")
+	t.Setenv("CONFIG_SUBSCRIBER_SECRET", "env-subscriber-secret-0123456789abcdef")
 	cfg, err := LoadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != ":8092" || cfg.DSN != "env-dsn" || cfg.WebhookSecret != "env-secret" || cfg.ConfigSyncSecret != "env-sync-secret-0123456789abcdef0123456789" || cfg.ConnectTimeout != 4*time.Second {
+	if cfg.Address != ":8092" || cfg.DSN != "env-dsn" ||
+		cfg.SubscriberCode != "access-env" ||
+		cfg.SubscriberSecret != "env-subscriber-secret-0123456789abcdef" ||
+		cfg.ConnectTimeout != 4*time.Second {
 		t.Fatalf("%+v", cfg)
 	}
 }
@@ -45,7 +51,8 @@ func TestConfigFileDoesNotInheritBase(t *testing.T) {
 	if err := os.WriteFile(base, []byte("server:\n  typo: ignored\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dev, []byte("database:\n  dsn: test\nwebhook:\n  secret: valid-secret\nconfigSync:\n  secret: valid-sync-secret-0123456789abcdef0123456789abcdef\n"), 0600); err != nil {
+	yaml := "database:\n  dsn: test\nsubscriber:\n  code: access-test\n  secret: " + yamlSubscriberSecret + "\n"
+	if err := os.WriteFile(dev, []byte(yaml), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadFile(dev)
