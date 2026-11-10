@@ -143,7 +143,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li>根目录 <code>db/incremental/</code>：文件命名为 <code>V0001__description.sql</code>，序号全局连续递增，历史存量脚本为 <strong>V0001～V0012</strong>；下一份增量是 <strong>V0013</strong>。跨数据库时在文件名中注明 <code>config_center</code> 或 <code>config_access</code>。</li>
 <li><strong>新增数据库变更时，创建新编号的增量 SQL，并同步更新对应的全量 SQL</strong>，以及本文和 CI、发布相关检查。已经发布的增量 SQL 不允许修改、删除或重新编号。</li>
 <li>新增增量 SQL 头部注明目标数据库、适用旧结构与前置条件；所有 SQL 仍由管理员手工检查并执行。</li>
-<li><strong>注意：V0001～V0011 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。</strong> 例如 <code>V0003</code> 只适用于仍有旧 <code>sdk_service_binding</code> / <code>scope_type</code> 的库，<code>V0009</code> 仅适用于旧渠道表结构。已升级的库不得重跑。</li>
+<li><strong>注意：V0001～V0012 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。</strong> 例如 <code>V0003</code> 只适用于仍有旧 <code>sdk_service_binding</code> / <code>scope_type</code> 的库，<code>V0009</code> 仅适用于旧渠道表结构。已升级的库不得重跑。</li>
 <li>当前不引入 Flyway、自动执行或迁移版本记录表。<strong>编号本身不能证明数据库已经应用过该变更</strong>，执行前需检查真实表结构、数据和历史操作记录。</li>
 </ul>
 <p>源码目录 <code>db/full/</code>、<code>db/incremental/</code> 在发布包中分别对应 <code>sql/full/</code>、<code>sql/incremental/</code>。手动部署只使用这两处 SQL。</p>
@@ -363,6 +363,24 @@ admin/                     # -SkipFrontend 时不存在</code></pre></div>
 <li>已有旧版订阅者表（含 <code>webhook_secret</code>）的 <code>config_center</code>：备份后先检查并确保每条密钥唯一、32–255 字节且无首尾空格，再执行 <code>sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql</code>。该脚本将旧 Webhook 密钥列改为双向同步签名密钥并添加唯一索引；重复密钥会导致迁移失败，短密钥会导致新版服务拒绝启动。</li>
 <li>全新、空的 <code>config_access</code>：<code>sql/full/config_access.sql</code>。</li>
 </ul>
+<h3>V0012 订阅密钥迁移前检查</h3>
+<p>以下检查只读取订阅者 ID、编码和密钥长度，不输出密钥明文。若任一查询返回记录，先为对应接入端生成不同的高熵密钥并更新旧版订阅记录；所有密钥须为 32–255 字节且不得包含首尾空格。确认无重复、无非法密钥后，再执行 V0012。</p>
+<div class="code-card"><div class="code-header"><span>sql</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-sql">-- 密钥长度或首尾空格不符合新协议
+SELECT id, code, OCTET_LENGTH(webhook_secret) AS secret_bytes
+FROM config_subscriber
+WHERE OCTET_LENGTH(webhook_secret) NOT BETWEEN 32 AND 255
+   OR TRIM(webhook_secret) &lt;&gt; webhook_secret;
+
+-- 查出使用重复密钥的订阅记录，不显示密钥内容
+SELECT s.id, s.code
+FROM config_subscriber s
+WHERE EXISTS (
+    SELECT 1
+    FROM config_subscriber other
+    WHERE other.id &lt;&gt; s.id
+      AND BINARY other.webhook_secret = BINARY s.webhook_secret
+);</code></pre></div>
+<p>完成 <code>V0012__rename_webhook_secret_to_signing_secret.sql</code> 后，为每个接入端配置与对应 <code>config_subscriber.signing_secret</code> 完全一致的 <code>subscriber.code</code> / <code>subscriber.secret</code>，再同步升级配置中心和接入端。不要只更新一侧，也不要把密钥写入仓库或日志。</p>
 <p>例如在 Linux 发布包解压目录（已有库补建订单表）：</p>
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">mysql -u &lt;管理账号&gt; -p config_center &lt; sql/incremental/V0001__add_game_order.sql</code></pre></div>
 <p>如果目标表已经存在，不要反复执行初始化 SQL；应检查实际表定义与索引。 应用启动只校验结构，不创建或修改数据库表。历史 <code>config_schema_migrations</code> 仅作遗留记录，新代码不再检查或更新。 参见 <a href="#database">数据库说明</a>。</p>
