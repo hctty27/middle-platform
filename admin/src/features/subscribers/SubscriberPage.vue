@@ -73,7 +73,7 @@ async function saveSubscriber() {
     return
   }
   if (editForm.secret && (!isValidSubscriberSecret(editForm.secret))) {
-    ElMessage.warning('签名密钥至少 32 字节且不能包含首尾空格')
+    ElMessage.warning('签名密钥须为 32–255 字节且不能包含首尾空格')
     return
   }
   savingSubscriber.value = true
@@ -205,7 +205,7 @@ onMounted(() => void loadSubscribers())
         <el-form-item label="接入端签名密钥（32–255 字节）">
           <el-input v-model="newSubscriber.secret" type="password" show-password autocomplete="new-password" />
         </el-form-item>
-        <p class="muted">支持 HTTP / HTTPS 回调地址，服务端会校验目标地址安全性。</p>
+        <p class="muted">签名密钥必须在所有接入端之间保持唯一；同一接入端的配置拉取、本地查询和 Webhook 共用此密钥。服务端会校验回调地址安全性。</p>
       </el-form>
       <template #footer>
         <el-button @click="showSubscriber = false">取消</el-button>
