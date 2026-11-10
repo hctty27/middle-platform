@@ -53,6 +53,21 @@ def signature_headers(secret, method, path, payload, timestamp=None, nonce=None)
     }
 
 
+def verify_signature_vector():
+    """确保 Python 测试签名与 Go 共享模块的固定协议向量一致。"""
+    actual = signature_headers(
+        "0123456789abcdef0123456789abcdef",
+        "GET",
+        "/api/core/admin/services",
+        b"",
+        timestamp="1793865600",
+        nonce="0123456789abcdef",
+    )["X-Signature"]
+    expected = "bddff8f8d31b4b4a220740c6f112502badad53a3c912bb745fd70e9e1db9ec1d"
+    if actual != expected:
+        raise AssertionError(f"Python HMAC-SHA256 测试向量不匹配: {actual}")
+
+
 def request_secret(port, path):
     """根据服务和接口前缀选择对应的独立 HMAC 密钥。"""
     request_path = urllib.parse.urlsplit(path).path
@@ -60,7 +75,7 @@ def request_secret(port, path):
     def matches(prefix):
         return request_path == prefix or request_path.startswith(prefix + "/")
 
-    if port == 8080:
+    if port in {8080, 8082}:
         if matches("/api/config/admin"):
             return os.environ["ADMIN_AUTH_SECRET"]
         if matches("/api/config/sync") or matches("/api/config/nodes"):
@@ -189,6 +204,8 @@ def synchronized_nodes(count, revision):
 
 def main():
     """覆盖双实例写入、回调签名、增量同步和故障恢复。"""
+    verify_signature_vector()
+    print("通过：Python 与 Go HMAC-SHA256 固定测试向量一致", flush=True)
     center1 = start("center-1", "config-center-java", 8080)
     wait_until("primary config-center ready", lambda: request(8080, "/health/ready")["status"] == "UP")
     center2 = start("center-2", "config-center-java", 8082)
