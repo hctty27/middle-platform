@@ -39,11 +39,14 @@ func TestEventAndSubscribeRoutes(t *testing.T) {
 		{"事件 ext 字符串", "/api/service/events/test", `{"event":"a","ext":"x"}`, 400, 0, 0},
 		{"订阅只填必填", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl"}`, 200, 0, 1},
 		{"订阅带微信模板", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":"{\"thing1\":{\"value\":\"礼包\"}}"}`, 200, 0, 1},
-		{"订阅缺模板", "/api/service/subscribe/test", `{"open_id":"u1"}`, 400, 0, 0},
-		{"订阅 data 非字符串", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":{"x":1}}`, 400, 0, 0},
-		{"订阅 data 无效 JSON", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":"not-json"}`, 400, 0, 0},
-		{"订阅重复字段", "/api/service/subscribe/test", `{"open_id":"u1","open_id":"u2","tpl_id":"tpl"}`, 400, 0, 0},
-		{"订阅 ext 错误", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","ext":{}}`, 400, 0, 0},
+		{"订阅缺模板", "/api/service/subscribe/test", `{"open_id":"u1"}`, 200, 0, 1},
+		{"订阅旧格式", "/api/service/subscribe/test", ` {"templateId":"tpl","snOpenId":"u1","content":{"thing1":{"value":"礼包"}},"extend":{"gamePackageId":123}} `, 200, 0, 1},
+		{"订阅 data 非字符串", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":{"x":1}}`, 200, 0, 1},
+		{"订阅 data 任意字符串", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","data":"not-json"}`, 200, 0, 1},
+		{"订阅重复字段", "/api/service/subscribe/test", `{"open_id":"u1","open_id":"u2","tpl_id":"tpl"}`, 200, 0, 1},
+		{"订阅 ext 对象", "/api/service/subscribe/test", `{"open_id":"u1","tpl_id":"tpl","ext":{}}`, 200, 0, 1},
+		{"订阅非法 JSON", "/api/service/subscribe/test", `{"broken":`, 400, 0, 0},
+		{"订阅数组", "/api/service/subscribe/test", `[]`, 400, 0, 0},
 		{"非法环境", "/api/service/subscribe/other", `{"open_id":"u1","tpl_id":"tpl"}`, 400, 0, 0},
 	}
 	for _, tc := range tests {
@@ -74,6 +77,14 @@ func TestEventAndSubscribeRoutes(t *testing.T) {
 	oversizedHandler.ServeHTTP(response, request)
 	if response.Code != http.StatusRequestEntityTooLarge || oversized.events != 0 {
 		t.Fatalf("超长事件请求未拒绝: HTTP=%d calls=%d", response.Code, oversized.events)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/service/subscribe/test", strings.NewReader(huge))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("x-app-id", "110006")
+	response = httptest.NewRecorder()
+	oversizedHandler.ServeHTTP(response, request)
+	if response.Code != http.StatusRequestEntityTooLarge || oversized.subscriptions != 0 {
+		t.Fatalf("超长订阅请求未拒绝: HTTP=%d calls=%d", response.Code, oversized.subscriptions)
 	}
 	legacy := RouterWithServices(&fakeChecker{}, fakeDB{}, nil, nil)
 	for _, path := range []string{"/api/service/events/test", "/api/service/subscribe/test"} {

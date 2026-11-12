@@ -47,7 +47,7 @@ func TestOutboundServiceChecksSignatureAndSwitch(t *testing.T) {
 		body string
 	}{
 		{"event_report", `{"event":"login","ext":{"roleId":"r1"}}`},
-		{"subscribe_message", `{"open_id":"u1","tpl_id":"tpl","data":"{}"}`},
+		{"subscribe_message", ` {"templateId":"tpl","snOpenId":"u1","content":{"thing1":{"value":"礼包"}}} `},
 	} {
 		body := []byte(tc.body)
 		req := httptest.NewRequest(http.MethodPost, "/api/service/events/test", nil)

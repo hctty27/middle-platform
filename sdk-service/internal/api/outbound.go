@@ -28,7 +28,7 @@ type SubscribeSender interface {
 var errInvalidOutbound = errors.New("上报或订阅消息参数不合法")
 var errOutboundTooLarge = errors.New("事件或订阅消息请求体超过 64KiB")
 
-// parseOutbound 严格校验字段白名单、重复键和 64KiB 大小限制。
+// parseOutbound 限制请求体大小；事件请求还校验字段与重复键。
 // 保留原始请求体供后续游戏请求验签，避免重编码改变签名输入。
 func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte, error) {
 	if r.URL.RawQuery != "" ||
@@ -42,6 +42,13 @@ func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte,
 			return nil, errOutboundTooLarge
 		}
 		return nil, errInvalidOutbound
+	}
+	if code == "subscribe_message" {
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
+			return nil, errInvalidOutbound
+		}
+		return raw, nil
 	}
 	fields := map[string]json.RawMessage{}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -58,16 +65,7 @@ func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte,
 		if !ok || fields[key] != nil {
 			return nil, errInvalidOutbound
 		}
-		switch code {
-		case "event_report":
-			if key != "event" && key != "ext" {
-				return nil, errInvalidOutbound
-			}
-		case "subscribe_message":
-			if key != "open_id" && key != "tpl_id" && key != "data" && key != "ext" {
-				return nil, errInvalidOutbound
-			}
-		default:
+		if code != "event_report" || (key != "event" && key != "ext") {
 			return nil, errInvalidOutbound
 		}
 		var value json.RawMessage
@@ -83,34 +81,12 @@ func parseOutbound(w http.ResponseWriter, r *http.Request, code string) ([]byte,
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return nil, errInvalidOutbound
 	}
-	if code == "event_report" {
-		event, ok := readOutboundString(fields["event"], 128, true)
-		if !ok || strings.TrimSpace(event) != event {
-			return nil, errInvalidOutbound
-		}
-		ext := bytes.TrimSpace(fields["ext"])
-		if len(ext) == 0 || ext[0] != '{' {
-			return nil, errInvalidOutbound
-		}
-		return raw, nil
-	}
-	if _, ok := readOutboundString(fields["open_id"], 256, true); !ok {
+	event, ok := readOutboundString(fields["event"], 128, true)
+	if !ok || strings.TrimSpace(event) != event {
 		return nil, errInvalidOutbound
 	}
-	if _, ok := readOutboundString(fields["tpl_id"], 256, true); !ok {
-		return nil, errInvalidOutbound
-	}
-	data, ok := readOutboundString(fields["data"], 32*1024, false)
-	if !ok {
-		return nil, errInvalidOutbound
-	}
-	if data != "" {
-		var object map[string]json.RawMessage
-		if json.Unmarshal([]byte(data), &object) != nil || object == nil {
-			return nil, errInvalidOutbound
-		}
-	}
-	if _, ok := readOutboundString(fields["ext"], 4*1024, false); !ok {
+	ext := bytes.TrimSpace(fields["ext"])
+	if len(ext) == 0 || ext[0] != '{' {
 		return nil, errInvalidOutbound
 	}
 	return raw, nil
