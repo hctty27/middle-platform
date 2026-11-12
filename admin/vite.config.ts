@@ -10,6 +10,7 @@ export default defineConfig({
     host: '127.0.0.1',
     proxy: {
       '/api/service': 'http://127.0.0.1:8221',
+      '/api/core': 'http://127.0.0.1:8082',
       '/api': 'http://127.0.0.1:8080',
       '/actuator': 'http://127.0.0.1:8080'
     }
