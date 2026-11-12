@@ -86,7 +86,7 @@ const paymentCallback = ref({
   gameOrderId: '',
   amount: '600',
   attach: '',
-  paidAt: new Date().toISOString()
+  paidAt: ''
 })
 
 const selectedApp = computed(() => apps.value.find(item => item.code === selectedAppCode.value) ?? null)
@@ -429,7 +429,12 @@ watch(() => props.gameId, () => {
   void loadApps()
 }, { immediate: true })
 
-watch([selectedAppCode, environment], () => {
+watch(selectedAppCode, () => {
+  results.value = {}
+  allowPaymentCallback.value = false
+})
+
+watch(environment, () => {
   results.value = {}
 })
 
@@ -463,7 +468,8 @@ watch(() => roleControl.value.type, type => {
     />
 
     <section class="simulator-panel">
-      <div class="simulator-common-fields">
+      <el-form label-position="top" autocomplete="off" class="simulator-common-form">
+        <div class="simulator-common-fields">
         <el-form-item label="渠道应用" required>
           <el-select
             v-model="selectedAppCode"
@@ -494,7 +500,8 @@ watch(() => roleControl.value.type, type => {
           <el-tag v-else type="danger">未配置 appSecret</el-tag>
           <span class="simulator-help">密钥仅在当前页面内存中使用，不展示、不持久化。</span>
         </el-form-item>
-      </div>
+        </div>
+      </el-form>
 
       <div class="simulator-endpoints">
         <span>SDK Service：{{ sdkServiceBaseUrl }}</span>
@@ -607,8 +614,8 @@ watch(() => roleControl.value.type, type => {
               <el-form-item label="金额 amount（分）" required>
                 <el-input v-model="paymentCallback.amount" type="number" min="1" />
               </el-form-item>
-              <el-form-item label="支付时间 paid_at（RFC3339）" required>
-                <el-input v-model="paymentCallback.paidAt" placeholder="2026-11-12T10:00:00Z" />
+              <el-form-item label="支付时间 paid_at（RFC3339，可留空）">
+                <el-input v-model="paymentCallback.paidAt" placeholder="留空使用当前 UTC 时间" />
               </el-form-item>
             </div>
             <el-form-item label="透传参数 attach">
@@ -677,6 +684,7 @@ watch(() => roleControl.value.type, type => {
 .simulator-panel { background: white; border: 1px solid #e5ebf3; border-radius: 12px; padding: 22px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,50,80,.03); }
 .simulator-common-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: end; }
 .simulator-common-fields :deep(.el-form-item) { margin-bottom: 10px; }
+.simulator-common-form { margin-bottom: 0; }
 .simulator-endpoints { display: flex; gap: 18px; flex-wrap: wrap; margin: 2px 0 14px; color: #8996a9; font-size: 12px; }
 .simulator-alert { margin: 12px 0; }
 .simulator-tabs :deep(.el-tabs__content) { padding-top: 12px; }
