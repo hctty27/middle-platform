@@ -5,12 +5,22 @@ function toHex(bytes: ArrayBuffer | Uint8Array): string {
   return Array.from(data, value => value.toString(16).padStart(2, '0')).join('')
 }
 
+function compareUtf8(left: string, right: string): number {
+  const a = encoder.encode(left)
+  const b = encoder.encode(right)
+  const length = Math.min(a.length, b.length)
+  for (let i = 0; i < length; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i]
+  }
+  return a.length - b.length
+}
+
 async function signSorted(values: string[], filterEmpty: boolean): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost 访问管理后台')
   }
   const items = filterEmpty ? values.filter(value => value !== '') : values
-  items.sort()
+  items.sort(compareUtf8)
   return toHex(await globalThis.crypto.subtle.digest('SHA-1', encoder.encode(items.join('_'))))
 }
 
