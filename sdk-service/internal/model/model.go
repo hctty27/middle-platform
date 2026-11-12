@@ -33,7 +33,7 @@ type UserCheckRequest struct {
 	OpenID string
 }
 
-// UserCheckResult 表示游戏侧用户是否存在。
+// UserCheckResult 表示平台侧用户是否存在。
 type UserCheckResult struct {
 	Exists bool
 }

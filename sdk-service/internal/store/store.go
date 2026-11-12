@@ -47,7 +47,7 @@ WHERE a.code=? AND a.status=1`
 // VerifySchema 检查服务所需的表结构和服务目录是否已初始化。
 // 缺少必要服务时明确报错，不在启动阶段自动执行数据库迁移。
 func (s *Store) VerifySchema(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, routeQuery+" LIMIT 0", "prod", "prod", "user_check", "prod", "__probe__")
+	rows, err := s.db.QueryContext(ctx, routeQuery+" LIMIT 0", "prod", "prod", "role_query", "prod", "__probe__")
 	if err != nil {
 		return fmt.Errorf("核验功能依赖的数据库结构不完整: %w", err)
 	}
@@ -55,7 +55,6 @@ func (s *Store) VerifySchema(ctx context.Context) error {
 		return err
 	}
 	for _, entry := range []struct{ code, script string }{
-		{"user_check", "add_sdk_user_check.sql"},
 		{"role_query", "add_sdk_role_query.sql"},
 		{"server_query", "add_sdk_server_query.sql"},
 		{"role_control", "add_sdk_role_control.sql"},
@@ -74,15 +73,51 @@ func (s *Store) VerifySchema(ctx context.Context) error {
 	return nil
 }
 
-// Lookup 查询用户核验使用的渠道环境配置。
+// Lookup 查询用户核验的渠道环境和密钥，不依赖 SDK 服务目录。
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, error) {
-	return s.LookupService(ctx, appID, env, "user_check")
+	if env != "prod" && env != "test" && env != "review" {
+		return model.Target{}, model.ErrNotFound
+	}
+	const query = `
+SELECT a.config, g.code, COALESCE(gs.config, JSON_OBJECT())
+FROM sdk_channel_app a
+JOIN config_node g ON g.id=a.game_id AND g.node_type='game' AND g.status=1
+LEFT JOIN sdk_node_config gs ON gs.node_id=g.id
+JOIN config_node sg ON sg.id=CASE ?
+    WHEN 'prod' THEN a.prod_server_group_id
+    WHEN 'test' THEN a.test_server_group_id
+    WHEN 'review' THEN a.review_server_group_id
+    ELSE NULL END
+    AND sg.node_type='server_group' AND sg.game_id=a.game_id AND sg.status=1
+JOIN config_node r ON r.id=sg.region_id
+    AND r.node_type='region' AND r.game_id=a.game_id AND r.status=1 AND r.env_type=?
+WHERE a.code=? AND a.status=1`
+	var appJSON, gameJSON []byte
+	var gameCode string
+	err := s.db.QueryRowContext(ctx, query, env, env, appID).Scan(&appJSON, &gameCode, &gameJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Target{}, model.ErrNotFound
+	}
+	if err != nil {
+		return model.Target{}, fmt.Errorf("查询用户核验渠道配置失败: %w", err)
+	}
+	var app struct {
+		AppSecret string `json:"appSecret"`
+	}
+	var game struct {
+		GameSecret string `json:"gameSecret"`
+	}
+	if json.Unmarshal(appJSON, &app) != nil || json.Unmarshal(gameJSON, &game) != nil ||
+		strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" {
+		return model.Target{}, model.ErrInvalidConfig
+	}
+	return model.Target{AppID: appID, Env: env, GameCode: gameCode, AppSecret: app.AppSecret, GameSecret: game.GameSecret}, nil
 }
 
 // LookupService 按渠道 AppID、环境和服务代码查询启用状态、密钥与转发地址。
 // 不回退到其他环境，防止跨环境读取密钥和业务路由。
 func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode string) (model.Target, error) {
-	if serviceCode != "user_check" && serviceCode != "role_query" && serviceCode != "server_query" && serviceCode != "role_control" &&
+	if serviceCode != "role_query" && serviceCode != "server_query" && serviceCode != "role_control" &&
 		serviceCode != "event_report" && serviceCode != "subscribe_message" {
 		return model.Target{}, model.ErrInvalidConfig
 	}
@@ -113,7 +148,6 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
 		ServiceAdapters map[string]string `json:"serviceAdapters"`
 	}
 	var region struct {
-		UserCheckURL   string `json:"userCheckUrl"`
 		RoleQueryURL   string `json:"roleQueryUrl"`
 		ServerQueryURL string `json:"serverQueryUrl"`
 		RoleControlURL string `json:"roleControlUrl"`
@@ -134,7 +168,7 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
 	if serviceCode == "event_report" || serviceCode == "subscribe_message" {
 		return result, nil
 	}
-	targetURL := strings.TrimSpace(region.UserCheckURL)
+	var targetURL string
 	switch serviceCode {
 	case "role_query":
 		targetURL = strings.TrimSpace(region.RoleQueryURL)
@@ -149,8 +183,6 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
 		return model.Target{}, model.ErrInvalidConfig
 	}
 	switch serviceCode {
-	case "user_check":
-		result.UserCheckURL = targetURL
 	case "role_query":
 		result.RoleQueryURL = targetURL
 	case "server_query":

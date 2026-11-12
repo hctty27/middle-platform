@@ -31,6 +31,7 @@ type Config struct {
 	Platform struct {
 		EventReportURL      string `yaml:"eventReportURL"`
 		SubscribeMessageURL string `yaml:"subscribeMessageURL"`
+		UserCheckURL        string `yaml:"userCheckURL"`
 	} `yaml:"platform"`
 	Log logging.Config `yaml:"log"`
 }

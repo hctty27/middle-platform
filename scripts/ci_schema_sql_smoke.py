@@ -66,6 +66,15 @@ WHERE table_schema='manual_fresh' AND table_name IN
 'config_subscriber_delivery_state','sdk_channel_app','sdk_node_config','game_order')""", "8")
     assert_sql("""SELECT COUNT(*) FROM information_schema.tables
 WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", "0")
+    assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service WHERE code='user_check'", "0")
+    mysql("""INSERT INTO manual_fresh.sdk_service (code,name,description,enabled)
+      VALUES ('user_check','核验用户信息','旧记录',1);
+      INSERT INTO manual_fresh.sdk_service_channel (service_id,channel_app_id,env,enabled,config)
+      SELECT id,900,'test',1,JSON_OBJECT('legacy',true) FROM manual_fresh.sdk_service WHERE code='user_check';""")
+    mysql(database="manual_fresh", script=source("db/incremental/V0014__remove_user_check_service.sql"))
+    assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service WHERE code='user_check'", "0")
+    assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service_channel WHERE channel_app_id=900", "0")
+    assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service WHERE code='role_query'", "1")
     # 人工重复执行完整初始化必须拒绝，不允许静默覆盖旧数据。
     mysql(database="manual_fresh", script=init, ok=False)
 

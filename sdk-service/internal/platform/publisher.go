@@ -31,14 +31,20 @@ type Publisher struct {
 }
 
 // NewPublisher 校验平台接口地址的协议、路径和其他限制，禁止请求重定向。
-func NewPublisher(eventURL, subscribeURL string) (*Publisher, error) {
+func NewPublisher(eventURL, subscribeURL string, userCheckURL ...string) (*Publisher, error) {
+	checkURL := ""
+	if len(userCheckURL) > 0 {
+		checkURL = userCheckURL[0]
+	}
 	endpoints := map[string]string{
 		"event_report":      eventURL,
 		"subscribe_message": subscribeURL,
+		"user_check":        checkURL,
 	}
 	paths := map[string]string{
 		"event_report":      "/report/event",
 		"subscribe_message": "/game/subscribe/send-message",
+		"user_check":        "/cp/user/check",
 	}
 	for code, raw := range endpoints {
 		if raw == "" {
@@ -64,24 +70,33 @@ func NewPublisher(eventURL, subscribeURL string) (*Publisher, error) {
 // Send 使用渠道 AppSecret 为平台请求签名，并校验 HTTP 及平台业务响应。
 // 平台签名仅包含密钥与指定 Header 值，业务 Body 不参与签名。
 func (p *Publisher) Send(ctx context.Context, code, appID, secret string, body []byte) error {
-	if p == nil || p.endpoints[code] == "" {
-		return ErrPublishEndpointMissing
-	}
 	if code != "event_report" && code != "subscribe_message" {
 		return ErrPublishEndpointMissing
 	}
+	_, err := p.send(ctx, code, appID, secret, body)
+	return err
+}
+
+func (p *Publisher) CheckUser(ctx context.Context, appID, secret string, body []byte) (bool, error) {
+	return p.send(ctx, "user_check", appID, secret, body)
+}
+
+func (p *Publisher) send(ctx context.Context, code, appID, secret string, body []byte) (bool, error) {
+	if p == nil || p.endpoints[code] == "" {
+		return false, ErrPublishEndpointMissing
+	}
 	if appID == "" || secret == "" {
-		return errors.New("平台签名密钥或 AppID 缺失")
+		return false, errors.New("平台签名密钥或 AppID 缺失")
 	}
 	var bytesNonce [8]byte
 	if _, err := rand.Read(bytesNonce[:]); err != nil {
-		return fmt.Errorf("生成平台请求 nonce 失败: %w", err)
+		return false, fmt.Errorf("生成平台请求 nonce 失败: %w", err)
 	}
 	nonce := hex.EncodeToString(bytesNonce[:])
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoints[code], bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("%w: 创建请求失败: %v", ErrPublishRejected, err)
+		return false, fmt.Errorf("%w: 创建请求失败: %v", ErrPublishRejected, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-app-id", appID)
@@ -91,20 +106,25 @@ func (p *Publisher) Send(ctx context.Context, code, appID, secret string, body [
 	req.Header.Set("x-signature", signature.SignValues(secret, appID, timestamp, nonce))
 	response, err := p.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrPublishRejected, err)
+		return false, fmt.Errorf("%w: %w", ErrPublishRejected, err)
 	}
 	defer response.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 8*1024+1))
 	if err != nil || len(raw) > 8*1024 || response.StatusCode != http.StatusOK {
-		return fmt.Errorf("%w: 平台 HTTP %d 或响应读取失败", ErrPublishRejected, response.StatusCode)
+		return false, fmt.Errorf("%w: 平台 HTTP %d 或响应读取失败", ErrPublishRejected, response.StatusCode)
 	}
 	var result struct {
 		Code *int  `json:"code"`
 		Data *bool `json:"data"`
 	}
-	if json.Unmarshal(raw, &result) != nil || result.Code == nil || *result.Code != 0 ||
-		result.Data == nil || !*result.Data {
-		return fmt.Errorf("%w: 平台业务返回不成功", ErrPublishRejected)
+	if json.Unmarshal(raw, &result) != nil || result.Code == nil {
+		return false, fmt.Errorf("%w: 平台响应不合法", ErrPublishRejected)
 	}
-	return nil
+	if code == "user_check" && *result.Code == 1021003 && result.Data == nil {
+		return false, nil
+	}
+	if *result.Code != 0 || result.Data == nil || !*result.Data {
+		return false, fmt.Errorf("%w: 平台业务返回不成功", ErrPublishRejected)
+	}
+	return true, nil
 }

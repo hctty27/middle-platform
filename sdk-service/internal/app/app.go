@@ -16,7 +16,7 @@ import (
 	"hitall.com/middle-platform/sdk-service/internal/adapter/rolecontrol"
 	"hitall.com/middle-platform/sdk-service/internal/adapter/rolequery"
 	"hitall.com/middle-platform/sdk-service/internal/adapter/serverquery"
-	"hitall.com/middle-platform/sdk-service/internal/adapter/usercheck"
+	"hitall.com/middle-platform/sdk-service/internal/adapter/transport"
 	"hitall.com/middle-platform/sdk-service/internal/api"
 	"hitall.com/middle-platform/sdk-service/internal/platform"
 	"hitall.com/middle-platform/sdk-service/internal/service"
@@ -63,15 +63,7 @@ func Run(configPath string) error {
 	}
 
 	timeout, _ := time.ParseDuration(cfg.Game.Timeout)
-	gameClient := usercheck.NewHTTPClient(timeout)
-
-	userRegistry, err := usercheck.NewRegistry(map[string]usercheck.Adapter{
-		"standard": &usercheck.Standard{Client: gameClient},
-	})
-	if err != nil {
-		return err
-	}
-	checker := &service.UserCheckService{Routes: routes, Adapters: userRegistry}
+	gameClient := transport.NewHTTPClient(timeout)
 
 	roleRegistry, err := rolequery.NewRegistry(map[string]rolequery.Adapter{
 		"standard": &rolequery.Standard{Client: gameClient},
@@ -97,10 +89,11 @@ func Run(configPath string) error {
 	}
 	controller := &service.RoleControlService{Routes: routes, Adapters: controlRegistry}
 
-	publisher, err := platform.NewPublisher(cfg.Platform.EventReportURL, cfg.Platform.SubscribeMessageURL)
+	publisher, err := platform.NewPublisher(cfg.Platform.EventReportURL, cfg.Platform.SubscribeMessageURL, cfg.Platform.UserCheckURL)
 	if err != nil {
 		return fmt.Errorf("初始化平台上报客户端失败: %w", err)
 	}
+	checker := &service.UserCheckService{Routes: routes, Sender: publisher}
 	outbound := &service.OutboundService{Routes: routes, Sender: publisher}
 
 	server := &http.Server{

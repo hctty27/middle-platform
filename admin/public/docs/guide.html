@@ -69,14 +69,14 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 
 游戏/客户端 ──SDK 配置、订单─────────&gt; sdk-core ───&gt; 权威 MySQL
 平台 ──支付回调──────────────────────&gt; sdk-core ───&gt; 游戏发货通知
-平台 ──核验、查询、封解禁──────────────&gt; sdk-service ──适配器──&gt; 游戏接口
-游戏 ──事件上报、订阅消息──────────────&gt; sdk-service ───────────&gt; 平台
+平台 ──查询、封解禁────────────────────&gt; sdk-service ──适配器──&gt; 游戏接口
+游戏 ──用户核验、事件上报、订阅消息────&gt; sdk-service ───────────&gt; 平台
                                                └──────────────&gt; 权威 MySQL（只读）</code></pre></div>
 <ul>
 <li><code>config-center</code>：管理基础节点与订阅者，并提供同步版本、变更记录、快照查询。</li>
 <li><code>config-center-access</code>：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。</li>
 <li><code>sdk-core</code>：直接查询权威库，根据环境绑定按需返回固定公开配置字段；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。</li>
-<li><code>sdk-service</code>：平台主动调用游戏，处理平台发起的用户核验、角色/区服查询、封解禁，以及游戏上报的事件和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。</li>
+<li><code>sdk-service</code>：处理平台发起的角色/区服查询和封解禁，以及游戏发起的用户核验、事件上报和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。</li>
 <li><code>admin</code>：Vue 3 管理界面，管理后台以密钥解锁，管理请求始终使用 <code>adminAuth</code> 签名；生产仍须使用 TLS 与受保护的管理网关。</li>
 </ul>
 <h2 id="architecture-2">配置数据模型</h2>
@@ -106,7 +106,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <p>部署方案见 <a href="#production">生产运维</a>。</p>
 <h2 id="architecture-5">SDK 业务与密钥边界</h2>
 <ul>
-<li><code>sdk_service</code> 管理已实现功能的全局开关，<code>sdk_service_channel</code> 按服务、渠道包、环境唯一绑定；当前功能包括 <code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code> 和 <code>role_control</code>。</li>
+<li><code>sdk_service</code> 管理已实现功能的全局开关，<code>sdk_service_channel</code> 按服务、渠道包、环境唯一绑定；当前功能包括 <code>event_report</code>、<code>subscribe_message</code>、<code>role_query</code>、<code>server_query</code> 和 <code>role_control</code>。</li>
 <li>游戏侧用 <code>sdk_node_config(game).config.gameSecret</code> 验签，平台侧用 <code>sdk_channel_app.config.appSecret</code> 验签；两套签名密钥不能混用。</li>
 <li>配置同步按 <code>config_subscriber.code</code> 识别接入端，每条订阅记录保存唯一的 <code>signing_secret</code>；接入端使用匹配的 <code>subscriber.code</code> / <code>subscriber.secret</code>。同一密钥用于配置拉取、本地只读接口和 Webhook，且与 <code>adminAuth.secret</code> 完全独立。</li>
 <li>订单登记与支付回调具有持久化处理和异步发货补偿，游戏必须幂等；渠道事件目前同步转发、不入库、不自动重试；用户核验不缓存、不落库、不自动重试。</li>
@@ -118,7 +118,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <h2 id="architecture-6">SDK Core 与 SDK Service 职责</h2>
 <ul>
 <li><code>sdk-core</code>：管理 SDK 节点配置、渠道包、服务开关，并承担配置查询、订单登记、支付回调和游戏发货通知。</li>
-<li><code>sdk-service</code>：承担平台 → 游戏的核验/查询/封解禁，以及游戏 → 平台的事件上报/订阅消息推送。</li>
+<li><code>sdk-service</code>：承担平台 → 游戏的查询/封解禁，以及游戏 → 平台的用户核验/事件上报/订阅消息推送。</li>
 <li>事件上报迁移后统一入口为 <code>POST /api/service/events/{env}</code>，订阅消息为 <code>POST /api/service/subscribe/{env}</code>；不保留 Core 旧事件入口。</li>
 <li>两类平台上报均沿用 <code>sdk_service</code> 全局开关和 <code>sdk_service_channel</code> 渠道环境开关，无新建业务数据表。</li>
 </ul>
@@ -135,15 +135,15 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <article class="doc-pane" id="database" data-pane="database" aria-labelledby="tab-database" hidden><div class="eyebrow">DEVELOPER GUIDE / DATABASE</div><p class="pane-subtitle">数据模型、全量 SQL、增量升级与迁移</p><h1>数据库结构与手动 SQL</h1>
 <h2 id="database-1">核心约定</h2>
 <p><strong>所有建表和升级都由管理员人工执行 SQL。</strong> 四个 Go 服务不会在启动时执行 DDL；只校验实际表结构。SQL 随 Linux 发布包一起交付，也可从源码中获取：</p>
-<div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_center.sql">config_center.sql</a></td></tr><tr><td>新建空的 <code>config_access</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_access.sql">config_access.sql</a></td></tr><tr><td>已有库缺少订单表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0001__add_game_order.sql">V0001__add_game_order.sql</a></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0002__add_sdk_services.sql">V0002__add_sdk_services.sql</a></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0003__migrate_sdk_service_channel.sql">V0003__migrate_sdk_service_channel.sql</a></td></tr><tr><td>已有服务表缺少核验用户信息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0004__add_sdk_user_check.sql">V0004__add_sdk_user_check.sql</a></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0005__add_sdk_role_query.sql">V0005__add_sdk_role_query.sql</a></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0006__add_sdk_server_query.sql">V0006__add_sdk_server_query.sql</a></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0007__add_sdk_role_control.sql">V0007__add_sdk_role_control.sql</a></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0008__add_sdk_subscribe_message.sql">V0008__add_sdk_subscribe_message.sql</a></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0009__migrate_sdk_node_config.sql">V0009__migrate_sdk_node_config.sql</a></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0010__cleanup_legacy_sdk_fields.sql">V0010__cleanup_legacy_sdk_fields.sql</a></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0011__add_game_market_type.sql">V0011__add_game_market_type.sql</a></td></tr><tr><td>将订阅者 Webhook 密钥升级为双向同步签名密钥</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0012__rename_webhook_secret_to_signing_secret.sql">V0012__rename_webhook_secret_to_signing_secret.sql</a></td></tr></tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_center.sql">config_center.sql</a></td></tr><tr><td>新建空的 <code>config_access</code></td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/full/config_access.sql">config_access.sql</a></td></tr><tr><td>已有库缺少订单表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0001__add_game_order.sql">V0001__add_game_order.sql</a></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0002__add_sdk_services.sql">V0002__add_sdk_services.sql</a></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0003__migrate_sdk_service_channel.sql">V0003__migrate_sdk_service_channel.sql</a></td></tr><tr><td>历史脚本：旧版核验用户信息目录（新版本不要执行）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0004__add_sdk_user_check.sql">V0004__add_sdk_user_check.sql</a></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0005__add_sdk_role_query.sql">V0005__add_sdk_role_query.sql</a></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0006__add_sdk_server_query.sql">V0006__add_sdk_server_query.sql</a></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0007__add_sdk_role_control.sql">V0007__add_sdk_role_control.sql</a></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0008__add_sdk_subscribe_message.sql">V0008__add_sdk_subscribe_message.sql</a></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0009__migrate_sdk_node_config.sql">V0009__migrate_sdk_node_config.sql</a></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0010__cleanup_legacy_sdk_fields.sql">V0010__cleanup_legacy_sdk_fields.sql</a></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0011__add_game_market_type.sql">V0011__add_game_market_type.sql</a></td></tr><tr><td>将订阅者 Webhook 密钥升级为双向同步签名密钥</td><td><a href="https://github.com/hctty27/middle-platform/blob/main/db/incremental/V0012__rename_webhook_secret_to_signing_secret.sql">V0012__rename_webhook_secret_to_signing_secret.sql</a></td></tr></tbody></table></div>
 <p>不得对已有配置数据的库再次执行 <code>db/full/</code> 中的全量 SQL。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 <code>DROP TABLE</code>。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。</p>
 <h2 id="database-2">SQL 目录与增量编号</h2>
 <ul>
 <li>根目录 <code>db/full/</code>：<code>config_center.sql</code> 与 <code>config_access.sql</code> 是<strong>当前完整结构快照</strong>，仅用于新建对应空库，不包含生产业务数据。</li>
-<li>根目录 <code>db/incremental/</code>：文件命名为 <code>V0001__description.sql</code>，序号全局连续递增，历史存量脚本为 <strong>V0001～V0012</strong>；下一份增量是 <strong>V0013</strong>。跨数据库时在文件名中注明 <code>config_center</code> 或 <code>config_access</code>。</li>
+<li>根目录 <code>db/incremental/</code>：文件命名为 <code>V0001__description.sql</code>，序号全局连续递增，历史存量脚本为 <strong>V0001～V0014</strong>；下一份增量是 <strong>V0015</strong>。跨数据库时在文件名中注明 <code>config_center</code> 或 <code>config_access</code>。</li>
 <li><strong>新增数据库变更时，创建新编号的增量 SQL，并同步更新对应的全量 SQL</strong>，以及本文和 CI、发布相关检查。已经发布的增量 SQL 不允许修改、删除或重新编号。</li>
 <li>新增增量 SQL 头部注明目标数据库、适用旧结构与前置条件；所有 SQL 仍由管理员手工检查并执行。</li>
-<li><strong>注意：V0001～V0012 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。</strong> 例如 <code>V0003</code> 只适用于仍有旧 <code>sdk_service_binding</code> / <code>scope_type</code> 的库，<code>V0009</code> 仅适用于旧渠道表结构。已升级的库不得重跑。</li>
+<li><strong>注意：V0001～V0014 是不同历史版本、不同场景的 SQL 归档编号，并非可全部连续执行的升级链。</strong> 例如 <code>V0003</code> 只适用于仍有旧 <code>sdk_service_binding</code> / <code>scope_type</code> 的库，<code>V0009</code> 仅适用于旧渠道表结构。已升级的库不得重跑。</li>
 <li>当前不引入 Flyway、自动执行或迁移版本记录表。<strong>编号本身不能证明数据库已经应用过该变更</strong>，执行前需检查真实表结构、数据和历史操作记录。</li>
 </ul>
 <p>源码目录 <code>db/full/</code>、<code>db/incremental/</code> 在发布包中分别对应 <code>sql/full/</code>、<code>sql/incremental/</code>。手动部署只使用这两处 SQL。</p>
@@ -172,14 +172,14 @@ SELECT COUNT(*) FROM config_center.config_node;</code></pre></div>
 <li><code>config_revision</code>、<code>config_node_change_log</code>：同步游标和变更日志</li>
 <li><code>config_subscriber</code>、<code>config_subscriber_delivery_state</code>：接入端身份、唯一的 <code>signing_secret</code> 与 Webhook 投递状态</li>
 <li><code>game_order</code>：SDK Core 充值订单、支付状态、通知租约和补偿</li>
-<li><code>sdk_service</code>：SDK 功能目录与全局开关，新库初始化预置已实现的 <code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code>、<code>role_control</code>，不包含 <code>scope_type</code>、<code>sort_order</code></li>
+<li><code>sdk_service</code>：SDK 功能目录与全局开关，新库初始化预置已实现的 <code>event_report</code>、<code>subscribe_message</code>、<code>role_query</code>、<code>server_query</code>、<code>role_control</code>，不包含 <code>scope_type</code>、<code>sort_order</code></li>
 <li><code>sdk_service_channel</code>：按 <code>service_id + channel_app_id + env</code> 唯一的渠道包服务绑定</li>
 </ul>
 <p><code>config_center</code> 的配置表与订单表使用同一个数据库。SDK Core 只使用一个 <code>database.dsn</code> 连接池；建议配置表只授予 SELECT、订单表授予 SELECT/INSERT/UPDATE，运行账号不授予 DDL。</p>
 <h2 id="database-5">SDK 功能配置与数据安全</h2>
 <ul>
 <li><code>sdk_service_channel</code> 使用 <code>(service_id, channel_app_id, env)</code> 唯一约束，<code>env</code> 只能是 <code>prod/test/review</code>。</li>
-<li><code>event_report</code>、<code>subscribe_message</code>、<code>user_check</code>、<code>role_query</code>、<code>server_query</code> 与 <code>role_control</code> 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。</li>
+<li><code>event_report</code>、<code>subscribe_message</code>、<code>role_query</code>、<code>server_query</code> 与 <code>role_control</code> 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。</li>
 <li><code>sdk_service_channel.config</code> 为 JSON 对象；当前事件上报不使用事件级规则，不持久化和自动重试。</li>
 <li>SDK Core 的管理接口为 <code>GET /api/core/admin/services</code>、<code>PUT /api/core/admin/services/{id}</code> 和渠道包 <code>/api/core/admin/channel-apps/{id}/services</code> 系列，详见 <a href="index.html#a-sdk-start">管理接口</a>。</li>
 <li>充值订单和发货通知不依赖功能开关。</li>
@@ -276,7 +276,7 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml</code></pre></div>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd sdk-service
 Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-service -config configs/config-dev.yaml</code></pre></div>
-<p>首次部署应确认功能开关表已建立并包含 <code>user_check</code>、<code>event_report</code>、<code>subscribe_message</code> 等已实现服务；已有库缺少订阅消息服务时先手动执行 <code>db/incremental/V0008__add_sdk_subscribe_message.sql</code>。游戏 <code>gameSecret</code>、渠道包 <code>appSecret</code>、大区 <code>userCheckUrl</code> 已配置，且相应全局与渠道环境的功能开关已开启。<strong>默认 <code>standard</code> 适配器无需配置</strong>。本地健康检查：<code>http://127.0.0.1:8221/health/ready</code>。</p>
+<p>首次部署应确认功能开关表已建立并包含 <code>event_report</code>、<code>subscribe_message</code> 等已实现服务；已有库缺少订阅消息服务时先手动执行 <code>db/incremental/V0008__add_sdk_subscribe_message.sql</code>。游戏 <code>gameSecret</code>、渠道包 <code>appSecret</code>、平台 <code>platform.userCheckURL</code> 已配置，且其他需开关的功能已开启相应全局与渠道环境开关；用户核验不依赖服务目录或开关。<strong>角色、区服等游戏回调的默认 <code>standard</code> 适配器无需配置</strong>。本地健康检查：<code>http://127.0.0.1:8221/health/ready</code>。</p>
 <p>游戏上报事件使用 <code>POST /api/service/events/{env}</code>，订阅消息使用 <code>POST /api/service/subscribe/{env}</code>，AppID 放 <code>x-app-id</code>。平台两个目标地址由 <code>sdk-service/configs/config-dev.yaml</code> 的 <code>platform.eventReportURL</code> 与 <code>platform.subscribeMessageURL</code> 指定，未启用相应业务时可留空。旧 Core 事件路由已移除；不要继续请求 <code>/api/core/events/{env}</code>。</p>
 <p>平台和游戏联调报文分别见 <a href="index.html#p-start">平台接口 HTML</a>、<a href="index.html#g-start">游戏接口 HTML</a>。</p>
 <h2 id="development-6">5. Vue 管理端</h2>
@@ -357,7 +357,7 @@ admin/                     # -SkipFrontend 时不存在</code></pre></div>
 <li>全新、空的 <code>config_center</code>：<code>sql/full/config_center.sql</code>。</li>
 <li>已有 <code>config_center</code> 仅缺少订单表：<code>sql/incremental/V0001__add_game_order.sql</code>。</li>
 <li>已有权威库但没有 SDK 服务表：<code>sql/incremental/V0002__add_sdk_services.sql</code>（仅表确实不存在时执行）。</li>
-<li>已有功能表但缺少 <code>user_check</code> 服务目录：<code>sql/incremental/V0004__add_sdk_user_check.sql</code>。</li>
+<li>用户核验不再依赖服务目录或开关；升级后可手动执行 <code>sql/incremental/V0014__remove_user_check_service.sql</code>。脚本会永久删除旧目录及其全部渠道环境开关和扩展配置，执行前须备份并检查。</li>
 <li>已有服务表但缺少角色查询、区服查询或封解禁目录：分别手工执行 <code>sql/incremental/V0005__add_sdk_role_query.sql</code>、<code>sql/incremental/V0006__add_sdk_server_query.sql</code>、<code>sql/incremental/V0007__add_sdk_role_control.sql</code>，在部署新版 sdk-service 前完成。</li>
 <li>已有服务表但缺少订阅消息目录：手动执行 <code>sql/incremental/V0008__add_sdk_subscribe_message.sql</code>，在部署新版 sdk-service 前完成。</li>
 <li>已有旧版订阅者表（含 <code>webhook_secret</code>）的 <code>config_center</code>：备份后先检查并确保每条密钥唯一、32–255 字节且无首尾空格，再执行 <code>sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql</code>。该脚本将旧 Webhook 密钥列改为双向同步签名密钥并添加唯一索引；重复密钥会导致迁移失败，短密钥会导致新版服务拒绝启动。</li>

@@ -15,6 +15,7 @@ game:
 platform:
   eventReportURL: ""
   subscribeMessageURL: ""
+  userCheckURL: ""
 
 log:
   level: info

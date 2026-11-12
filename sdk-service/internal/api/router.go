@@ -2,6 +2,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"hitall.com/middle-platform/sdk-service/internal/auth"
 	"hitall.com/middle-platform/sdk-service/internal/model"
 	"hitall.com/middle-platform/sdk-service/internal/platform"
 	"hitall.com/middle-platform/shared/logging"
@@ -45,7 +47,12 @@ func parseBody(w http.ResponseWriter, r *http.Request) (model.UserCheckRequest, 
 	if strings.TrimSpace(r.URL.RawQuery) != "" || !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 		return model.UserCheckRequest{}, errInvalidBody
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024))
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8*1024))
+	if err != nil {
+		return model.UserCheckRequest{}, errInvalidBody
+	}
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	dec := json.NewDecoder(bytes.NewReader(raw))
 	start, err := dec.Token()
 	if err != nil || start != json.Delim('{') {
 		return model.UserCheckRequest{}, errInvalidBody
@@ -143,14 +150,16 @@ func routerServices(checker UserChecker, db Pinger, role RoleQuerier, server Ser
 			switch {
 			case errors.Is(err, model.ErrNotFound):
 				status, code, message = 404, 404, "渠道包不存在或未绑定该环境"
-			case errors.Is(err, model.ErrDisabled):
-				status, code, message = 403, 403, "当前渠道环境未开启用户核验"
-			case errors.Is(err, platform.ErrUnauthorized):
-				status, code, message = 401, 401, "平台请求签名验证失败"
-			case errors.Is(err, model.ErrUpstream):
-				status, code, message = 502, 502, "游戏核验接口调用失败"
+			case errors.Is(err, auth.ErrUnauthorized):
+				status, code, message = 401, 401, "游戏请求签名验证失败"
+			case errors.Is(err, model.ErrInvalidConfig):
+				status, code, message = 422, 422, "渠道服务配置不合法"
+			case errors.Is(err, platform.ErrPublishEndpointMissing):
+				status, code, message = 503, 503, "未配置平台核验地址"
+			case errors.Is(err, platform.ErrPublishRejected):
+				status, code, message = 502, 502, "平台核验接口调用失败"
 				if errors.Is(err, context.DeadlineExceeded) {
-					status, code, message = 504, 504, "游戏核验接口请求超时"
+					status, code, message = 504, 504, "平台核验接口请求超时"
 				}
 			}
 			logging.FromContext(r.Context()).WarnContext(r.Context(),

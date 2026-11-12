@@ -5,7 +5,7 @@ import { apiErrorMessage, sdkApi, sdkServiceApi } from '../../api/http'
 import { generateNonce, signPaymentCallback, signServiceRequest } from './signature'
 
 type Environment = 'test' | 'review' | 'prod'
-type ApiKey = 'user_check' | 'role_query' | 'server_query' | 'role_control' | 'payment_callback'
+type ApiKey = 'role_query' | 'server_query' | 'role_control' | 'payment_callback'
 type ServiceApiKey = Exclude<ApiKey, 'payment_callback'>
 type RoleControlType = 'close' | 'unClose' | 'lock' | 'unLock'
 type RequestBody = Record<string, string | number>
@@ -48,14 +48,13 @@ const props = defineProps<{ gameId: number | null }>()
 const apps = ref<ChannelApp[]>([])
 const selectedAppCode = ref('')
 const environment = ref<Environment>('test')
-const activeApi = ref<ApiKey>('user_check')
+const activeApi = ref<ApiKey>('role_query')
 const loadingApps = ref(false)
 const submitting = ref(false)
 const allowPaymentCallback = ref(false)
 const results = ref<Partial<Record<ApiKey, RequestResult>>>({})
 let appRequestSequence = 0
 
-const userCheck = ref({ openId: '' })
 const roleQuery = ref({
   openId: '',
   roleId: '',
@@ -134,12 +133,6 @@ function addOptional(body: RequestBody, values: string[], key: string, raw: stri
 }
 
 function buildServicePayload(key: ServiceApiKey): ServicePayload {
-  if (key === 'user_check') {
-    const openId = userCheck.value.openId
-    if (!openId.trim()) throw new Error('请填写 open_id')
-    return { path: 'user/check', body: { open_id: openId }, signatureValues: [openId] }
-  }
-
   if (key === 'role_query') {
     const body: RequestBody = {}
     const values: string[] = []
@@ -569,14 +562,6 @@ watch(() => roleControl.value.type, type => {
       />
 
       <el-tabs v-model="activeApi" class="simulator-tabs">
-        <el-tab-pane label="用户核验" name="user_check">
-          <el-form label-position="top" autocomplete="off" class="simulator-form" @submit.prevent="sendRequest">
-            <el-form-item label="open_id" required>
-              <el-input v-model="userCheck.openId" placeholder="user_10001" />
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
         <el-tab-pane label="角色查询" name="role_query">
           <el-form label-position="top" autocomplete="off" class="simulator-form" @submit.prevent="sendRequest">
             <div class="simulator-fields">

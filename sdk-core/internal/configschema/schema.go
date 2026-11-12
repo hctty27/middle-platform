@@ -22,7 +22,6 @@ var fields = map[string][]Field{
 	},
 	"region": {
 		{Key: "payNotifyUrl", Title: "支付通知地址", Description: "SDK Core 支付成功后通知游戏服的完整地址", Group: "支付配置", Format: "uri", Placeholder: "https://game.example.com/pay/notify", Order: 1},
-		{Key: "userCheckUrl", Title: "用户核验地址", Description: "SDK Service 核验用户的游戏服接口地址", Group: "用户与角色", Format: "uri", Order: 2},
 		{Key: "roleQueryUrl", Title: "角色查询地址", Description: "SDK Service 查询游戏角色的接口地址", Group: "用户与角色", Format: "uri", Order: 3},
 		{Key: "serverQueryUrl", Title: "区服查询地址", Description: "SDK Service 查询游戏区服的接口地址", Group: "区服接口", Format: "uri", Order: 4},
 		{Key: "roleControlUrl", Title: "封解禁地址", Description: "SDK Service 封号、解封、禁言、解禁言接口地址", Group: "用户与角色", Format: "uri", Order: 5},
@@ -45,7 +44,7 @@ var owners = func() map[string]string {
 }()
 
 var adapterNames = map[string]string{
-	"user_check": "用户核验", "role_query": "角色查询",
+	"role_query": "角色查询",
 	"server_query": "区服查询", "role_control": "封解禁",
 }
 
@@ -70,7 +69,7 @@ func Schema(nodeType string) (map[string]any, bool) {
 		}
 		if field.Key == "serviceAdapters" {
 			nested := make(map[string]any, len(adapterNames))
-			order := map[string]int{"user_check": 1, "role_query": 2, "server_query": 3, "role_control": 4}
+			order := map[string]int{"role_query": 2, "server_query": 3, "role_control": 4}
 			for key, title := range adapterNames {
 				nested[key] = map[string]any{"type": "string", "title": title + "适配器",
 					"description": "不填写则使用 standard", "default": "standard",
