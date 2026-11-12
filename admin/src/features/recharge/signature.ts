@@ -31,6 +31,16 @@ function hex(bytes: ArrayBuffer | Uint8Array): string {
   return Array.from(data, value => value.toString(16).padStart(2, '0')).join('')
 }
 
+function compareUtf8(left: string, right: string): number {
+  const a = encoder.encode(left)
+  const b = encoder.encode(right)
+  const length = Math.min(a.length, b.length)
+  for (let i = 0; i < length; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i]
+  }
+  return a.length - b.length
+}
+
 async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<string> {
   return hex(await crypto.subtle.digest(algorithm, encoder.encode(text)))
 }
@@ -50,7 +60,7 @@ export async function signRegistration(
     if (value === null || value === undefined || value === '') continue
     values.push(typeof value === 'object' ? JSON.stringify(value) : String(value))
   }
-  return digest('SHA-1', values.filter(value => value !== '').sort().join('_'))
+  return digest('SHA-1', values.filter(value => value !== '').sort(compareUtf8).join('_'))
 }
 
 export function generateNonce(): string {
