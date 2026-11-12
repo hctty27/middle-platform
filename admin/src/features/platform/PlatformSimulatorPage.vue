@@ -653,7 +653,7 @@ watch(() => roleControl.value.type, type => {
       </el-tabs>
 
       <div class="simulator-actions">
-        <el-button :disabled="!canPreview" @click="previewRequest">预览请求</el-button>
+        <el-button :disabled="!canPreview || submitting" @click="previewRequest">预览请求</el-button>
         <el-button
           v-if="!(activeApi === 'role_control' && environment === 'prod')"
           type="primary"
