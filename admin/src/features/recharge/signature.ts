@@ -1,8 +1,7 @@
-// 充值联调签名：严格匹配 SDK Core 当前的游戏登记协议和平台 V1 协议。
+// 订单登记模拟签名：严格匹配 SDK Core 当前的游戏登记协议。
 const encoder = new TextEncoder()
 const appIDPattern = '[A-Za-z0-9][A-Za-z0-9._:-]{0,127}'
 const registerPathPattern = new RegExp(`(/api/core/orders/(test|prod|review)/(${appIDPattern}))$`)
-const callbackPathPattern = new RegExp(`/api/core/pay/notify/(${appIDPattern})$`)
 
 export interface Endpoint {
   url: string
@@ -25,13 +24,6 @@ export function parseRegisterEndpoint(raw: string): Endpoint {
   const match = url.pathname.match(registerPathPattern)
   if (!match) throw new Error('登记 URL 应以 /api/core/orders/{env}/{appid} 结尾')
   return { url: url.toString(), env: match[2], appid: match[3] }
-}
-
-export function parseCallbackEndpoint(raw: string): Endpoint {
-  const url = parseUrl(raw)
-  const match = url.pathname.match(callbackPathPattern)
-  if (!match) throw new Error('回调 URL 应以 /api/core/pay/notify/{appid} 结尾')
-  return { url: url.toString(), appid: match[1] }
 }
 
 function hex(bytes: ArrayBuffer | Uint8Array): string {
@@ -64,11 +56,4 @@ export async function signRegistration(
 export function generateNonce(): string {
   if (!crypto?.getRandomValues) throw new Error('当前页面不支持安全随机数，请使用 HTTPS 或 localhost')
   return hex(crypto.getRandomValues(new Uint8Array(8)))
-}
-
-export async function signPlatformV1(appSecret: string, orderNo: string, gameOrderID: string, nonce: string, timestamp: string): Promise<string> {
-  if (!crypto?.subtle) throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost')
-  if (!appSecret) throw new Error('请填写平台密钥 appSecret')
-  const values = [orderNo, gameOrderID, appSecret, nonce, timestamp].sort()
-  return digest('SHA-1', values.join('_'))
 }
