@@ -33,7 +33,7 @@ func TestUserCheckRouter(t *testing.T) {
 		calls      int
 	}{
 		{"存在", `{"open_id":"x"}`, true, 200, `"data":true`, 1},
-		{"不存在", `{"open_id":"x"}`, false, 200, `"code":1021003`, 1},
+		{"不存在", `{"open_id":"x"}`, false, 200, `"code":1,`, 1},
 		{"非法字段", `{"open_id":"x","extra":1}`, true, 400, `"code":400`, 0},
 		{"重复字段", `{"open_id":"x","open_id":"y"}`, true, 400, `"code":400`, 0},
 		{"空值", `{"open_id":""}`, true, 400, `"code":400`, 0},

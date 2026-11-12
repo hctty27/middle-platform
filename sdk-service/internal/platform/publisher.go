@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"hitall.com/middle-platform/shared/logging"
 	"hitall.com/middle-platform/shared/signature"
 )
 
@@ -81,19 +82,44 @@ func (p *Publisher) CheckUser(ctx context.Context, appID, secret string, body []
 	return p.send(ctx, "user_check", appID, secret, body)
 }
 
-func (p *Publisher) send(ctx context.Context, code, appID, secret string, body []byte) (bool, error) {
+func (p *Publisher) send(ctx context.Context, code, appID, secret string, body []byte) (success bool, publishErr error) {
+	start := time.Now()
+	status := 0
+	var businessCode *int
+	failure := ""
+	path := map[string]string{
+		"event_report": "/report/event", "subscribe_message": "/game/subscribe/send-message", "user_check": "/cp/user/check",
+	}[code]
+	logger := logging.FromContext(ctx)
+	defer func() {
+		attrs := []any{"service_code", code, "app_id", appID, "method", http.MethodPost,
+			"path", path, "request_bytes", len(body), "http_status", status, "duration_ms", time.Since(start).Milliseconds()}
+		if businessCode != nil {
+			attrs = append(attrs, "business_code", *businessCode)
+		}
+		if publishErr != nil {
+			attrs = append(attrs, "failure", failure)
+			logger.WarnContext(ctx, "平台接口请求失败", attrs...)
+		} else {
+			logger.InfoContext(ctx, "平台接口请求完成", attrs...)
+		}
+	}()
+	failure = "endpoint_missing"
 	if p == nil || p.endpoints[code] == "" {
 		return false, ErrPublishEndpointMissing
 	}
+	failure = "credentials_missing"
 	if appID == "" || secret == "" {
 		return false, errors.New("平台签名密钥或 AppID 缺失")
 	}
+	failure = "nonce_generation"
 	var bytesNonce [8]byte
 	if _, err := rand.Read(bytesNonce[:]); err != nil {
 		return false, fmt.Errorf("生成平台请求 nonce 失败: %w", err)
 	}
 	nonce := hex.EncodeToString(bytesNonce[:])
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	failure = "request_creation"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoints[code], bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("%w: 创建请求失败: %v", ErrPublishRejected, err)
@@ -104,12 +130,23 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	req.Header.Set("x-nonce", nonce)
 	// 平台开放服务仅签 Header 四值，不包含业务 Body。
 	req.Header.Set("x-signature", signature.SignValues(secret, appID, timestamp, nonce))
+	failure = "transport"
 	response, err := p.client.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("%w: %w", ErrPublishRejected, err)
 	}
 	defer response.Body.Close()
+	status = response.StatusCode
+	failure = "http_or_response_read"
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 8*1024+1))
+	loggedBody := raw
+	truncated := len(raw) > 8*1024
+	if truncated {
+		loggedBody = raw[:8*1024]
+	}
+	logger.DebugContext(ctx, "平台接口请求和响应", "service_code", code, "http_status", status,
+		"request_body", string(body), "response_body", string(loggedBody),
+		"response_truncated", truncated, "response_read_error", err != nil)
 	if err != nil || len(raw) > 8*1024 || response.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("%w: 平台 HTTP %d 或响应读取失败", ErrPublishRejected, response.StatusCode)
 	}
@@ -117,9 +154,12 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 		Code *int  `json:"code"`
 		Data *bool `json:"data"`
 	}
+	failure = "invalid_response"
 	if json.Unmarshal(raw, &result) != nil || result.Code == nil {
 		return false, fmt.Errorf("%w: 平台响应不合法", ErrPublishRejected)
 	}
+	businessCode = result.Code
+	failure = "business_rejected"
 	if code == "user_check" && *result.Code == 1021003 && result.Data == nil {
 		return false, nil
 	}

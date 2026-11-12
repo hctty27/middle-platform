@@ -70,7 +70,7 @@ func TestUserCheckGameToPlatform(t *testing.T) {
 	}
 	result = `{"code":1021003,"message":"用户信息不存在","data":null}`
 	w = request(true)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"code":1021003`) || calls != 2 {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"code":1,`) || calls != 2 {
 		t.Fatalf("missing: %d %s calls=%d", w.Code, w.Body.String(), calls)
 	}
 	result = `{"code":500,"data":null}`

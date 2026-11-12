@@ -168,7 +168,7 @@ func routerServices(checker UserChecker, db Pinger, role RoleQuerier, server Ser
 			return
 		}
 		if !result.Exists {
-			writeJSON(w, http.StatusOK, response{Code: 1021003, Message: "用户信息不存在"})
+			writeJSON(w, http.StatusOK, response{Code: 1, Message: "用户信息不存在"})
 			return
 		}
 		writeJSON(w, http.StatusOK, response{Code: 0, Message: "ok", Data: true})
