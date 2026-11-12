@@ -14,18 +14,19 @@ import SDKServicePage from './features/services/SDKServicePage.vue'
 import SDKNodeConfigPage from './features/services/SDKNodeConfigPage.vue'
 import SubscriberPage from './features/subscribers/SubscriberPage.vue'
 import RechargeSimulatorPage from './features/recharge/RechargeSimulatorPage.vue'
+import PlatformSimulatorPage from './features/platform/PlatformSimulatorPage.vue'
 
-type Page = 'overview' | 'nodes' | 'channel_apps' | 'sdk_node_config' | 'sdk_services' | 'subscribers' | 'recharge' | 'about'
-const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'sdk_node_config', 'sdk_services', 'subscribers', 'recharge', 'about']
+type Page = 'overview' | 'nodes' | 'channel_apps' | 'sdk_node_config' | 'sdk_services' | 'subscribers' | 'platform_simulator' | 'recharge' | 'about'
+const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'sdk_node_config', 'sdk_services', 'subscribers', 'platform_simulator', 'recharge', 'about']
 const navigation = ref<Page>('overview')
 const sdkFocusNodeId = ref<number | null>(null)
 const sidebarCollapsed = ref(false)
 const titles: Record<Page, string> = {
   overview: '工作台', nodes: '配置管理', channel_apps: '渠道应用', sdk_node_config: 'SDK 配置', sdk_services: '服务管理',
-  subscribers: '接入同步', recharge: '充值模拟', about: '系统说明'
+  subscribers: '接入同步', platform_simulator: '发行平台模拟', recharge: '订单登记模拟', about: '系统说明'
 }
 const currentTitle = computed(() => titles[navigation.value])
-const currentSection = computed(() => ['sdk_node_config', 'sdk_services', 'channel_apps', 'recharge'].includes(navigation.value)
+const currentSection = computed(() => ['sdk_node_config', 'sdk_services', 'channel_apps', 'platform_simulator', 'recharge'].includes(navigation.value)
   ? 'SDK 管理' : ['nodes', 'subscribers'].includes(navigation.value) ? '配置中心' : '工作空间')
 const activeGame = computed(() => games.value.find(game => game.id === currentGameId.value))
 const updating = ref(false)
@@ -152,9 +153,12 @@ onUnmounted(() => {
       <button title="服务管理" :class="{ active: navigation === 'sdk_services' }" @click="navigate('sdk_services')">
         <span class="nav-symbol">⚙</span><span v-if="!sidebarCollapsed">服务管理</span>
       </button>
+      <button title="发行平台模拟" :class="{ active: navigation === 'platform_simulator' }" @click="navigate('platform_simulator')">
+        <span class="nav-symbol">⇄</span><span v-if="!sidebarCollapsed">发行平台模拟</span>
+      </button>
       <div v-if="!sidebarCollapsed" class="group-title">其他</div>
-      <button title="充值模拟" :class="{ active: navigation === 'recharge' }" @click="navigate('recharge')">
-        <span class="nav-symbol">¥</span><span v-if="!sidebarCollapsed">充值模拟</span>
+      <button title="订单登记模拟" :class="{ active: navigation === 'recharge' }" @click="navigate('recharge')">
+        <span class="nav-symbol">¥</span><span v-if="!sidebarCollapsed">订单登记模拟</span>
       </button>
       <button title="系统说明" :class="{ active: navigation === 'about' }" @click="navigate('about')">
         <span class="nav-symbol">ⓘ</span><span v-if="!sidebarCollapsed">系统说明</span>
@@ -200,6 +204,7 @@ onUnmounted(() => {
         <SDKNodeConfigPage v-if="navigation === 'sdk_node_config'" :game-id="currentGameId" :focus-node-id="sdkFocusNodeId" />
         <SDKServicePage v-if="navigation === 'sdk_services'" />
         <SubscriberPage v-if="navigation === 'subscribers'" />
+        <PlatformSimulatorPage v-if="navigation === 'platform_simulator'" :game-id="currentGameId" />
         <RechargeSimulatorPage v-if="navigation === 'recharge'" />
         <main v-if="navigation === 'about'" class="content-panel">
           <h2>系统说明</h2>
