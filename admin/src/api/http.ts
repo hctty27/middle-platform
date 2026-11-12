@@ -29,7 +29,7 @@ const sdkServiceBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.sdkServiceApiBaseUr
 
 export const sdkServiceApi = axios.create({
   baseURL: sdkServiceBaseUrl.replace(/\/+$/, ''),
-  timeout: 15000
+  timeout: 40000
 })
 
 export const api = axios.create({
