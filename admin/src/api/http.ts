@@ -8,6 +8,7 @@ declare global {
     __MIDDLE_PLATFORM_CONFIG__?: {
       apiBaseUrl?: string
       sdkApiBaseUrl?: string
+      sdkServiceApiBaseUrl?: string
     }
   }
 }
@@ -21,6 +22,14 @@ const sdkBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.sdkApiBaseUrl?.trim()
 export const sdkApi = axios.create({
   baseURL: sdkBaseUrl.replace(/\/+$/, ''),
   timeout: 10000
+})
+
+const sdkServiceBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.sdkServiceApiBaseUrl?.trim()
+  || '/api/service'
+
+export const sdkServiceApi = axios.create({
+  baseURL: sdkServiceBaseUrl.replace(/\/+$/, ''),
+  timeout: 15000
 })
 
 export const api = axios.create({
