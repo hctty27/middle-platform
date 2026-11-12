@@ -82,7 +82,7 @@ const roleControl = ref({
   extension: ''
 })
 const paymentCallback = ref({
-  orderNo: '',
+  orderNo: 'P' + Date.now(),
   gameOrderId: '',
   amount: '600',
   attach: '',
