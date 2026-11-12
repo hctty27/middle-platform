@@ -436,6 +436,7 @@ async function loadApps(): Promise<void> {
 
 watch(() => props.gameId, () => {
   results.value = {}
+  allowPaymentCallback.value = false
   void loadApps()
 }, { immediate: true })
 
@@ -446,6 +447,7 @@ watch(selectedAppCode, () => {
 
 watch(environment, () => {
   results.value = {}
+  allowPaymentCallback.value = false
 })
 
 watch(() => roleControl.value.type, type => {
