@@ -154,7 +154,7 @@ function prettyJSON(value: string): string {
         <h1>订单登记模拟</h1>
         <p>模拟游戏服向 SDK Core 登记充值订单，自动生成游戏签名并发送真实请求。</p>
       </div>
-      <el-tag type="warning" effect="plain">仅支持测试环境</el-tag>
+      <el-tag type="warning" effect="plain">仅支持 test / review</el-tag>
     </div>
     <el-alert
       title="订单登记只创建待支付订单，不代表支付成功；正式服登记已在模拟页面中禁用。"
