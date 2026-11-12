@@ -1,8 +1,7 @@
-// 充值联调签名：严格匹配 SDK Core 当前的游戏登记协议和平台 V1 协议。
+// 订单登记模拟签名：严格匹配 SDK Core 当前的游戏登记协议。
 const encoder = new TextEncoder()
 const appIDPattern = '[A-Za-z0-9][A-Za-z0-9._:-]{0,127}'
 const registerPathPattern = new RegExp(`(/api/core/orders/(test|prod|review)/(${appIDPattern}))$`)
-const callbackPathPattern = new RegExp(`/api/core/pay/notify/(${appIDPattern})$`)
 
 export interface Endpoint {
   url: string
@@ -27,16 +26,19 @@ export function parseRegisterEndpoint(raw: string): Endpoint {
   return { url: url.toString(), env: match[2], appid: match[3] }
 }
 
-export function parseCallbackEndpoint(raw: string): Endpoint {
-  const url = parseUrl(raw)
-  const match = url.pathname.match(callbackPathPattern)
-  if (!match) throw new Error('回调 URL 应以 /api/core/pay/notify/{appid} 结尾')
-  return { url: url.toString(), appid: match[1] }
-}
-
 function hex(bytes: ArrayBuffer | Uint8Array): string {
   const data = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes
   return Array.from(data, value => value.toString(16).padStart(2, '0')).join('')
+}
+
+function compareUtf8(left: string, right: string): number {
+  const a = encoder.encode(left)
+  const b = encoder.encode(right)
+  const length = Math.min(a.length, b.length)
+  for (let i = 0; i < length; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i]
+  }
+  return a.length - b.length
 }
 
 async function digest(algorithm: 'SHA-1' | 'SHA-256', text: string): Promise<string> {
@@ -58,17 +60,10 @@ export async function signRegistration(
     if (value === null || value === undefined || value === '') continue
     values.push(typeof value === 'object' ? JSON.stringify(value) : String(value))
   }
-  return digest('SHA-1', values.filter(value => value !== '').sort().join('_'))
+  return digest('SHA-1', values.filter(value => value !== '').sort(compareUtf8).join('_'))
 }
 
 export function generateNonce(): string {
   if (!crypto?.getRandomValues) throw new Error('当前页面不支持安全随机数，请使用 HTTPS 或 localhost')
   return hex(crypto.getRandomValues(new Uint8Array(8)))
-}
-
-export async function signPlatformV1(appSecret: string, orderNo: string, gameOrderID: string, nonce: string, timestamp: string): Promise<string> {
-  if (!crypto?.subtle) throw new Error('当前页面不支持 Web Crypto，请使用 HTTPS 或 localhost')
-  if (!appSecret) throw new Error('请填写平台密钥 appSecret')
-  const values = [orderNo, gameOrderID, appSecret, nonce, timestamp].sort()
-  return digest('SHA-1', values.join('_'))
 }
