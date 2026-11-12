@@ -232,6 +232,9 @@ async function buildSignedRequest(apiKey: ApiKey): Promise<BuiltRequest> {
   const env = environment.value
   if (!app) throw new Error('请先选择渠道应用')
   if (!secret) throw new Error('当前渠道应用未配置 appSecret')
+  if (apiKey === 'payment_callback' && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(app.code)) {
+    throw new Error('当前 AppID 不符合 SDK Core 支付回调接口要求')
+  }
   if (apiKey !== 'payment_callback' && !/^[A-Za-z0-9_-]{1,128}$/.test(app.code)) {
     throw new Error('当前 AppID 不符合 SDK Service 接口要求')
   }
