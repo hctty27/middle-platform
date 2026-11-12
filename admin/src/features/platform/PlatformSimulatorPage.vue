@@ -231,6 +231,9 @@ async function buildSignedRequest(): Promise<BuiltRequest> {
   const app = selectedApp.value
   if (!app) throw new Error('请先选择渠道应用')
   if (!appSecret.value) throw new Error('当前渠道应用未配置 appSecret')
+  if (activeApi.value !== 'payment_callback' && !/^[A-Za-z0-9_-]{1,128}$/.test(app.code)) {
+    throw new Error('当前 AppID 不符合 SDK Service 接口要求')
+  }
 
   const timestamp = String(Math.floor(Date.now() / 1000))
   const nonce = generateNonce()
@@ -335,39 +338,43 @@ async function previewRequest(): Promise<void> {
 
 async function sendRequest(): Promise<void> {
   if (submitting.value || !canSend.value) return
-
-  if (activeApi.value === 'role_control') {
-    try {
-      await ElMessageBox.confirm(
-        '此操作会调用真实游戏服的封禁、解封或禁言接口。请确认使用的是测试角色。',
-        '确认角色控制操作',
-        { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '取消' }
-      )
-    } catch {
-      return
-    }
-  }
-
-  if (activeApi.value === 'payment_callback') {
-    try {
-      await ElMessageBox.confirm(
-        '此操作会确认订单支付，并可能触发游戏服真实发货。请确认订单属于隔离测试环境。',
-        '确认平台充值回调',
-        { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '取消' }
-      )
-    } catch {
-      return
-    }
-  }
-
   submitting.value = true
+
   try {
+    if (activeApi.value === 'role_control') {
+      try {
+        await ElMessageBox.confirm(
+          '此操作会调用真实游戏服的封禁、解封或禁言接口。请确认使用的是测试角色。',
+          '确认角色控制操作',
+          { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '取消' }
+        )
+      } catch {
+        return
+      }
+    }
+
+    if (activeApi.value === 'payment_callback') {
+      try {
+        await ElMessageBox.confirm(
+          '此操作会确认订单支付，并可能触发游戏服真实发货。请确认订单属于隔离测试环境。',
+          '确认平台充值回调',
+          { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '取消' }
+        )
+      } catch {
+        return
+      }
+    }
+
     const request = await buildSignedRequest()
     const result = await executeRequest(request)
     results.value = { ...results.value, [activeApi.value]: result }
 
-    if (result.acknowledged) {
-      ElMessage.success('支付回调已确认；游戏发货由后台 Worker 异步处理')
+    if (activeApi.value === 'payment_callback') {
+      if (result.acknowledged) {
+        ElMessage.success('支付回调已确认；游戏发货由后台 Worker 异步处理')
+      } else {
+        ElMessage.error(result.error || '支付回调未被正确确认，请查看响应内容')
+      }
     } else if (result.status !== null && result.status >= 200 && result.status < 300) {
       ElMessage.success('请求已发送，请检查响应内容')
     } else {
@@ -393,6 +400,7 @@ async function loadApps(): Promise<void> {
   if (!props.gameId) {
     apps.value = []
     selectedAppCode.value = ''
+    loadingApps.value = false
     return
   }
 
@@ -424,6 +432,14 @@ watch(() => props.gameId, () => {
 watch([selectedAppCode, environment], () => {
   results.value = {}
 })
+
+watch(() => roleControl.value.type, type => {
+  if (type === 'unClose' || type === 'unLock') {
+    roleControl.value.duration = ''
+  } else if (!roleControl.value.duration) {
+    roleControl.value.duration = '3600'
+  }
+})
 </script>
 
 <template>
@@ -438,7 +454,7 @@ watch([selectedAppCode, environment], () => {
     </header>
 
     <el-alert
-      v-if="!gameId"
+      v-if="!props.gameId"
       title="请先选择游戏，再选择对应的渠道应用。"
       type="info"
       show-icon
@@ -453,7 +469,7 @@ watch([selectedAppCode, environment], () => {
             v-model="selectedAppCode"
             filterable
             :loading="loadingApps"
-            :disabled="!gameId"
+            :disabled="!props.gameId"
             placeholder="选择当前游戏的渠道应用"
             style="width: 100%"
             autocomplete="off"
@@ -602,6 +618,7 @@ watch([selectedAppCode, environment], () => {
               我确认这是隔离测试订单，并了解回调可能触发游戏服真实发货
             </el-checkbox>
             <p class="simulator-help">此接口不带环境路径，SDK Core 会根据 game_order 记录定位订单所属环境。</p>
+            <p class="simulator-help">V1 签名仅覆盖 order_no、game_order_id、appSecret、timestamp、nonce；amount、attach、paid_at 不参与签名，后端仍会与已登记订单核对金额和透传参数。</p>
           </el-form>
         </el-tab-pane>
       </el-tabs>
