@@ -156,10 +156,10 @@ onUnmounted(() => {
       <button title="发行平台模拟" :class="{ active: navigation === 'platform_simulator' }" @click="navigate('platform_simulator')">
         <span class="nav-symbol">⇄</span><span v-if="!sidebarCollapsed">发行平台模拟</span>
       </button>
-      <div v-if="!sidebarCollapsed" class="group-title">其他</div>
       <button title="订单登记模拟" :class="{ active: navigation === 'recharge' }" @click="navigate('recharge')">
         <span class="nav-symbol">¥</span><span v-if="!sidebarCollapsed">订单登记模拟</span>
       </button>
+      <div v-if="!sidebarCollapsed" class="group-title">其他</div>
       <button title="系统说明" :class="{ active: navigation === 'about' }" @click="navigate('about')">
         <span class="nav-symbol">ⓘ</span><span v-if="!sidebarCollapsed">系统说明</span>
       </button>
