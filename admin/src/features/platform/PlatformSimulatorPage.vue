@@ -277,7 +277,7 @@ async function buildSignedRequest(): Promise<BuiltRequest> {
 async function executeRequest(request: BuiltRequest): Promise<RequestResult> {
   const started = performance.now()
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 15000)
+  const timeout = window.setTimeout(() => controller.abort(), 40000)
   try {
     const response = await fetch(request.url, {
       method: 'POST',
