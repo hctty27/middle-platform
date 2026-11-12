@@ -434,9 +434,10 @@ location ^~ /api/service/ {
 <p>前端所有配置中心 API 请求从 <code>admin/config.js</code> 中读取：</p>
 <div class="code-card"><div class="code-header"><span>js</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-js">window.__MIDDLE_PLATFORM_CONFIG__ = {
   apiBaseUrl: &#39;/api/config&#39;,
-  sdkApiBaseUrl: &#39;/api/core&#39;
+  sdkApiBaseUrl: &#39;/api/core&#39;,
+  sdkServiceApiBaseUrl: &#39;/api/service&#39;
 }</code></pre></div>
-<p>注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。<code>apiBaseUrl</code> 指向配置中心，<code>sdkApiBaseUrl</code> 指向 SDK Core。管理页面只可通过内网/受认证的独立网关访问，不得通过公开 SDK 网关访问 <code>/api/core/admin/</code>。</p>
+<p>注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。<code>apiBaseUrl</code> 指向配置中心，<code>sdkApiBaseUrl</code> 指向 SDK Core，<code>sdkServiceApiBaseUrl</code> 指向 SDK Service。发行平台模拟页面会调用 SDK Service 的核验/查询/封解禁接口，以及 SDK Core 的支付回调接口；默认使用同源路径，避免浏览器跨域。管理页面只可通过内网/受认证的独立网关访问，不得通过公开 SDK 网关访问 <code>/api/core/admin/</code>。</p>
 <p>为了确保更新 <code>admin/</code> 静态资源时不覆盖生产配置，建议在正式服务器将配置长期保存于 <code>/data/middle-platform/config/admin.js</code>：</p>
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">cp -n /data/middle-platform/admin/config.js /data/middle-platform/config/admin.js
 vi /data/middle-platform/config/admin.js</code></pre></div>
@@ -455,8 +456,11 @@ location ^~ /admin/ {
 }
 location ^~ /api/config/ {
     proxy_pass http://127.0.0.1:8201;
+}
+location ^~ /api/service/ {
+    proxy_pass http://127.0.0.1:8221;
 }</code></pre></div>
-<p>该规则只演示配置中心相关路径。SDK Core 的 <code>/api/core/</code> 仍应独立配置负载均衡代理，不能转发到配置中心。此处 <code>proxy_pass</code> 不附加 URI，直接透传原始 <code>/api/config/</code> 请求路径。</p>
+<p>该规则演示配置中心和 SDK Service 路径。SDK Core 的 <code>/api/core/</code> 仍应独立配置负载均衡代理，不能转发到配置中心或 SDK Service。<code>/api/service/</code> 需透传原始路径到 SDK Service 的 8221 端口；如部署在其他地址，可通过 <code>sdkServiceApiBaseUrl</code> 修改前端请求基址。</p>
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">nginx -t &amp;&amp; systemctl reload nginx
 curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 <p>改动 <code>admin.js</code> 后强制刷新浏览器即可生效，不需要重启 Supervisor。原项目使用 hash 路由，子路径刷新不会要求额外的前端路由配置。</p>
