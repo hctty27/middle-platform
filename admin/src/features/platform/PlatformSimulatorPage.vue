@@ -227,21 +227,23 @@ function validatePaymentCallback(): {
   return { orderNo, gameOrderId, amount, attach, paidAt }
 }
 
-async function buildSignedRequest(): Promise<BuiltRequest> {
+async function buildSignedRequest(apiKey: ApiKey): Promise<BuiltRequest> {
   const app = selectedApp.value
+  const secret = appSecret.value
+  const env = environment.value
   if (!app) throw new Error('请先选择渠道应用')
-  if (!appSecret.value) throw new Error('当前渠道应用未配置 appSecret')
-  if (activeApi.value !== 'payment_callback' && !/^[A-Za-z0-9_-]{1,128}$/.test(app.code)) {
+  if (!secret) throw new Error('当前渠道应用未配置 appSecret')
+  if (apiKey !== 'payment_callback' && !/^[A-Za-z0-9_-]{1,128}$/.test(app.code)) {
     throw new Error('当前 AppID 不符合 SDK Service 接口要求')
   }
 
   const timestamp = String(Math.floor(Date.now() / 1000))
   const nonce = generateNonce()
 
-  if (activeApi.value === 'payment_callback') {
+  if (apiKey === 'payment_callback') {
     const input = validatePaymentCallback()
     const signature = await signPaymentCallback(
-      appSecret.value, input.orderNo, input.gameOrderId, nonce, timestamp
+      secret, input.orderNo, input.gameOrderId, nonce, timestamp
     )
     const body = {
       order_no: input.orderNo,
@@ -258,12 +260,12 @@ async function buildSignedRequest(): Promise<BuiltRequest> {
     }
   }
 
-  const payload = buildServicePayload(activeApi.value)
+  const payload = buildServicePayload(apiKey)
   const signature = await signServiceRequest(
-    appSecret.value, app.code, timestamp, nonce, payload.signatureValues
+    secret, app.code, timestamp, nonce, payload.signatureValues
   )
   return {
-    url: resolveUrl(sdkServiceBaseUrl.value, payload.path + '/' + environment.value),
+    url: resolveUrl(sdkServiceBaseUrl.value, payload.path + '/' + env),
     headers: {
       'x-app-id': app.code,
       'x-timestamp': timestamp,
@@ -318,10 +320,11 @@ async function executeRequest(request: BuiltRequest): Promise<RequestResult> {
 
 async function previewRequest(): Promise<void> {
   try {
-    const request = await buildSignedRequest()
+    const apiKey = activeApi.value
+    const request = await buildSignedRequest(apiKey)
     results.value = {
       ...results.value,
-      [activeApi.value]: {
+      [apiKey]: {
         status: null,
         durationMs: 0,
         url: request.url,
@@ -339,10 +342,13 @@ async function previewRequest(): Promise<void> {
 
 async function sendRequest(): Promise<void> {
   if (submitting.value || !canSend.value) return
+  const apiKey = activeApi.value
+  const appCode = selectedAppCode.value
+  const env = environment.value
   submitting.value = true
 
   try {
-    if (activeApi.value === 'role_control') {
+    if (apiKey === 'role_control') {
       try {
         await ElMessageBox.confirm(
           '此操作会调用真实游戏服的封禁、解封或禁言接口。请确认使用的是测试角色。',
@@ -354,7 +360,7 @@ async function sendRequest(): Promise<void> {
       }
     }
 
-    if (activeApi.value === 'payment_callback') {
+    if (apiKey === 'payment_callback') {
       try {
         await ElMessageBox.confirm(
           '此操作会确认订单支付，并可能触发游戏服真实发货。请确认订单属于隔离测试环境。',
@@ -366,11 +372,13 @@ async function sendRequest(): Promise<void> {
       }
     }
 
-    const request = await buildSignedRequest()
+    const request = await buildSignedRequest(apiKey)
     const result = await executeRequest(request)
-    results.value = { ...results.value, [activeApi.value]: result }
+    if (appCode === selectedAppCode.value && env === environment.value) {
+      results.value = { ...results.value, [apiKey]: result }
+    }
 
-    if (activeApi.value === 'payment_callback') {
+    if (apiKey === 'payment_callback') {
       if (result.acknowledged) {
         ElMessage.success('支付回调已确认；游戏发货由后台 Worker 异步处理')
       } else {
