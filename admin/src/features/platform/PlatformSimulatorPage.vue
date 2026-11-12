@@ -395,6 +395,7 @@ async function sendRequest(): Promise<void> {
     ElMessage.error(error instanceof Error ? error.message : '请求发送失败')
   } finally {
     submitting.value = false
+    if (apiKey === 'payment_callback') allowPaymentCallback.value = false
   }
 }
 
