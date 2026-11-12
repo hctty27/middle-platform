@@ -1,7 +1,8 @@
 const encoder = new TextEncoder()
 
-function toHex(bytes: ArrayBuffer): string {
-  return Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, '0')).join('')
+function toHex(bytes: ArrayBuffer | Uint8Array): string {
+  const data = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes
+  return Array.from(data, value => value.toString(16).padStart(2, '0')).join('')
 }
 
 async function signSorted(values: string[], filterEmpty: boolean): Promise<string> {
@@ -17,7 +18,7 @@ export function generateNonce(): string {
   if (!globalThis.crypto?.getRandomValues) {
     throw new Error('当前页面不支持安全随机数，请使用 HTTPS 或 localhost')
   }
-  return toHex(globalThis.crypto.getRandomValues(new Uint8Array(8)).buffer)
+  return toHex(globalThis.crypto.getRandomValues(new Uint8Array(8)))
 }
 
 export function signServiceRequest(
