@@ -323,17 +323,21 @@ async function executeRequest(request: BuiltRequest): Promise<RequestResult> {
 async function previewRequest(): Promise<void> {
   try {
     const apiKey = activeApi.value
+    const appCode = selectedAppCode.value
+    const env = environment.value
     const request = await buildSignedRequest(apiKey)
-    results.value = {
-      ...results.value,
-      [apiKey]: {
-        status: null,
-        durationMs: 0,
-        url: request.url,
-        headers: { 'Content-Type': 'application/json', ...request.headers },
-        requestBody: request.requestBody,
-        responseBody: '',
-        preview: true
+    if (appCode === selectedAppCode.value && env === environment.value) {
+      results.value = {
+        ...results.value,
+        [apiKey]: {
+          status: null,
+          durationMs: 0,
+          url: request.url,
+          headers: { 'Content-Type': 'application/json', ...request.headers },
+          requestBody: request.requestBody,
+          responseBody: '',
+          preview: true
+        }
       }
     }
     ElMessage.success('请求已生成，尚未发送')
