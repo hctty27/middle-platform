@@ -573,7 +573,7 @@ watch(() => roleControl.value.type, type => {
         </el-tab-pane>
 
         <el-tab-pane label="角色查询" name="role_query">
-          <el-form label-position="top" autocomplete="off" class="simulator-form">
+          <el-form label-position="top" autocomplete="off" class="simulator-form" @submit.prevent="sendRequest">
             <div class="simulator-fields">
               <el-form-item label="open_id"><el-input v-model="roleQuery.openId" placeholder="user_10001" /></el-form-item>
               <el-form-item label="role_id"><el-input v-model="roleQuery.roleId" placeholder="role_10001" /></el-form-item>
@@ -586,7 +586,7 @@ watch(() => roleControl.value.type, type => {
         </el-tab-pane>
 
         <el-tab-pane label="区服查询" name="server_query">
-          <el-form label-position="top" autocomplete="off" class="simulator-form">
+          <el-form label-position="top" autocomplete="off" class="simulator-form" @submit.prevent="sendRequest">
             <div class="simulator-fields">
               <el-form-item label="original_server_id"><el-input v-model="serverQuery.originalServerId" placeholder="1001" /></el-form-item>
               <el-form-item label="current_server_id"><el-input v-model="serverQuery.currentServerId" placeholder="1001" /></el-form-item>
@@ -599,7 +599,7 @@ watch(() => roleControl.value.type, type => {
         </el-tab-pane>
 
         <el-tab-pane label="角色封禁/解禁" name="role_control">
-          <el-form label-position="top" autocomplete="off" class="simulator-form">
+          <el-form label-position="top" autocomplete="off" class="simulator-form" @submit.prevent="sendRequest">
             <div class="simulator-fields">
               <el-form-item label="操作类型" required>
                 <el-select v-model="roleControl.type" style="width: 100%">
