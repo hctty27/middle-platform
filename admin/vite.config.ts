@@ -1,4 +1,4 @@
-// 仅用于本地前端开发：把 API 和健康检查请求转发至本机 Go 服务。
+// 本地开发时分别代理配置中心、SDK Service 和健康检查请求。
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
