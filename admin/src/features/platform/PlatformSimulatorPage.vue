@@ -278,10 +278,11 @@ async function executeRequest(request: BuiltRequest): Promise<RequestResult> {
   const started = performance.now()
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 40000)
+  const headers = { 'Content-Type': 'application/json', ...request.headers }
   try {
     const response = await fetch(request.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...request.headers },
+      headers,
       body: request.requestBody,
       signal: controller.signal,
       credentials: 'omit',
@@ -292,7 +293,7 @@ async function executeRequest(request: BuiltRequest): Promise<RequestResult> {
       status: response.status,
       durationMs: Math.round(performance.now() - started),
       url: request.url,
-      headers: request.headers,
+      headers,
       requestBody: request.requestBody,
       responseBody,
       acknowledged: request.acknowledgement
@@ -305,7 +306,7 @@ async function executeRequest(request: BuiltRequest): Promise<RequestResult> {
       status: null,
       durationMs: Math.round(performance.now() - started),
       url: request.url,
-      headers: request.headers,
+      headers,
       requestBody: request.requestBody,
       responseBody: '',
       error: '请求失败：' + message + '（请检查服务地址、反向代理、CORS 和 HTTPS 混合内容限制）'
@@ -324,7 +325,7 @@ async function previewRequest(): Promise<void> {
         status: null,
         durationMs: 0,
         url: request.url,
-        headers: request.headers,
+        headers: { 'Content-Type': 'application/json', ...request.headers },
         requestBody: request.requestBody,
         responseBody: '',
         preview: true
@@ -392,6 +393,15 @@ function prettyJSON(value: string): string {
     return JSON.stringify(JSON.parse(value), null, 2)
   } catch {
     return value
+  }
+}
+
+async function copyText(value: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value)
+    ElMessage.success('已复制')
+  } catch {
+    ElMessage.error('复制失败，请检查浏览器剪贴板权限')
   }
 }
 
@@ -663,11 +673,20 @@ watch(() => roleControl.value.type, type => {
       </div>
       <p class="simulator-request-url">POST {{ currentResult.url }}</p>
       <el-alert v-if="currentResult.error" :title="currentResult.error" type="error" show-icon :closable="false" />
-      <h4>请求 Header（不包含密钥原文）</h4>
+      <div class="simulator-result-label">
+        <h4>请求 Header</h4>
+        <el-button link size="small" @click="copyText(JSON.stringify(currentResult.headers, null, 2))">复制</el-button>
+      </div>
       <pre>{{ JSON.stringify(currentResult.headers, null, 2) }}</pre>
-      <h4>请求 Body</h4>
+      <div class="simulator-result-label">
+        <h4>请求 Body</h4>
+        <el-button link size="small" @click="copyText(prettyJSON(currentResult.requestBody))">复制</el-button>
+      </div>
       <pre>{{ prettyJSON(currentResult.requestBody) }}</pre>
-      <h4>响应 Body</h4>
+      <div class="simulator-result-label">
+        <h4>响应 Body</h4>
+        <el-button link size="small" :disabled="!currentResult.responseBody" @click="copyText(prettyJSON(currentResult.responseBody))">复制</el-button>
+      </div>
       <pre>{{ currentResult.responseBody ? prettyJSON(currentResult.responseBody) : currentResult.preview ? '尚未发送' : '（空）' }}</pre>
       <p v-if="currentResult.acknowledged" class="simulator-help">
         SDK Core 已确认支付；游戏发货由后台 Worker 异步处理，此结果不代表游戏服已经发货。
@@ -697,7 +716,8 @@ watch(() => roleControl.value.type, type => {
 .simulator-result-heading, .simulator-result-tags { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
 .simulator-result-heading h3 { font-size: 16px; margin: 0; }
 .simulator-result-tags { justify-content: flex-end; color: #8793a6; font-size: 12px; }
-.simulator-result h4 { font-size: 12px; margin: 14px 0 6px; color: #43506a; }
+.simulator-result-label { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+.simulator-result h4 { font-size: 12px; margin: 0 0 6px; color: #43506a; }
 .simulator-result pre { padding: 12px; border: 1px solid #ebeff6; background: #f7f9fc; border-radius: 7px; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
 .simulator-request-url { overflow-wrap: anywhere; color: #667791; font-size: 12px; }
 @media (max-width: 760px) {
