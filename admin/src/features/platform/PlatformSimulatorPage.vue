@@ -635,6 +635,7 @@ watch(() => roleControl.value.type, type => {
               我确认这是隔离测试订单，并了解回调可能触发游戏服真实发货
             </el-checkbox>
             <p class="simulator-help">必须先完成订单登记；order_no、game_order_id、amount、attach 必须与已登记订单匹配。</p>
+            <p class="simulator-help">同一订单重试必须复用首次使用的 order_no；支付确认后不能更换平台订单号。</p>
             <p class="simulator-help">此接口不带环境路径，SDK Core 会根据 game_order 记录定位订单所属环境。</p>
             <p class="simulator-help">V1 签名仅覆盖 order_no、game_order_id、appSecret、timestamp、nonce；amount、attach、paid_at 不参与签名，后端仍会与已登记订单核对金额和透传参数。</p>
           </el-form>
