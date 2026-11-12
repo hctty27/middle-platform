@@ -129,15 +129,14 @@ function parseInteger(raw: string, label: string, min: number, max: number): num
 }
 
 function addOptional(body: RequestBody, values: string[], key: string, raw: string): void {
-  const value = raw.trim()
-  values.push(value)
-  if (value) body[key] = value
+  values.push(raw)
+  if (raw !== '') body[key] = raw
 }
 
 function buildServicePayload(key: ServiceApiKey): ServicePayload {
   if (key === 'user_check') {
-    const openId = userCheck.value.openId.trim()
-    if (!openId) throw new Error('请填写 open_id')
+    const openId = userCheck.value.openId
+    if (!openId.trim()) throw new Error('请填写 open_id')
     return { path: 'user/check', body: { open_id: openId }, signatureValues: [openId] }
   }
 
@@ -149,7 +148,7 @@ function buildServicePayload(key: ServiceApiKey): ServicePayload {
     addOptional(body, values, 'original_server_id', roleQuery.value.originalServerId)
     addOptional(body, values, 'current_server_id', roleQuery.value.currentServerId)
     addOptional(body, values, 'extension', roleQuery.value.extension)
-    if (!values.slice(0, 4).some(value => value !== '')) {
+    if (!values.slice(0, 4).some(value => value.trim() !== '')) {
       throw new Error('open_id、role_id、original_server_id、current_server_id 至少填写一项')
     }
     return { path: 'role/query', body, signatureValues: values }
