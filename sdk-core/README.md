@@ -25,6 +25,8 @@ Copy-Item configs/config.yaml configs/config-dev.yaml
 go run ./cmd/sdk-core -config configs/config-dev.yaml
 ```
 
+发货 Worker 使用 `orderNotify.workers`（默认 4，范围 1～32）设置单实例并发数，`orderNotify.idleInterval`（默认 `500ms`，范围 `100ms～10s`）设置无任务或领取失败后的等待时间。有到期订单时连续领取，不额外等待；修改配置后需重启 SDK Core。Worker 共享现有 `database.maxOpenConns` 连接池，增加并发前应观察数据库连接等待和游戏通知耗时。
+
 新库按 [数据库文档](../admin/public/docs/guide.html#database) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。公开配置接口固定返回 `snKey`、`zoneKey` 和可选 `tsKey`，直接读取所需数据库字段，不再使用响应映射文件。需要增加公开字段时同步更新查询、DTO、测试和接口文档。
 
 `/api/core/admin/**` 始终使用 HMAC-SHA256，密钥为 `adminAuth.secret`，至少 32 字节，并与配置中心使用相同管理密钥；生产仍需网关隔离并启用 HTTPS，不应公开暴露管理路由。

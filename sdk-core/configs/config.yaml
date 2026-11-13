@@ -9,6 +9,11 @@ database:
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
+# 异步发货：有到期订单时连续领取；仅队列为空或数据库失败时等待。
+orderNotify:
+  workers: 4
+  idleInterval: 500ms
+
 # 管理接口使用 HMAC-SHA256；与 config-center 的 adminAuth.secret 保持一致。始终验签，密钥至少 32 字节。
 adminAuth:
   secret: ""
