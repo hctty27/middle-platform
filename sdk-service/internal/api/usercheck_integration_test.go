@@ -16,13 +16,13 @@ import (
 	"hitall.com/middle-platform/shared/signature"
 )
 
-type checkRoutes struct{ missing bool }
+type checkRoutes struct{ missing, skip bool }
 
 func (s *checkRoutes) Lookup(_ context.Context, appID, env string) (model.Target, error) {
 	if s.missing {
 		return model.Target{}, model.ErrNotFound
 	}
-	return model.Target{AppID: appID, Env: env, GameSecret: "game-secret", AppSecret: "app-secret"}, nil
+	return model.Target{AppID: appID, Env: env, GameSecret: "game-secret", AppSecret: "app-secret", SkipUserCheck: s.skip}, nil
 }
 
 func TestUserCheckGameToPlatform(t *testing.T) {
@@ -86,6 +86,23 @@ func TestUserCheckGameToPlatform(t *testing.T) {
 	w = request(false)
 	if w.Code != 401 || calls != 4 {
 		t.Fatalf("invalid signature: %d calls=%d", w.Code, calls)
+	}
+	routes.skip = true
+	invalidBody := httptest.NewRequest(http.MethodPost, "/api/service/user/check/test", strings.NewReader(`{"open_id":""}`))
+	invalidBody.Header.Set("Content-Type", "application/json")
+	invalidBody.Header.Set("x-app-id", "app1")
+	invalidResponse := httptest.NewRecorder()
+	handler.ServeHTTP(invalidResponse, invalidBody)
+	if invalidResponse.Code != 400 || calls != 4 {
+		t.Fatalf("skipped with invalid body: %d calls=%d", invalidResponse.Code, calls)
+	}
+	w = request(true)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"data":true`) || calls != 4 {
+		t.Fatalf("skipped: %d %s calls=%d", w.Code, w.Body.String(), calls)
+	}
+	w = request(false)
+	if w.Code != 401 || calls != 4 {
+		t.Fatalf("skipped with invalid signature: %d calls=%d", w.Code, calls)
 	}
 	routes.missing = true
 	w = request(true)

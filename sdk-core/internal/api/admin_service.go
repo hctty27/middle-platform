@@ -100,7 +100,7 @@ func (h *adminStore) channelServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.db.QueryContext(r.Context(), `SELECT sv.id,sv.code,sv.name,sv.description,sv.enabled,
-       COALESCE(ch.enabled,0),COALESCE(ch.config,JSON_OBJECT()) FROM sdk_service sv
+       COALESCE(ch.enabled,CASE WHEN sv.code='user_check' THEN 1 ELSE 0 END),COALESCE(ch.config,JSON_OBJECT()) FROM sdk_service sv
        LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id AND ch.channel_app_id=? AND ch.env=?
        ORDER BY sv.id`, id, env)
 	if err != nil {

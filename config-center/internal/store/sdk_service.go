@@ -88,7 +88,7 @@ WHERE app.id=?`, env, env, appID).
 	return true, nil
 }
 
-// SDKChannelServices 返回指定渠道包环境的服务配置，未绑定时默认关闭。
+// SDKChannelServices 返回指定渠道包环境的服务配置，用户核验未绑定时默认开启，其他服务默认关闭。
 func (s *Store) SDKChannelServices(ctx context.Context, appID int64, env string) ([]model.SDKChannelService, error) {
 	if appID <= 0 || !validSDKEnv(env) {
 		return nil, ErrInvalid
@@ -99,7 +99,7 @@ func (s *Store) SDKChannelServices(ctx context.Context, appID int64, env string)
 	}
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT sv.id,sv.code,sv.name,sv.description,sv.enabled,
-       COALESCE(ch.enabled,0),COALESCE(ch.config,JSON_OBJECT())
+       COALESCE(ch.enabled,CASE WHEN sv.code='user_check' THEN 1 ELSE 0 END),COALESCE(ch.config,JSON_OBJECT())
 FROM sdk_service sv
 LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id AND ch.channel_app_id=? AND ch.env=?
 ORDER BY sv.id`, appID, env)

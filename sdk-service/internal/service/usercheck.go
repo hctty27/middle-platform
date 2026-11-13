@@ -8,6 +8,7 @@ import (
 
 	"hitall.com/middle-platform/sdk-service/internal/auth"
 	"hitall.com/middle-platform/sdk-service/internal/model"
+	"hitall.com/middle-platform/shared/logging"
 )
 
 type UserCheckSender interface {
@@ -37,6 +38,10 @@ func (s *UserCheckService) Check(r *http.Request, env, appID string, _ model.Use
 	}
 	if err := auth.VerifyGameRequest(r, appID, target.GameSecret, body, time.Now()); err != nil {
 		return model.UserCheckResult{}, err
+	}
+	if target.SkipUserCheck {
+		logging.FromContext(r.Context()).InfoContext(r.Context(), "已跳过平台用户核验", "app_id", appID, "env", env)
+		return model.UserCheckResult{Exists: true}, nil
 	}
 	exists, err := s.Sender.CheckUser(r.Context(), appID, target.AppSecret, body)
 	return model.UserCheckResult{Exists: exists}, err

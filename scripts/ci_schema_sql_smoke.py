@@ -66,14 +66,25 @@ WHERE table_schema='manual_fresh' AND table_name IN
 'config_subscriber_delivery_state','sdk_channel_app','sdk_node_config','game_order')""", "8")
     assert_sql("""SELECT COUNT(*) FROM information_schema.tables
 WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", "0")
-    assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service WHERE code='user_check'", "0")
-    mysql("""INSERT INTO manual_fresh.sdk_service (code,name,description,enabled)
-      VALUES ('user_check','核验用户信息','旧记录',1);
+    assert_sql("SELECT enabled FROM manual_fresh.sdk_service WHERE code='user_check'", "1")
+    restore = source("db/incremental/V0015__restore_user_check_service.sql")
+    # 已有自定义数据必须在重复执行恢复脚本时保留。
+    mysql("""UPDATE manual_fresh.sdk_service SET enabled=0,description='自定义' WHERE code='user_check';
       INSERT INTO manual_fresh.sdk_service_channel (service_id,channel_app_id,env,enabled,config)
-      SELECT id,900,'test',1,JSON_OBJECT('legacy',true) FROM manual_fresh.sdk_service WHERE code='user_check';""")
+      SELECT id,900,'test',0,JSON_OBJECT('retained',true) FROM manual_fresh.sdk_service WHERE code='user_check';""")
+    mysql(database="manual_fresh", script=restore)
+    mysql(database="manual_fresh", script=restore)
+    assert_sql("SELECT enabled,description FROM manual_fresh.sdk_service WHERE code='user_check'", "0\t自定义")
+    assert_sql("""SELECT ch.enabled,JSON_UNQUOTE(JSON_EXTRACT(ch.config,'$.retained'))
+      FROM manual_fresh.sdk_service_channel ch JOIN manual_fresh.sdk_service sv ON sv.id=ch.service_id
+      WHERE sv.code='user_check' AND ch.channel_app_id=900""", "0\ttrue")
+    # 历史 V0014 的破坏性操作仅在隔离场景演练，升级时绝不可重跑。
     mysql(database="manual_fresh", script=source("db/incremental/V0014__remove_user_check_service.sql"))
     assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service WHERE code='user_check'", "0")
     assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service_channel WHERE channel_app_id=900", "0")
+    mysql(database="manual_fresh", script=restore)
+    mysql(database="manual_fresh", script=restore)
+    assert_sql("SELECT COUNT(*),MIN(enabled) FROM manual_fresh.sdk_service WHERE code='user_check'", "1\t1")
     assert_sql("SELECT COUNT(*) FROM manual_fresh.sdk_service WHERE code='role_query'", "1")
     # 人工重复执行完整初始化必须拒绝，不允许静默覆盖旧数据。
     mysql(database="manual_fresh", script=init, ok=False)

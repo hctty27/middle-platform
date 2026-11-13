@@ -68,7 +68,7 @@ onMounted(() => void load())
           </template>
         </el-table-column>
       </el-table>
-      <p class="muted">服务目录包括事件上报、角色查询、区服查询、封解禁和订阅消息推送；渠道环境开关需在渠道应用页面单独开启。</p>
+      <p class="muted">用户核验默认开启；全局或渠道环境显式关闭时跳过平台核验。其他服务的渠道环境开关默认关闭，需在渠道应用页面单独开启。</p>
     </section>
   </main>
 </template>

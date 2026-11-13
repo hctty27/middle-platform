@@ -175,16 +175,42 @@ func TestDatabaseWriteAndWebhookIntegration(t *testing.T) {
 	if app.TestServerGroupID == nil || *app.TestServerGroupID != group.ID {
 		t.Fatalf("binding not saved: %+v", app)
 	}
-	// 每个渠道包独立启用已实现的事件上报功能。
+	// 未绑定时仅用户核验默认开启，显式渠道关闭和全局关闭均须保留。
 	if _, err = db.ExecContext(ctx, `INSERT INTO sdk_service (id,code,name,enabled)
-      VALUES (501,'event_report','事件上报',1)`); err != nil {
+      VALUES (500,'user_check','用户核验',1), (501,'event_report','事件上报',1)`); err != nil {
 		t.Fatal(err)
 	}
+	checkServices := func(userEnabled, userEffective, eventEnabled bool) {
+		t.Helper()
+		items, err := store.SDKChannelServices(ctx, app.ID, "test")
+		if err != nil || len(items) != 2 || items[0].Code != "user_check" ||
+			items[0].Enabled != userEnabled || items[0].EffectiveEnabled != userEffective ||
+			items[1].Code != "event_report" || items[1].Enabled != eventEnabled {
+			t.Fatalf("channel service defaults: %+v %v", items, err)
+		}
+	}
+	checkServices(true, true, false)
+	if err = store.UpsertSDKChannelService(ctx, app.ID, 500, "test", false, json.RawMessage(`{"keep":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	checkServices(false, false, false)
+	if err = store.UpsertSDKChannelService(ctx, app.ID, 500, "test", true, json.RawMessage("{}")); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.UpdateSDKService(ctx, 500, false); err != nil {
+		t.Fatal(err)
+	}
+	checkServices(true, false, false)
+	if err = store.UpdateSDKService(ctx, 500, true); err != nil {
+		t.Fatal(err)
+	}
+	checkServices(true, true, false)
+	// 每个渠道包独立启用已实现的事件上报功能。
 	if err = store.UpsertSDKChannelService(ctx, app.ID, 501, "test", true, json.RawMessage("{}")); err != nil {
 		t.Fatal(err)
 	}
 	services, err := store.SDKChannelServices(ctx, app.ID, "test")
-	if err != nil || len(services) != 1 || services[0].Code != "event_report" || !services[0].EffectiveEnabled {
+	if err != nil || len(services) != 2 || services[1].Code != "event_report" || !services[1].EffectiveEnabled {
 		t.Fatalf("channel event binding: %+v %v", services, err)
 	}
 	if err = store.UpsertSDKChannelService(ctx, app.ID, 501, "invalid", true, json.RawMessage("{}")); !errors.Is(err, ErrInvalid) {

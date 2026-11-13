@@ -37,8 +37,10 @@ func (c *checkConn) QueryContext(_ context.Context, query string, args []driver.
 
 type checkRows struct{ rows [][]driver.Value }
 
-func (r *checkRows) Columns() []string { return []string{"config", "code", "game_config"} }
-func (r *checkRows) Close() error      { return nil }
+func (r *checkRows) Columns() []string {
+	return []string{"config", "code", "game_config", "global_enabled", "channel_enabled"}
+}
+func (r *checkRows) Close() error { return nil }
 func (r *checkRows) Next(dest []driver.Value) error {
 	if len(r.rows) == 0 {
 		return io.EOF
@@ -48,15 +50,15 @@ func (r *checkRows) Next(dest []driver.Value) error {
 	return nil
 }
 
-func TestLookupUserCheckWithoutServiceDirectory(t *testing.T) {
-	connector := &checkConnector{rows: [][]driver.Value{{[]byte(`{"appSecret":"app-secret"}`), "game1", []byte(`{"gameSecret":"game-secret"}`)}}}
+func TestLookupUserCheck(t *testing.T) {
+	connector := &checkConnector{rows: [][]driver.Value{{[]byte(`{"appSecret":"app-secret"}`), "game1", []byte(`{"gameSecret":"game-secret"}`), int64(1), int64(1)}}}
 	db := sql.OpenDB(connector)
 	defer db.Close()
 	target, err := New(db).Lookup(context.Background(), "app1", "test")
 	if err != nil || target.AppID != "app1" || target.Env != "test" || target.AppSecret != "app-secret" || target.GameSecret != "game-secret" {
 		t.Fatalf("target=%+v err=%v", target, err)
 	}
-	if strings.Contains(connector.query, "sdk_service") || len(connector.args) != 3 || connector.args[0].Value != "test" || connector.args[1].Value != "test" || connector.args[2].Value != "app1" {
+	if !strings.Contains(connector.query, "COALESCE(ch.enabled, 1)") || len(connector.args) != 4 || connector.args[0].Value != "test" || connector.args[1].Value != "test" || connector.args[2].Value != "test" || connector.args[3].Value != "app1" {
 		t.Fatalf("unexpected query: %s, args=%v", connector.query, connector.args)
 	}
 	if _, err := New(db).Lookup(context.Background(), "app1", "bad"); !errors.Is(err, model.ErrNotFound) {
@@ -66,8 +68,38 @@ func TestLookupUserCheckWithoutServiceDirectory(t *testing.T) {
 	if _, err := New(db).Lookup(context.Background(), "app1", "prod"); !errors.Is(err, model.ErrNotFound) {
 		t.Fatalf("missing binding: %v", err)
 	}
-	connector.rows = [][]driver.Value{{[]byte(`{"appSecret":""}`), "game1", []byte(`{"gameSecret":"game-secret"}`)}}
+	connector.rows = [][]driver.Value{{[]byte(`{"appSecret":""}`), "game1", []byte(`{"gameSecret":"game-secret"}`), int64(1), int64(1)}}
 	if _, err := New(db).Lookup(context.Background(), "app1", "test"); !errors.Is(err, model.ErrInvalidConfig) {
 		t.Fatalf("missing secret: %v", err)
+	}
+	connector.rows = [][]driver.Value{{[]byte(`{"appSecret":""}`), "game1", []byte(`{"gameSecret":"game-secret"}`), int64(0), int64(1)}}
+	if got, err := New(db).Lookup(context.Background(), "app1", "test"); err != nil || !got.SkipUserCheck {
+		t.Fatalf("skip without platform secret: target=%+v err=%v", got, err)
+	}
+	connector.rows = [][]driver.Value{{[]byte(`{"appSecret":""}`), "game1", []byte(`{"gameSecret":""}`), int64(0), int64(1)}}
+	if _, err := New(db).Lookup(context.Background(), "app1", "test"); !errors.Is(err, model.ErrInvalidConfig) {
+		t.Fatalf("skip without game secret: %v", err)
+	}
+	for _, tc := range []struct {
+		global, channel driver.Value
+		skip            bool
+		invalid         bool
+	}{
+		{int64(1), int64(1), false, false},
+		{int64(0), int64(1), true, false},
+		{int64(1), int64(0), true, false},
+		{nil, int64(1), false, true},
+		{int64(2), int64(1), false, true},
+		{int64(1), int64(2), false, true},
+	} {
+		connector.rows = [][]driver.Value{{[]byte(`{"appSecret":"app-secret"}`), "game1", []byte(`{"gameSecret":"game-secret"}`), tc.global, tc.channel}}
+		got, err := New(db).Lookup(context.Background(), "app1", "review")
+		if tc.invalid {
+			if !errors.Is(err, model.ErrInvalidConfig) {
+				t.Fatalf("invalid switches: %v", err)
+			}
+		} else if err != nil || got.SkipUserCheck != tc.skip {
+			t.Fatalf("switches %v/%v: target=%+v err=%v", tc.global, tc.channel, got, err)
+		}
 	}
 }

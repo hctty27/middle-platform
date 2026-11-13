@@ -118,7 +118,7 @@ watch(() => [props.targetId, env.value], () => { void load() }, { immediate: tru
     <div class="section-heading">
       <div>
         <h3>渠道服务配置</h3>
-        <p class="muted">未单独配置的服务默认关闭；全局关闭后渠道无法使用。</p>
+        <p class="muted">用户核验未单独配置时默认开启，全局或渠道环境显式关闭即跳过平台核验；其他服务未配置时默认关闭。</p>
       </div>
       <div class="panel-actions">
         <el-select :model-value="env" @change="changeEnv" :disabled="savingId !== null" style="width: 130px">
@@ -147,7 +147,10 @@ watch(() => [props.targetId, env.value], () => { void load() }, { immediate: tru
                        :disabled="savingId !== null || !item.globalEnabled" @click="save(item)">保存</el-button>
           </div>
         </div>
-        <p v-if="item.code === 'event_report' || item.code === 'subscribe_message'" class="muted">
+        <p v-if="item.code === 'user_check'" class="muted">
+          关闭后仍校验游戏请求签名，但不验证平台用户是否真实存在，并直接返回成功。
+        </p>
+        <p v-else-if="item.code === 'event_report' || item.code === 'subscribe_message'" class="muted">
           事件上报和订阅消息仅使用当前渠道环境开关；开启后同步转发平台，不保存业务数据。
         </p>
         <el-input v-else v-model="item.configText" type="textarea" :rows="3" spellcheck="false"

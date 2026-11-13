@@ -26,6 +26,7 @@ type Target struct {
 	AdapterName    string
 	AppSecret      string
 	GameSecret     string
+	SkipUserCheck  bool
 }
 
 // UserCheckRequest 表示用户核验的身份参数。

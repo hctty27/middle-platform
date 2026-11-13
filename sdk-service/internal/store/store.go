@@ -55,6 +55,7 @@ func (s *Store) VerifySchema(ctx context.Context) error {
 		return err
 	}
 	for _, entry := range []struct{ code, script string }{
+		{"user_check", "V0015__restore_user_check_service.sql"},
 		{"role_query", "add_sdk_role_query.sql"},
 		{"server_query", "add_sdk_server_query.sql"},
 		{"role_control", "add_sdk_role_control.sql"},
@@ -73,13 +74,13 @@ func (s *Store) VerifySchema(ctx context.Context) error {
 	return nil
 }
 
-// Lookup 查询用户核验的渠道环境和密钥，不依赖 SDK 服务目录。
+// Lookup 查询用户核验的渠道环境、密钥和开关。
 func (s *Store) Lookup(ctx context.Context, appID, env string) (model.Target, error) {
 	if env != "prod" && env != "test" && env != "review" {
 		return model.Target{}, model.ErrNotFound
 	}
 	const query = `
-SELECT a.config, g.code, COALESCE(gs.config, JSON_OBJECT())
+SELECT a.config, g.code, COALESCE(gs.config, JSON_OBJECT()), sv.enabled, COALESCE(ch.enabled, 1)
 FROM sdk_channel_app a
 JOIN config_node g ON g.id=a.game_id AND g.node_type='game' AND g.status=1
 LEFT JOIN sdk_node_config gs ON gs.node_id=g.id
@@ -91,15 +92,22 @@ JOIN config_node sg ON sg.id=CASE ?
     AND sg.node_type='server_group' AND sg.game_id=a.game_id AND sg.status=1
 JOIN config_node r ON r.id=sg.region_id
     AND r.node_type='region' AND r.game_id=a.game_id AND r.status=1 AND r.env_type=?
+LEFT JOIN sdk_service sv ON sv.code='user_check'
+LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id AND ch.channel_app_id=a.id AND ch.env=?
 WHERE a.code=? AND a.status=1`
 	var appJSON, gameJSON []byte
 	var gameCode string
-	err := s.db.QueryRowContext(ctx, query, env, env, appID).Scan(&appJSON, &gameCode, &gameJSON)
+	var globalEnabled sql.NullInt64
+	var channelEnabled int
+	err := s.db.QueryRowContext(ctx, query, env, env, env, appID).Scan(&appJSON, &gameCode, &gameJSON, &globalEnabled, &channelEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Target{}, model.ErrNotFound
 	}
 	if err != nil {
 		return model.Target{}, fmt.Errorf("查询用户核验渠道配置失败: %w", err)
+	}
+	if !globalEnabled.Valid || (globalEnabled.Int64 != 0 && globalEnabled.Int64 != 1) || (channelEnabled != 0 && channelEnabled != 1) {
+		return model.Target{}, model.ErrInvalidConfig
 	}
 	var app struct {
 		AppSecret string `json:"appSecret"`
@@ -107,11 +115,13 @@ WHERE a.code=? AND a.status=1`
 	var game struct {
 		GameSecret string `json:"gameSecret"`
 	}
+	skip := globalEnabled.Int64 == 0 || channelEnabled == 0
 	if json.Unmarshal(appJSON, &app) != nil || json.Unmarshal(gameJSON, &game) != nil ||
-		strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" {
+		(!skip && strings.TrimSpace(app.AppSecret) == "") || strings.TrimSpace(game.GameSecret) == "" {
 		return model.Target{}, model.ErrInvalidConfig
 	}
-	return model.Target{AppID: appID, Env: env, GameCode: gameCode, AppSecret: app.AppSecret, GameSecret: game.GameSecret}, nil
+	return model.Target{AppID: appID, Env: env, GameCode: gameCode, AppSecret: app.AppSecret, GameSecret: game.GameSecret,
+		SkipUserCheck: skip}, nil
 }
 
 // LookupService 按渠道 AppID、环境和服务代码查询启用状态、密钥与转发地址。
