@@ -151,6 +151,9 @@ func (s *OrderService) Receive(ctx context.Context, appid string, h http.Header,
 	}
 	paidAt, err := time.Parse(time.RFC3339, callback.PaidAt)
 	if err != nil {
+		paidAt, err = time.Parse("2006-01-02 15:04:05Z07", callback.PaidAt)
+	}
+	if err != nil {
 		return "", ErrInvalidOrder
 	}
 	if err = s.Orders.ConfirmPayment(ctx, o.ID, callback.OrderNo, paidAt); err != nil {
