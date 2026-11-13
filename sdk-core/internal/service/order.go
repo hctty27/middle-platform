@@ -187,49 +187,47 @@ func (s *OrderService) deliver(ctx context.Context, o model.Order) error {
 	return err
 }
 
-// RunWorker 使用固定数量的消费者并发处理到期通知。
-// 不在 HTTP 回调请求中发送网络通知；多进程由 MySQL SKIP LOCKED 分配订单。
-// 通知租约为 60 秒，长于单次 5 秒网络超时；进程崩溃后租约到期可重新领取。
-func (s *OrderService) RunWorker(ctx context.Context) {
-	const workers = 4
+// RunWorker 使用可配置数量的消费者处理到期通知。
+// 通过 MySQL SKIP LOCKED 协调多进程；60 秒租约长于 5 秒通知超时。
+func (s *OrderService) RunWorker(ctx context.Context, workers int, idleInterval time.Duration) {
 	var wg sync.WaitGroup
 	wg.Add(workers)
 	for i := 0; i < workers; i++ {
 		go func() {
 			defer wg.Done()
-			ticker := time.NewTicker(500 * time.Millisecond)
-			defer ticker.Stop()
-			var lastClaimErrorLog time.Time
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					jobCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-					order, err := s.Orders.ClaimDue(jobCtx)
-					cancel()
-					if err != nil {
-						if ctx.Err() == nil {
-							// 避免数据库故障时每 500ms 刷屏，同一消费者 30 秒最多记录一次。
-							if time.Since(lastClaimErrorLog) >= 30*time.Second {
-								slog.Warn("领取游戏发货通知任务失败", "error", err)
-								lastClaimErrorLog = time.Now()
-							}
-						}
-						continue
-					}
-					if order == nil {
-						continue
-					}
-					if notifyErr := s.deliver(ctx, *order); notifyErr != nil && ctx.Err() == nil {
-						slog.Warn("游戏发货通知失败", "order_id", order.ID,
-							"attempt", order.NotifyAttempts, "error", notifyErr)
-					}
-				}
-			}
+			s.runNotifyWorker(ctx, idleInterval)
 		}()
 	}
 	wg.Wait()
+}
+
+// runNotifyWorker 在存在积压时连续领取订单，仅空闲或领取失败时等待。
+func (s *OrderService) runNotifyWorker(ctx context.Context, idleInterval time.Duration) {
+	var lastClaimErrorLog time.Time
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		jobCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		order, err := s.Orders.ClaimDue(jobCtx)
+		cancel()
+		if err == nil && order != nil {
+			if notifyErr := s.deliver(ctx, *order); notifyErr != nil && ctx.Err() == nil {
+				slog.Warn("游戏发货通知失败", "order_id", order.ID,
+					"attempt", order.NotifyAttempts, "error", notifyErr)
+			}
+			continue
+		}
+		if err != nil && ctx.Err() == nil && time.Since(lastClaimErrorLog) >= 30*time.Second {
+			slog.Warn("领取游戏发货通知任务失败", "error", err)
+			lastClaimErrorLog = time.Now()
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(idleInterval):
+		}
+	}
 }
 
 // Validate 在启动前检查订单服务依赖是否完整。

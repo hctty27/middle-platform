@@ -20,13 +20,20 @@ type Database struct {
 	ConnMaxLifetime string `yaml:"connMaxLifetime"`
 }
 
+// OrderNotify 保存异步发货任务的并发和空闲轮询参数。
+type OrderNotify struct {
+	Workers      int    `yaml:"workers"`
+	IdleInterval string `yaml:"idleInterval"`
+}
+
 // Config 保存 SDK Core 的监听、数据库和日志配置。
 type Config struct {
 	Log    logging.Config `yaml:"log"`
 	Server struct {
 		Address string `yaml:"address"`
 	} `yaml:"server"`
-	Database  Database `yaml:"database"`
+	Database    Database    `yaml:"database"`
+	OrderNotify OrderNotify `yaml:"orderNotify"`
 	AdminAuth struct {
 		Secret string `yaml:"secret"`
 	} `yaml:"adminAuth"`
@@ -45,12 +52,24 @@ func validateDB(d Database) error {
 	return nil
 }
 
+func validateOrderNotify(cfg OrderNotify) error {
+	if cfg.Workers < 1 || cfg.Workers > 32 {
+		return errors.New("orderNotify.workers 必须在 1 到 32 之间")
+	}
+	interval, err := time.ParseDuration(cfg.IdleInterval)
+	if err != nil || interval < 100*time.Millisecond || interval > 10*time.Second {
+		return errors.New("orderNotify.idleInterval 必须在 100ms 到 10s 之间")
+	}
+	return nil
+}
+
 // Load 严格解析单份 YAML，并允许环境变量覆盖连接和监听地址。
 func Load(path string) (Config, error) {
 	cfg := Config{}
 	cfg.Log = logging.Default()
 	cfg.Server.Address = ":8082"
 	cfg.Database = defaultDB()
+	cfg.OrderNotify = OrderNotify{Workers: 4, IdleInterval: "500ms"}
 	if path == "" {
 		path = "configs/config.yaml"
 	}
@@ -76,6 +95,9 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("必须配置 server.address")
 	}
 	if err := validateDB(cfg.Database); err != nil {
+		return Config{}, err
+	}
+	if err := validateOrderNotify(cfg.OrderNotify); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

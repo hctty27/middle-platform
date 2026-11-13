@@ -85,11 +85,12 @@ func Run(configPath string) error {
 		return err
 	}
 
+	idleInterval, _ := time.ParseDuration(cfg.OrderNotify.IdleInterval) // 已通过 settings.Load 校验
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)
-		orders.RunWorker(workerCtx)
+		orders.RunWorker(workerCtx, cfg.OrderNotify.Workers, idleInterval)
 	}()
 	defer func() {
 		stopWorker()

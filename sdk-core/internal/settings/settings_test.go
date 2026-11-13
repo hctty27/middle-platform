@@ -20,6 +20,9 @@ func TestSingleDatabaseConfiguration(t *testing.T) {
 	if cfg.Database.MaxOpenConns != 20 {
 		t.Fatalf("unexpected pool default: %d", cfg.Database.MaxOpenConns)
 	}
+	if cfg.OrderNotify.Workers != 4 || cfg.OrderNotify.IdleInterval != "500ms" {
+		t.Fatalf("unexpected order notify defaults: %+v", cfg.OrderNotify)
+	}
 }
 
 func TestRemovedFeatureSwitchesRejected(t *testing.T) {
@@ -96,5 +99,47 @@ func TestRemovedAdminAuthEnabledRejected(t *testing.T) {
 		if _, err := Load(path); err == nil {
 			t.Fatalf("removed adminAuth.enabled=%s should be rejected", enabled)
 		}
+	}
+}
+
+// TestOrderNotifyConfiguration 验证发货 Worker 参数可以覆盖默认值，并拒绝危险配置。
+func TestOrderNotifyConfiguration(t *testing.T) {
+	cases := []struct {
+		name    string
+		yaml    string
+		workers int
+		idle    string
+		wantErr bool
+	}{
+		{name: "custom", yaml: "orderNotify:\n  workers: 8\n  idleInterval: 1s\n", workers: 8, idle: "1s"},
+		{name: "minimum", yaml: "orderNotify:\n  workers: 1\n  idleInterval: 100ms\n", workers: 1, idle: "100ms"},
+		{name: "maximum", yaml: "orderNotify:\n  workers: 32\n  idleInterval: 10s\n", workers: 32, idle: "10s"},
+		{name: "zero workers", yaml: "orderNotify:\n  workers: 0\n", wantErr: true},
+		{name: "too many workers", yaml: "orderNotify:\n  workers: 33\n", wantErr: true},
+		{name: "too short idle", yaml: "orderNotify:\n  idleInterval: 99ms\n", wantErr: true},
+		{name: "too long idle", yaml: "orderNotify:\n  idleInterval: 11s\n", wantErr: true},
+		{name: "invalid duration", yaml: "orderNotify:\n  idleInterval: instant\n", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			data := "database:\n  dsn: test-dsn\n" + tc.yaml
+			if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected invalid order notify config: %q", tc.yaml)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.OrderNotify.Workers != tc.workers || cfg.OrderNotify.IdleInterval != tc.idle {
+				t.Fatalf("unexpected order notify config: %+v", cfg.OrderNotify)
+			}
+		})
 	}
 }
