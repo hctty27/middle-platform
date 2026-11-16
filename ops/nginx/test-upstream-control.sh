@@ -85,6 +85,10 @@ if grep -Eq '^server 127[.]0[.]0[.]1:8201 .* down;$' "$root/run/nginx/config-cen
 fi
 sed -i 's/8202 max_fails=1 fail_timeout=10s;/8202 max_fails=1 fail_timeout=10s down;/' \
     "$root/run/nginx/config-center-upstream.conf"
+if "$control" validate config-center 8202 >/dev/null 2>&1; then
+    printf 'Already-drained peer validation unexpectedly passed\\n' >&2
+    exit 1
+fi
 if "$control" drain config-center 8201 >/dev/null 2>&1; then
     printf 'Refused-to-drain-last-peer test unexpectedly passed\n' >&2
     exit 1

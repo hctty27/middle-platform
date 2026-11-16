@@ -54,6 +54,10 @@ if [[ "$total" -ne "$expected_count" || "$matches" -ne 1 ]]; then
         "$file" "$total" "$matches" "$expected_count" >&2
     exit 1
 fi
+if [[ "$action" == validate && "$target_down" -eq 1 ]]; then
+    printf 'Upstream instance is already marked down: %s port %s\\n' "$group" "$port" >&2
+    exit 1
+fi
 if [[ "$action" == drain && "$target_down" -eq 0 && "$active" -le 1 ]]; then
     printf 'Refusing to drain the last active %s instance\n' "$group" >&2
     exit 1

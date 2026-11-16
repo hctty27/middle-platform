@@ -208,6 +208,10 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
             printf 'Supervisor program is unavailable: %s; no application files were changed\n' "$program" >&2
             exit 1
         fi
+        if ! curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
+            printf 'Instance is not Ready: %s on port %s; no application files were changed\\n' "$program" "$port" >&2
+            exit 1
+        fi
         if [[ "$group" != none ]]; then
             MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" validate "$group" "$port"
         fi
