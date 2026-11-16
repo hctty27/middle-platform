@@ -532,7 +532,7 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 <h2 id="production-11">内部 UTC 升级与回滚</h2>
 <p>本次同时统一内部 UTC 时区与秒级精度：数据库使用 <code>DATETIME(0)</code>，内部 API 使用 UTC RFC3339 秒级时间并以 <code>Z</code> 结尾；外部 HMAC 时间戳继续使用 Unix 秒，不改变签名协议。</p>
 <ol>
-<li><strong>先停服并备份：</strong>停止四个 Go 服务的全部实例，确认没有旧版本继续写入时间字段；分别完整备份 <code>config_center</code> 和 <code>config_access</code>。时间精度变更会重建部分表，必须在维护窗口执行。</li>
+<li><strong>先停服并备份：</strong>停止四个 Go 服务的全部实例，确认没有旧版本继续写入时间字段；分别完整备份 <code>config_center</code> 和 <code>config_access</code>。降低 DATETIME 精度的 ALTER 可能触发表重建或长时间元数据锁，必须先在预发布环境评估并安排维护窗口。</li>
 <li><strong>执行数据库迁移：</strong>在 <code>config_center</code> 执行 V0019，在 <code>config_access</code> 执行 V0020。脚本先扣除已有值的小数秒，再修改为 <code>DATETIME(0)</code>，采用截断、不四舍五入。<code>game_order</code> 可能较大，先在同版本 MySQL 的预发布库评估执行时长、锁等待和磁盘空间。</li>
 <li><strong>升级并启动服务：</strong>部署本次四个 Go 服务版本后再启动。配置同步端仍兼容带小数秒 RFC3339 和旧无时区时间（按 UTC 解释），但统一截断到秒；支付回调也兼容毫秒输入并在入库前转 UTC、截断到秒。配置接口只输出不带小数秒的 RFC3339。</li>
 <li><strong>核验：</strong>检查快照、增量、节点读取和接入端 revision 均以秒级 UTC 输出；抽查订单 <code>paid_at</code>；查询 <code>information_schema.columns.datetime_precision</code>，确认两库所有业务时间字段均为 0；检查所有 Go 服务的 MySQL Session 时区为 <code>+00:00</code>。</li>
