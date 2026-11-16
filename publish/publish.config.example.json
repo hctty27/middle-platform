@@ -11,11 +11,9 @@
     "sdk-core-2": 8212,
     "sdk-core-3": 8213,
     "sdk-core-4": 8214,
-    "sdk-core-5": 8215,
     "sdk-service-1": 8221,
     "sdk-service-2": 8222,
     "sdk-service-3": 8223,
-    "sdk-service-4": 8224,
-    "sdk-service-5": 8225
+    "sdk-service-4": 8224
   }
 }

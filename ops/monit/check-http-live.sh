@@ -8,11 +8,14 @@ fi
 
 program=$1
 port=$2
+case "$program" in
+    config-center-[12]) supervisor_process="config-center:$program" ;;
+    sdk-core-[1-4]) supervisor_process="sdk-core:$program" ;;
+    sdk-service-[1-4]) supervisor_process="sdk-service:$program" ;;
+    config-center-access) supervisor_process=$program ;;
+    *) printf 'Invalid Supervisor program name\n' >&2; exit 2 ;;
+esac
 
-if [[ ! "$program" =~ ^(config-center(-access)?|sdk-core|sdk-service)(-[1-9][0-9]*)?$ ]]; then
-    printf 'Invalid Supervisor program name\n' >&2
-    exit 2
-fi
 lock_file=${PUBLISH_LOCK_FILE:-/data/middle-platform/.publish.lock}
 if [[ -L "$lock_file" ]]; then
     printf 'Refusing symlinked publish lock: %s\n' "$lock_file" >&2
@@ -49,8 +52,8 @@ if [[ -z "$supervisorctl_bin" || ! -x "$supervisorctl_bin" || -z "$curl_bin" || 
     exit 0
 fi
 
-status=$("$supervisorctl_bin" status "$program" 2>/dev/null) || exit 0
-if [[ "$status" != "$program RUNNING "* ]]; then
+status=$("$supervisorctl_bin" status "$supervisor_process" 2>/dev/null) || exit 0
+if [[ "$status" != "$supervisor_process RUNNING "* ]]; then
     exit 0
 fi
 

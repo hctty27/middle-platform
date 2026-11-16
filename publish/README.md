@@ -4,7 +4,7 @@
 
 ## 生产实例拓扑
 
-`publish.config.json` 的 `services` 必须包含完整的 2/5/5 实例及固定本机健康端口：
+`publish.config.json` 的 `services` 必须包含完整的 2/4/4 实例及固定本机健康端口：
 
 ```json
 {
@@ -16,17 +16,17 @@
     "sdk-core-2": 8212,
     "sdk-core-3": 8213,
     "sdk-core-4": 8214,
-    "sdk-core-5": 8215,
+    "sdk-core-4": 8214,
     "sdk-service-1": 8221,
     "sdk-service-2": 8222,
     "sdk-service-3": 8223,
     "sdk-service-4": 8224,
-    "sdk-service-5": 8225
+    "sdk-service-4": 8224
   }
 }
 ```
 
-实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。可额外配置可选的 `config-center-access: 8291`，但它不属于当前 2/5/5 Nginx upstream。
+实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。可额外配置可选的 `config-center-access: 8291`，但它不属于当前 2/4/4 Nginx upstream。
 
 ## 首次部署前必须完成
 
@@ -34,7 +34,9 @@
 2. 按 [ops/nginx/README.md](../ops/nginx/README.md) 安装 Nginx upstream include、合并三个 API location、配置 `worker_shutdown_timeout 75s`，初始化 `/data/middle-platform/run/nginx/`。
 3. 确认 Nginx 由 systemd 管理且处于 active 状态。
 4. 为 SSH 部署用户配置受限免密 sudo：仅允许实际路径下的 `nginx -t`、`nginx -T`、`systemctl reload nginx`。发布脚本使用 `sudo -n`，不会交互式提权。
-5. 确认 12 个 Supervisor program 均存在，SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
+5. 确认 10 个 Supervisor program 均存在，Supervisor 以 root 运行并加载三个 `[group:...]` 分组；进程名需使用 `group:program` 形式。每个实例设置 `GOMEMLIMIT=128MiB`（Go Runtime 软限制，不是 RSS 硬上限）。SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
+
+首次从旧版未分组配置迁移时，先备份 Supervisor 配置并安排维护窗口。切换到 `[group:...]` 后，进程标识会从 `sdk-core-1` 变为 `sdk-core:sdk-core-1`，`supervisorctl reread/update` 可能重启所有实例并移除第 5 个 Core/Service 实例；完成后再执行正常的逐实例滚动发布。
 
 如果这些前置条件未完成，正常发布会在替换应用文件前失败。首次安装 Nginx 与系统服务配置必须由管理员审核，不会由发布脚本自动覆盖。
 
@@ -47,13 +49,13 @@
 # 完整发布：校验、逐实例 Nginx 摘除、Supervisor 重启、Ready 验活、重新加入
 .\publish\publish.ps1 -Version v1.0.0
 
-# 只滚动更新 SDK Core 的 5 个实例
+# 只滚动更新 SDK Core 的 4 个实例
 .\publish\publish.ps1 -Service sdk-core -Version v1.0.1
 
 # 只滚动更新配置中心的 2 个实例
 .\publish\publish.ps1 -Service config-center -Version v1.0.2
 
-# 只滚动更新 SDK Service 的 5 个实例
+# 只滚动更新 SDK Service 的 4 个实例
 .\publish\publish.ps1 -Service sdk-service -Version v1.0.3
 
 # 只更新文件，不重启、不执行 Nginx 摘除
@@ -64,12 +66,12 @@
 
 ## 滚动发布流程
 
-完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/5/5 进程与 Nginx runtime include，再原子替换文件。随后按 `services` 顺序逐个执行：
+完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/4 进程与 Nginx runtime include，再原子替换文件。随后按 `services` 顺序逐个执行：
 
 1. 将当前实例在对应 Nginx upstream 标记为 `down`。
 2. 执行 `nginx -t` 并 graceful reload。
 3. 等待旧 Nginx worker 退出；`worker_shutdown_timeout 75s` 限制排空时间。
-4. 调用 `supervisorctl restart <program>`。
+4. 调用 `supervisorctl restart <group>:<program>`，例如 `supervisorctl restart sdk-core:sdk-core-1`。
 5. 等待 Supervisor RUNNING，并要求本机 `/health/ready` 连续 3 次 HTTP 200。
 6. 移除 `down`，再次校验并 reload Nginx，将实例重新加入流量。
 7. 完成当前实例后才处理下一个实例。

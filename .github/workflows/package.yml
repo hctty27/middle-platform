@@ -57,13 +57,15 @@ jobs:
       - name: Validate deployment script syntax
         run: |
           bash -n publish/publish-remote.sh
-          for script in ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/nginx/install-runtime.sh ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh; do
+          for script in ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/monit/test-restart-supervisor-program.sh ops/nginx/install-runtime.sh ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh; do
             bash -n "$script"
           done
       - name: Test Nginx upstream drain and restore
         run: bash ops/nginx/test-upstream-control.sh
       - name: Test Monit liveness check
         run: bash ops/monit/test-check-http-live.sh
+      - name: Test Monit Supervisor group restart
+        run: bash ops/monit/test-restart-supervisor-program.sh
       - name: Publishing smoke tests
         run: python3 -I publish/ci_publish_smoke.py
       # 验证完整归档的内容、ELF 架构及 Linux 执行位。
@@ -74,7 +76,7 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ ops/ ops/README.md ops/supervisor/middle-platform.conf ops/monit/ ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/monit/middle-platform.conf ops/nginx/ ops/nginx/README.md ops/nginx/middle-platform-upstreams.conf ops/nginx/middle-platform-locations.conf ops/nginx/proxy-common.conf ops/nginx/middle-platform-main.conf.example ops/nginx/runtime/ ops/nginx/runtime/config-center-upstream.conf ops/nginx/runtime/sdk-core-upstream.conf ops/nginx/runtime/sdk-service-upstream.conf ops/nginx/install-runtime.sh ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ ops/ ops/README.md ops/supervisor/middle-platform.conf ops/monit/ ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/monit/test-restart-supervisor-program.sh ops/monit/middle-platform.conf ops/nginx/ ops/nginx/README.md ops/nginx/middle-platform-upstreams.conf ops/nginx/middle-platform-locations.conf ops/nginx/proxy-common.conf ops/nginx/middle-platform-main.conf.example ops/nginx/runtime/ ops/nginx/runtime/config-center-upstream.conf ops/nginx/runtime/sdk-core-upstream.conf ops/nginx/runtime/sdk-service-upstream.conf ops/nginx/install-runtime.sh ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do
@@ -96,7 +98,7 @@ jobs:
             test "$(stat -c %a "$tmpdir/bin/$binary")" = "755"
             file "$tmpdir/bin/$binary" | grep -E 'ELF 64-bit .*x86-64'
           done
-          for script in ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/nginx/install-runtime.sh ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh; do
+          for script in ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/monit/test-restart-supervisor-program.sh ops/nginx/install-runtime.sh ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh; do
             tar -tvzf "$tarball" | grep -E "^-rwxr-xr-x.*$script$"
           done
           # 验证相对静态路径与运行时配置被真正写入发布包。
@@ -155,7 +157,7 @@ jobs:
           if (-not (Test-Path $archive)) { throw "Missing archive: $archive" }
           $names = @(& tar -tzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
-          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql', 'ops/README.md', 'ops/supervisor/middle-platform.conf', 'ops/monit/check-http-live.sh', 'ops/monit/restart-supervisor-program.sh', 'ops/nginx/README.md', 'ops/nginx/middle-platform-upstreams.conf', 'ops/nginx/middle-platform-locations.conf', 'ops/nginx/proxy-common.conf', 'ops/nginx/middle-platform-main.conf.example', 'ops/nginx/runtime/config-center-upstream.conf', 'ops/nginx/runtime/sdk-core-upstream.conf', 'ops/nginx/runtime/sdk-service-upstream.conf', 'ops/nginx/install-runtime.sh', 'ops/nginx/upstream-control.sh', 'ops/nginx/test-upstream-control.sh')) {
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql', 'ops/README.md', 'ops/supervisor/middle-platform.conf', 'ops/monit/check-http-live.sh', 'ops/monit/restart-supervisor-program.sh', 'ops/monit/test-check-http-live.sh', 'ops/monit/test-restart-supervisor-program.sh', 'ops/nginx/README.md', 'ops/nginx/middle-platform-upstreams.conf', 'ops/nginx/middle-platform-locations.conf', 'ops/nginx/proxy-common.conf', 'ops/nginx/middle-platform-main.conf.example', 'ops/nginx/runtime/config-center-upstream.conf', 'ops/nginx/runtime/sdk-core-upstream.conf', 'ops/nginx/runtime/sdk-service-upstream.conf', 'ops/nginx/install-runtime.sh', 'ops/nginx/upstream-control.sh', 'ops/nginx/test-upstream-control.sh')) {
             if ($name -notin $names) { throw "Missing binary: $name" }
           }
           foreach ($sqlFile in @(Get-ChildItem -LiteralPath 'db/full', 'db/incremental' -File -Filter '*.sql')) {
@@ -171,7 +173,7 @@ jobs:
               throw "Missing executable permission in tar header: bin/$name"
             }
           }
-          foreach ($script in @('ops/monit/check-http-live.sh', 'ops/monit/restart-supervisor-program.sh', 'ops/nginx/install-runtime.sh', 'ops/nginx/upstream-control.sh', 'ops/nginx/test-upstream-control.sh')) {
+          foreach ($script in @('ops/monit/check-http-live.sh', 'ops/monit/restart-supervisor-program.sh', 'ops/monit/test-check-http-live.sh', 'ops/monit/test-restart-supervisor-program.sh', 'ops/nginx/install-runtime.sh', 'ops/nginx/upstream-control.sh', 'ops/nginx/test-upstream-control.sh')) {
             if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\s' -and $_.Trim().EndsWith($script) })) {
               throw "Missing executable permission in tar header: $script"
             }
