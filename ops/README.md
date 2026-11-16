@@ -36,6 +36,8 @@ SDK Core 的 `orderNotify.workers: 4` 是每进程配置，4 个实例最多同�
 
 Supervisor 使用三个异构分组：`config-center`、`sdk-core`、`sdk-service`。组内进程名在 Supervisor 中带组前缀，例如 `config-center:config-center-1`。可以使用 `supervisorctl status config-center:*`、`supervisorctl restart sdk-core:*` 等命令按组管理。
 
+**从旧版 2/5/5 首次迁移时注意：** 旧配置的进程标识是 `sdk-core-1`，新分组后的标识是 `sdk-core:sdk-core-1`。替换 Supervisor 配置后执行 `reread/update` 会切换进程组标识，并移除 `sdk-core-5`、`sdk-service-5`；这次配置迁移可能重启全部 10 个实例，不属于逐实例滚动发布。请先备份 Supervisor 配置，在维护窗口完成迁移，确认 2/4/4 全部 RUNNING 且 Ready 后，再启用新的 Nginx upstream 和后续滚动发布。
+
 如果服务器已有同名 program，先备份并合并配置，不要重复定义。SSH 发布用户也必须能够通过 Supervisor control socket 执行 `supervisorctl status/restart`；按实际发行版配置 socket 所属组和权限，不要把管理 socket 暴露给普通业务用户。完成配置后：
 
 ```bash

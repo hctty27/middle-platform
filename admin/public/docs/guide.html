@@ -401,6 +401,7 @@ stdout_logfile_maxbytes=50MB
 stdout_logfile_backups=5
 environment=GOMEMLIMIT=&quot;128MiB&quot;,CONFIG_GO_ADDR=&quot;127.0.0.1:8201&quot;</code></pre></div>
 <p>部署拓扑为 Config Center 2 个实例（8201–8202）、SDK Core 4 个实例（8211–8214）、SDK Service 4 个实例（8221–8224）。每个 Go program 均设置 <code>GOMEMLIMIT=&quot;128MiB&quot;</code>，并归入 <code>[group:config-center]</code>、<code>[group:sdk-core]</code>、<code>[group:sdk-service]</code> 三个 Supervisor 分组。实例以 <code>user=root</code> 启动；SSH 发布账号仍使用独立的 <code>deploy</code> 账号。分组后实例名使用 <code>sdk-core:sdk-core-1</code> 形式。配置变更后：</p>
+<p><strong>首次从旧版 2/5/5 未分组配置迁移：</strong> 先备份 Supervisor 配置并安排维护窗口。切换到显式分组后，进程标识会从 <code>sdk-core-1</code> 变为 <code>sdk-core:sdk-core-1</code>；执行 <code>supervisorctl reread</code> / <code>update</code> 可能重启全部 10 个实例，并移除 <code>sdk-core-5</code>、<code>sdk-service-5</code>。这一步不是逐实例滚动发布。确认新分组下 2/4/4 全部 RUNNING 且 Ready 后，再切换 Nginx runtime upstream 并使用新的发布脚本。</p>
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl status config-center:*

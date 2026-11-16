@@ -36,6 +36,8 @@
 4. 为 SSH 部署用户配置受限免密 sudo：仅允许实际路径下的 `nginx -t`、`nginx -T`、`systemctl reload nginx`。发布脚本使用 `sudo -n`，不会交互式提权。
 5. 确认 10 个 Supervisor program 均存在，Supervisor 以 root 运行并加载三个 `[group:...]` 分组；进程名需使用 `group:program` 形式。每个实例设置 `GOMEMLIMIT=128MiB`（Go Runtime 软限制，不是 RSS 硬上限）。SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
 
+首次从旧版未分组配置迁移时，先备份 Supervisor 配置并安排维护窗口。切换到 `[group:...]` 后，进程标识会从 `sdk-core-1` 变为 `sdk-core:sdk-core-1`，`supervisorctl reread/update` 可能重启所有实例并移除第 5 个 Core/Service 实例；完成后再执行正常的逐实例滚动发布。
+
 如果这些前置条件未完成，正常发布会在替换应用文件前失败。首次安装 Nginx 与系统服务配置必须由管理员审核，不会由发布脚本自动覆盖。
 
 ## 使用命令
