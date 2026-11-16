@@ -24,6 +24,36 @@ Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分�
 
 Nginx 和 Supervisor 由管理员按服务器现状安装、管理；项目不提供 Nginx/Supervisor 安装脚本，也不会自动覆盖系统配置。
 
+### 从旧版配置迁移
+
+首次切换到单文件配置前，先备份旧站点配置，并检查 Nginx 当前实际加载的 upstream 定义：
+
+```bash
+sudo nginx -T 2>&1 | grep -nE 'upstream (config_center|sdk_core|sdk_service)'
+```
+
+如果旧版单独使用了 `/etc/nginx/conf.d/middle-platform-upstreams.conf`，必须先备份并停用它，避免新旧配置同时定义相同 upstream：
+
+```bash
+timestamp=$(date +%Y%m%d%H%M%S)
+backup_dir=/etc/nginx/backup/middle-platform
+sudo install -d -m 0700 "$backup_dir"
+
+for file in middle-platform.conf middle-platform-upstreams.conf middle-platform-locations.conf proxy-common.conf; do
+    source="/etc/nginx/conf.d/$file"
+    if sudo test -f "$source"; then
+        sudo cp -a "$source" "$backup_dir/$file.$timestamp"
+    fi
+done
+
+legacy_upstream=/etc/nginx/conf.d/middle-platform-upstreams.conf
+if sudo test -f "$legacy_upstream"; then
+    sudo mv "$legacy_upstream" "$legacy_upstream.disabled.$timestamp"
+fi
+```
+
+如果 `nginx -T` 显示其他文件仍定义了这三个 upstream，也必须先备份并停用对应旧定义。不要删除备份；确认新配置通过 `nginx -t` 且业务正常后，再按运维保留策略清理。
+
 1. 确认 `/etc/nginx/nginx.conf` 的 `http {}` 中包含：
 
 ```nginx
