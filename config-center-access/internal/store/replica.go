@@ -21,14 +21,15 @@ type State struct {
 
 // NodeView 仅展示接入服务本地副本的非敏感索引字段。
 type NodeView struct {
-	ID       int64   `json:"id"`
-	GameID   *int64  `json:"game_id"`
-	RegionID *int64  `json:"region_id"`
-	NodeType string  `json:"node_type"`
-	EnvType  *string `json:"env_type"`
-	Code     string  `json:"code"`
-	Name     string  `json:"name"`
-	Status   int     `json:"status"`
+	ID         int64   `json:"id"`
+	GameID     *int64  `json:"game_id"`
+	RegionID   *int64  `json:"region_id"`
+	NodeType   string  `json:"node_type"`
+	EnvType    *string `json:"env_type"`
+	MarketType *string `json:"market_type"`
+	Code       string  `json:"code"`
+	Name       string  `json:"name"`
+	Status     int     `json:"status"`
 }
 
 // Replica 使用独立数据库，不直接修改权威配置中心。
@@ -51,7 +52,15 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 	if nodeCount != 1 || stateCount != 1 {
 		return errors.New("本地配置副本缺少表结构；请在空的 config_access 数据库手动执行 config-center-access/db/sql/initialize.sql")
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,env_type,node_type,
+	var marketColumn int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema=DATABASE() AND table_name='config_node' AND column_name='market_type'`).Scan(&marketColumn); err != nil {
+		return err
+	}
+	if marketColumn != 1 {
+		return errors.New("本地副本缺少 market_type，请先备份并手工执行 db/incremental/V0016__add_config_access_game_market_type.sql")
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,env_type,market_type,node_type,
 		code,name,status,config,remark,created_at,updated_at FROM config_node LIMIT 0`)
 	if err != nil {
 		return fmt.Errorf("本地副本表结构已过时，请先使用旧版升级程序升级再启动: %w", err)
@@ -91,6 +100,16 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 	}
 	if strings.Contains(clause, "production") || !strings.Contains(clause, "prod") {
 		return errors.New("本地副本环境 CHECK 约束已过时，请先升级到 V6")
+	}
+	if err := s.DB.QueryRowContext(ctx, `SELECT check_clause FROM information_schema.check_constraints
+		WHERE constraint_schema=DATABASE() AND constraint_name='chk_replica_node_market_type'`).Scan(&clause); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("本地副本缺少游戏运营地区 CHECK 约束，请先备份并手工执行 db/incremental/V0016__add_config_access_game_market_type.sql")
+		}
+		return err
+	}
+	if !strings.Contains(clause, "domestic") || !strings.Contains(clause, "overseas") {
+		return errors.New("本地副本游戏运营地区 CHECK 约束已过时，请先手工执行 db/incremental/V0016__add_config_access_game_market_type.sql")
 	}
 	var stateRows int
 	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_sync_state WHERE id=1").Scan(&stateRows); err != nil {
@@ -164,15 +183,15 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 			return false, err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO config_node
-			(id,game_id,region_id,node_type,env_type,code,name,status,config,remark,created_at,updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+			(id,game_id,region_id,node_type,env_type,market_type,code,name,status,config,remark,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
 			ON DUPLICATE KEY UPDATE
 			game_id=VALUES(game_id),region_id=VALUES(region_id),
-			node_type=VALUES(node_type),env_type=VALUES(env_type),
+			node_type=VALUES(node_type),env_type=VALUES(env_type),market_type=VALUES(market_type),
 			code=VALUES(code),name=VALUES(name),status=VALUES(status),
 			config=VALUES(config),remark=VALUES(remark),
 			created_at=VALUES(created_at),updated_at=VALUES(updated_at)`,
-			node.ID, node.GameID, node.RegionID, node.NodeType, node.EnvType, node.Code,
+			node.ID, node.GameID, node.RegionID, node.NodeType, node.EnvType, node.MarketType, node.Code,
 			node.Name, node.Status, node.Config, node.Remark, created, updated)
 		if err != nil {
 			return false, fmt.Errorf("保存节点 %d 失败: %w", node.ID, err)
@@ -198,7 +217,7 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 	return true, nil
 }
 
-// validateNode 在持久化前校验远端节点的必填项、环境枚举和日期字段。
+// validateNode 在持久化前校验远端节点的必填项、环境、运营地区和日期字段。
 func validateNode(n remote.Node) error {
 	if n.ID <= 0 || n.Code == "" || n.Name == "" || !json.Valid([]byte(n.Config)) {
 		return fmt.Errorf("节点 ID=%d 或 JSON 配置不合法", n.ID)
@@ -213,6 +232,13 @@ func validateNode(n remote.Node) error {
 		}
 	} else if n.EnvType != nil {
 		return fmt.Errorf("非大区节点不能设置环境")
+	}
+	if n.NodeType == "game" {
+		if n.MarketType == nil || (*n.MarketType != "domestic" && *n.MarketType != "overseas") {
+			return fmt.Errorf("游戏节点 %d 的运营地区不合法", n.ID)
+		}
+	} else if n.MarketType != nil {
+		return fmt.Errorf("非游戏节点 %d 不能设置运营地区", n.ID)
 	}
 	if _, err := parseDate(n.CreatedAt); err != nil {
 		return err
@@ -237,8 +263,7 @@ func parseDate(v string) (time.Time, error) {
 
 // Nodes 查询本地配置副本，不触发远程网络访问。
 func (s *Replica) Nodes(ctx context.Context) ([]NodeView, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,node_type,env_type,code,name,status
-        FROM config_node ORDER BY id`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,node_type,env_type,market_type,code,name,status FROM config_node ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -247,8 +272,8 @@ func (s *Replica) Nodes(ctx context.Context) ([]NodeView, error) {
 	for rows.Next() {
 		var n NodeView
 		var game, region sql.NullInt64
-		var envType sql.NullString
-		if err := rows.Scan(&n.ID, &game, &region, &n.NodeType, &envType, &n.Code, &n.Name, &n.Status); err != nil {
+		var envType, marketType sql.NullString
+		if err := rows.Scan(&n.ID, &game, &region, &n.NodeType, &envType, &marketType, &n.Code, &n.Name, &n.Status); err != nil {
 			return nil, err
 		}
 		if game.Valid {
@@ -259,6 +284,9 @@ func (s *Replica) Nodes(ctx context.Context) ([]NodeView, error) {
 		}
 		if envType.Valid {
 			n.EnvType = &envType.String
+		}
+		if marketType.Valid {
+			n.MarketType = &marketType.String
 		}
 		out = append(out, n)
 	}

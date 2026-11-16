@@ -7,6 +7,7 @@ CREATE TABLE config_node (
     region_id BIGINT NULL,
     node_type VARCHAR(20) NOT NULL,
     env_type VARCHAR(16) COLLATE utf8mb4_bin NULL,
+    market_type VARCHAR(16) COLLATE utf8mb4_bin NULL COMMENT '游戏运营地区：domestic国内，overseas海外；仅游戏节点使用',
     code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     name VARCHAR(128) NOT NULL,
     status TINYINT NOT NULL,
@@ -20,6 +21,10 @@ CREATE TABLE config_node (
     CONSTRAINT chk_replica_node_env_type CHECK (
         (node_type = 'region' AND (env_type IS NULL OR env_type IN ('test', 'review', 'prod')))
         OR (node_type <> 'region' AND env_type IS NULL)
+    ),
+    CONSTRAINT chk_replica_node_market_type CHECK (
+        (node_type = 'game' AND market_type IS NOT NULL AND market_type IN ('domestic', 'overseas'))
+        OR (node_type <> 'game' AND market_type IS NULL)
     ),
     CONSTRAINT chk_replica_node_ancestry CHECK (
         (node_type = 'game' AND game_id IS NULL AND region_id IS NULL)

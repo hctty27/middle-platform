@@ -233,7 +233,41 @@ VALUES (11,900,'test',0,'{}');""", ok=False)
 
     mysql(database="manual_replica", script=replica)
     assert_sql("SELECT epoch,revision FROM manual_replica.config_sync_state WHERE id=1", "NULL\t0")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.table_constraints
+      WHERE constraint_schema='manual_replica' AND table_name='config_node'
+        AND constraint_name='chk_replica_node_market_type'""", "1")
+    mysql("""INSERT INTO manual_replica.config_node
+      (id,node_type,market_type,code,name,status,config,created_at,updated_at)
+      VALUES (1,'game','overseas','g','Game',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));
+      INSERT INTO manual_replica.config_node
+      (id,game_id,node_type,env_type,code,name,status,config,created_at,updated_at)
+      VALUES (2,1,'region','prod','r','Region',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+    assert_sql("SELECT market_type FROM manual_replica.config_node WHERE id=1", "overseas")
+    assert_sql("SELECT market_type FROM manual_replica.config_node WHERE id=2", "NULL")
+    mysql("""INSERT INTO manual_replica.config_node
+      (id,node_type,code,name,status,config,created_at,updated_at)
+      VALUES (3,'game','bad','Bad',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""", ok=False)
+    mysql("""INSERT INTO manual_replica.config_node
+      (id,game_id,node_type,env_type,market_type,code,name,status,config,created_at,updated_at)
+      VALUES (4,1,'region','test','domestic','r2','Region',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""", ok=False)
     mysql(database="manual_replica", script=replica, ok=False)
+
+    # 已有接入副本补上游戏运营地区：旧游戏回填国内，非游戏保持为空，重复执行被拒绝。
+    mysql("CREATE DATABASE manual_replica_upgrade CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;")
+    mysql(database="manual_replica_upgrade", script=replica)
+    mysql("""ALTER TABLE manual_replica_upgrade.config_node DROP CHECK chk_replica_node_market_type;
+      ALTER TABLE manual_replica_upgrade.config_node DROP COLUMN market_type;
+      INSERT INTO manual_replica_upgrade.config_node
+      (id,node_type,code,name,status,config,created_at,updated_at)
+      VALUES (11,'game','legacy','Legacy',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));
+      INSERT INTO manual_replica_upgrade.config_node
+      (id,game_id,node_type,env_type,code,name,status,config,created_at,updated_at)
+      VALUES (12,11,'region','test','r','Region',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+    access_market = source("db/incremental/V0016__add_config_access_game_market_type.sql")
+    mysql(database="manual_replica_upgrade", script=access_market)
+    assert_sql("SELECT market_type FROM manual_replica_upgrade.config_node WHERE id=11", "domestic")
+    assert_sql("SELECT market_type FROM manual_replica_upgrade.config_node WHERE id=12", "NULL")
+    mysql(database="manual_replica_upgrade", script=access_market, ok=False)
     print("通过：手动 SQL 初始化、升级、现有事件绑定保留、GTID 与数据库约束", flush=True)
 
 

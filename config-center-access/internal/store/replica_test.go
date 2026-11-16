@@ -26,7 +26,8 @@ func TestParseDateUTC(t *testing.T) {
 			if got.Location() != time.UTC || got.Format(time.RFC3339Nano) != tc.want {
 				t.Fatalf("got %s (%s), want %s (UTC)", got.Format(time.RFC3339Nano), got.Location(), tc.want)
 			}
-			node := remote.Node{ID: 1, NodeType: "game", Code: "g", Name: "Game", Config: "{}", CreatedAt: tc.input, UpdatedAt: tc.input}
+			market := "domestic"
+			node := remote.Node{ID: 1, NodeType: "game", MarketType: &market, Code: "g", Name: "Game", Config: "{}", CreatedAt: tc.input, UpdatedAt: tc.input}
 			if err := validateNode(node); err != nil {
 				t.Fatalf("valid sync node rejected: %v", err)
 			}
@@ -66,7 +67,55 @@ func TestValidateNodeEnvironment(t *testing.T) {
 		t.Fatal("accepted environment on game")
 	}
 	node.EnvType = nil
+	market := "domestic"
+	node.MarketType = &market
 	if err := validateNode(node); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestValidateNodeMarketType 验证只有游戏节点保存 domestic 或 overseas。
+func TestValidateNodeMarketType(t *testing.T) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	base := remote.Node{ID: 1, Code: "n", Name: "Node", Config: "{}", CreatedAt: now, UpdatedAt: now}
+	domestic, overseas, empty, other := "domestic", "overseas", "", "europe"
+	gameID := int64(1)
+	for _, market := range []*string{nil, &empty, &other} {
+		node := base
+		node.NodeType = "game"
+		node.MarketType = market
+		if err := validateNode(node); err == nil {
+			t.Fatalf("accepted game market %v", market)
+		}
+	}
+	for _, market := range []*string{&domestic, &overseas} {
+		node := base
+		node.NodeType = "game"
+		node.MarketType = market
+		if err := validateNode(node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, kind := range []string{"region", "server_group"} {
+		node := base
+		node.NodeType = kind
+		node.MarketType = &domestic
+		if kind == "region" {
+			env := "test"
+			node.EnvType = &env
+			node.GameID = &gameID
+		}
+		if err := validateNode(node); err == nil {
+			t.Fatalf("accepted market type on %s", kind)
+		}
+		node.MarketType = nil
+		if kind == "server_group" {
+			regionID := int64(2)
+			node.GameID = &gameID
+			node.RegionID = &regionID
+		}
+		if err := validateNode(node); err != nil {
+			t.Fatalf("%s without market type: %v", kind, err)
+		}
 	}
 }
