@@ -5,12 +5,12 @@ on:
       profile:
         description: Load profile (all traffic stays on this runner)
         type: choice
-        options: [smoke, baseline, stress]
+        options: [smoke, baseline, stress, soak]
         default: smoke
       topology:
         description: Instance topology
         type: choice
-        options: [compact, cluster]
+        options: [compact, cluster, both]
         default: compact
       scenario:
         description: Business scenario
@@ -32,11 +32,17 @@ concurrency:
 jobs:
   load:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    name: Load (${{ matrix.label }})
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"soak-compact","topology":"compact","profile":"soak"}]' || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
+
     env:
       GOWORK: 'off'
-      LOAD_PROFILE: ${{ inputs.profile || 'smoke' }}
-      LOAD_TOPOLOGY: ${{ inputs.topology || 'compact' }}
+      LOAD_PROFILE: ${{ matrix.profile }}
+      LOAD_TOPOLOGY: ${{ matrix.topology }}
       LOAD_SCENARIO: ${{ inputs.scenario || 'all' }}
       MYSQL_PWD: runner-load-only
     steps:
@@ -53,7 +59,7 @@ jobs:
       - name: Validate scripts
         run: |
           bash -n tests/load/setup.sh tests/load/run.sh
-          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py
+          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py
           test -z "$(gofmt -l tests/load/mock.go)"
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
       - name: Install local services
@@ -66,13 +72,13 @@ jobs:
         run: bash tests/load/setup.sh
       - name: Run load scenarios
         run: bash tests/load/run.sh
-      - name: Explore order saturation (PR only)
-        if: github.event_name == 'pull_request'
+      - name: Explore all scenario saturation (PR only)
+        if: github.event_name == 'pull_request' && matrix.profile == 'smoke'
         continue-on-error: true
-        id: order-stress
+        id: stress
         env:
           LOAD_PROFILE: stress
-          LOAD_SCENARIO: order
+          LOAD_SCENARIO: all
         run: bash tests/load/run.sh
       - name: Collect diagnostics and report
         if: always()
@@ -80,6 +86,9 @@ jobs:
           mkdir -p "$LOAD_DIR/results"
           mysql -uroot -h127.0.0.1 -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Max_used_connections','Slow_queries','Questions','Innodb_buffer_pool_reads','Innodb_row_lock_waits');" > "$LOAD_DIR/results/mysql-status.txt" 2>&1 || true
           python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ '${{ steps.stress.outcome }}' == failure ]]; then
+            echo 'Exploratory stress reached a threshold or execution error; see individual stage results.' | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Stop local services
         if: always()
         run: |
@@ -94,7 +103,7 @@ jobs:
         id: upload
         continue-on-error: true
         with:
-          name: runner-load-${{ github.run_id }}-${{ github.run_attempt }}
+          name: runner-load-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.label }}
           path: |
             ${{ env.LOAD_DIR }}/results/
             ${{ env.LOAD_DIR }}/logs/

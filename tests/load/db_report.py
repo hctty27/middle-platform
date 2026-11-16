@@ -35,8 +35,8 @@ def cpu(path):
 def print_diagnostics(root):
     print("\n### Per-stage database and host diagnostics\n")
     print("Counters are global, including background activity; missing values are not zero.\n")
-    print("| Stage | CPU busy % | IO wait % | Row lock waits delta | Row lock ms delta | Log waits delta | Data fsync delta |")
-    print("|---|---:|---:|---:|---:|---:|---:|")
+    print("| Stage | CPU busy % | IO wait % | Row lock waits delta | Row lock ms delta | Log waits delta | Data fsync delta | Prepared executions delta |")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|")
     stages = rows(root / "stages.tsv")[1:]
     for scenario, rate, *_ in stages:
         label = f"{scenario}-{rate}"
@@ -53,7 +53,7 @@ def print_diagnostics(root):
         wait = f"{sum(s[1] for s in samples) / len(samples):.1f}" if samples else "—"
         print("| " + " | ".join([label, busy, wait, delta("Innodb_row_lock_waits"),
               delta("Innodb_row_lock_time"), delta("Innodb_log_waits"),
-              delta("Innodb_data_fsyncs")]) + " |")
+              delta("Innodb_data_fsyncs"), delta("Com_stmt_execute")]) + " |")
     print("\n### SQL digest deltas for order-related scenarios\n")
     print("Elapsed time is aggregate and can overlap across connections; top 5 per stage.")
     for scenario, rate, *_ in stages:

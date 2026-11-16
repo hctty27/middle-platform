@@ -5,6 +5,7 @@ import pathlib
 import sys
 
 from db_report import print_diagnostics
+from process_monitor import print_process_report
 
 root = pathlib.Path(sys.argv[1])
 print("## Runner-local load test\n")
@@ -46,6 +47,13 @@ with stages.open() as file:
             row["exit_code"],
         ]) + " |")
 print_diagnostics(root)
+print_process_report(root)
+print('\n### Per-stage payment delivery (paid / delivered / pending)\n')
+for row in csv.DictReader(stages.open(), delimiter='\t'):
+    name = row['scenario'] + '-' + row['iteration_rate']
+    stage_delivery = root / (name + '.delivery.tsv')
+    if stage_delivery.exists():
+        print('- ' + name + ': ' + stage_delivery.read_text().strip().replace('\t', ' / '))
 delivery = root / "delivery.tsv"
 if delivery.exists():
     print("\n### Asynchronous order delivery\n")
