@@ -35,12 +35,13 @@ jobs:
     timeout-minutes: 45
     env:
       GOWORK: 'off'
-      LOAD_DIR: ${{ runner.temp }}/middle-platform-load
       LOAD_PROFILE: ${{ inputs.profile || 'smoke' }}
       LOAD_TOPOLOGY: ${{ inputs.topology || 'compact' }}
       LOAD_SCENARIO: ${{ inputs.scenario || 'all' }}
       MYSQL_PWD: runner-load-only
     steps:
+      - name: Initialize local workspace
+        run: echo "LOAD_DIR=$RUNNER_TEMP/middle-platform-load" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
