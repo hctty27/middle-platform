@@ -536,7 +536,7 @@ class DeploymentTopologyTests(unittest.TestCase):
         self.assertIn("location ^~ /api/service/", locations)
         self.assertIn(".publish.lock", (root / "ops/monit/check-http-live.sh").read_text())
         self.assertIn(".publish.lock", (root / "ops/monit/restart-supervisor-program.sh").read_text())
-        self.assertIn(".publish.lock", (root / "publish/publish-remote.sh").read_text())
+        self.assertIn(".publish.lock", (root / "publish/publish-remote.sh").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
