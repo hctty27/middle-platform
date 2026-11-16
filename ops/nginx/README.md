@@ -53,6 +53,8 @@ deploy ALL=(root) NOPASSWD: /usr/sbin/nginx -t, /usr/sbin/nginx -T, /usr/bin/sys
 
 Replace the user and executable paths with the actual values on the server, then validate with `visudo -cf /etc/sudoers.d/middle-platform-deploy`. The helper always uses `sudo -n`; it will fail before replacing application files if the Nginx configuration is not active, the runtime include is not loaded, the expected peer count is wrong, or the sudo permission is missing. Do not grant unrestricted sudo to the deployment account.
 
+Upstream `keepalive` values are per-worker idle-connection cache limits, not total connection pools: 8 for Config Center and 16 for each SDK group. Revisit them if `worker_processes` or file-descriptor limits change.
+
 ## Passive health checks and request retry
 
 The upstreams use `max_fails=1 fail_timeout=10s`. Nginx Open Source observes real proxied traffic, temporarily avoids an upstream after a communication failure, and retries it after the fail window. It does not actively poll `/health/ready`; active upstream health checks and slow start require NGINX Plus.
