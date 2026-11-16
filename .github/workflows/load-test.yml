@@ -53,25 +53,33 @@ jobs:
       - name: Validate scripts
         run: |
           bash -n tests/load/setup.sh tests/load/run.sh
-          python3 -m py_compile tests/load/topology.py tests/load/report.py
+          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py
           test -z "$(gofmt -l tests/load/mock.go)"
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
       - name: Install local services
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y nginx supervisor
+          sudo apt-get install -y nginx supervisor sysstat
           sudo systemctl start mysql.service
           mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'runner-load-only';"
       - name: Start isolated application stack
         run: bash tests/load/setup.sh
       - name: Run load scenarios
         run: bash tests/load/run.sh
+      - name: Explore order saturation (PR only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        id: order-stress
+        env:
+          LOAD_PROFILE: stress
+          LOAD_SCENARIO: order
+        run: bash tests/load/run.sh
       - name: Collect diagnostics and report
         if: always()
         run: |
           mkdir -p "$LOAD_DIR/results"
           mysql -uroot -h127.0.0.1 -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Max_used_connections','Slow_queries','Questions','Innodb_buffer_pool_reads','Innodb_row_lock_waits');" > "$LOAD_DIR/results/mysql-status.txt" 2>&1 || true
-          python3 tests/load/report.py "$LOAD_DIR/results" >> "$GITHUB_STEP_SUMMARY"
+          python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Stop local services
         if: always()
         run: |
@@ -83,10 +91,17 @@ jobs:
           fi
       - uses: actions/upload-artifact@v4
         if: always()
+        id: upload
+        continue-on-error: true
         with:
           name: runner-load-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ env.LOAD_DIR }}/results/
             ${{ env.LOAD_DIR }}/logs/
-          retention-days: 14
+          retention-days: 1
           if-no-files-found: warn
+      - name: Explain unavailable artifact
+        if: always() && steps.upload.outcome == 'failure'
+        run: |
+          echo "::warning::Artifact upload failed; use the report and k6 output in job logs."
+          echo "Artifact upload failed; use the report and k6 output in job logs." >> "$GITHUB_STEP_SUMMARY"

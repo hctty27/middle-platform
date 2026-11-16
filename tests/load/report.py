@@ -4,6 +4,8 @@ import json
 import pathlib
 import sys
 
+from db_report import print_diagnostics
+
 root = pathlib.Path(sys.argv[1])
 print("## Runner-local load test\n")
 for name in ("revision", "topology"):
@@ -43,6 +45,7 @@ with stages.open() as file:
             number(metric(data, "dropped_iterations", "count"), 0),
             row["exit_code"],
         ]) + " |")
+print_diagnostics(root)
 delivery = root / "delivery.tsv"
 if delivery.exists():
     print("\n### Asynchronous order delivery\n")

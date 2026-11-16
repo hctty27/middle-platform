@@ -17,14 +17,14 @@ const runID = __ENV.LOAD_RUN_ID || 'local';
 const businessFailed = new Rate('business_failed');
 const cases = ['config-sync', 'sdk-config', 'user-check', 'order', 'duplicate', 'payment'];
 if (scenario !== 'mixed' && !cases.includes(scenario)) throw new Error('unknown scenario');
-if (!Number.isInteger(rate) || rate < 1 || rate > 500) throw new Error('invalid local rate');
+if (!Number.isInteger(rate) || rate < 1 || rate > 1000) throw new Error('invalid local rate');
 
 export const options = {
   scenarios: {
     load: {
       executor: 'constant-arrival-rate', rate, timeUnit: '1s', duration,
-      preAllocatedVUs: Math.min(50, Math.max(5, Math.ceil(rate / 4))),
-      maxVUs: Math.min(200, Math.max(20, rate)),
+      preAllocatedVUs: Math.min(200, Math.max(5, Math.ceil(rate / 5))),
+      maxVUs: Math.min(400, Math.max(20, Math.ceil(rate / 2))),
       gracefulStop: '10s',
     },
   },

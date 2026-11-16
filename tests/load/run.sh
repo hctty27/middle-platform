@@ -5,7 +5,7 @@ set -Eeuo pipefail
 case "$LOAD_PROFILE" in
   smoke) rates=(5); duration=10s ;;
   baseline) rates=(25 50 100); duration=30s ;;
-  stress) rates=(50 100 200 300); duration=30s ;;
+  stress) rates=(100 250 500 1000); duration=30s ;;
   *) exit 2 ;;
 esac
 requested_scenario="$LOAD_SCENARIO"
@@ -14,7 +14,7 @@ case "$LOAD_SCENARIO" in
   config-sync|sdk-config|user-check|order|duplicate|payment|mixed) scenarios=("$LOAD_SCENARIO") ;;
   *) exit 2 ;;
 esac
-vmstat -w 2 > "$LOAD_DIR/results/vmstat.txt" &
+vmstat -w 2 >> "$LOAD_DIR/results/vmstat.txt" &
 vmstat_pid=$!
 (
   while true; do
@@ -22,18 +22,33 @@ vmstat_pid=$!
     ps -eo pid,comm,pcpu,rss,nlwp --sort=-rss | head -n 30 || true
     sleep 2
   done
-) > "$LOAD_DIR/results/processes.txt" &
+) >> "$LOAD_DIR/results/processes.txt" &
 ps_pid=$!
 trap 'kill "$vmstat_pid" "$ps_pid" 2>/dev/null || true' EXIT
-printf 'scenario\titeration_rate\tduration\texit_code\n' > "$LOAD_DIR/results/stages.tsv"
+if [[ ! -f "$LOAD_DIR/results/stages.tsv" ]]; then
+  printf 'scenario\titeration_rate\tduration\texit_code\n' > "$LOAD_DIR/results/stages.tsv"
+fi
+snapshot() {
+  local path="$1"
+  mysql -uroot -h127.0.0.1 -N -B -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Innodb_row_lock_waits','Innodb_row_lock_time','Innodb_log_waits','Innodb_os_log_fsyncs','Innodb_data_fsyncs','Innodb_buffer_pool_reads','Com_commit','Com_insert','Com_select','Slow_queries');" > "$path.status.tsv" 2>"$path.status.err" || true
+  mysql -uroot -h127.0.0.1 -N -B -e "SELECT DIGEST, COUNT_STAR, SUM_TIMER_WAIT, SUM_LOCK_TIME, LEFT(DIGEST_TEXT,240) FROM performance_schema.events_statements_summary_by_digest WHERE SCHEMA_NAME='config_center' AND DIGEST IS NOT NULL;" > "$path.digest.tsv" 2>"$path.digest.err" || true
+}
 failed=0
 export LOAD_DURATION="$duration"
 for scenario in "${scenarios[@]}"; do
   for rate in "${rates[@]}"; do
     export LOAD_SCENARIO="$scenario" LOAD_RATE="$rate" LOAD_RUN_ID="$scenario-$rate"
     label="$scenario-$rate"
+    snapshot "$LOAD_DIR/results/$label.before"
+    vmstat -w 1 > "$LOAD_DIR/results/$label.vmstat" &
+    stage_vm=$!
+    iostat -dx 1 > "$LOAD_DIR/results/$label.iostat" &
+    stage_io=$!
     code=0
     k6 run --summary-export "$LOAD_DIR/results/$label.json" tests/load/scenarios.js 2>&1 | tee "$LOAD_DIR/results/$label.txt" || code=$?
+    kill "$stage_vm" "$stage_io" 2>/dev/null || true
+    wait "$stage_vm" "$stage_io" 2>/dev/null || true
+    snapshot "$LOAD_DIR/results/$label.after"
     printf '%s\t%s\t%s\t%s\n' "$scenario" "$rate" "$duration" "$code" >> "$LOAD_DIR/results/stages.tsv"
     if (( code != 0 )); then
       failed=1
@@ -48,7 +63,7 @@ for i in $(seq 1 60); do
   if (( pending == 0 )); then break; fi
   sleep 2
 done
-printf 'paid\tdelivered\tpending\n%s\t%s\t%s\n' "$paid" "$delivered" "$pending" > "$LOAD_DIR/results/delivery.tsv"
+printf 'paid\tdelivered\tpending\n%s\t%s\t%s\n' "$paid" "$delivered" "$pending" | tee "$LOAD_DIR/results/delivery.tsv"
 if (( pending != 0 )); then failed=1; fi
 if [[ "$requested_scenario" == all || "$requested_scenario" == payment || "$requested_scenario" == mixed ]] && (( paid == 0 )); then failed=1; fi
 exit "$failed"
