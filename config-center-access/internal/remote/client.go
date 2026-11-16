@@ -24,18 +24,20 @@ const maxResponseBytes = 64 << 20
 
 // Node 保留远程节点的 JSON 字段及日期格式。
 type Node struct {
-	ID        int64   `json:"id"`
-	NodeType  string  `json:"nodeType"`
-	EnvType   *string `json:"envType"`
-	GameID    *int64  `json:"gameId"`
-	RegionID  *int64  `json:"regionId"`
-	Code      string  `json:"code"`
-	Name      string  `json:"name"`
-	Status    int     `json:"status"`
-	Config    string  `json:"config"`
-	Remark    *string `json:"remark"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt string  `json:"updatedAt"`
+	ID       int64   `json:"id"`
+	NodeType string  `json:"nodeType"`
+	EnvType  *string `json:"envType"`
+	// MarketType 仅游戏节点使用：domestic 国内、overseas 海外。
+	MarketType *string `json:"marketType"`
+	GameID     *int64  `json:"gameId"`
+	RegionID   *int64  `json:"regionId"`
+	Code       string  `json:"code"`
+	Name       string  `json:"name"`
+	Status     int     `json:"status"`
+	Config     string  `json:"config"`
+	Remark     *string `json:"remark"`
+	CreatedAt  string  `json:"createdAt"`
+	UpdatedAt  string  `json:"updatedAt"`
 }
 
 // Revision 唯一标识权威数据集及其单调递增版本。

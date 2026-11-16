@@ -15,7 +15,7 @@ import (
 
 const (
 	testSubscriberCode = "access-test"
-	testSyncSecret = "config-sync-secret-0123456789abcdef0123456789"
+	testSyncSecret     = "config-sync-secret-0123456789abcdef0123456789"
 )
 
 func TestClientSignsAllSyncRequests(t *testing.T) {
@@ -98,5 +98,34 @@ func TestClientRejectsMissingSubscriberCode(t *testing.T) {
 	client := New("http://127.0.0.1:1", time.Second, time.Second, "", testSyncSecret)
 	if _, err := client.Head(context.Background()); err == nil {
 		t.Fatal("missing subscriber code should be rejected")
+	}
+}
+
+func TestSnapshotJSONKeepsMarketType(t *testing.T) {
+	raw := []byte(`{
+		"epoch":"550e8400-e29b-41d4-a716-446655440000",
+		"revision":12,
+		"nodes":[
+			{"id":1,"nodeType":"game","envType":null,"marketType":"domestic","gameId":null,"regionId":null,"code":"game_a","name":"示例游戏","status":1,"config":"{}","remark":null,"createdAt":"2026-11-04T10:00:00Z","updatedAt":"2026-11-04T10:00:00Z","parentId":0},
+			{"id":2,"nodeType":"region","envType":"prod","marketType":null,"gameId":1,"regionId":null,"code":"r","name":"大区","status":1,"config":"{}","remark":null,"createdAt":"2026-11-04T10:00:00Z","updatedAt":"2026-11-04T10:00:00Z","parentId":1},
+			{"id":3,"nodeType":"server_group","envType":null,"marketType":null,"gameId":1,"regionId":2,"code":"s","name":"区服组","status":1,"config":"{}","remark":null,"createdAt":"2026-11-04T10:00:00Z","updatedAt":"2026-11-04T10:00:00Z","parentId":2},
+			{"id":4,"nodeType":"game","envType":null,"marketType":"overseas","gameId":null,"regionId":null,"code":"game_b","name":"海外游戏","status":1,"config":"{}","remark":null,"createdAt":"2026-11-04T10:00:00Z","updatedAt":"2026-11-04T10:00:00Z","parentId":0}
+		]
+	}`)
+	var snap Snapshot
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Nodes) != 4 {
+		t.Fatalf("nodes = %d", len(snap.Nodes))
+	}
+	if snap.Nodes[0].MarketType == nil || *snap.Nodes[0].MarketType != "domestic" {
+		t.Fatalf("domestic game = %+v", snap.Nodes[0])
+	}
+	if snap.Nodes[1].MarketType != nil || snap.Nodes[2].MarketType != nil {
+		t.Fatalf("non-game market leaked: %+v %+v", snap.Nodes[1].MarketType, snap.Nodes[2].MarketType)
+	}
+	if snap.Nodes[3].MarketType == nil || *snap.Nodes[3].MarketType != "overseas" {
+		t.Fatalf("overseas game = %+v", snap.Nodes[3])
 	}
 }
