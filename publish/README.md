@@ -19,7 +19,7 @@
 }
 ```
 
-支持 `config-center`、`config-center-1`、`config-center-2` 等命名；`sdk-core`、`sdk-service` 和 `config-center-access` 同理。只接受 **模块名** 或 **模块名-正整数**，不会将 `config-center-access` 误认为 `config-center`。
+示例对应 `ops/supervisor/middle-platform.conf`。如需部署多个配置中心实例，可将 Supervisor program 扩展为 `config-center-1`、`config-center-2` 并分别配置端口；`sdk-core`、`sdk-service` 和 `config-center-access` 也支持相同的实例命名规则。只接受 **模块名** 或 **模块名-正整数**，不会将 `config-center-access` 误认为 `config-center`。
 
 例如 `-Service config-center` 只重启已配置的 `config-center-1`、`config-center-2`；全量发布仅重启 `services` 中列出的实例，不执行 `supervisorctl restart all`。发布时按 JSON 声明的顺序逐个重启，每个都使用 `http://127.0.0.1:<端口>/health/ready` 验活。后续添加实例只改 JSON，不改脚本。若未配置匹配实例，发布在本地就会终止，避免更新文件后无法重启。执行 `-SkipRestart` 时不需要配置 `services`。
 

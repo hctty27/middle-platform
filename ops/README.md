@@ -21,6 +21,7 @@
 首次安装或完成配置合并后：
 
 ```bash
+sudo systemctl enable --now supervisor
 sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl status
@@ -52,6 +53,7 @@ set daemon 10
 sudo chmod 0755 /data/middle-platform/ops/monit/check-http-live.sh
 sudo install -d /etc/monit/conf-enabled
 sudo install -m 0644 /data/middle-platform/ops/monit/middle-platform.conf /etc/monit/conf-enabled/middle-platform
+sudo systemctl enable --now monit
 sudo monit -t
 sudo monit reload
 sudo monit status
