@@ -18,7 +18,7 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 ## 内部 UTC 时间
 
-内部时间输出遵循[权威接口文档的内部时间约定](../admin/public/docs/index.html#s-intro)：UTC 的 RFC3339，不带小数秒。已有权威库执行 `db/incremental/V0016__config_center_millisecond_timestamps.sql`。不改变外部 Unix 秒、签名及支付回调协议。时区升级的发布顺序见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
+内部时间统一为 UTC 秒级：数据库字段使用 `DATETIME(0)`，SQL 当前时间使用 `UTC_TIMESTAMP()`，接口输出 RFC3339 并以 `Z` 结尾。已有权威库备份后执行 `db/incremental/V0019__config_center_second_timestamps.sql`；该脚本会先截断历史小数秒，再修改字段精度，不四舍五入。V0016 是历史毫秒迁移，不再是最终精度。发布顺序见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
 
 ## 安全与参考
 

@@ -13,8 +13,8 @@ CREATE TABLE config_node (
     status TINYINT NOT NULL,
     config JSON NOT NULL,
     remark VARCHAR(500) NULL,
-    created_at DATETIME(3) NOT NULL,
-    updated_at DATETIME(3) NOT NULL,
+    created_at DATETIME(0) NOT NULL,
+    updated_at DATETIME(0) NOT NULL,
     KEY idx_replica_game_type (game_id, node_type),
     KEY idx_replica_region_type (region_id, node_type),
     CONSTRAINT chk_replica_node_type CHECK (node_type IN ('game', 'region', 'server_group')),
@@ -37,8 +37,8 @@ CREATE TABLE config_sync_state (
     id TINYINT NOT NULL PRIMARY KEY,
     epoch CHAR(36) NULL,
     revision BIGINT NOT NULL,
-    updated_at DATETIME(3) NOT NULL
+    updated_at DATETIME(0) NOT NULL
 ) ENGINE=InnoDB;
 
 INSERT INTO config_sync_state(id, epoch, revision, updated_at)
-VALUES (1, NULL, 0, UTC_TIMESTAMP(3));
+VALUES (1, NULL, 0, UTC_TIMESTAMP());

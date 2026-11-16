@@ -30,6 +30,7 @@ on:
       - '.github/workflows/package.yml'
 
 permissions:
+  actions: write
   contents: read
 
 jobs:
@@ -92,8 +93,25 @@ jobs:
           sha256sum "$tarball"
           test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 1
           test "$(find dist -mindepth 1 -type d | wc -l)" -eq 0
+      # 仅保留最近 3 个 main 发布包，PR/功能分支只验证打包，不长期占用 Artifact 配额。
+      - name: Clean old release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" | jq -r '[.[].artifacts[] | select(.expired == false and (.name | startswith("middle-platform-")))] as $all | ([$all[] | select(.workflow_run.head_branch == "main")] | sort_by(.created_at) | reverse | .[0:3] | map(.id)) as $keep | $all[] | . as $artifact | select(($keep | index($artifact.id)) == null) | [.id, .created_at, (.workflow_run.head_branch // "unknown")] | @tsv')"
+          deleted=0
+          while read -r artifact_id created_at head_branch; do
+            [[ -n "$artifact_id" ]] || continue
+            gh api --silent --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+            echo "Deleted artifact ${artifact_id} from branch ${head_branch}, created at ${created_at}"
+            deleted=$((deleted + 1))
+          done <<< "$artifacts"
+          echo "Deleted ${deleted} old/non-main middle-platform artifact(s); kept the latest 3 main artifacts."
       # 单文件直接下载 tar.gz，不再套一层 ZIP。
       - uses: actions/upload-artifact@v7
+        if: github.ref == 'refs/heads/main'
         with:
           name: middle-platform-linux-amd64
           path: dist/*.tar.gz

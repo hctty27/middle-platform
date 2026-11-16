@@ -268,6 +268,76 @@ VALUES (11,900,'test',0,'{}');""", ok=False)
     assert_sql("SELECT market_type FROM manual_replica_upgrade.config_node WHERE id=11", "domestic")
     assert_sql("SELECT market_type FROM manual_replica_upgrade.config_node WHERE id=12", "NULL")
     mysql(database="manual_replica_upgrade", script=access_market, ok=False)
+    # 秒级时间迁移：模拟 V0016/V0017 后的 DATETIME(3) 结构，验证历史小数秒截断而非四舍五入。
+    mysql("""CREATE DATABASE manual_seconds_center CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE manual_seconds_access CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;""")
+    mysql(database="manual_seconds_center", script=init)
+    mysql(database="manual_seconds_access", script=replica)
+    mysql(database="manual_seconds_center", script="""ALTER TABLE config_node
+      MODIFY created_at DATETIME(3) NOT NULL, MODIFY updated_at DATETIME(3) NOT NULL;
+    ALTER TABLE sdk_node_config
+      MODIFY created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      MODIFY updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3);
+    ALTER TABLE config_node_change_log MODIFY created_at DATETIME(3) NOT NULL;
+    ALTER TABLE config_subscriber
+      MODIFY created_at DATETIME(3) NOT NULL, MODIFY updated_at DATETIME(3) NOT NULL;
+    ALTER TABLE config_subscriber_delivery_state
+      MODIFY lease_until DATETIME(3) NULL,
+      MODIFY next_attempt_at DATETIME(3) NOT NULL, MODIFY updated_at DATETIME(3) NOT NULL;
+    ALTER TABLE sdk_channel_app
+      MODIFY created_at DATETIME(3) NOT NULL, MODIFY updated_at DATETIME(3) NOT NULL;
+    ALTER TABLE game_order
+      MODIFY paid_at DATETIME(3) DEFAULT NULL,
+      MODIFY last_notify_at DATETIME(3) DEFAULT NULL,
+      MODIFY notify_success_at DATETIME(3) DEFAULT NULL,
+      MODIFY next_notify_at DATETIME(3) DEFAULT NULL,
+      MODIFY created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      MODIFY updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3);
+    ALTER TABLE sdk_service
+      MODIFY created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      MODIFY updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3);
+    ALTER TABLE sdk_service_channel
+      MODIFY created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      MODIFY updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3);
+    INSERT INTO config_node
+      (id,node_type,market_type,code,name,status,config,created_at,updated_at)
+      VALUES (1001,'game','domestic','seconds-check','Seconds',1,'{}',
+              '2026-11-16 04:05:06.600','2026-11-16 04:05:06.900');
+    INSERT INTO game_order
+      (appid,game_id,env,game_order_id,amount,attach,game_notify_url,
+       paid_at,last_notify_at,notify_success_at,next_notify_at,created_at,updated_at)
+      VALUES ('seconds-app',1001,'test','seconds-order',100,'','https://game.example.com/notify',
+              '2026-11-16 04:05:06.900','2026-11-16 04:05:07.600',
+              '2026-11-16 04:05:08.700','2026-11-16 04:05:09.800',
+              '2026-11-16 04:05:10.900','2026-11-16 04:05:11.900');""")
+    mysql(database="manual_seconds_access", script="""ALTER TABLE config_node
+      MODIFY created_at DATETIME(3) NOT NULL, MODIFY updated_at DATETIME(3) NOT NULL;
+    ALTER TABLE config_sync_state MODIFY updated_at DATETIME(3) NOT NULL;
+    INSERT INTO config_node
+      (id,node_type,market_type,code,name,status,config,created_at,updated_at)
+      VALUES (1001,'game','domestic','seconds-check','Seconds',1,'{}',
+              '2026-11-16 04:05:06.600','2026-11-16 04:05:06.900');
+    UPDATE config_sync_state SET updated_at='2026-11-16 04:05:07.900' WHERE id=1;""")
+    mysql(database="manual_seconds_center", script=source("db/incremental/V0019__config_center_second_timestamps.sql"))
+    mysql(database="manual_seconds_access", script=source("db/incremental/V0020__config_access_second_timestamps.sql"))
+    assert_sql("""SELECT DATE_FORMAT(created_at,'%Y-%m-%d %H:%i:%s.%f')
+      FROM manual_seconds_center.config_node WHERE id=1001""", "2026-11-16 04:05:06.000000")
+    assert_sql("""SELECT DATE_FORMAT(paid_at,'%Y-%m-%d %H:%i:%s.%f'),
+      DATE_FORMAT(created_at,'%Y-%m-%d %H:%i:%s.%f')
+      FROM manual_seconds_center.game_order WHERE game_order_id='seconds-order'""",
+      "2026-11-16 04:05:06.000000\t2026-11-16 04:05:10.000000")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema='manual_seconds_center' AND data_type='datetime'
+        AND datetime_precision=0""", "22")
+    assert_sql("""SELECT DATE_FORMAT(updated_at,'%Y-%m-%d %H:%i:%s.%f')
+      FROM manual_seconds_access.config_sync_state WHERE id=1""", "2026-11-16 04:05:07.000000")
+    assert_sql("""SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema='manual_seconds_access' AND data_type='datetime'
+        AND datetime_precision=0""", "3")
+    # 秒级迁移允许安全重跑，已截断的数据不会再次改变。
+    mysql(database="manual_seconds_center", script=source("db/incremental/V0019__config_center_second_timestamps.sql"))
+    mysql(database="manual_seconds_access", script=source("db/incremental/V0020__config_access_second_timestamps.sql"))
+
     print("通过：手动 SQL 初始化、升级、现有事件绑定保留、GTID 与数据库约束", flush=True)
 
 
