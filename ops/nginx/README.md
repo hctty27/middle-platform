@@ -15,7 +15,8 @@ Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分�
 ## 配置文件结构
 
 - `middle-platform.conf`：唯一需要维护的 Nginx 站点配置，包含三个 upstream 定义、80/443 server、三个 API location 和管理后台。
-- `/data/middle-platform/run/nginx/*.conf`：服务器上的三个动态 upstream 实例列表，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。它们不属于 Git 仓库中的 `ops/`，也不是独立站点配置。
+- [`run/nginx/`](../../run/nginx/)：Git 仓库根目录下的三个 upstream 初始配置，仅供首次部署时手动复制或参考，不进入发布包。
+- `/data/middle-platform/run/nginx/*.conf`：服务器上的三个动态 upstream 实例列表，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。服务器运行状态独立于仓库初始配置。
 - `upstream-control.sh`：负责校验、摘除、恢复 upstream 实例。
 
 站点配置中的三个 upstream 块直接写在 `middle-platform.conf`。块内只通过 `include` 引用服务器运行时实例列表，以便滚动发布可以安全地摘除单个实例，而不改写整份站点配置。
@@ -66,7 +67,7 @@ include /etc/nginx/conf.d/*.conf;
 sudo cp /data/middle-platform/ops/nginx/middle-platform.conf /etc/nginx/conf.d/middle-platform.conf
 ```
 
-3. 首次手动创建三个动态 upstream 实例列表。将 `deploy` 替换为实际 SSH 发布用户。以下命令只创建缺失文件，不覆盖已有运行状态：
+3. 首次手动创建三个动态 upstream 实例列表。可以手动复制仓库根目录的 `run/nginx/*.conf` 至服务器对应目录（仅复制缺失文件），也可以按以下命令创建。将 `deploy` 替换为实际 SSH 发布用户。以下命令只创建缺失文件，不覆盖已有运行状态：
 
 ```bash
 deploy_user=deploy
@@ -115,7 +116,7 @@ sudo chown "$deploy_user:$deploy_group" /data/middle-platform/.publish.lock
 sudo chmod 0660 /data/middle-platform/.publish.lock
 ```
 
-这三个文件只在首次部署时手动创建。后续不要从发布包覆盖它们；滚动发布期间由 `upstream-control.sh` 修改对应实例的 `down` 状态。
+这三个文件只在首次部署时手动创建或复制。仓库初始配置不打包、不自动上传、不自动初始化或覆盖服务器文件；滚动发布期间仍由 `upstream-control.sh` 修改服务器对应实例的 `down` 状态。
 
 4. 在 `/etc/nginx/nginx.conf` 的顶层 main context 中（`events {}` 和 `http {}` 外）设置：
 
