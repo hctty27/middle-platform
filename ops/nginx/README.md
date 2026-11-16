@@ -1,8 +1,8 @@
-# Nginx upstream runtime templates
+# Nginx 单文件站点配置与滚动发布
 
-These files target the single-host deployment at `/data/middle-platform`. They use Nginx Open Source passive health checks and controlled `down`/reload operations for rolling deployments. They do not configure TLS, domains, firewall rules, or replace an existing virtual host.
+本配置适用于 `/data/middle-platform` 单机部署。站点配置统一维护在 `middle-platform.conf`，包含三组 upstream、HTTP/HTTPS、SSL、API 路由、代理公共参数和 Vue 管理后台。
 
-## Instance groups
+## 实例拓扑
 
 | Upstream | Supervisor programs | Local ports |
 |---|---|---|
@@ -10,81 +10,116 @@ These files target the single-host deployment at `/data/middle-platform`. They u
 | `sdk_core` | `sdk-core-1..4` | 8211–8214 |
 | `sdk_service` | `sdk-service-1..4` | 8221–8224 |
 
-Supervisor uses the heterogeneous groups `config-center`, `sdk-core`, and `sdk-service`; process names are group-qualified (for example `sdk-core:sdk-core-1`). All Go instances bind to loopback. Nginx is the only public ingress. The app routes are `/api/config/`, `/api/core/`, and `/api/service/`; `config-center-access` is intentionally not part of this 2/4/4 deployment.
+Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分组；进程名带组前缀，例如 `sdk-core:sdk-core-1`。所有 Go 实例只监听 loopback，Nginx 是唯一公网入口。当前 2/4/4 拓扑不包含可选的 `config-center-access`。
 
-## One-time installation
+## 配置文件结构
 
-1. Ensure Nginx is installed and managed by systemd as `nginx.service`.
-2. Install the upstream definition into the Nginx HTTP include directory (commonly `/etc/nginx/conf.d/`):
+- `middle-platform.conf`：唯一需要维护的 Nginx 站点配置，包含三个 upstream 定义、80/443 server、三个 API location 和管理后台。
+- `runtime/config-center-upstream.conf`、`runtime/sdk-core-upstream.conf`、`runtime/sdk-service-upstream.conf`：初始实例列表模板。
+- `/data/middle-platform/run/nginx/*.conf`：服务器上的动态 upstream 状态文件，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。它们不是独立站点配置，不需要人工日常维护。
+- `upstream-control.sh`：负责校验、摘除、恢复 upstream 实例。
 
-```bash
-sudo install -m 0644 /data/middle-platform/ops/nginx/middle-platform-upstreams.conf /etc/nginx/conf.d/middle-platform-upstreams.conf
+站点配置中的 upstream 块直接写在 `middle-platform.conf`。块内只通过 `include` 引用动态实例列表，以便滚动发布可以安全地摘除单个实例，而不改写整份站点配置。
+
+## 手动配置
+
+Nginx 和 Supervisor 由管理员按服务器现状安装、管理；项目不提供安装 Nginx/Supervisor 的脚本，也不会自动覆盖系统配置。
+
+1. 确认 `/etc/nginx/nginx.conf` 的 `http {}` 中包含：
+
+```nginx
+include /etc/nginx/conf.d/*.conf;
 ```
 
-3. Merge the three locations from `middle-platform-locations.conf` into the existing application `server {}` block. Keep your existing TLS, domain, access-control, and static admin configuration. Do not create a second catch-all virtual host if one already exists.
-
-4. Add `worker_shutdown_timeout 75s;` to the top-level main context of `/etc/nginx/nginx.conf`, outside `events {}` and `http {}`. If the directive already exists, update it instead of adding a duplicate. This bounds graceful worker draining during Nginx reload.
-
-5. Initialize the runtime upstream files as the SSH deployment user:
+2. 将唯一站点配置复制到 Nginx 站点目录：
 
 ```bash
-sudo /data/middle-platform/ops/nginx/install-runtime.sh deploy
+sudo cp /data/middle-platform/ops/nginx/middle-platform.conf /etc/nginx/conf.d/middle-platform.conf
 ```
 
-Replace `deploy` with the actual SSH deployment account. The installer preserves existing runtime files and never overwrites a previously drained state. It creates the runtime directory, files and shared `.publish.lock` owned by that account; Monit uses the same lock to avoid racing a release.
+3. 初始化动态 upstream 状态文件。将 `deploy` 替换为实际 SSH 发布用户。以下命令只创建缺失文件，不覆盖已有状态：
 
-6. Check the Nginx configuration and reload it:
+```bash
+deploy_user=deploy
+deploy_group=$(id -gn "$deploy_user")
+runtime_dir=/data/middle-platform/run/nginx
+template_dir=/data/middle-platform/ops/nginx/runtime
+
+sudo install -d -o "$deploy_user" -g "$deploy_group" -m 0750 "$runtime_dir"
+
+for name in config-center sdk-core sdk-service; do
+    target="$runtime_dir/$name-upstream.conf"
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+        sudo install -o "$deploy_user" -g "$deploy_group" -m 0640 \
+            "$template_dir/$name-upstream.conf" "$target"
+    fi
+done
+
+sudo touch /data/middle-platform/.publish.lock
+sudo chown "$deploy_user:$deploy_group" /data/middle-platform/.publish.lock
+sudo chmod 0660 /data/middle-platform/.publish.lock
+```
+
+4. 在 `/etc/nginx/nginx.conf` 的顶层 main context 中（`events {}` 和 `http {}` 外）设置：
+
+```nginx
+worker_shutdown_timeout 75s;
+```
+
+仓库中的 `middle-platform-main.conf.example` 仅用于说明这个必须放在 main context 的全局指令。不要把它放进 `conf.d` 的站点文件。
+
+5. 检查并重载 Nginx：
 
 ```bash
 sudo nginx -t
-sudo systemctl enable --now nginx
 sudo systemctl reload nginx
 ```
 
-The `include` paths in the upstream template are absolute and point to `/data/middle-platform/run/nginx/*.conf`.
+## 部署权限
 
-## Deployment permissions
+SSH 发布用户需要拥有 `/data/middle-platform/run/nginx/` 和 `/data/middle-platform/.publish.lock` 的写权限，并能通过 Supervisor control socket 执行 `supervisorctl status/restart`。
 
-The SSH deployment user must be able to write the runtime upstream directory and the shared publish lock file. The server must provide `flock` (normally from util-linux) for deployment/Monit mutual exclusion. Configure passwordless sudo for the exact paths reported by `command -v nginx` and `command -v systemctl`. For example, after verifying those paths, a sudoers drop-in may contain:
+发布用户只需要受限免密 sudo 权限来执行实际路径下的 `nginx -t`、`nginx -T` 和 `systemctl reload nginx`。例如，确认系统实际命令路径后，sudoers 可以按需配置：
 
 ```
 deploy ALL=(root) NOPASSWD: /usr/sbin/nginx -t, /usr/sbin/nginx -T, /usr/bin/systemctl reload nginx
 ```
 
-Replace the user and executable paths with the actual values on the server, then validate with `visudo -cf /etc/sudoers.d/middle-platform-deploy`. The helper always uses `sudo -n`; it will fail before replacing application files if the Nginx configuration is not active, the runtime include is not loaded, the expected peer count is wrong, or the sudo permission is missing. Do not grant unrestricted sudo to the deployment account.
+替换为实际用户和命令路径，并使用 `visudo -cf` 校验。不要授予部署用户不受限制的 sudo。
 
-Upstream `keepalive` values are per-worker idle-connection cache limits, not total connection pools: 8 for Config Center and 16 for each SDK group. Revisit them if `worker_processes` or file-descriptor limits change.
+## 被动健康检查与请求重试
 
-## Passive health checks and request retry
+三个 upstream 使用 `least_conn`、`max_fails=1 fail_timeout=10s`，keepalive 分别为 Config Center 8、SDK Core 16、SDK Service 16。keepalive 是每个 worker 的空闲连接缓存上限，不是总连接池。
 
-The upstreams use `max_fails=1 fail_timeout=10s`. Nginx Open Source observes real proxied traffic, temporarily avoids an upstream after a communication failure, and retries it after the fail window. It does not actively poll `/health/ready`; active upstream health checks and slow start require NGINX Plus.
+Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败窗口内暂时避开故障实例；它不会主动轮询 `/health/ready`。HTTP 503 会直接返回，不作为 upstream 摘除条件，避免共享 MySQL 故障导致全部实例被误摘除。
 
-The proxy snippet retries only transport/protocol failures and HTTP 502/504. It deliberately omits `non_idempotent`, so Nginx does not replay a POST after it has been sent upstream. HTTP 503 is passed through (for example, when the shared MySQL dependency is unavailable) rather than marking every app instance unhealthy.
+代理重试仅包含传输错误、超时、无效响应头、HTTP 502 和 504；不启用 `non_idempotent`，避免已发送的订单登记、支付 POST 请求被 Nginx 重放。
 
-## Rolling deployment behavior
+## 滚动发布行为
 
-For each selected Supervisor instance, in configured order:
+对每个选中的 Supervisor 实例，按配置顺序逐个执行：
 
-1. Verify Nginx is active, its effective configuration loads the expected upstream include, and at least one peer remains available.
-2. Mark only that instance `down` in its runtime upstream file, run `nginx -t`, and gracefully reload Nginx.
-3. Wait for old Nginx workers to exit. The configured `worker_shutdown_timeout 75s` bounds this drain; if the wait fails, deployment stops and the instance stays drained.
-4. Restart only that Supervisor program.
-5. Require Supervisor `RUNNING` and three consecutive HTTP 200 responses from its local `/health/ready` endpoint.
-6. Remove `down`, validate and reload Nginx to return the instance to traffic.
+1. 验证 Nginx 正在运行、加载了对应 upstream 和 location，且该组至少还有一个可用实例。
+2. 在对应的 `/data/middle-platform/run/nginx/*.conf` 中将当前实例标记为 `down`。
+3. 执行 `nginx -t` 并 graceful reload。
+4. 等待旧 Nginx worker 退出。顶层 `worker_shutdown_timeout 75s` 限制排空时间；超时则停止发布，实例保持摘除。
+5. 仅重启当前 Supervisor program。
+6. 要求 Supervisor 状态为 RUNNING，并且本机 `/health/ready` 连续 3 次返回 HTTP 200。
+7. 移除 `down`，再次校验并 reload Nginx，将实例恢复到流量中。
 
-If restart or readiness fails, deployment halts and leaves that instance drained so Nginx does not send it traffic. Remaining instances are not restarted. The script does not perform automatic binary rollback; inspect logs, fix the cause, then restore the instance after it passes Ready.
+如果重启、Ready 或 Nginx reload 失败，发布立即停止，故障实例保持摘除，后续实例不再重启。修复问题并确认 Ready 后，再手动恢复实例。
 
-A full release drains and restores 10 instances individually. It does not stop the entire upstream group. This is rolling availability, not a mathematical zero-error guarantee: clients can still see failures caused by application bugs, shared MySQL outages, Nginx reload errors, or all peers failing.
+完整发布逐个处理 10 个实例，不会停止整个 upstream 组。它提供滚动可用性，不承诺严格零错误；应用错误、共享 MySQL 故障、Nginx reload 失败或所有实例同时故障仍可能影响业务。发布不提供自动二进制回滚。
 
-## Manual operations
+## 手动操作
 
 ```bash
-# Validate one group member
+# 校验实例
 /data/middle-platform/ops/nginx/upstream-control.sh validate sdk-core 8211
 
-# Drain / restore one instance (normally done by the publisher)
-sudo -u deploy /data/middle-platform/ops/nginx/upstream-control.sh drain sdk-core 8211
-sudo -u deploy /data/middle-platform/ops/nginx/upstream-control.sh enable sdk-core 8211
+# 摘除 / 恢复实例（通常由发布脚本调用）
+/data/middle-platform/ops/nginx/upstream-control.sh drain sdk-core 8211
+/data/middle-platform/ops/nginx/upstream-control.sh enable sdk-core 8211
 ```
 
-Use the actual deployment user instead of `deploy`. Always inspect `run/nginx/*.conf` and run `nginx -t` after manual changes.
+执行手动操作时使用实际发布用户；操作后检查 `/data/middle-platform/run/nginx/*.conf` 并运行 `nginx -t`。
