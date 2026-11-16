@@ -557,6 +557,7 @@ class DeploymentTopologyTests(unittest.TestCase):
         self.assertFalse((root / "ops/nginx/middle-platform-upstreams.conf").exists())
         self.assertFalse((root / "ops/nginx/middle-platform-locations.conf").exists())
         self.assertFalse((root / "ops/nginx/proxy-common.conf").exists())
+        self.assertFalse((root / "ops/nginx/install-runtime.sh").exists())
         self.assertIn(".publish.lock", (root / "ops/monit/check-http-live.sh").read_text())
         self.assertIn(".publish.lock", (root / "ops/monit/restart-supervisor-program.sh").read_text())
         self.assertIn(".publish.lock", (root / "publish/publish-remote.sh").read_text(encoding="utf-8"))
