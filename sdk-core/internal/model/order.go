@@ -36,7 +36,7 @@ type Order struct {
 	NextNotifyAt    time.Time
 }
 
-// PaymentCallback 表示平台 v1 回调数据，也用于发送游戏发货通知。
+// PaymentCallback 表示平台发来的 v1 支付回调。发给游戏的通知不使用此结构。
 type PaymentCallback struct {
 	OrderNo     string `json:"order_no"`
 	GameOrderID string `json:"game_order_id"`
