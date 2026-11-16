@@ -17,7 +17,7 @@
 ## 首次部署前必须完成
 
 1. 按 [ops/README.md](../ops/README.md) 手动加载 Supervisor、Monit 配置，并确认对应 systemd 服务已由管理员安装、启用。
-2. 按 [ops/nginx/README.md](../ops/nginx/README.md) 将唯一站点配置 `ops/nginx/middle-platform.conf` 复制到 `/etc/nginx/conf.d/middle-platform.conf`，并按文档中的命令手动创建三个动态 upstream 状态文件到 `/data/middle-platform/run/nginx/`；再在 `/etc/nginx/nginx.conf` 的 main context 配置 `worker_shutdown_timeout 75s`。三个动态文件不随发布包交付，也不会被发布覆盖。
+2. 按 [ops/nginx/README.md](../ops/nginx/README.md) 将唯一站点配置 `ops/nginx/middle-platform.conf` 复制到 `/etc/nginx/conf.d/middle-platform.conf`，并按文档中的命令手动创建三个动态 upstream 状态文件到 `/data/middle-platform/run/nginx/`；再在 `/etc/nginx/nginx.conf` 的 main context 配置 `worker_shutdown_timeout 75s`。仓库根目录 [`run/nginx/`](../run/nginx/) 提供三个初始配置，可按需手动复制缺失文件。它们不随发布包交付，发布不会自动初始化或覆盖服务器上的运行时文件。
 3. 确认 Nginx 已由 systemd 管理且处于 active 状态，站点配置通过 `nginx -t`。
 4. 为 SSH 部署用户配置受限免密 sudo：仅允许实际路径下的 `nginx -t`、`nginx -T`、`systemctl reload nginx`。发布脚本使用 `sudo -n`，不会交互式提权。
 5. 确认 10 个 Supervisor program 均存在，Supervisor 以 root 运行并加载三个 `[group:...]` 分组；进程名需使用 `group:program` 形式。每个实例设置 `GOMEMLIMIT=128MiB`（Go Runtime 软限制，不是 RSS 硬上限）。SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。

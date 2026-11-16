@@ -77,7 +77,7 @@ Monit 每 10 秒检查一次，连续 3 个周期 Liveness 失败后才重启实
 
 ## Nginx 与安全滚动发布
 
-Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform.conf)，同一个文件内包含三组 upstream、HTTP/HTTPS、SSL、API location、公共代理参数和 Vue 管理后台。三个动态 upstream 实例列表只保存在服务器的 `/data/middle-platform/run/nginx/`，不在 Git 仓库的 `ops/` 中维护；首次创建方式见 [Nginx 运维说明](nginx/README.md)。
+Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform.conf)，同一个文件内包含三组 upstream、HTTP/HTTPS、SSL、API location、公共代理参数和 Vue 管理后台。三个 upstream 初始配置保存在 Git 仓库根目录 [`run/nginx/`](../run/nginx/)，仅供首次部署手动复制或参考，不随发布包交付；服务器实际运行状态保存在 `/data/middle-platform/run/nginx/`，由滚动发布控制脚本维护。首次创建方式见 [Nginx 运维说明](nginx/README.md)。
 
 项目不提供 Nginx 或 Supervisor 的安装脚本，也不会自动覆盖系统配置。管理员手动将站点配置复制到 `/etc/nginx/conf.d/middle-platform.conf`，按 Nginx 运维说明创建三个动态 upstream 状态文件，并在 `/etc/nginx/nginx.conf` 的 main context 设置 `worker_shutdown_timeout 75s`。Supervisor 继续使用本目录的单文件模板 `supervisor/middle-platform.conf`，由管理员按服务器现有 Supervisor 配置方式加载。
 
