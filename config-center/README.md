@@ -16,6 +16,10 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 检查 `GET /health/ready`。服务启动不自动执行 DDL，节点变更推进 `epoch/revision`；Webhook 只发版本通知，接入方根据修订号异步拉取。渠道包不参与三级节点同步。
 
+## 内部 UTC 时间
+
+内部时间输出遵循[权威接口文档的内部时间约定](../admin/public/docs/index.html#s-intro)。本次统一 DB 驱动和会话时区，不改变连接池、超时、表精度或历史数据，也不改变外部 Unix 秒、签名及支付回调协议。部署必须先升级所有 access，再升级 center；回滚先由 center 恢复旧输出，再回滚 access，详见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
+
 ## 安全与参考
 
 `/api/config/admin/**` 始终使用 HMAC-SHA256，密钥为 `adminAuth.secret`，须与 SDK Core 的管理密钥一致。`/api/config/sync/**`、`/api/config/nodes/**` 根据请求头 `X-Subscriber-Code` 查找 `config_subscriber` 对应记录，并使用该记录的 `signing_secret` 验签。配置中心发送 Webhook 时也使用同一条订阅记录的密钥。每个接入端必须使用唯一且独立的密钥，长度为 32–255 字节且不得包含首尾空格；停用订阅者会拒绝该接入端的同步读取请求并停止新的 Webhook 投递。已有数据库升级时先备份并检查旧 `webhook_secret` 是否重复、长度不在 32–255 字节范围内或包含首尾空格，再手工执行 `db/incremental/V0012__rename_webhook_secret_to_signing_secret.sql`。密钥轮换必须同步更新接入端 `subscriber.secret` 并重启接入端；不能只更新一侧。

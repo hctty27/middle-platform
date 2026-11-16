@@ -21,6 +21,41 @@ func capture(t *testing.T) *bytes.Buffer {
 	return buffer
 }
 
+func TestHandlerRecordTimeUTC(t *testing.T) {
+	stamp := time.Date(2026, 11, 16, 2, 5, 6, 123000000, time.FixedZone("east", 8*3600))
+	for _, format := range []string{"json", "text"} {
+		t.Run(format, func(t *testing.T) {
+			var out bytes.Buffer
+			cfg := Default()
+			cfg.Format = format
+			handler := newHandler(&out, cfg)
+			record := slog.NewRecord(stamp, slog.LevelInfo, "event", 0)
+			record.AddAttrs(slog.Group("payload", slog.Time("time", stamp)), slog.String("time_text", "unchanged"))
+			if err := handler.Handle(context.Background(), record); err != nil {
+				t.Fatal(err)
+			}
+			want := stamp.UTC().Format(time.RFC3339Nano)
+			if format == "json" {
+				var event struct {
+					Time     string `json:"time"`
+					TimeText string `json:"time_text"`
+					Payload  struct {
+						Time string `json:"time"`
+					} `json:"payload"`
+				}
+				if err := json.Unmarshal(out.Bytes(), &event); err != nil {
+					t.Fatal(err)
+				}
+				if event.Time != want || event.Payload.Time != stamp.Format(time.RFC3339Nano) || event.TimeText != "unchanged" {
+					t.Fatalf("unexpected log: %s", out.String())
+				}
+			} else if !strings.HasPrefix(out.String(), "time="+want+" ") || !strings.Contains(out.String(), "payload.time="+stamp.Format(time.RFC3339Nano)) {
+				t.Fatalf("unexpected log: %s", out.String())
+			}
+		})
+	}
+}
+
 func TestConfigAndEnvironment(t *testing.T) {
 	cfg := Default()
 	t.Setenv("LOG_LEVEL", "debug")

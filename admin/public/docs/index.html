@@ -382,7 +382,10 @@ x-signature: &lt;使用 appSecret、Header、Body 计算的 SHA-1&gt;
 <section id="s-intro" class="section"><div class="section-title"><h2>接入流程</h2></div><div class="summary">Webhook 通知 + 主动拉取；优先采用全量快照</div><p>第三方系统提供可接收通知的回调地址，由中台管理员注册订阅者。配置中心的游戏、大区或区服组发生变更时会发送签名 Webhook。第三方收到通知后快速应答，在后台主动拉取配置并更新自己的缓存或数据库。</p><div class="notice warn">安全要求：配置拉取请求与 Webhook 通知统一使用该接入端在 <code>config_subscriber.signing_secret</code> 中配置的独立密钥。请求必须携带 <code>X-Subscriber-Code</code>、<code>X-Timestamp</code>、<code>X-Nonce</code>、<code>X-Signature</code>；接入端编码也参与签名。每个接入端必须使用唯一且独立的 32–255 字节密钥，且不得包含首尾空格；不与 <code>adminAuth.secret</code> 共用。</div><h3>配置拉取请求的统一 Header</h3><div class="codebox"><div class="codehead"><span>所有配置拉取接口</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>X-Subscriber-Code: &lt;配置中心登记的接入端编码&gt;
 X-Timestamp: &lt;当前 Unix 秒时间戳&gt;
 X-Nonce: &lt;每次请求新生成的 16 位小写 hex&gt;
-X-Signature: &lt;64 位小写 HMAC-SHA256 hex&gt;</code></pre></div><p>这些 Header 适用于 revision、changes、snapshot、节点详情和 batch-get。使用该接入端自己的 <code>signing_secret</code> 签名，并将 <code>X-Subscriber-Code</code> 纳入签名原文；GET 的 Body 为空字节串，POST 必须签署并发送完全相同的原始 JSON 字节。路径使用服务端收到的 <code>URL.EscapedPath()</code>，Query 使用 Go <code>url.Values.Encode()</code> 规范化。</p><h3>推荐的最简接入流程</h3><ul class="points"><li>第三方准备 <code>callbackUrl</code>，与中台管理员确认 <code>subscriber.code</code>，并安全获取该订阅记录对应的独立签名密钥。</li><li>管理员在配置中心创建订阅者（第三方不需要自行调用管理 API）。</li><li>中台变更配置后 POST Webhook；第三方校验签名和时间戳，立即返回 HTTP 2xx。</li><li>第三方在后台调用 <code>GET /api/config/sync/snapshot</code> 获取一致性全量快照，将节点与 <code>epoch/revision</code> 同时保存。</li><li>建议每 5 分钟主动调用版本接口，补偿通知丢失；配置量很大时才考虑增量同步。</li></ul><h3>同步范围</h3><div class="table-wrap"><table><thead><tr><th>节点类型</th><th>含义</th><th>是否同步</th></tr></thead><tbody><tr><td><code>game</code></td><td>游戏</td><td>是</td></tr><tr><td><code>region</code></td><td>大区（测试/正式/提审）</td><td>是</td></tr><tr><td><code>server_group</code></td><td>区服组</td><td>是</td></tr><tr><td><code>channel_app</code></td><td>渠道应用、渠道绑定、AppID 配置</td><td>否</td></tr><tr><td><code>game_order</code></td><td>充值订单</td><td>否</td></tr></tbody></table></div><div class="notice info"><strong>推荐：</strong>第三方优先实现 Webhook + 全量快照 + 周期版本校对。无需使用中台的 MySQL 副本，也不需要对接管理写 API。</div></section>
+X-Signature: &lt;64 位小写 HMAC-SHA256 hex&gt;</code></pre></div><p>这些 Header 适用于 revision、changes、snapshot、节点详情和 batch-get。使用该接入端自己的 <code>signing_secret</code> 签名，并将 <code>X-Subscriber-Code</code> 纳入签名原文；GET 的 Body 为空字节串，POST 必须签署并发送完全相同的原始 JSON 字节。路径使用服务端收到的 <code>URL.EscapedPath()</code>，Query 使用 Go <code>url.Values.Encode()</code> 规范化。</p><h3>推荐的最简接入流程</h3><ul class="points"><li>第三方准备 <code>callbackUrl</code>，与中台管理员确认 <code>subscriber.code</code>，并安全获取该订阅记录对应的独立签名密钥。</li><li>管理员在配置中心创建订阅者（第三方不需要自行调用管理 API）。</li><li>中台变更配置后 POST Webhook；第三方校验签名和时间戳，立即返回 HTTP 2xx。</li><li>第三方在后台调用 <code>GET /api/config/sync/snapshot</code> 获取一致性全量快照，将节点与 <code>epoch/revision</code> 同时保存。</li><li>建议每 5 分钟主动调用版本接口，补偿通知丢失；配置量很大时才考虑增量同步。</li></ul><h3>同步范围</h3><div class="table-wrap"><table><thead><tr><th>节点类型</th><th>含义</th><th>是否同步</th></tr></thead><tbody><tr><td><code>game</code></td><td>游戏</td><td>是</td></tr><tr><td><code>region</code></td><td>大区（测试/正式/提审）</td><td>是</td></tr><tr><td><code>server_group</code></td><td>区服组</td><td>是</td></tr><tr><td><code>channel_app</code></td><td>渠道应用、渠道绑定、AppID 配置</td><td>否</td></tr><tr><td><code>game_order</code></td><td>充值订单</td><td>否</td></tr></tbody></table></div><div class="notice info"><strong>推荐：</strong>第三方优先实现 Webhook + 全量快照 + 周期版本校对。无需使用中台的 MySQL 副本，也不需要对接管理写 API。</div>
+<h3>内部时间约定</h3>
+<p>内部配置节点、变更、渠道和服务的 <code>createdAt</code> / <code>updatedAt</code> 统一输出 UTC 的 <code>RFC3339Nano</code> 字符串，以 <code>Z</code> 结尾，例如 <code>2026-11-04T10:00:00Z</code> 或 <code>2026-11-04T10:00:00.123456Z</code>；小数秒按实际精度输出，不固定补位。接入端 <code>GET /api/access/revision</code> 的本地 <code>updated_at</code> 同样遵循此约定（不为配置中心 revision 接口新增字段）。</p>
+<p><code>config-center-access</code> 接受带时区的 RFC3339 时间并转为 UTC，也兼容旧版无时区字符串，按 UTC 解释而非服务器本地时区。数据库现有时间字段的 3 / 6 位小数秒精度保留，不做 DDL 或历史数据重写。该约定不改变外部 Unix 秒、签名或支付回调协议；部署顺序及历史数据边界见 <a href="guide.html#production-11">内部 UTC 升级与回滚</a>。</p></section>
 <section id="s-config" class="section"><div class="section-title"><h2>接入参数</h2></div><div class="summary">双方交换的最小配置项</div><div class="table-wrap"><table><thead><tr><th>参数</th><th>提供方</th><th>含义 / 示例</th></tr></thead><tbody><tr><td><code>code</code></td><td>中台分配</td><td>接入端唯一标识，必须与配置中心 <code>config_subscriber.code</code> 一致</td></tr><tr><td><code>callbackUrl</code></td><td>第三方</td><td>中台可访问的回调，例如 <code>https://game.example.com/internal/config/callback</code></td></tr><tr><td><code>secret</code></td><td>中台安全分发</td><td>该接入端唯一的 HMAC-SHA256 密钥；同时用于配置拉取、本地只读查询和 Webhook，长度为 32–255 字节且不得包含首尾空格。配置中心保存于 <code>config_subscriber.signing_secret</code>，接入端配置为 <code>subscriber.secret</code></td></tr><tr><td><code>configCenterBaseUrl</code></td><td>中台</td><td>配置中心 API 根地址，例如 <code>https://config.example.com</code></td></tr></tbody></table></div><p>文档接口路径均不包含 <code>/sdk</code> 前缀。实际部署若使用公网 <code>/sdk/api/...</code>，应以管理员提供的网关地址为准。</p><div class="notice warn">Webhook 回调地址可为公网或内网 HTTP/HTTPS 域名或 IP；生产优先 HTTPS。平台拒绝元数据服务及部分特殊网络地址，不代表任意地址都能直接访问。</div></section>
 <section id="s-webhook" class="section"><div class="section-title"><h2>接收 Webhook 回调</h2></div><div class="summary">配置变更通知；签名通过后尽快返回 2xx</div><p>签名公式与测试向量见 <a href="#sig-sync">签名规范 · 配置同步签名</a>。</p><div class="route"><span class="verb post">POST</span><code>{callbackUrl}</code></div><p>配置中心向第三方预先提供的 <code>callbackUrl</code> 发起请求，Body 只包含 <code>epoch</code>、<code>revision</code>，不包含完整配置。</p><h3>请求 Header</h3><div class="table-wrap"><table><thead><tr><th>Header</th><th>类型/说明</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr><tr><td><code>X-Subscriber-Code</code></td><td>配置中心登记的接入端编码；该值也参与签名</td></tr><tr><td><code>X-Timestamp</code></td><td>Unix 秒级时间戳</td></tr><tr><td><code>X-Nonce</code></td><td>16 位小写十六进制随机数</td></tr><tr><td><code>X-Signature</code></td><td>64 位小写十六进制 HMAC-SHA256</td></tr></tbody></table></div><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>epoch</code></td><td>string</td><td>是</td><td>数据集标识，发生变化需重新全量同步</td></tr><tr><td><code>revision</code></td><td>integer</td><td>是</td><td>该 epoch 内的版本游标</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /internal/config/callback HTTP/1.1
 Host: game.example.com
@@ -415,8 +418,8 @@ Host: config.example.com</code></pre></div><h3>响应结构</h3><div class="tabl
       &quot;status&quot;: 1,
       &quot;config&quot;: &quot;{\&quot;featureEnabled\&quot;:true}&quot;,
       &quot;remark&quot;: null,
-      &quot;createdAt&quot;: &quot;2026-11-04T10:00:00&quot;,
-      &quot;updatedAt&quot;: &quot;2026-11-04T10:00:00&quot;,
+      &quot;createdAt&quot;: &quot;2026-11-04T10:00:00Z&quot;,
+      &quot;updatedAt&quot;: &quot;2026-11-04T10:00:00Z&quot;,
       &quot;parentId&quot;: 0
     }
   ]
@@ -427,13 +430,13 @@ Host: config.example.com</code></pre></div><h3>HTTP 200 响应示例</h3><div cl
     &quot;revision&quot;: 13,
     &quot;nodeId&quot;: 7,
     &quot;operation&quot;: &quot;UPSERT&quot;,
-    &quot;createdAt&quot;: &quot;2026-11-04T17:00:00&quot;
+    &quot;createdAt&quot;: &quot;2026-11-04T17:00:00Z&quot;
   },
   {
     &quot;revision&quot;: 14,
     &quot;nodeId&quot;: 8,
     &quot;operation&quot;: &quot;DELETE&quot;,
-    &quot;createdAt&quot;: &quot;2026-11-04T17:02:00&quot;
+    &quot;createdAt&quot;: &quot;2026-11-04T17:02:00Z&quot;
   }
 ]</code></pre></div><h3>事件字段</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>含义</th></tr></thead><tbody><tr><td><code>revision</code></td><td>本事件版本，必须与前一条连续</td></tr><tr><td><code>nodeId</code></td><td>发生变化的节点 ID</td></tr><tr><td><code>operation</code></td><td><code>UPSERT</code> 创建/更新；<code>DELETE</code> 删除</td></tr><tr><td><code>createdAt</code></td><td>变更产生时间</td></tr></tbody></table></div><ul class="points"><li>接口返回 <strong>JSON 数组</strong>，不包含统一响应外壳。</li><li>按 revision 升序验证连续性，不能直接跳过版本或只以最后一个版本成功作结。</li><li>收集变更涉及的节点 ID，再通过批量接口获取节点最新状态；重复的 ID 可以去重。</li><li>若事件缺失、顺序不连续或 epoch 已变化，必须回退全量快照。</li><li>返回数量可能达到 limit；持续拉取后续分页，直到本地版本追平远端。</li></ul></section>
 <section id="s-batch" class="section"><div class="section-title"><h2>批量查询节点</h2></div><div class="summary">为增量事件取回节点最新值</div><div class="route"><span class="verb post">POST</span><code>/api/config/nodes/batch-get</code></div><p>增量事件只携带节点 ID 和操作类型，不携带完整配置内容。使用批量查询获取最新节点对象。</p><h3>请求 Body</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td><code>ids</code></td><td>integer[]</td><td>是</td><td>节点 ID 数组，一次最多 500 个</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>POST /api/config/nodes/batch-get HTTP/1.1
@@ -452,8 +455,8 @@ Content-Type: application/json
     &quot;status&quot;: 1,
     &quot;config&quot;: &quot;{\&quot;featureEnabled\&quot;:true}&quot;,
     &quot;remark&quot;: null,
-    &quot;createdAt&quot;: &quot;2026-11-04T10:00:00&quot;,
-    &quot;updatedAt&quot;: &quot;2026-11-04T10:00:00&quot;,
+    &quot;createdAt&quot;: &quot;2026-11-04T10:00:00Z&quot;,
+    &quot;updatedAt&quot;: &quot;2026-11-04T10:00:00Z&quot;,
     &quot;parentId&quot;: 0
   }
 ]</code></pre></div><ul class="points"><li>接口响应为 <strong>节点数组</strong>，缺失的 ID 表示该节点当前已不存在，应在本地删除。</li><li>不要仅凭 UPSERT / DELETE 事件操作来决定最终存储；同一 ID 在多次变更后以批量读取的当前状态为准。</li><li>将批量节点更新、缺失节点删除与同步版本在同一原子操作中提交。</li><li>若批量读取与源配置变化发生竞态，继续追赶新版本；无法确认一致性时改用全量快照。</li></ul></section>

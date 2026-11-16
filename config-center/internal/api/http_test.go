@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"hitall.com/middle-platform/config-center/internal/model"
 )
 
 type stubReader struct {
@@ -91,12 +94,22 @@ func TestRejectInvalidPaging(t *testing.T) {
 
 // TestLocalDateTimeContract 验证节点时间字段的 JSON 序列化兼容性。
 func TestLocalDateTimeContract(t *testing.T) {
-	n := Node{NodeType: "game", Config: `{"a":1}`}
+	stamp := model.LocalDateTime(time.Date(2026, 11, 16, 2, 5, 6, 123456000, time.FixedZone("east", 8*3600)))
+	n := Node{NodeType: "game", Config: `{"a":1}`, CreatedAt: stamp, UpdatedAt: stamp}
 	out, err := json.Marshal(n)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(out), "\"parentId\":0") {
 		t.Fatalf("missing parentId: %s", out)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(out, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"createdAt", "updatedAt"} {
+		if fields[field] != "2026-11-15T18:05:06.123456Z" {
+			t.Fatalf("%s is not UTC: %s", field, out)
+		}
 	}
 }

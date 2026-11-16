@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"hitall.com/middle-platform/config-center-access/internal/api"
 	"hitall.com/middle-platform/config-center-access/internal/remote"
 	"hitall.com/middle-platform/config-center-access/internal/settings"
@@ -37,7 +36,11 @@ func Run(configPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	db, err := sql.Open("mysql", cfg.DSN)
+	parsed, err := bootstrap.ParseMySQLUTC(cfg.DSN)
+	if err != nil {
+		return err
+	}
+	db, err := sql.Open("mysql", parsed.FormatDSN())
 	if err != nil {
 		return err
 	}
