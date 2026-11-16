@@ -99,7 +99,7 @@ jobs:
           path: dist/*.tar.gz
           archive: false
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
   # 验证 Windows 本地执行同一脚本，也能生成带 Unix 755 权限的 tar.gz。
   package-windows-amd64:
