@@ -30,6 +30,7 @@ on:
       - '.github/workflows/package.yml'
 
 permissions:
+  actions: write
   contents: read
 
 jobs:
@@ -92,6 +93,73 @@ jobs:
           sha256sum "$tarball"
           test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 1
           test "$(find dist -mindepth 1 -type d | wc -l)" -eq 0
+      # 清理超过当前 3 天保留策略的旧发布包，避免历史分支构建长期占满 Artifact 配额。
+      - name: Clean old release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cutoff_epoch="$(date -u -d '3 days ago' +%s)"
+          artifacts="$(gh api --paginate --jq '.artifacts[] | select(.expired == false and (.name | startswith("middle-platform-"))) | [.id, .created_at] | @tsv' "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100")"
+          deleted=0
+          while IFS=
+        with:
+          name: middle-platform-linux-amd64
+          path: dist/*.tar.gz
+          archive: false
+          if-no-files-found: error
+          retention-days: 3
+
+  # 验证 Windows 本地执行同一脚本，也能生成带 Unix 755 权限的 tar.gz。
+  package-windows-amd64:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.3"
+          cache-dependency-path: '**/go.sum'
+      - name: Build from Windows PowerShell
+        shell: pwsh
+        run: .\scripts\package.ps1 -Arch amd64 -Version windows-test -SkipFrontend
+      - name: Publishing smoke tests on Windows
+        shell: pwsh
+        run: python -I publish/ci_publish_smoke.py
+      - name: Verify tar.gz on Windows
+        shell: pwsh
+        run: |
+          $archive = 'dist/middle-platform-windows-test-linux-amd64.tar.gz'
+          if (-not (Test-Path $archive)) { throw "Missing archive: $archive" }
+          $names = @(& tar -tzf $archive)
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql')) {
+            if ($name -notin $names) { throw "Missing binary: $name" }
+          }
+          foreach ($sqlFile in @(Get-ChildItem -LiteralPath 'db/full', 'db/incremental' -File -Filter '*.sql')) {
+            $sqlEntry = "sql/$($sqlFile.Directory.Name)/$($sqlFile.Name)"
+            if ($sqlEntry -notin $names) { throw "Missing SQL: $sqlEntry" }
+          }
+          if (@(Get-ChildItem dist -File).Count -ne 1) { throw 'Unexpected dist files' }
+          if (@(Get-ChildItem dist -Directory).Count -ne 0) { throw 'Unexpected dist directories' }
+          $details = @(& tar -tvzf $archive)
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to inspect tar permissions' }
+          foreach ($name in @('config-center', 'config-center-access', 'sdk-core', 'sdk-service')) {
+            if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\s' -and $_.Trim().EndsWith("bin/$name") })) {
+              throw "Missing executable permission in tar header: $name"
+            }
+          }
+\t' read -r artifact_id created_at; do
+            [[ -n "$artifact_id" ]] || continue
+            created_epoch="$(date -u -d "$created_at" +%s)"
+            if (( created_epoch < cutoff_epoch )); then
+              gh api --silent --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+              echo "Deleted artifact ${artifact_id} created at ${created_at}"
+              deleted=$((deleted + 1))
+            fi
+          done <<< "$artifacts"
+          echo "Deleted ${deleted} old middle-platform artifact(s)."
       # 单文件直接下载 tar.gz，不再套一层 ZIP。
       - uses: actions/upload-artifact@v7
         with:
