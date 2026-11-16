@@ -174,6 +174,15 @@ try {
     }
     if ($incrementalFiles.Count -eq 0) { throw '未找到增量 SQL' }
 
+    # 运维模板随发布包交付，但不会由发布脚本自动安装或重载。
+    $opsSource = Join-Path $repoRoot 'ops'
+    if (-not (Test-Path -LiteralPath (Join-Path $opsSource 'README.md') -PathType Leaf)) {
+        throw '缺少 ops/README.md，无法打包生产运维模板'
+    }
+    $opsDir = Join-Path $stageDir 'ops'
+    New-Item -ItemType Directory -Force -Path $opsDir | Out-Null
+    Copy-Item -Path (Join-Path $opsSource '*') -Destination $opsDir -Recurse -Force
+
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。
     if ($buildFrontend) {
         $frontendTimer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -223,7 +232,7 @@ try {
         Write-Host ("Vue 构建耗时: {0:N1}s" -f $frontendTimer.Elapsed.TotalSeconds)
     }
 
-    # 发布包只包含 bin/、sql/ 和可选的 admin/，不附加校验文件或构建说明。
+    # 发布包包含 bin/、sql/、ops/ 和可选的 admin/，不附加校验文件或构建说明。
     # 在本机运行 Go 打包辅助程序，避免 Windows 交叉编译环境阻止 go run。
     $env:GOOS = ([string]$goHost[0]).Trim()
     $env:GOARCH = ([string]$goHost[1]).Trim()
@@ -270,7 +279,7 @@ try {
 
     Write-Host ''
     Write-Host "打包完成: $archivePath"
-    Write-Host '归档目录: sql/ 以及本次选择的 bin/、admin/（按实际打包内容）'
+    Write-Host '归档目录: bin/、sql/、ops/ 以及可选的 admin/'
     Write-Host ("总耗时: {0:N1}s" -f $buildTimer.Elapsed.TotalSeconds)
     Write-Host '所有 Linux 可执行文件均设置为 0755 权限。'
 

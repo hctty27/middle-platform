@@ -1,6 +1,6 @@
 # 本地打包与发布
 
-在 Windows/PowerShell 上构建 Linux ELF 和 Vue 静态文件，经 SSH/SCP 上传到现有服务器目录并直接更新。**不使用 releases 版本目录，不提供自动或手动回滚功能**；数据库 SQL 永远由管理员手动执行。
+在 Windows/PowerShell 上构建 Linux ELF、Vue 静态文件和运维模板，经 SSH/SCP 上传到现有服务器目录并直接更新。**不使用 releases 版本目录，不提供自动或手动回滚功能**；数据库 SQL 永远由管理员手动执行。
 
 ## 首次配置
 
@@ -19,7 +19,7 @@
 }
 ```
 
-支持 `config-center`、`config-center-1`、`config-center-2` 等命名；`sdk-core`、`sdk-service` 和 `config-center-access` 同理。只接受 **模块名** 或 **模块名-正整数**，不会将 `config-center-access` 误认为 `config-center`。
+示例对应 `ops/supervisor/middle-platform.conf`。如需部署多个配置中心实例，可将 Supervisor program 扩展为 `config-center-1`、`config-center-2` 并分别配置端口；`sdk-core`、`sdk-service` 和 `config-center-access` 也支持相同的实例命名规则。只接受 **模块名** 或 **模块名-正整数**，不会将 `config-center-access` 误认为 `config-center`。
 
 例如 `-Service config-center` 只重启已配置的 `config-center-1`、`config-center-2`；全量发布仅重启 `services` 中列出的实例，不执行 `supervisorctl restart all`。发布时按 JSON 声明的顺序逐个重启，每个都使用 `http://127.0.0.1:<端口>/health/ready` 验活。后续添加实例只改 JSON，不改脚本。若未配置匹配实例，发布在本地就会终止，避免更新文件后无法重启。执行 `-SkipRestart` 时不需要配置 `services`。
 
@@ -59,9 +59,9 @@
 
 ## 生产发布行为
 
-本地完成构建和归档校验后上传到服务器临时目录，验证 SHA-256、文件类型、架构与选定服务，再直接更新固定的 `bin/`、`admin/`、`sql/`。生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；SQL 仅分发，不会自动执行。升级旧版配置同步协议时，必须先备份 `config_center`，检查并处理重复、长度不在 32–255 字节范围内或包含首尾空格的旧 `webhook_secret`，再由管理员手工执行 `sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql`。随后为每个接入端配置匹配的 `subscriber.code` / `subscriber.secret`，并同步发布配置中心与接入端；不要只更新一侧。
+本地完成构建和归档校验后上传到服务器临时目录，验证 SHA-256、文件类型、架构与选定服务，再直接更新固定的 `bin/`、`admin/`、`sql/`、`ops/`。生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；SQL 仅分发，不会自动执行；`ops/` 只交付模板，不会自动安装或重载 Supervisor/Monit。升级旧版配置同步协议时，必须先备份 `config_center`，检查并处理重复、长度不在 32–255 字节范围内或包含首尾空格的旧 `webhook_secret`，再由管理员手工执行 `sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql`。随后为每个接入端配置匹配的 `subscriber.code` / `subscriber.secret`，并同步发布配置中心与接入端；不要只更新一侧。
 
-默认按 `publish.config.json` 中的 `services` 逐实例执行 Supervisor 重启与 `/health/ready` 验活；未列出的实例不会被重启。本发布流程**不提供自动回滚或零中断保证**，失败时需人工处置。完整的部署目录、Nginx、数据库升级与故障处理以 [生产运维](../admin/public/docs/guide.html#production) 为准。
+默认按 `publish.config.json` 中的 `services` 逐实例执行 Supervisor 重启与 `/health/ready` 验活；未列出的实例不会被重启。本发布流程**不提供自动回滚或零中断保证**，失败时需人工处置。Supervisor、Monit 安装和故障恢复以 [ops/README.md](../ops/README.md) 及 [生产运维](../admin/public/docs/guide.html#production) 为准。
 
 ## CI 和自测
 

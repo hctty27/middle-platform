@@ -12,6 +12,7 @@ on:
       - 'shared/**'
       - 'admin/**'
       - 'publish/**'
+      - 'ops/**'
       - 'scripts/package.ps1'
       - 'scripts/package-archive.go'
       - '.github/workflows/package.yml'
@@ -25,6 +26,7 @@ on:
       - 'shared/**'
       - 'admin/**'
       - 'publish/**'
+      - 'ops/**'
       - 'scripts/package.ps1'
       - 'scripts/package-archive.go'
       - '.github/workflows/package.yml'
@@ -52,8 +54,10 @@ jobs:
       - name: Build binary and frontend release package
         shell: pwsh
         run: ./scripts/package.ps1 -Arch amd64 -Version ${{ github.sha }}
-      - name: Validate remote publish script syntax
-        run: bash -n publish/publish-remote.sh
+      - name: Validate deployment script syntax
+        run: bash -n publish/publish-remote.sh && bash -n ops/monit/check-http-live.sh && bash -n ops/monit/test-check-http-live.sh
+      - name: Test Monit liveness check
+        run: bash ops/monit/test-check-http-live.sh
       - name: Publishing smoke tests
         run: python3 -I publish/ci_publish_smoke.py
       # 验证完整归档的内容、ELF 架构及 Linux 执行位。
@@ -64,12 +68,12 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ ops/ ops/README.md ops/supervisor/middle-platform.conf ops/monit/check-http-live.sh ops/monit/test-check-http-live.sh ops/monit/middle-platform.conf admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do
             case "$item" in
-              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|bin/sdk-service|sql/|sql/full/|sql/full/*|sql/incremental/|sql/incremental/*|admin/|admin/*) ;;
+              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|bin/sdk-service|sql/|sql/full/|sql/full/*|sql/incremental/|sql/incremental/*|ops/|ops/*|admin/|admin/*) ;;
               *) echo "Unexpected archive entry: $item" >&2; exit 1 ;;
             esac
           done <<< "$entries"
@@ -86,6 +90,7 @@ jobs:
             test "$(stat -c %a "$tmpdir/bin/$binary")" = "755"
             file "$tmpdir/bin/$binary" | grep -E 'ELF 64-bit .*x86-64'
           done
+          tar -tvzf "$tarball" | grep -E '^-rwxr-xr-x.*ops/monit/check-http-live.sh$'
           # 验证相对静态路径与运行时配置被真正写入发布包。
           grep -F 'config.js' "$tmpdir/admin/index.html"
           grep -F './assets/' "$tmpdir/admin/index.html"
@@ -142,7 +147,7 @@ jobs:
           if (-not (Test-Path $archive)) { throw "Missing archive: $archive" }
           $names = @(& tar -tzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
-          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql')) {
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql', 'ops/README.md', 'ops/supervisor/middle-platform.conf', 'ops/monit/check-http-live.sh')) {
             if ($name -notin $names) { throw "Missing binary: $name" }
           }
           foreach ($sqlFile in @(Get-ChildItem -LiteralPath 'db/full', 'db/incremental' -File -Filter '*.sql')) {
@@ -157,4 +162,7 @@ jobs:
             if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\s' -and $_.Trim().EndsWith("bin/$name") })) {
               throw "Missing executable permission in tar header: $name"
             }
+          }
+          if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\s' -and $_.Trim().EndsWith('ops/monit/check-http-live.sh') })) {
+            throw 'Missing executable permission in tar header: ops/monit/check-http-live.sh'
           }
