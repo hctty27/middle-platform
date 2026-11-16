@@ -76,7 +76,7 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ ops/ ops/README.md ops/supervisor/middle-platform.conf ops/monit/ ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/monit/test-restart-supervisor-program.sh ops/monit/middle-platform.conf ops/nginx/ ops/nginx/README.md ops/nginx/middle-platform.conf ops/nginx/middle-platform-main.conf.example ops/nginx/runtime/ ops/nginx/runtime/config-center-upstream.conf ops/nginx/runtime/sdk-core-upstream.conf ops/nginx/runtime/sdk-service-upstream.conf ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ ops/ ops/README.md ops/supervisor/middle-platform.conf ops/monit/ ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/monit/test-restart-supervisor-program.sh ops/monit/middle-platform.conf ops/nginx/ ops/nginx/README.md ops/nginx/middle-platform.conf ops/nginx/middle-platform-main.conf.example ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do
@@ -85,6 +85,10 @@ jobs:
               *) echo "Unexpected archive entry: $item" >&2; exit 1 ;;
             esac
           done <<< "$entries"
+          if grep -Eq '^ops/nginx/runtime(/|$)' <<< "$entries"; then
+            echo "Runtime upstream state must not be packaged from ops/" >&2
+            exit 1
+          fi
           # 新增 SQL 自动校验归档完整性，避免遗漏增量文件。
           for path in db/full/*.sql db/incremental/*.sql; do
             test -f "$path"
@@ -157,7 +161,8 @@ jobs:
           if (-not (Test-Path $archive)) { throw "Missing archive: $archive" }
           $names = @(& tar -tzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
-          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql', 'ops/README.md', 'ops/supervisor/middle-platform.conf', 'ops/monit/check-http-live.sh', 'ops/monit/restart-supervisor-program.sh', 'ops/monit/test-check-http-live.sh', 'ops/monit/test-restart-supervisor-program.sh', 'ops/nginx/README.md', 'ops/nginx/middle-platform.conf', 'ops/nginx/middle-platform-main.conf.example', 'ops/nginx/runtime/config-center-upstream.conf', 'ops/nginx/runtime/sdk-core-upstream.conf', 'ops/nginx/runtime/sdk-service-upstream.conf', 'ops/nginx/upstream-control.sh', 'ops/nginx/test-upstream-control.sh')) {
+          if ($names | Where-Object { $_ -match '^ops/nginx/runtime(/|$)' }) { throw 'Runtime upstream state must not be packaged from ops/' }
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql', 'ops/README.md', 'ops/supervisor/middle-platform.conf', 'ops/monit/check-http-live.sh', 'ops/monit/restart-supervisor-program.sh', 'ops/monit/test-check-http-live.sh', 'ops/monit/test-restart-supervisor-program.sh', 'ops/nginx/README.md', 'ops/nginx/middle-platform.conf', 'ops/nginx/middle-platform-main.conf.example', 'ops/nginx/upstream-control.sh', 'ops/nginx/test-upstream-control.sh')) {
             if ($name -notin $names) { throw "Missing binary: $name" }
           }
           foreach ($sqlFile in @(Get-ChildItem -LiteralPath 'db/full', 'db/incremental' -File -Filter '*.sql')) {
