@@ -1,27 +1,7 @@
-name: Runner Load Test
+name: Runner Load Test (2h soak)
 on:
-  workflow_dispatch:
-    inputs:
-      profile:
-        description: Load profile (all traffic stays on this runner)
-        type: choice
-        options: [smoke, baseline, stress, soak, soak2h]
-        default: smoke
-      topology:
-        description: Instance topology
-        type: choice
-        options: [compact, cluster, both]
-        default: compact
-      scenario:
-        description: Business scenario
-        type: choice
-        options: [all, config-sync, sdk-config, user-check, order, duplicate, payment, mixed]
-        default: all
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/load-test.yml'
-      - 'tests/load/**'
+  push:
+    branches: [test/runner-soak2h-93e3240]
 
 permissions:
   contents: read
@@ -32,18 +12,13 @@ concurrency:
 jobs:
   load:
     runs-on: ubuntu-24.04
-    name: Load (${{ matrix.label }})
-    timeout-minutes: ${{ matrix.profile == 'soak2h' && 150 || 55 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"soak-compact","topology":"compact","profile":"soak"}]' || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
-
+    name: Load (soak2h-compact)
+    timeout-minutes: 150
     env:
       GOWORK: 'off'
-      LOAD_PROFILE: ${{ matrix.profile }}
-      LOAD_TOPOLOGY: ${{ matrix.topology }}
-      LOAD_SCENARIO: ${{ inputs.scenario || 'all' }}
+      LOAD_PROFILE: soak2h
+      LOAD_TOPOLOGY: compact
+      LOAD_SCENARIO: mixed
       MYSQL_PWD: runner-load-only
     steps:
       - name: Initialize local workspace
@@ -72,23 +47,12 @@ jobs:
         run: bash tests/load/setup.sh
       - name: Run load scenarios
         run: bash tests/load/run.sh
-      - name: Explore all scenario saturation (PR only)
-        if: github.event_name == 'pull_request' && matrix.profile == 'smoke'
-        continue-on-error: true
-        id: stress
-        env:
-          LOAD_PROFILE: stress
-          LOAD_SCENARIO: all
-        run: bash tests/load/run.sh
       - name: Collect diagnostics and report
         if: always()
         run: |
           mkdir -p "$LOAD_DIR/results"
           mysql -uroot -h127.0.0.1 -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Max_used_connections','Slow_queries','Questions','Innodb_buffer_pool_reads','Innodb_row_lock_waits');" > "$LOAD_DIR/results/mysql-status.txt" 2>&1 || true
           python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"
-          if [[ '${{ steps.stress.outcome }}' == failure ]]; then
-            echo 'Exploratory stress reached a threshold or execution error; see individual stage results.' | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
       - name: Stop local services
         if: always()
         run: |
@@ -103,7 +67,7 @@ jobs:
         id: upload
         continue-on-error: true
         with:
-          name: runner-load-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.label }}
+          name: runner-load-${{ github.run_id }}-${{ github.run_attempt }}-soak2h-compact
           path: |
             ${{ env.LOAD_DIR }}/results/
             ${{ env.LOAD_DIR }}/logs/
