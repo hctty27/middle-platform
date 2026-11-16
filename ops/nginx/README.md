@@ -17,7 +17,7 @@ Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分�
 - `middle-platform.conf`：唯一需要维护的 Nginx 站点配置，包含三个 upstream 定义、80/443 server、三个 API location 和管理后台。
 - [`run/nginx/`](../../run/nginx/)：Git 仓库根目录下的三个 upstream 初始配置，仅供首次部署时手动复制或参考，不进入发布包。
 - `/data/middle-platform/run/nginx/*.conf`：服务器上的三个动态 upstream 实例列表，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。服务器运行状态独立于仓库初始配置。
-- `upstream-control.sh`：负责校验、摘除、恢复 upstream 实例。
+- `upstream-control.sh`：负责校验、摘除、恢复 upstream 实例。仓库整个 `ops/` 不进入发布包；首次部署须手动复制该脚本到服务器 `/data/middle-platform/ops/nginx/upstream-control.sh`，设置 0755 执行权限。日常发布使用服务器现有脚本，不覆盖它。
 
 站点配置中的三个 upstream 块直接写在 `middle-platform.conf`。块内只通过 `include` 引用服务器运行时实例列表，以便滚动发布可以安全地摘除单个实例，而不改写整份站点配置。
 
@@ -61,9 +61,10 @@ fi
 include /etc/nginx/conf.d/*.conf;
 ```
 
-2. 将唯一站点配置复制到 Nginx 站点目录：
+2. 从仓库手动上传所需 Nginx 配置与控制脚本到服务器对应位置（不随应用发布包交付），设置控制脚本执行权限，并将唯一站点配置复制到 Nginx 站点目录：
 
 ```bash
+sudo chmod 0755 /data/middle-platform/ops/nginx/upstream-control.sh
 sudo cp /data/middle-platform/ops/nginx/middle-platform.conf /etc/nginx/conf.d/middle-platform.conf
 ```
 
