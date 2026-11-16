@@ -22,7 +22,7 @@ func TestReceivePaidAtFormats(t *testing.T) {
 		{name: "sender milliseconds", paidAt: "2026-11-13 12:09:23.524+08", want: "2026-11-13T04:09:23Z"},
 		{name: "sender seconds", paidAt: "2026-11-13 12:09:23+08", want: "2026-11-13T04:09:23Z"},
 		{name: "sender negative offset", paidAt: "2026-11-13 12:09:23.524-05", want: "2026-11-13T17:09:23Z"},
-		{name: "RFC3339 milliseconds", paidAt: "2026-11-13T12:09:23.524+08:00", want: "2026-11-13T04:09:23.524Z"},
+		{name: "RFC3339 milliseconds", paidAt: "2026-11-13T12:09:23.524+08:00", want: "2026-11-13T04:09:23Z"},
 		{name: "RFC3339 UTC", paidAt: "2026-11-13T04:09:23Z", want: "2026-11-13T04:09:23Z"},
 		{name: "RFC3339 nanoseconds", paidAt: "2026-11-13T12:09:23.524123456+08:00", want: "2026-11-13T04:09:23Z"},
 		{name: "empty", invalid: true},
