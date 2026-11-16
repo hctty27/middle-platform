@@ -41,8 +41,12 @@
 
 ## 安全与部署边界
 
-- 数据库 DDL 由管理员审核后手动执行，服务启动不建表、不自动迁移。
+- 数据库 DDL 由管理员审核后手工执行，服务启动不建表、不自动迁移。
 - `/api/config/admin/**`、`/api/core/admin/**` 始终使用 `adminAuth.secret` 请求签名；生产仍须使用 TLS 和受保护的管理网关，不能只依赖签名或隐藏页面。可能包含密钥的原始配置/同步接口也必须限制访问。
 - 配置同步、接入端本地只读接口与 Webhook 统一使用每个接入端唯一的 `config_subscriber.signing_secret`；请求必须携带并签署 `X-Subscriber-Code`。接入端配置为 `subscriber.code` / `subscriber.secret`，不再使用全局 `configSync.secret` 或单独的 `webhook.secret`。
 - Go 业务路由不包含 `/sdk` 前缀，公网如使用 `/sdk/` 应由 Nginx 负责前缀转换。
 - 订单与发货通知必须幂等；事件上报当前不落库、不自动重试。对外请求与签名规范统一在 `admin/public/docs/index.html` 中维护。
+
+## 压力测试
+
+**[正式环境 k6 压测手册](tests/load/README.md)**：Windows 压测机、HMAC 签名、只读基准、受控写入、长稳测试与 Nginx 故障观察。

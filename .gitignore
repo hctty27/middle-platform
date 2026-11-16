@@ -18,3 +18,7 @@
 
 # 本机发布目标。复制 publish/publish.config.example.json 后填写，勿提交
 publish/publish.config.json
+
+# k6 本地凭据和生成的压测报告
+tests/load/config.local.ps1
+tests/load/reports/
