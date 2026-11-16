@@ -176,4 +176,3 @@ jobs:
               throw "Missing executable permission in tar header: $script"
             }
           }
-          }
