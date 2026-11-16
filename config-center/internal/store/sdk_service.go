@@ -47,7 +47,7 @@ func (s *Store) UpdateSDKService(ctx context.Context, id int64, enabled bool) er
 		return ErrInvalid
 	}
 	result, err := s.DB.ExecContext(ctx,
-		"UPDATE sdk_service SET enabled=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?", enabled, id)
+		"UPDATE sdk_service SET enabled=?,updated_at=UTC_TIMESTAMP() WHERE id=?", enabled, id)
 	if err != nil {
 		return databaseError(err)
 	}
@@ -163,7 +163,7 @@ func (s *Store) UpsertSDKChannelService(ctx context.Context, appID, serviceID in
 	_, err = tx.ExecContext(ctx, `
 INSERT INTO sdk_service_channel (service_id,channel_app_id,env,enabled,config)
 VALUES (?,?,?,?,?)
-ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),config=VALUES(config),updated_at=UTC_TIMESTAMP(3)`,
+ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),config=VALUES(config),updated_at=UTC_TIMESTAMP()`,
 		serviceID, appID, env, enabled, string(config))
 	if err != nil {
 		return databaseError(err)

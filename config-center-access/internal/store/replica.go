@@ -75,6 +75,32 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
+	for _, column := range []string{"created_at", "updated_at"} {
+		var dataType string
+		var precision sql.NullInt64
+		err := s.DB.QueryRowContext(ctx, `SELECT data_type, datetime_precision
+			FROM information_schema.columns
+			WHERE table_schema=DATABASE() AND table_name='config_node' AND column_name=?`, column).Scan(&dataType, &precision)
+		if err != nil {
+			return fmt.Errorf("检查本地副本时间字段 config_node.%s 失败: %w", column, err)
+		}
+		if dataType != "datetime" || !precision.Valid || precision.Int64 != 0 {
+			return fmt.Errorf("本地副本时间字段 config_node.%s 必须使用 DATETIME(0)，请执行 V0020", column)
+		}
+	}
+	{
+		var dataType string
+		var precision sql.NullInt64
+		err := s.DB.QueryRowContext(ctx, `SELECT data_type, datetime_precision
+			FROM information_schema.columns
+			WHERE table_schema=DATABASE() AND table_name='config_sync_state' AND column_name='updated_at'`).Scan(&dataType, &precision)
+		if err != nil {
+			return fmt.Errorf("检查本地副本时间字段 config_sync_state.updated_at 失败: %w", err)
+		}
+		if dataType != "datetime" || !precision.Valid || precision.Int64 != 0 {
+			return errors.New("本地副本时间字段 config_sync_state.updated_at 必须使用 DATETIME(0)，请执行 V0020")
+		}
+	}
 	var obsoleteColumns int
 	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
 		WHERE table_schema=DATABASE() AND table_name='config_node'
@@ -202,7 +228,7 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 		epoch = nil
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE config_sync_state
-		SET epoch=?,revision=?,updated_at=UTC_TIMESTAMP(3) WHERE id=1`,
+		SET epoch=?,revision=?,updated_at=UTC_TIMESTAMP() WHERE id=1`,
 		epoch, next.Revision)
 	if err != nil {
 		return false, err
@@ -251,14 +277,14 @@ func validateNode(n remote.Node) error {
 
 func parseDate(v string) (time.Time, error) {
 	if parsed, err := time.Parse(time.RFC3339Nano, v); err == nil {
-		return parsed.UTC(), nil
+		return parsed.UTC().Truncate(time.Second), nil
 	}
 	// 旧版配置中心的无时区时间约定为 UTC。
 	parsed, err := time.ParseInLocation("2006-01-02T15:04:05.999999999", v, time.UTC)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("配置节点日期时间 %q 不合法: %w", v, err)
 	}
-	return parsed, nil
+	return parsed.UTC().Truncate(time.Second), nil
 }
 
 // Nodes 查询本地配置副本，不触发远程网络访问。

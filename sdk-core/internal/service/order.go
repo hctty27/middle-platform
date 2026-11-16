@@ -160,6 +160,7 @@ func (s *OrderService) Receive(ctx context.Context, appid string, h http.Header,
 	if err != nil {
 		return "", ErrInvalidOrder
 	}
+	paidAt = paidAt.UTC().Truncate(time.Second)
 	if err = s.Orders.ConfirmPayment(ctx, o.ID, callback.OrderNo, paidAt); err != nil {
 		return "", err
 	}

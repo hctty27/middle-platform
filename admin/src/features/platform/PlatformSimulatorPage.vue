@@ -211,11 +211,12 @@ function validatePaymentCallback(): {
   const attach = paymentCallback.value.attach
   if (new TextEncoder().encode(attach).byteLength > 4096) throw new Error('attach 超过 4096 字节')
 
-  const paidAt = paymentCallback.value.paidAt.trim() || new Date().toISOString()
+  const paidAtInput = paymentCallback.value.paidAt.trim() || new Date().toISOString()
   const rfc3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
-  if (!rfc3339.test(paidAt) || !Number.isFinite(Date.parse(paidAt))) {
+  if (!rfc3339.test(paidAtInput) || !Number.isFinite(Date.parse(paidAtInput))) {
     throw new Error('paid_at 必须是 RFC3339 时间格式')
   }
+  const paidAt = new Date(paidAtInput).toISOString().replace(/\.\d{3}Z$/, 'Z')
   return { orderNo, gameOrderId, amount, attach, paidAt }
 }
 
@@ -626,8 +627,8 @@ watch(() => roleControl.value.type, type => {
               <el-form-item label="金额 amount（分）" required>
                 <el-input v-model="paymentCallback.amount" type="number" min="1" />
               </el-form-item>
-              <el-form-item label="支付时间 paid_at（RFC3339，可留空）">
-                <el-input v-model="paymentCallback.paidAt" placeholder="留空使用当前 UTC 时间" />
+              <el-form-item label="支付时间 paid_at（RFC3339 秒级，可留空）">
+                <el-input v-model="paymentCallback.paidAt" placeholder="留空使用当前 UTC 秒级时间" />
               </el-form-item>
             </div>
             <el-form-item label="透传参数 attach">
@@ -639,7 +640,7 @@ watch(() => roleControl.value.type, type => {
             <p class="simulator-help">必须先完成订单登记；order_no、game_order_id、amount、attach 必须与已登记订单匹配。</p>
             <p class="simulator-help">同一订单重试必须复用首次使用的 order_no；支付确认后不能更换平台订单号。</p>
             <p class="simulator-help">此接口不带环境路径，SDK Core 会根据 game_order 记录定位订单所属环境。</p>
-            <p class="simulator-help">V1 签名仅覆盖 order_no、game_order_id、appSecret、timestamp、nonce；amount、attach、paid_at 不参与签名，后端仍会与已登记订单核对金额和透传参数。</p>
+            <p class="simulator-help">V1 签名仅覆盖 order_no、game_order_id、appSecret、timestamp、nonce；amount、attach、paid_at 不参与签名。paid_at 会转换为 UTC 秒级时间后发送，兼容毫秒输入并截断。后端仍会与已登记订单核对金额和透传参数。</p>
           </el-form>
         </el-tab-pane>
       </el-tabs>

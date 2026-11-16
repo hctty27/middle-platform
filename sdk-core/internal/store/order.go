@@ -108,8 +108,8 @@ func (s *OrderStore) ConfirmPayment(ctx context.Context, id int64, platformOrder
 	}
 	_, err = tx.ExecContext(ctx, `
         UPDATE game_order SET platform_order_no=?,payment_status=1,paid_at=?,
-        next_notify_at=UTC_TIMESTAMP(3) WHERE id=? AND payment_status=0`,
-		platformOrderNo, paidAt.UTC(), id)
+        next_notify_at=UTC_TIMESTAMP() WHERE id=? AND payment_status=0`,
+		platformOrderNo, paidAt.UTC().Truncate(time.Second), id)
 	if err != nil {
 		var myErr *mysql.MySQLError
 		if errors.As(err, &myErr) && myErr.Number == 1062 {
@@ -126,7 +126,7 @@ func (s *OrderStore) CompleteNotify(ctx context.Context, id int64, attempt int, 
 	if notifyErr == nil {
 		_, err := s.db.ExecContext(ctx, `
             UPDATE game_order SET notify_status=1,
-                notify_success_at=COALESCE(notify_success_at,UTC_TIMESTAMP(3)),
+                notify_success_at=COALESCE(notify_success_at,UTC_TIMESTAMP()),
                 last_notify_error='',next_notify_at=NULL
             WHERE id=? AND payment_status=1 AND notify_status<>1
               AND notify_attempts=?`, id, attempt)
@@ -137,7 +137,7 @@ func (s *OrderStore) CompleteNotify(ctx context.Context, id int64, attempt int, 
 		// 延期仍计入领取次数，后续真实失败可能因此使用较长的原有退避。
 		_, err := s.db.ExecContext(ctx, `
 		    UPDATE game_order SET last_notify_error=?,
-		        next_notify_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 5 SECOND)
+		        next_notify_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 5 SECOND)
 		    WHERE id=? AND payment_status=1 AND notify_status<>1
 		      AND notify_attempts=?`, model.ErrNotifyDeferred.Error(), id, attempt)
 		return err
@@ -148,7 +148,7 @@ func (s *OrderStore) CompleteNotify(ctx context.Context, id int64, attempt int, 
 	}
 	_, err := s.db.ExecContext(ctx, `
         UPDATE game_order SET notify_status=2,last_notify_error=?,
-        next_notify_at=DATE_ADD(UTC_TIMESTAMP(3),
+        next_notify_at=DATE_ADD(UTC_TIMESTAMP(),
             INTERVAL LEAST(3600,30*POW(2,LEAST(7,notify_attempts))) SECOND)
         WHERE id=? AND payment_status=1 AND notify_status<>1
           AND notify_attempts=?`, summary, id, attempt)
@@ -188,7 +188,7 @@ func (s *OrderStore) claimDueOnce(ctx context.Context) (*model.Order, error) {
 	err = tx.QueryRowContext(ctx, `
         SELECT id FROM game_order
         WHERE payment_status=1 AND notify_status<>1
-          AND next_notify_at<=UTC_TIMESTAMP(3)
+          AND next_notify_at<=UTC_TIMESTAMP()
         ORDER BY next_notify_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -198,8 +198,8 @@ func (s *OrderStore) claimDueOnce(ctx context.Context) (*model.Order, error) {
 	}
 	_, err = tx.ExecContext(ctx, `
         UPDATE game_order SET notify_attempts=notify_attempts+1,
-        last_notify_at=UTC_TIMESTAMP(3),
-        next_notify_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND)
+        last_notify_at=UTC_TIMESTAMP(),
+        next_notify_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 60 SECOND)
         WHERE id=?`, id)
 	if err != nil {
 		return nil, err

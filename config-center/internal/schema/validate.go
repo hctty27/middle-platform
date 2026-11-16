@@ -137,5 +137,53 @@ func validateSchema(ctx context.Context, conn *sql.Conn) error {
 			}
 		}
 	}
+	if err := validateSecondPrecision(ctx, conn); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateSecondPrecision(ctx context.Context, conn *sql.Conn) error {
+	columns := []struct {
+		table  string
+		column string
+	}{
+		{"config_node", "created_at"},
+		{"config_node", "updated_at"},
+		{"sdk_node_config", "created_at"},
+		{"sdk_node_config", "updated_at"},
+		{"config_node_change_log", "created_at"},
+		{"config_subscriber", "created_at"},
+		{"config_subscriber", "updated_at"},
+		{"config_subscriber_delivery_state", "lease_until"},
+		{"config_subscriber_delivery_state", "next_attempt_at"},
+		{"config_subscriber_delivery_state", "updated_at"},
+		{"sdk_channel_app", "created_at"},
+		{"sdk_channel_app", "updated_at"},
+		{"game_order", "paid_at"},
+		{"game_order", "last_notify_at"},
+		{"game_order", "notify_success_at"},
+		{"game_order", "next_notify_at"},
+		{"game_order", "created_at"},
+		{"game_order", "updated_at"},
+		{"sdk_service", "created_at"},
+		{"sdk_service", "updated_at"},
+		{"sdk_service_channel", "created_at"},
+		{"sdk_service_channel", "updated_at"},
+	}
+	for _, column := range columns {
+		var dataType string
+		var precision sql.NullInt64
+		err := conn.QueryRowContext(ctx, `SELECT data_type, datetime_precision
+			FROM information_schema.columns
+			WHERE table_schema=DATABASE() AND table_name=? AND column_name=?`,
+			column.table, column.column).Scan(&dataType, &precision)
+		if err != nil {
+			return fmt.Errorf("检查时间字段 %s.%s 失败: %w", column.table, column.column, err)
+		}
+		if dataType != "datetime" || !precision.Valid || precision.Int64 != 0 {
+			return fmt.Errorf("时间字段 %s.%s 必须使用 DATETIME(0)", column.table, column.column)
+		}
+	}
 	return nil
 }
