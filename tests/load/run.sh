@@ -8,6 +8,7 @@ case "$LOAD_PROFILE" in
   stress) rates=(50 100 200 300); duration=30s ;;
   *) exit 2 ;;
 esac
+requested_scenario="$LOAD_SCENARIO"
 case "$LOAD_SCENARIO" in
   all) scenarios=(config-sync sdk-config user-check order duplicate payment mixed) ;;
   config-sync|sdk-config|user-check|order|duplicate|payment|mixed) scenarios=("$LOAD_SCENARIO") ;;
@@ -49,5 +50,5 @@ for i in $(seq 1 60); do
 done
 printf 'paid\tdelivered\tpending\n%s\t%s\t%s\n' "$paid" "$delivered" "$pending" > "$LOAD_DIR/results/delivery.tsv"
 if (( pending != 0 )); then failed=1; fi
-if [[ "$LOAD_SCENARIO" == payment || "$LOAD_SCENARIO" == mixed ]] && (( paid == 0 )); then failed=1; fi
+if [[ "$requested_scenario" == all || "$requested_scenario" == payment || "$requested_scenario" == mixed ]] && (( paid == 0 )); then failed=1; fi
 exit "$failed"

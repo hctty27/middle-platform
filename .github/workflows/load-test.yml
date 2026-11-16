@@ -54,7 +54,7 @@ jobs:
           bash -n tests/load/setup.sh tests/load/run.sh
           python3 -m py_compile tests/load/topology.py tests/load/report.py
           test -z "$(gofmt -l tests/load/mock.go)"
-          k6 inspect tests/load/scenarios.js
+          LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
       - name: Install local services
         run: |
           sudo apt-get update -q
@@ -78,7 +78,7 @@ jobs:
             supervisorctl -c "$LOAD_DIR/supervisor.conf" shutdown || true
           fi
           if [ -f "$LOAD_DIR/nginx.conf" ]; then
-            nginx -c "$LOAD_DIR/nginx.conf" -s quit || true
+            nginx -p "$LOAD_DIR" -e "$LOAD_DIR/logs/nginx-error.log" -c "$LOAD_DIR/nginx.conf" -s quit || true
           fi
       - uses: actions/upload-artifact@v4
         if: always()

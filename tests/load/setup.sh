@@ -22,8 +22,8 @@ sed -i 's|userCheckURL: ""|userCheckURL: "http://127.0.0.1:8290/cp/user/check"|'
 python3 tests/load/topology.py "$LOAD_DIR" "$LOAD_TOPOLOGY"
 # Supervisor inherits the disposable local DB settings above.
 supervisord -c "$LOAD_DIR/supervisor.conf"
-nginx -t -c "$LOAD_DIR/nginx.conf"
-nginx -c "$LOAD_DIR/nginx.conf"
+nginx -p "$LOAD_DIR" -e "$LOAD_DIR/logs/nginx-error.log" -t -c "$LOAD_DIR/nginx.conf"
+nginx -p "$LOAD_DIR" -e "$LOAD_DIR/logs/nginx-error.log" -c "$LOAD_DIR/nginx.conf"
 while read -r port; do
   curl --noproxy '*' --retry 30 --retry-connrefused --retry-delay 1 --max-time 5 -fsS "http://127.0.0.1:$port/health/ready" >/dev/null
 done < "$LOAD_DIR/ports.txt"

@@ -39,7 +39,7 @@ export const options = {
 };
 
 function stamp() {
-  return { ts: String(Math.floor(Date.now() / 1000)), nonce: crypto.hexEncode(crypto.randomBytes(8)) };
+  return { ts: String(Math.floor(Date.now() / 1000)), nonce: Array.from(new Uint8Array(crypto.randomBytes(8)), b => b.toString(16).padStart(2, '0')).join('') };
 }
 function gameHeaders(path, body) {
   const { ts, nonce } = stamp();
