@@ -23,7 +23,7 @@ Nginx 将以下路径转发到对应服务：
 1. 使用 HTTPS 正式 Nginx 域名；Windows 压测机与业务服务器分离。
 2. 使用 test 环境 AppID、游戏密钥和独立订阅者身份；不要把 prod AppID 或生产密钥放进本地配置。
 3. 确认 test 渠道包已绑定有效配置，且所有测试请求不会触发真实充值、发货、奖励或用户资产变更。
-4. 确认 Nginx access log 能通过压测 IP、User-Agent 和测试 AppID 识别流量。
+4. 确认 Nginx access log 能通过压测源 IP 和专用 User-Agent 识别流量；如果当前日志格式记录了 x-app-id，再同时核对测试 AppID。
 5. 先确认 MySQL 备份、连接数余量、磁盘空间、日志轮转和告警可用。
 6. 先执行 smoke；确认正式业务流量无异常后，才逐档提高 RPS。
 7. 任何正式业务异常、持续 5xx、P95 明显恶化、CPU/内存/数据库连接接近告警阈值时，立即停止压测。
@@ -34,7 +34,7 @@ Nginx 将以下路径转发到对应服务：
 
 - sdk-core-orders 会向生产数据库新增订单，并由异步 Worker 处理后续通知。只有确认 test 渠道的 payNotifyUrl 指向隔离的测试接收端、不会触发真实发货后，才允许使用 -AllowOrderWrites -ConfirmOrderNotifySink。脚本限制最高 5 RPS，但仍会持续产生订单记录，测试结束后按业务审核流程清理，不直接执行未经审核的 SQL。
 - sdk-service-user-check 会经过 SDK Service 的游戏 HMAC、配置读取和用户核验流程。只有确认 test 渠道全局及渠道环境开关使其跳过外部平台核验，并且不会访问真实平台时，才允许使用 -AllowServiceUserCheck -ConfirmSkipUserCheck。否则不要执行该场景。
-- mixed/ramp/soak 默认只混合 config-center revision 读取与 sdk-core test 配置读取。只有显式使用 -IncludeServiceInMix 并完成上面的确认，才加入 sdk-service 用户核验流量。
+- mixed/ramp/soak 默认使用合成比例：40% config-center revision 读取、60% sdk-core test 配置读取。只有显式使用 -IncludeServiceInMix 并完成上面的确认，才改为 40% config-center、50% sdk-core、10% sdk-service 用户核验。该比例是压测初始模型，不代表真实线上流量比例，正式容量评估前应按访问日志调整。
 - 不测试支付回调、订单发货通知、角色封禁/解禁、配置管理写入或事件/订阅推送；这些操作可能影响真实玩家或第三方系统。
 
 ## 3. Windows 安装与本地配置
@@ -72,7 +72,7 @@ notepad .\tests\load\config.local.ps1
 | ORDER_ID_PREFIX | 订单测试唯一 ID 前缀 |
 | ORDER_AMOUNT | 订单测试金额，默认 1 |
 
-不要把真实密钥写入命令行、测试报告或仓库。
+不要把真实密钥写入命令行、测试报告或仓库。Windows 系统时间必须保持同步；游戏和订阅者签名均使用秒级时间戳，服务端验签时间窗口为 5 分钟。
 
 ## 4. 执行命令
 

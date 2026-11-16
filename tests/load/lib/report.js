@@ -5,32 +5,33 @@ function metric(data, name) {
 export function summaryOutputs(data) {
   const runId = (__ENV.LOADTEST_RUN_ID || String(Date.now())).replace(/[^A-Za-z0-9_-]/g, '-');
   const scenario = (__ENV.LOADTEST_SCENARIO || 'load').replace(/[^A-Za-z0-9_-]/g, '-');
+  const metrics = {};
+  const thresholds = {};
+
+  Object.keys(data.metrics || {}).forEach(function (name) {
+    metrics[name] = data.metrics[name].values || null;
+    if (data.metrics[name].thresholds) {
+      thresholds[name] = data.metrics[name].thresholds;
+    }
+  });
+
   const report = {
     generatedAt: new Date().toISOString(),
     runId: runId,
     scenario: scenario,
     baseUrl: __ENV.BASE_URL || '',
-    metrics: {
-      http_req_duration: metric(data, 'http_req_duration'),
-      http_req_failed: metric(data, 'http_req_failed'),
-      http_reqs: metric(data, 'http_reqs'),
-      iterations: metric(data, 'iterations'),
-      dropped_iterations: metric(data, 'dropped_iterations'),
-      checks: metric(data, 'checks'),
+    loadProfile: {
+      maxRps: Number(__ENV.MAX_RPS || 0),
+      duration: __ENV.DURATION || null,
+      mixIncludesSdkService: __ENV.MIX_INCLUDE_SERVICE === 'true',
     },
-    thresholds: {},
+    metrics: metrics,
+    thresholds: thresholds,
   };
 
-  Object.keys(data.metrics || {}).forEach(function (name) {
-    const thresholds = data.metrics[name].thresholds;
-    if (thresholds) {
-      report.thresholds[name] = thresholds;
-    }
-  });
-
-  const duration = report.metrics.http_req_duration || {};
-  const failed = report.metrics.http_req_failed || {};
-  const rps = report.metrics.http_reqs || {};
+  const duration = metrics.http_req_duration || {};
+  const failed = metrics.http_req_failed || {};
+  const rps = metrics.http_reqs || {};
   const output = [
     'Load test: ' + scenario,
     'Run ID: ' + runId,
