@@ -100,7 +100,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          artifacts="$(gh api --paginate --slurp --jq '[.[].artifacts[] | select(.expired == false and (.name | startswith("middle-platform-")))] as $all | ([$all[] | select(.workflow_run.head_branch == "main")] | sort_by(.created_at) | reverse | .[0:3] | map(.id)) as $keep | $all[] | . as $artifact | select(($keep | index($artifact.id)) == null) | [.id, .created_at, (.workflow_run.head_branch // "unknown")] | @tsv' "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100")"
+          artifacts="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" | jq -r '[.[].artifacts[] | select(.expired == false and (.name | startswith("middle-platform-")))] as $all | ([$all[] | select(.workflow_run.head_branch == "main")] | sort_by(.created_at) | reverse | .[0:3] | map(.id)) as $keep | $all[] | . as $artifact | select(($keep | index($artifact.id)) == null) | [.id, .created_at, (.workflow_run.head_branch // "unknown")] | @tsv')"
           deleted=0
           while read -r artifact_id created_at head_branch; do
             [[ -n "$artifact_id" ]] || continue
