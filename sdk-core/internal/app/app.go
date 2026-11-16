@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -42,6 +41,8 @@ func Run(configPath string) error {
 	if err := logging.Init("sdk-core", cfg.Log); err != nil {
 		return fmt.Errorf("初始化日志失败: %w", err)
 	}
+	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	db, err := openDB(cfg.Database)
 	if err != nil {
@@ -49,7 +50,7 @@ func Run(configPath string) error {
 	}
 	defer db.Close()
 
-	initCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	initCtx, cancel := context.WithTimeout(stopCtx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(initCtx); err != nil {
 		return fmt.Errorf("连接配置中心数据库失败: %w", err)
@@ -107,33 +108,26 @@ func Run(configPath string) error {
 		defer close(workerDone)
 		orders.RunWorker(workerCtx, cfg.OrderNotify.Workers, idleInterval)
 	}()
-	defer func() {
-		stopWorker()
-		<-workerDone
-	}()
+	defer stopWorker()
 
 	requestTimeout, _ := time.ParseDuration(cfg.Server.RequestTimeout)
 	routerOptions := api.RouterOptions{RequestTimeout: requestTimeout}
-	var ready atomic.Bool
-	ready.Store(true)
+	health := bootstrap.NewHealthState()
+	health.SetReady(true)
 	server := &http.Server{
 		Addr: cfg.Server.Address,
-		Handler: logging.HTTP(cfg.Log, bootstrap.ReadinessMiddleware(
+		Handler: logging.HTTP(cfg.Log, health.Middleware(
 			signature.AdminMiddleware(
 				api.RouterWithAdminOptions(service.NewConfigService(publicReader), db, routerOptions, orders),
 				"/api/core/admin",
 				cfg.AdminAuth.Secret,
 			),
-			&ready,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-
-	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -150,12 +144,12 @@ func Run(configPath string) error {
 		}
 	}
 
-	ready.Store(false)
+	health.SetReady(false)
 	stop()
 	stopWorker()
 	slog.Info("SDK Core 正在关闭")
 
-	shutdownCtx, done := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, done := context.WithTimeout(context.Background(), bootstrap.HTTPShutdownTimeout)
 	defer done()
 	shutdownErr := server.Shutdown(shutdownCtx)
 	if shutdownErr != nil {
@@ -163,7 +157,13 @@ func Run(configPath string) error {
 		shutdownErr = errors.Join(shutdownErr, server.Close())
 	}
 
-	if err := errors.Join(listenErr, shutdownErr); err != nil {
+	var workerErr error
+	select {
+	case <-workerDone:
+	case <-shutdownCtx.Done():
+		workerErr = fmt.Errorf("发货工作线程关闭超时: %w", shutdownCtx.Err())
+	}
+	if err := errors.Join(listenErr, shutdownErr, workerErr); err != nil {
 		return err
 	}
 	slog.Info("SDK Core 已停止")

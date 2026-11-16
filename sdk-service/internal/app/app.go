@@ -44,6 +44,8 @@ func Run(configPath string) error {
 	if err := logging.Init("sdk-service", cfg.Log); err != nil {
 		return err
 	}
+	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	db, err := openDB(cfg.Database)
 	if err != nil {
@@ -51,7 +53,7 @@ func Run(configPath string) error {
 	}
 	defer db.Close()
 
-	initCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	initCtx, cancel := context.WithTimeout(stopCtx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(initCtx); err != nil {
 		return fmt.Errorf("连接配置中心数据库失败: %w", err)
@@ -103,19 +105,18 @@ func Run(configPath string) error {
 
 	requestTimeout, _ := time.ParseDuration(cfg.Server.RequestTimeout)
 	routerOptions := api.RouterOptions{RequestTimeout: requestTimeout}
+	health := bootstrap.NewHealthState()
+	health.SetReady(true)
 	server := &http.Server{
 		Addr: cfg.Server.Address,
-		Handler: logging.HTTP(cfg.Log, api.RouterWithOptions(
+		Handler: logging.HTTP(cfg.Log, health.Middleware(api.RouterWithOptions(
 			checker, db, roleQuerier, serverQuerier, controller, outbound, outbound, routerOptions,
-		)),
+		))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      max(timeout+5*time.Second, requestTimeout+2*time.Second),
 		IdleTimeout:       60 * time.Second,
 	}
-
-	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -123,22 +124,30 @@ func Run(configPath string) error {
 		errCh <- server.ListenAndServe()
 	}()
 
+	var listenErr error
 	select {
 	case <-stopCtx.Done():
 	case err := <-errCh:
 		if !errors.Is(err, http.ErrServerClosed) {
-			return err
+			listenErr = err
 		}
 	}
 
+	health.SetReady(false)
+	stop()
+	started := time.Now()
 	slog.Info("SDK Service 正在关闭")
-	shutdownCtx, finish := context.WithTimeout(context.Background(), 20*time.Second)
+	shutdownCtx, finish := context.WithTimeout(context.Background(), bootstrap.HTTPShutdownTimeout)
 	defer finish()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		_ = server.Close()
-		return fmt.Errorf("HTTP 服务优雅关闭失败: %w", err)
+	shutdownErr := server.Shutdown(shutdownCtx)
+	if shutdownErr != nil {
+		slog.Warn("HTTP 优雅关闭失败，正在关闭活动连接", "error", shutdownErr)
+		shutdownErr = errors.Join(shutdownErr, server.Close())
+	}
+	if err := errors.Join(listenErr, shutdownErr); err != nil {
+		return err
 	}
 
-	slog.Info("SDK Service 已停止")
+	slog.Info("SDK Service 已停止", "duration", time.Since(started))
 	return nil
 }

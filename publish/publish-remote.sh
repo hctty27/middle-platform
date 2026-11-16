@@ -42,7 +42,7 @@ esac
 tar -tzf "$archive" > "$stage/entries"
 while IFS= read -r entry; do
     case "$entry" in
-        bin/|bin/*|admin/|admin/*|sql/|sql/*) ;;
+        bin/|bin/*|admin/|admin/*|sql/|sql/*|ops/|ops/*) ;;
         *) printf 'Unexpected archive entry: %s\n' "$entry" >&2; exit 1 ;;
     esac
     if [[ "/$entry/" == *'/../'* || "/$entry/" == *'/./'* ]]; then

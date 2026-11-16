@@ -52,13 +52,15 @@ class RemotePublishTests(unittest.TestCase):
         files = {f"bin/{name}": b"#!/bin/sh\nexit 0\n" for name in BINARIES
                  if name != omit and (only is None or name == only)}
         files["sql/full/config_center.sql"] = b"DO NOT EXECUTE"
+        files["ops/README.md"] = b"Operations templates"
+        files["ops/monit/check-http-live.sh"] = b"#!/usr/bin/env bash\\nexit 0\\n"
         if frontend:
             files.update({"admin/index.html": b"new-index", "admin/config.js": b"default-config"})
         with tarfile.open(self.archive, "w:gz") as archive:
             for name, content in files.items():
                 entry = tarfile.TarInfo(name)
                 entry.size = len(content)
-                entry.mode = 0o755 if name.startswith("bin/") else 0o644
+                entry.mode = 0o755 if name.startswith("bin/") or (name.startswith("ops/") and name.endswith(".sh")) else 0o644
                 archive.addfile(entry, io.BytesIO(content))
             if extra:
                 archive.addfile(extra)
@@ -111,6 +113,8 @@ exec bash "$@"
         for path in protected:
             self.assertEqual(path.read_text(), "keep")
         self.assertTrue((self.root / "packages" / ARCHIVE).is_file())
+        self.assertEqual((self.root / "ops/README.md").read_bytes(), b"Operations templates")
+        self.assertTrue((self.root / "ops/monit/check-http-live.sh").is_file())
         self.assertFalse(self.stage.exists())
         self.assertIn("SQL was NOT executed", result.stdout)
 

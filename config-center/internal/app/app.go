@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -32,6 +31,9 @@ func Run(configPath string) error {
 	if err := logging.Init("config-center", cfg.Log); err != nil {
 		return err
 	}
+	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	parsed, err := bootstrap.ParseMySQLUTC(cfg.DSN)
 	if err != nil {
 		return err
@@ -41,7 +43,7 @@ func Run(configPath string) error {
 	parsed.WriteTimeout = 10 * time.Second
 
 	// 启动只读校验数据库结构；建表与升级 SQL 由管理员手动执行。
-	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	migrationCtx, migrationCancel := context.WithTimeout(stopCtx, 3*time.Minute)
 	defer migrationCancel()
 	if err := schema.Validate(migrationCtx, parsed.FormatDSN()); err != nil {
 		return err
@@ -56,7 +58,7 @@ func Run(configPath string) error {
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(10 * time.Minute)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(stopCtx, 5*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
 		return err
@@ -77,9 +79,9 @@ func Run(configPath string) error {
 		[]string{"/api/config/sync", "/api/config/nodes"},
 		repository.SubscriberSecret,
 	)
-	var ready atomic.Bool
-	ready.Store(true)
-	handler = bootstrap.ReadinessMiddleware(handler, &ready)
+	health := bootstrap.NewHealthState()
+	health.SetReady(true)
+	handler = health.Middleware(handler)
 	server := &http.Server{
 		Addr:              address,
 		Handler:           logging.HTTP(cfg.Log, handler),
@@ -88,9 +90,6 @@ func Run(configPath string) error {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
-	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	// 后台 Webhook 投递使用独立生命周期，退出时先取消再等待任务结束。
 	workerCtx, cancelWorker := context.WithCancel(context.Background())
 	defer cancelWorker()
@@ -116,11 +115,11 @@ func Run(configPath string) error {
 		}
 	}
 	// 收到终止信号后立即撤销就绪状态，使网关停止分发新请求。
-	ready.Store(false)
+	health.SetReady(false)
 	stop()
 	started := time.Now()
 	slog.Info("配置中心正在关闭")
-	shutdownCtx, done := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, done := context.WithTimeout(context.Background(), bootstrap.HTTPShutdownTimeout)
 	defer done()
 	cancelWorker()
 	shutdownErr := server.Shutdown(shutdownCtx)

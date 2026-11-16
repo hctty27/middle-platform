@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -73,11 +72,11 @@ func Run(configPath string) error {
 		trigger.Run(workerCtx)
 	}()
 
-	var ready atomic.Bool
-	ready.Store(true)
+	health := bootstrap.NewHealthState()
+	health.SetReady(true)
 	server := &http.Server{
 		Addr:              cfg.Address,
-		Handler:           logging.HTTP(cfg.Log, bootstrap.ReadinessMiddleware(api.Router(replica, trigger, cfg.SubscriberCode, cfg.SubscriberSecret), &ready)),
+		Handler:           logging.HTTP(cfg.Log, health.Middleware(api.Router(replica, trigger, cfg.SubscriberCode, cfg.SubscriberSecret))),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -96,12 +95,12 @@ func Run(configPath string) error {
 		}
 	}
 
-	ready.Store(false)
+	health.SetReady(false)
 	stop()
 	started := time.Now()
 	slog.Info("配置接入服务正在关闭")
 
-	shutdownCtx, done := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, done := context.WithTimeout(context.Background(), bootstrap.HTTPShutdownTimeout)
 	defer done()
 	cancelWorker()
 
