@@ -48,24 +48,25 @@ class RemotePublishTests(unittest.TestCase):
         self.stage.mkdir(parents=True)
         self.archive = self.stage / ARCHIVE
         self.events = self.root / "events.log"
+        self.nginx_control = self.root / "ops/nginx/upstream-control.sh"
+        self.nginx_control.parent.mkdir(parents=True, exist_ok=True)
+        self.nginx_control.write_bytes((
+            b"#!/usr/bin/env bash\n"
+            b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
+        ))
+        self.nginx_control.chmod(0o755)
 
     def make_package(self, frontend=True, extra=None, omit=None, only=None):
         files = {f"bin/{name}": b"#!/bin/sh\nexit 0\n" for name in BINARIES
                  if name != omit and (only is None or name == only)}
         files["sql/full/config_center.sql"] = b"DO NOT EXECUTE"
-        files["ops/README.md"] = b"Operations templates"
-        files["ops/monit/check-http-live.sh"] = b"#!/usr/bin/env bash\\nexit 0\\n"
-        files["ops/nginx/upstream-control.sh"] = (
-            b"#!/usr/bin/env bash\n"
-            b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
-        )
         if frontend:
             files.update({"admin/index.html": b"new-index", "admin/config.js": b"default-config"})
         with tarfile.open(self.archive, "w:gz") as archive:
             for name, content in files.items():
                 entry = tarfile.TarInfo(name)
                 entry.size = len(content)
-                entry.mode = 0o755 if name.startswith("bin/") or (name.startswith("ops/") and name.endswith(".sh")) else 0o644
+                entry.mode = 0o755 if name.startswith("bin/") else 0o644
                 archive.addfile(entry, io.BytesIO(content))
             if extra:
                 archive.addfile(extra)
@@ -114,7 +115,9 @@ exec bash "$@"
     def test_full_update_preserves_configuration_and_old_assets(self):
         self.make_package()
         protected = [self.seed(path, "keep") for path in
-                     ("config/prod.yaml", "logs/service.log", "admin/config.js", "admin/assets/old.js")]
+                     ("config/prod.yaml", "logs/service.log", "admin/config.js", "admin/assets/old.js",
+                      "ops/README.md", "ops/monit/check-http-live.sh", "run/nginx/sdk-core-upstream.conf")]
+        helper_before = self.nginx_control.read_bytes()
         self.seed("bin/sdk-core", "old-binary")
         result = self.run_publish()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -123,9 +126,7 @@ exec bash "$@"
         for path in protected:
             self.assertEqual(path.read_text(encoding="utf-8"), "keep")
         self.assertTrue((self.root / "packages" / ARCHIVE).is_file())
-        self.assertEqual((self.root / "ops/README.md").read_bytes(), b"Operations templates")
-        self.assertTrue((self.root / "ops/monit/check-http-live.sh").is_file())
-        self.assertTrue((self.root / "ops/nginx/upstream-control.sh").is_file())
+        self.assertEqual(self.nginx_control.read_bytes(), helper_before)
         self.assertFalse(self.stage.exists())
         self.assertIn("SQL was NOT executed", result.stdout)
 
@@ -163,6 +164,7 @@ exec bash "$@"
         self.assert_rejected(service="sdk-core")
 
     def test_admin_only_archive_does_not_require_binaries(self):
+        self.nginx_control.unlink()
         self.make_package(only="admin")
         result = self.run_publish(service="admin")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -171,7 +173,9 @@ exec bash "$@"
 
     def test_core_instances_restart_sequentially_and_pass_health(self):
         self.make_package(frontend=False, only="sdk-core")
+        helper_before = self.nginx_control.read_bytes()
         result = self.run_publish(service="sdk-core", restart=True)
+        self.assertEqual(self.nginx_control.read_bytes(), helper_before)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Healthy: sdk-core-1", result.stdout)
         for i in range(1, 5):
@@ -234,6 +238,34 @@ exec bash "$@"
         events = self.events.read_text(encoding="utf-8").splitlines()
         self.assertIn("drain sdk-core 8211", events)
         self.assertNotIn("enable sdk-core 8211", events)
+
+    def test_missing_installed_nginx_helper_rejects_rolling_publish(self):
+        self.nginx_control.unlink()
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.assert_rejected(service="sdk-core", restart=True)
+        self.assertIn("Missing or unsafe Nginx upstream control helper", result.stderr)
+
+    def test_skip_restart_does_not_require_nginx_helper(self):
+        self.nginx_control.unlink()
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.run_publish(service="sdk-core")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.nginx_control.exists())
+
+    def test_access_restart_does_not_require_nginx_helper(self):
+        self.nginx_control.unlink()
+        self.make_package(frontend=False, only="config-center-access")
+        result = self.run_publish(service="config-center-access", restart=True,
+                                  plan="config-center-access:8291")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Healthy: config-center-access", result.stdout)
+
+    def test_rejects_ops_and_runtime_entries(self):
+        for name in ("ops/nginx/upstream-control.sh", "run/nginx/sdk-core-upstream.conf"):
+            with self.subTest(name=name):
+                self.make_package(extra=tarfile.TarInfo(name))
+                result = self.assert_rejected()
+                self.assertIn("Unexpected archive entry:", result.stderr)
 
     def test_bad_checksum(self):
         self.make_package()

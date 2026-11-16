@@ -13,6 +13,9 @@
 | `admin/` | Vue 3 管理端与静态接口/运维文档 |
 | `shared/` | Go 公共基础能力：数据库启动、YAML 读取、结构化日志和签名 |
 | `scripts/` | 打包及 CI 测试辅助脚本 |
+| `ops/` | 运维配置和控制脚本，手动部署，不进入发布包 |
+| `run/nginx/` | upstream 初始配置，手动复制，不进入发布包 |
+| `publish/` | 应用打包、上传及滚动发布工具 |
 
 配置结构为 `game → region → server_group`，`channel_app` 独立维护；渠道包 AppID 全局唯一，每个 `prod/test/review` 环境最多绑定一个区服组。**SDK Core、SDK Service 与配置中心使用同一个 `config_center` 权威库**；只有可选的接入端使用独立 `config_access` 副本库。
 

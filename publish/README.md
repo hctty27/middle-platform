@@ -1,6 +1,6 @@
 # 本地打包与安全滚动发布
 
-在 Windows/PowerShell 上构建 Linux ELF、Vue 静态文件和运维模板，经 SSH/SCP 上传到 Linux 服务器。生产目录统一为 `/data/middle-platform`。数据库 SQL 仅分发，不会自动执行。
+在 Windows/PowerShell 上构建 Linux ELF、Vue 静态文件和 SQL 发布包，经 SSH/SCP 上传到 Linux 服务器。生产目录统一为 `/data/middle-platform`。数据库 SQL 仅分发，不会自动执行。
 
 ## 生产实例拓扑
 
@@ -22,7 +22,7 @@
 4. 为 SSH 部署用户配置受限免密 sudo：仅允许实际路径下的 `nginx -t`、`nginx -T`、`systemctl reload nginx`。发布脚本使用 `sudo -n`，不会交互式提权。
 5. 确认 10 个 Supervisor program 均存在，Supervisor 以 root 运行并加载三个 `[group:...]` 分组；进程名需使用 `group:program` 形式。每个实例设置 `GOMEMLIMIT=128MiB`（Go Runtime 软限制，不是 RSS 硬上限）。SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
 
-项目只提供 Nginx、Supervisor 和 Monit 的配置模板及滚动发布控制逻辑，不提供安装这些系统服务的脚本，也不会自动覆盖系统配置。
+项目提供 Nginx、Supervisor 和 Monit 的配置模板及滚动发布控制逻辑，不提供系统服务安装脚本。整个 `ops/` 与 `run/` 均不进入发布包，管理员手动复制、独立维护。首次滚动发布前必须手动部署 `/data/middle-platform/ops/nginx/upstream-control.sh` 并赋予 0755 执行权限；不存在、不可执行或为符号链接时，涉及 Nginx 的滚动发布在替换应用文件前失败。只更新文件（`-SkipRestart`）、只发布管理端或单独重启不经过 Nginx 的 config-center-access 不要求该脚本。
 
 首次从旧版未分组配置迁移时，先备份 Supervisor 配置并安排维护窗口。切换到 `[group:...]` 后，进程标识会从 `sdk-core-1` 变为 `sdk-core:sdk-core-1`，`supervisorctl reread/update` 可能重启所有实例并移除第 5 个 Core/Service 实例；完成后再执行正常的逐实例滚动发布。
 
@@ -70,11 +70,11 @@
 
 Nginx Open Source 使用被动健康检查：`max_fails=1 fail_timeout=10s`。实例故障后，真实请求触发摘除；超过失败窗口后，Nginx 会通过后续真实请求重新尝试。它不主动轮询 `/health/ready`。代理重试不启用 `non_idempotent`，避免已发送的订单登记和支付 POST 被重复提交。
 
-生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；`ops/` 只交付模板，不会自动安装或重载 Supervisor/Monit/Nginx；SQL 仅分发，不自动执行。SSH 使用 Ed25519 私钥认证优先；首次连接应先手动确认主机指纹。
+生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；`ops/` 不打包、不上传、不覆盖，系统配置由管理员独立维护；滚动发布调用服务器现有 `upstream-control.sh` 修改 `run/nginx/` 实例状态并重载 Nginx；SQL 仅分发，不自动执行。SSH 使用 Ed25519 私钥认证优先；首次连接应先手动确认主机指纹。
 
 ## CI 与自测
 
-`.github/workflows/package.yml` 会验证 Linux/Windows 发布归档、运维模板、Shell 语法、Monit 检查、Nginx upstream 排空/恢复脚本，以及无实际 SSH 的发布冒烟测试：
+`.github/workflows/package.yml` 会验证 Linux/Windows 发布归档（只允许 `bin/`、`sql/`、`admin/`）、Shell 语法、Monit 检查、Nginx upstream 排空/恢复脚本，以及无实际 SSH 的发布冒烟测试：
 
 ```bash
 python -I publish/ci_publish_smoke.py

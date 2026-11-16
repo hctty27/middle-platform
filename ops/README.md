@@ -1,6 +1,6 @@
 # 生产运维配置
 
-生产目录统一为 `/data/middle-platform`。本目录提供 Supervisor、Monit 和 Nginx 模板；发布包会交付模板，但不会自动改写系统配置或重载系统服务。
+生产目录统一为 `/data/middle-platform`。本目录提供 Supervisor、Monit 和 Nginx 配置模板及运维脚本。整个 `ops/` 不进入发布包，管理员首次部署时手动复制所需文件，后续独立维护；应用发布不会上传或覆盖这些文件。
 
 本阶段不包含 MySQL 备份、Binlog 归档或数据库恢复脚本。
 
@@ -82,6 +82,8 @@ Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform
 项目不提供 Nginx 或 Supervisor 的安装脚本，也不会自动覆盖系统配置。管理员手动将站点配置复制到 `/etc/nginx/conf.d/middle-platform.conf`，按 Nginx 运维说明创建三个动态 upstream 状态文件，并在 `/etc/nginx/nginx.conf` 的 main context 设置 `worker_shutdown_timeout 75s`。Supervisor 继续使用本目录的单文件模板 `supervisor/middle-platform.conf`，由管理员按服务器现有 Supervisor 配置方式加载。
 
 当前采用 Nginx Open Source 被动健康检查（`max_fails=1 fail_timeout=10s`），观察真实请求的连接/超时失败；它不会主动轮询 `/health/ready`。故障实例暂时避开，超过失败窗口后通过后续真实请求重新尝试。滚动发布时则由发布脚本将单个实例标记为 `down`、reload Nginx、等待旧 worker 排空，再重启该实例并验证 3 次连续 Ready，最后重新加入 upstream。
+
+首次部署须从仓库手动复制 `ops/nginx/upstream-control.sh` 到服务器 `/data/middle-platform/ops/nginx/upstream-control.sh` 并设置 0755 执行权限。使用 Monit 时也须手动复制 `ops/monit/check-http-live.sh`、`ops/monit/restart-supervisor-program.sh` 到服务器对应目录，并设置 0755 权限。日常发布不会更新这些脚本；如有变更，须由管理员在非发布期间手动同步。
 
 SSH 发布用户必须拥有动态 upstream 状态目录和共享发布锁的写权限，并拥有受限的免密 sudo 权限，只允许执行实际路径下的 `nginx -t`、`nginx -T` 和 `systemctl reload nginx`。不要授予部署用户不受限制的 sudo。
 

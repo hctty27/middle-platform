@@ -52,7 +52,7 @@ esac
 tar -tzf "$archive" > "$stage/entries"
 while IFS= read -r entry; do
     case "$entry" in
-        bin/|bin/*|admin/|admin/*|sql/|sql/*|ops/|ops/*) ;;
+        bin/|bin/*|admin/|admin/*|sql/|sql/*) ;;
         *) printf 'Unexpected archive entry: %s\n' "$entry" >&2; exit 1 ;;
     esac
     if [[ "/$entry/" == *'/../'* || "/$entry/" == *'/./'* ]]; then
@@ -195,11 +195,17 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
         fi
     done
 
-    nginx_control="$stage/unpacked/ops/nginx/upstream-control.sh"
-    if [[ ! -x "$nginx_control" ]]; then
-        printf 'Nginx upstream control helper is missing from the release package\n' >&2
-        exit 1
-    fi
+    nginx_control="$root/ops/nginx/upstream-control.sh"
+    # 运维脚本独立维护，仅在有 Nginx upstream 的实例需要重启时检查。
+    for group in "${groups[@]}"; do
+        if [[ "$group" != none ]]; then
+            if [[ ! -f "$nginx_control" || ! -x "$nginx_control" || -L "$nginx_control" ]]; then
+                printf 'Missing or unsafe Nginx upstream control helper: %s; no application files were changed\n' "$nginx_control" >&2
+                exit 1
+            fi
+            break
+        fi
+    done
     for index in "${!programs[@]}"; do
         program="${programs[$index]}"
         group="${groups[$index]}"
@@ -245,7 +251,7 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
         if [[ "$group" != none ]]; then
             printf 'Draining %s from Nginx...\n' "$program"
-            MIDDLE_PLATFORM_ROOT="$root" "$root/ops/nginx/upstream-control.sh" drain "$group" "$port"
+            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" drain "$group" "$port"
         fi
         printf 'Restarting %s...\n' "$program"
         if ! supervisorctl restart "$supervisor_process"; then
@@ -273,7 +279,7 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         fi
         printf 'Healthy: %s (port %s)\n' "$program" "$port"
         if [[ "$group" != none ]]; then
-            MIDDLE_PLATFORM_ROOT="$root" "$root/ops/nginx/upstream-control.sh" enable "$group" "$port"
+            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" enable "$group" "$port"
             printf 'Restored %s to Nginx traffic\n' "$program"
         fi
     done
