@@ -121,7 +121,7 @@ exec bash "$@"
         self.assertEqual((self.root / "bin/sdk-core").read_bytes(), b"#!/bin/sh\nexit 0\n")
         self.assertEqual((self.root / "admin/index.html").read_bytes(), b"new-index")
         for path in protected:
-            self.assertEqual(path.read_text(), "keep")
+            self.assertEqual(path.read_text(encoding="utf-8"), "keep")
         self.assertTrue((self.root / "packages" / ARCHIVE).is_file())
         self.assertEqual((self.root / "ops/README.md").read_bytes(), b"Operations templates")
         self.assertTrue((self.root / "ops/monit/check-http-live.sh").is_file())
@@ -134,7 +134,7 @@ exec bash "$@"
         index = self.seed("admin/index.html", "old-index")
         result = self.run_publish()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(index.read_text(), "old-index")
+        self.assertEqual(index.read_text(encoding="utf-8"), "old-index")
 
     def test_first_frontend_install_includes_config(self):
         self.make_package()
@@ -146,7 +146,7 @@ exec bash "$@"
         old = self.seed("bin/sdk-core", "old-binary")
         result = self.run_publish(**kwargs)
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(old.read_text(), "old-binary")
+        self.assertEqual(old.read_text(encoding="utf-8"), "old-binary")
         self.assertTrue(self.archive.exists())
         return result
 
@@ -155,7 +155,7 @@ exec bash "$@"
         other = self.seed("bin/config-center", "original")
         result = self.run_publish(service="sdk-core")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(other.read_text(), "original")
+        self.assertEqual(other.read_text(encoding="utf-8"), "original")
         self.assertTrue((self.root / "bin/sdk-core").is_file())
 
     def test_mismatched_service_selector_does_not_change_files(self):
@@ -181,7 +181,7 @@ exec bash "$@"
                         result.stdout.index("Restarting sdk-core-1"))
         self.assertLess(result.stdout.index("Healthy: sdk-core-1"),
                         result.stdout.index("Restored sdk-core-1 to Nginx traffic"))
-        events = self.events.read_text().splitlines()
+        events = self.events.read_text(encoding="utf-8").splitlines()
         self.assertEqual(sum(line.startswith("validate sdk-core") for line in events), 4)
         self.assertLess(events.index("drain sdk-core 8211"), events.index("restart sdk-core:sdk-core-1"))
         self.assertLess(events.index("restart sdk-core:sdk-core-1"), events.index("enable sdk-core 8211"))
@@ -231,7 +231,7 @@ exec bash "$@"
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue((self.root / "bin/sdk-core").is_file())
         self.assertIn("Restarting sdk-core-1", result.stdout)
-        events = self.events.read_text().splitlines()
+        events = self.events.read_text(encoding="utf-8").splitlines()
         self.assertIn("drain sdk-core 8211", events)
         self.assertNotIn("enable sdk-core 8211", events)
 
@@ -346,7 +346,7 @@ exit $code
                 self.assertEqual(path.read_bytes(), original)
         runtime_path = self.root / "runtime-path.txt"
         if runtime_path.exists():
-            self.assertFalse(Path(runtime_path.read_text()).exists(), "Temporary build files were not cleaned up")
+            self.assertFalse(Path(runtime_path.read_text(encoding="utf-8")).exists(), "Temporary build files were not cleaned up")
         calls_file = self.root / "calls.txt"
         calls = calls_file.read_text(encoding="utf-8-sig").splitlines() if calls_file.exists() else []
         return result, calls
@@ -514,9 +514,9 @@ class DeploymentTopologyTests(unittest.TestCase):
             expected[f"sdk-core-{index}"] = ("sdk-core", 8210 + index)
             expected[f"sdk-service-{index}"] = ("sdk-service", 8220 + index)
 
-        supervisor = (root / "ops/supervisor/middle-platform.conf").read_text()
-        monit = (root / "ops/monit/middle-platform.conf").read_text()
-        config = json.loads((root / "publish/publish.config.example.json").read_text())
+        supervisor = (root / "ops/supervisor/middle-platform.conf").read_text(encoding="utf-8")
+        monit = (root / "ops/monit/middle-platform.conf").read_text(encoding="utf-8")
+        config = json.loads((root / "publish/publish.config.example.json").read_text(encoding="utf-8"))
         self.assertNotIn("services", config)
         publish_script = (root / "publish/publish.ps1").read_text(encoding="utf-8-sig")
         for name, (module, port) in expected.items():
@@ -527,9 +527,9 @@ class DeploymentTopologyTests(unittest.TestCase):
             self.assertIn(f"Name = '{name}'; Module = '{module}'; Port = {port}", publish_script)
 
         runtime = {
-            "config-center": (root / "ops/nginx/runtime/config-center-upstream.conf").read_text(),
-            "sdk-core": (root / "ops/nginx/runtime/sdk-core-upstream.conf").read_text(),
-            "sdk-service": (root / "ops/nginx/runtime/sdk-service-upstream.conf").read_text(),
+            "config-center": (root / "ops/nginx/runtime/config-center-upstream.conf").read_text(encoding="utf-8"),
+            "sdk-core": (root / "ops/nginx/runtime/sdk-core-upstream.conf").read_text(encoding="utf-8"),
+            "sdk-service": (root / "ops/nginx/runtime/sdk-service-upstream.conf").read_text(encoding="utf-8"),
         }
         for name, (module, port) in expected.items():
             self.assertIn(f"server 127.0.0.1:{port} ", runtime[module])
@@ -539,11 +539,11 @@ class DeploymentTopologyTests(unittest.TestCase):
         self.assertEqual(supervisor.count('GOMEMLIMIT="128MiB"'), 10)
         for group in ("config-center", "sdk-core", "sdk-service"):
             self.assertIn(f"[group:{group}]", supervisor)
-        check_script = (root / "ops/monit/check-http-live.sh").read_text()
-        restart_script = (root / "ops/monit/restart-supervisor-program.sh").read_text()
+        check_script = (root / "ops/monit/check-http-live.sh").read_text(encoding="utf-8")
+        restart_script = (root / "ops/monit/restart-supervisor-program.sh").read_text(encoding="utf-8")
         self.assertIn('supervisor_process="sdk-core:$program"', check_script)
         self.assertIn('supervisor_process="sdk-core:$1"', restart_script)
-        nginx_config = (root / "ops/nginx/middle-platform.conf").read_text()
+        nginx_config = (root / "ops/nginx/middle-platform.conf").read_text(encoding="utf-8")
         self.assertIn("upstream config_center", nginx_config)
         self.assertIn("upstream sdk_core", nginx_config)
         self.assertIn("upstream sdk_service", nginx_config)
@@ -558,8 +558,8 @@ class DeploymentTopologyTests(unittest.TestCase):
         self.assertFalse((root / "ops/nginx/middle-platform-locations.conf").exists())
         self.assertFalse((root / "ops/nginx/proxy-common.conf").exists())
         self.assertFalse((root / "ops/nginx/install-runtime.sh").exists())
-        self.assertIn(".publish.lock", (root / "ops/monit/check-http-live.sh").read_text())
-        self.assertIn(".publish.lock", (root / "ops/monit/restart-supervisor-program.sh").read_text())
+        self.assertIn(".publish.lock", (root / "ops/monit/check-http-live.sh").read_text(encoding="utf-8"))
+        self.assertIn(".publish.lock", (root / "ops/monit/restart-supervisor-program.sh").read_text(encoding="utf-8"))
         self.assertIn(".publish.lock", (root / "publish/publish-remote.sh").read_text(encoding="utf-8"))
 
 
