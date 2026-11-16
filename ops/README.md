@@ -87,7 +87,7 @@ Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform
 
 SSH 发布用户必须拥有动态 upstream 状态目录和共享发布锁的写权限，并拥有受限的免密 sudo 权限，只允许执行实际路径下的 `nginx -t`、`nginx -T` 和 `systemctl reload nginx`。不要授予部署用户不受限制的 sudo。
 
-发布前在本地 `publish/publish.config.json` 配置完整的 2/4/4 实例清单，`remoteDirectory` 使用 `/data/middle-platform`。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。如果实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。
+发布前在本地 `publish/publish.config.json` 配置 SSH 连接信息，`remoteDirectory` 使用 `/data/middle-platform`。固定的 2/4/4 实例清单由发布脚本定义，无需重复配置；可选的 `config-center-access` 可通过 `services` 配置。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。如果实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。
 
 ## 健康检查与数据库边界
 

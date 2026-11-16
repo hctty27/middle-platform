@@ -325,7 +325,12 @@ try {
     }
 
     if (-not $SkipBuild) {
-        & (Join-Path $PSScriptRoot 'package-local.ps1') -Arch $Arch -Version $Version -SkipFrontend:$SkipFrontend -Service $Service -Fast:$Fast
+        $archiveSource = Join-Path $PSScriptRoot 'package-archive.go'
+        $archiveBytes = [System.IO.File]::ReadAllBytes($archiveSource)
+        if ($archiveBytes -contains [byte]0) {
+            throw 'The archive helper contains NUL bytes. Original files were not changed.'
+        }
+        & (Join-Path $PSScriptRoot 'package.ps1') -Arch $Arch -Version $Version -SkipFrontend:$SkipFrontend -Service $Service -Fast:$Fast
     } else {
         Write-Host "跳过构建，使用已存在的 $Version 归档。"
     }

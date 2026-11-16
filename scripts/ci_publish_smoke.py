@@ -11,7 +11,8 @@ import tempfile
 import unittest
 
 
-SCRIPTS = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
+PUBLISH = ROOT / "publish"
 ARCHIVE = "middle-platform-smoke-linux-amd64.tar.gz"
 BINARIES = ("config-center", "config-center-access", "sdk-core", "sdk-service")
 
@@ -97,7 +98,7 @@ fi
 exec bash "$@"
 """
         return subprocess.run(
-            [BASH, "-c", commands, "test", bash_path(SCRIPTS / "publish-remote.sh"),
+            [BASH, "-c", commands, "test", bash_path(PUBLISH / "publish-remote.sh"),
              bash_path(self.root), bash_path(self.archive), digest, *extra_args],
             env={**os.environ, "TEST_MACHINE": machine,
                  "TEST_RESTART": "1" if restart else "0",
@@ -305,13 +306,10 @@ class LocalPublishTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         scripts = self.root / "publish"
         scripts.mkdir()
-        shutil.copyfile(SCRIPTS / "publish.ps1", scripts / "publish.ps1")
-        shutil.copyfile(SCRIPTS / "publish-remote.sh", scripts / "publish-remote.sh")
-        shutil.copyfile(SCRIPTS / "package-local.ps1", scripts / "package-local.ps1")
-        package_scripts = self.root / "scripts"
-        package_scripts.mkdir()
-        (package_scripts / "package-archive.go").write_bytes(b"package main\nfunc main() {}\n")
-        (package_scripts / "package.ps1").write_text('''param($Arch, $Version, [switch]$SkipFrontend, $Service = 'all', [switch]$Fast)
+        shutil.copyfile(PUBLISH / "publish.ps1", scripts / "publish.ps1")
+        shutil.copyfile(PUBLISH / "publish-remote.sh", scripts / "publish-remote.sh")
+        (scripts / "package-archive.go").write_bytes(b"package main\nfunc main() {}\n")
+        (scripts / "package.ps1").write_text('''param($Arch, $Version, [switch]$SkipFrontend, $Service = 'all', [switch]$Fast)
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $prefix = [IO.File]::ReadAllBytes($PSCommandPath)
 if ($prefix[0] -ne 239 -or $prefix[1] -ne 187 -or $prefix[2] -ne 191) { throw 'Missing UTF-8 BOM' }
@@ -323,7 +321,7 @@ $dir = Join-Path $repoRoot 'dist'
 New-Item -ItemType Directory -Force $dir | Out-Null
 [IO.File]::WriteAllText((Join-Path $dir "middle-platform-$Version-linux-$Arch.tar.gz"), 'fake-package')
 ''', encoding="utf-8-sig")
-        self.originals = {path: path.read_bytes() for path in package_scripts.iterdir()}
+        self.originals = {path: path.read_bytes() for path in (scripts / "package.ps1", scripts / "package-archive.go")}
         self.wrapper = self.root / "test.ps1"
         self.wrapper.write_text('''param($Mode)
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -500,7 +498,7 @@ exit $code
 
     def test_rejects_nul_source_without_connecting(self):
         self.write_config()
-        (self.root / "scripts/package-archive.go").write_bytes(b"package main\x00")
+        (self.root / "publish/package-archive.go").write_bytes(b"package main\x00")
         result, calls = self.invoke("nul-source")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls, [])
@@ -508,7 +506,7 @@ exit $code
 
     def test_rejects_changed_original_layout_without_connecting(self):
         self.write_config()
-        path = self.root / "scripts/package.ps1"
+        path = self.root / "publish/package.ps1"
         path.write_text("param($Arch, $Version, [switch]$SkipFrontend)\n", encoding="utf-8")
         result, calls = self.invoke("changed-layout")
         self.assertNotEqual(result.returncode, 0)
@@ -538,7 +536,7 @@ exit $code
 
 class DeploymentTopologyTests(unittest.TestCase):
     def test_supervisor_monit_nginx_and_publish_share_the_2_4_4_topology(self):
-        root = SCRIPTS.parent
+        root = ROOT
         expected = {}
         for index in range(1, 3):
             expected[f"config-center-{index}"] = ("config-center", 8200 + index)

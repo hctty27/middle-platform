@@ -1,6 +1,6 @@
 ﻿# 将 Go 服务和 Vue 前端交叉编译、校验，并打包为 Linux 发布归档。
 # Windows / Linux 统一生成 tar.gz，显式设置 bin/ 下 Linux ELF 的 0755 执行权限。
-# 用法：.\scripts\package.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
+# 用法：.\publish\package.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
 # 依赖：Go；启用前端构建时还需要 npm。真实凭据和生产 YAML 不打包。
 [CmdletBinding()]
 param(
@@ -244,7 +244,7 @@ try {
         [System.IO.File]::WriteAllText($archiveToolToRun, $sourceText, (New-Object System.Text.UTF8Encoding($false)))
         Write-Warning '检测到 package-archive.go 是 UTF-16，已使用临时 UTF-8 副本执行。请检查本地源文件编码。'
     } elseif ([System.Array]::IndexOf($archiveBytes, [byte]0) -ge 0) {
-        throw 'package-archive.go 包含 NUL 字节，无法作为 Go 源码执行。请检查文件编码；确认无本地修改后可执行 git restore -- scripts/package-archive.go。'
+        throw 'package-archive.go 包含 NUL 字节，无法作为 Go 源码执行。请检查文件编码；确认无本地修改后可执行 git restore -- publish/package-archive.go。'
     }
 
     Write-Host "正在创建 $archivePath..."
