@@ -529,7 +529,7 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 <li>独立管理 server：仅可信内网、VPN 或带认证的网关可以访问，允许 <code>/api/core/admin/</code> 反向代理到 <code>sdk_core</code>；后台静态页面及 <code>/api/config/admin/</code> 也由该入口保护。</li>
 </ul>
 <p>确保配置文件中带 <code>/sdk</code> 外部前缀时，先在对应外层 location 显式拒绝 <code>/sdk/api/core/admin/</code>，不能只拦截内部路径。请验证未认证的外部请求无法访问管理接口后才开始切流；单纯隐藏管理页面不足以保障安全。</p>
-<h2 id="production-11">内部 UTC 升级与回滚</h2>
+<h2 id="production-11">内部 UTC 与秒级时间升级</h2>
 <p>本次同时统一内部 UTC 时区与秒级精度：数据库使用 <code>DATETIME(0)</code>，内部 API 使用 UTC RFC3339 秒级时间并以 <code>Z</code> 结尾；外部 HMAC 时间戳继续使用 Unix 秒，不改变签名协议。</p>
 <ol>
 <li><strong>先停服并备份：</strong>停止四个 Go 服务的全部实例，确认没有旧版本继续写入时间字段；分别完整备份 <code>config_center</code> 和 <code>config_access</code>。降低 DATETIME 精度的 ALTER 可能触发表重建或长时间元数据锁，必须先在预发布环境评估并安排维护窗口。</li>
