@@ -15,15 +15,14 @@ Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分�
 ## 配置文件结构
 
 - `middle-platform.conf`：唯一需要维护的 Nginx 站点配置，包含三个 upstream 定义、80/443 server、三个 API location 和管理后台。
-- `runtime/config-center-upstream.conf`、`runtime/sdk-core-upstream.conf`、`runtime/sdk-service-upstream.conf`：初始实例列表模板。
-- `/data/middle-platform/run/nginx/*.conf`：服务器上的动态 upstream 状态文件，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。它们不是独立站点配置，不需要人工日常维护。
+- `/data/middle-platform/run/nginx/*.conf`：服务器上的三个动态 upstream 实例列表，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。它们不属于 Git 仓库中的 `ops/`，也不是独立站点配置。
 - `upstream-control.sh`：负责校验、摘除、恢复 upstream 实例。
 
-站点配置中的 upstream 块直接写在 `middle-platform.conf`。块内只通过 `include` 引用动态实例列表，以便滚动发布可以安全地摘除单个实例，而不改写整份站点配置。
+站点配置中的三个 upstream 块直接写在 `middle-platform.conf`。块内只通过 `include` 引用服务器运行时实例列表，以便滚动发布可以安全地摘除单个实例，而不改写整份站点配置。
 
 ## 手动配置
 
-Nginx 和 Supervisor 由管理员按服务器现状安装、管理；项目不提供安装 Nginx/Supervisor 的脚本，也不会自动覆盖系统配置。
+Nginx 和 Supervisor 由管理员按服务器现状安装、管理；项目不提供 Nginx/Supervisor 安装脚本，也不会自动覆盖系统配置。
 
 1. 确认 `/etc/nginx/nginx.conf` 的 `http {}` 中包含：
 
@@ -37,28 +36,56 @@ include /etc/nginx/conf.d/*.conf;
 sudo cp /data/middle-platform/ops/nginx/middle-platform.conf /etc/nginx/conf.d/middle-platform.conf
 ```
 
-3. 初始化动态 upstream 状态文件。将 `deploy` 替换为实际 SSH 发布用户。以下命令只创建缺失文件，不覆盖已有状态：
+3. 首次手动创建三个动态 upstream 实例列表。将 `deploy` 替换为实际 SSH 发布用户。以下命令只创建缺失文件，不覆盖已有运行状态：
 
 ```bash
 deploy_user=deploy
 deploy_group=$(id -gn "$deploy_user")
 runtime_dir=/data/middle-platform/run/nginx
-template_dir=/data/middle-platform/ops/nginx/runtime
 
 sudo install -d -o "$deploy_user" -g "$deploy_group" -m 0750 "$runtime_dir"
 
-for name in config-center sdk-core sdk-service; do
-    target="$runtime_dir/$name-upstream.conf"
-    if [[ ! -e "$target" && ! -L "$target" ]]; then
-        sudo install -o "$deploy_user" -g "$deploy_group" -m 0640 \
-            "$template_dir/$name-upstream.conf" "$target"
+if [[ ! -e "$runtime_dir/config-center-upstream.conf" && ! -L "$runtime_dir/config-center-upstream.conf" ]]; then
+    sudo tee "$runtime_dir/config-center-upstream.conf" >/dev/null <<'EOF'
+server 127.0.0.1:8201 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8202 max_fails=1 fail_timeout=10s;
+EOF
+fi
+
+if [[ ! -e "$runtime_dir/sdk-core-upstream.conf" && ! -L "$runtime_dir/sdk-core-upstream.conf" ]]; then
+    sudo tee "$runtime_dir/sdk-core-upstream.conf" >/dev/null <<'EOF'
+server 127.0.0.1:8211 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8212 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8213 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8214 max_fails=1 fail_timeout=10s;
+EOF
+fi
+
+if [[ ! -e "$runtime_dir/sdk-service-upstream.conf" && ! -L "$runtime_dir/sdk-service-upstream.conf" ]]; then
+    sudo tee "$runtime_dir/sdk-service-upstream.conf" >/dev/null <<'EOF'
+server 127.0.0.1:8221 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8222 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8223 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8224 max_fails=1 fail_timeout=10s;
+EOF
+fi
+
+for file in "$runtime_dir/config-center-upstream.conf" "$runtime_dir/sdk-core-upstream.conf" "$runtime_dir/sdk-service-upstream.conf"; do
+    if [[ -L "$file" || ! -f "$file" ]]; then
+        echo "Unsafe or missing upstream file: $file" >&2
+        exit 1
     fi
 done
+
+sudo chown "$deploy_user:$deploy_group" "$runtime_dir"/*.conf
+sudo chmod 0640 "$runtime_dir"/*.conf
 
 sudo touch /data/middle-platform/.publish.lock
 sudo chown "$deploy_user:$deploy_group" /data/middle-platform/.publish.lock
 sudo chmod 0660 /data/middle-platform/.publish.lock
 ```
+
+这三个文件只在首次部署时手动创建。后续不要从发布包覆盖它们；滚动发布期间由 `upstream-control.sh` 修改对应实例的 `down` 状态。
 
 4. 在 `/etc/nginx/nginx.conf` 的顶层 main context 中（`events {}` 和 `http {}` 外）设置：
 
