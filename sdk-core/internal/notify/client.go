@@ -129,6 +129,15 @@ func (c *Client) ValidateTarget(raw string) error {
 	return nil
 }
 
+// gameDelivery 是发给游戏的发货通知。paid_at 为 Unix 秒，与平台回调的时间字符串无关。
+type gameDelivery struct {
+	OrderNo     string `json:"order_no"`
+	GameOrderID string `json:"game_order_id"`
+	Amount      int64  `json:"amount"`
+	Attach      string `json:"attach"`
+	PaidAt      int64  `json:"paid_at"`
+}
+
 // Send 使用游戏密钥对通知方法、路径和原始请求体签名。
 func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
 	if err := c.ValidateTarget(o.GameNotifyURL); err != nil {
@@ -137,9 +146,13 @@ func (c *Client) Send(ctx context.Context, o model.Order, key []byte) error {
 	if len(key) == 0 {
 		return errors.New("发货通知签名密钥不合法")
 	}
-	body, err := json.Marshal(model.PaymentCallback{
+	paidAt := o.PaidAt.Unix()
+	if paidAt <= 0 {
+		return errors.New("发货通知支付时间不合法")
+	}
+	body, err := json.Marshal(gameDelivery{
 		OrderNo: o.PlatformOrderNo, GameOrderID: o.GameOrderID,
-		Amount: o.Amount, Attach: o.Attach, PaidAt: o.PaidAt.UTC().Format(time.RFC3339),
+		Amount: o.Amount, Attach: o.Attach, PaidAt: paidAt,
 	})
 	if err != nil {
 		return err

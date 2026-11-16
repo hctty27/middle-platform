@@ -82,6 +82,7 @@ func TestNotificationDialRejectsMetadata(t *testing.T) {
 
 func TestNotifySignatureUsesHMAC(t *testing.T) {
 	secret := []byte("game-secret")
+	paidAt := time.Date(2026, 11, 3, 0, 0, 0, 400_000_000, time.UTC)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/arbitrary/game/notify" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
@@ -97,7 +98,7 @@ func TestNotifySignatureUsesHMAC(t *testing.T) {
 			GameOrderID string `json:"game_order_id"`
 			Amount      int64  `json:"amount"`
 			Attach      string `json:"attach"`
-			PaidAt      string `json:"paid_at"`
+			PaidAt      int64  `json:"paid_at"`
 		}
 		if err := json.Unmarshal(body, &message); err != nil {
 			t.Error(err)
@@ -110,8 +111,8 @@ func TestNotifySignatureUsesHMAC(t *testing.T) {
 		if r.Header.Get("X-SDK-AppID") != "" {
 			t.Error("obsolete header")
 		}
-		if message.Amount != 600 || message.GameOrderID != "G100" {
-			t.Error("bad body")
+		if message.Amount != 600 || message.GameOrderID != "G100" || message.PaidAt != paidAt.Unix() {
+			t.Errorf("bad body: %+v", message)
 		}
 		if !signature.VerifyGameHMAC(r, secret, "110006", body, time.Now()) {
 			t.Error("invalid game notification signature")
@@ -123,9 +124,19 @@ func TestNotifySignatureUsesHMAC(t *testing.T) {
 	defer server.Close()
 	order := model.Order{
 		AppID: "110006", Env: "test", GameOrderID: "G100", PlatformOrderNo: "P100",
-		Amount: 600, GameNotifyURL: server.URL + "/arbitrary/game/notify", PaidAt: time.Now(),
+		Amount: 600, GameNotifyURL: server.URL + "/arbitrary/game/notify", PaidAt: paidAt,
 	}
 	if err := NewClient().Send(context.Background(), order, secret); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestNotifyRejectsNonPositivePaidAt(t *testing.T) {
+	order := model.Order{
+		AppID: "110006", GameOrderID: "G100", PlatformOrderNo: "P100",
+		Amount: 600, GameNotifyURL: "http://127.0.0.1:8080/notify",
+	}
+	if err := NewClient().Send(context.Background(), order, []byte("game-secret")); err == nil {
+		t.Fatal("zero paid_at must be rejected")
 	}
 }
