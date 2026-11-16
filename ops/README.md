@@ -77,11 +77,13 @@ Monit 每 10 秒检查一次，连续 3 个周期 Liveness 失败后才重启实
 
 ## Nginx 与安全滚动发布
 
-Nginx upstream、location、运行时实例列表、部署排空脚本及首次安装步骤见 [Nginx 运维说明](nginx/README.md)。
+Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform.conf)，同一个文件内包含三组 upstream、HTTP/HTTPS、SSL、API location、公共代理参数和 Vue 管理后台。三个动态 upstream 实例列表只保存在服务器的 `/data/middle-platform/run/nginx/`，不在 Git 仓库的 `ops/` 中维护；首次创建方式见 [Nginx 运维说明](nginx/README.md)。
+
+项目不提供 Nginx 或 Supervisor 的安装脚本，也不会自动覆盖系统配置。管理员手动将站点配置复制到 `/etc/nginx/conf.d/middle-platform.conf`，按 Nginx 运维说明创建三个动态 upstream 状态文件，并在 `/etc/nginx/nginx.conf` 的 main context 设置 `worker_shutdown_timeout 75s`。Supervisor 继续使用本目录的单文件模板 `supervisor/middle-platform.conf`，由管理员按服务器现有 Supervisor 配置方式加载。
 
 当前采用 Nginx Open Source 被动健康检查（`max_fails=1 fail_timeout=10s`），观察真实请求的连接/超时失败；它不会主动轮询 `/health/ready`。故障实例暂时避开，超过失败窗口后通过后续真实请求重新尝试。滚动发布时则由发布脚本将单个实例标记为 `down`、reload Nginx、等待旧 worker 排空，再重启该实例并验证 3 次连续 Ready，最后重新加入 upstream。
 
-首次部署 Nginx 集成后，SSH 发布用户必须拥有受限的免密 sudo 权限，只允许执行实际路径下的 `nginx -t`、`nginx -T` 和 `systemctl reload nginx`。不要授予部署用户不受限制的 sudo。
+SSH 发布用户必须拥有动态 upstream 状态目录和共享发布锁的写权限，并拥有受限的免密 sudo 权限，只允许执行实际路径下的 `nginx -t`、`nginx -T` 和 `systemctl reload nginx`。不要授予部署用户不受限制的 sudo。
 
 发布前在本地 `publish/publish.config.json` 配置完整的 2/4/4 实例清单，`remoteDirectory` 使用 `/data/middle-platform`。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。如果实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。
 
