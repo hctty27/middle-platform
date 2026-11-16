@@ -15,14 +15,12 @@ server 127.0.0.1:8211 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8212 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8213 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8214 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8215 max_fails=1 fail_timeout=10s;
 EOF
 cat > "$root/run/nginx/sdk-service-upstream.conf" <<'EOF'
 server 127.0.0.1:8221 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8222 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8223 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8224 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8225 max_fails=1 fail_timeout=10s;
 EOF
 cat > "$bin/sudo" <<'EOF'
 #!/usr/bin/env bash
@@ -91,6 +89,14 @@ if "$control" validate config-center 8202 >/dev/null 2>&1; then
 fi
 if "$control" drain config-center 8201 >/dev/null 2>&1; then
     printf 'Refused-to-drain-last-peer test unexpectedly passed\n' >&2
+    exit 1
+fi
+if "$control" validate sdk-core 8215 >/dev/null 2>&1; then
+    printf 'Removed fifth SDK Core port unexpectedly validated\n' >&2
+    exit 1
+fi
+if "$control" validate sdk-service 8225 >/dev/null 2>&1; then
+    printf 'Removed fifth SDK Service port unexpectedly validated\n' >&2
     exit 1
 fi
 if "$control" validate config-center 8291 >/dev/null 2>&1; then

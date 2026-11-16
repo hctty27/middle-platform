@@ -1,6 +1,6 @@
 ﻿# 将 Go 服务和 Vue 前端交叉编译、校验，并打包为 Linux 发布归档。
 # Windows / Linux 统一生成 tar.gz，显式设置 bin/ 下 Linux ELF 的 0755 执行权限。
-# 用法：.\scripts\package.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
+# 用法：.\publish\package.ps1 [-Arch amd64|arm64] [-Version v1] [-SkipFrontend]
 # 依赖：Go；启用前端构建时还需要 npm。真实凭据和生产 YAML 不打包。
 [CmdletBinding()]
 param(
@@ -174,15 +174,6 @@ try {
     }
     if ($incrementalFiles.Count -eq 0) { throw '未找到增量 SQL' }
 
-    # 运维模板随发布包交付，但不会由发布脚本自动安装或重载。
-    $opsSource = Join-Path $repoRoot 'ops'
-    if (-not (Test-Path -LiteralPath (Join-Path $opsSource 'README.md') -PathType Leaf)) {
-        throw '缺少 ops/README.md，无法打包生产运维模板'
-    }
-    $opsDir = Join-Path $stageDir 'ops'
-    New-Item -ItemType Directory -Force -Path $opsDir | Out-Null
-    Copy-Item -Path (Join-Path $opsSource '*') -Destination $opsDir -Recurse -Force
-
     # npm ci 使用锁文件安装，构建失败即终止打包，避免混入旧版前端文件。
     if ($buildFrontend) {
         $frontendTimer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -232,7 +223,7 @@ try {
         Write-Host ("Vue 构建耗时: {0:N1}s" -f $frontendTimer.Elapsed.TotalSeconds)
     }
 
-    # 发布包包含 bin/、sql/、ops/ 和可选的 admin/，不附加校验文件或构建说明。
+    # 发布包包含 bin/、sql/ 和可选的 admin/，不附加校验文件或构建说明。
     # 在本机运行 Go 打包辅助程序，避免 Windows 交叉编译环境阻止 go run。
     $env:GOOS = ([string]$goHost[0]).Trim()
     $env:GOARCH = ([string]$goHost[1]).Trim()
@@ -253,7 +244,7 @@ try {
         [System.IO.File]::WriteAllText($archiveToolToRun, $sourceText, (New-Object System.Text.UTF8Encoding($false)))
         Write-Warning '检测到 package-archive.go 是 UTF-16，已使用临时 UTF-8 副本执行。请检查本地源文件编码。'
     } elseif ([System.Array]::IndexOf($archiveBytes, [byte]0) -ge 0) {
-        throw 'package-archive.go 包含 NUL 字节，无法作为 Go 源码执行。请检查文件编码；确认无本地修改后可执行 git restore -- scripts/package-archive.go。'
+        throw 'package-archive.go 包含 NUL 字节，无法作为 Go 源码执行。请检查文件编码；确认无本地修改后可执行 git restore -- publish/package-archive.go。'
     }
 
     Write-Host "正在创建 $archivePath..."
@@ -279,7 +270,7 @@ try {
 
     Write-Host ''
     Write-Host "打包完成: $archivePath"
-    Write-Host '归档目录: bin/、sql/、ops/ 以及可选的 admin/'
+    Write-Host '归档目录: bin/、sql/ 以及可选的 admin/'
     Write-Host ("总耗时: {0:N1}s" -f $buildTimer.Elapsed.TotalSeconds)
     Write-Host '所有 Linux 可执行文件均设置为 0755 权限。'
 

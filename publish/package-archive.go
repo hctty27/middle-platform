@@ -75,7 +75,7 @@ func writeArchive(source, output string) (err error) {
 }
 
 func writeContents(writer *tar.Writer, source string) error {
-	for _, root := range []string{"bin", "sql", "admin", "ops"} {
+	for _, root := range []string{"bin", "sql", "admin"} {
 		dir := filepath.Join(source, root)
 		if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) && root == "admin" {
 			continue
@@ -111,8 +111,7 @@ func writeContents(writer *tar.Writer, source string) error {
 			}
 			header.Typeflag = tar.TypeReg
 			header.Size = info.Size()
-			if strings.HasPrefix(name, "bin/") ||
-				(strings.HasPrefix(name, "ops/") && strings.HasSuffix(name, ".sh")) {
+			if strings.HasPrefix(name, "bin/") {
 				header.Mode = 0o755
 			}
 			if err := writer.WriteHeader(header); err != nil {

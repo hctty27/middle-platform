@@ -1,59 +1,49 @@
 # 本地打包与安全滚动发布
 
-在 Windows/PowerShell 上构建 Linux ELF、Vue 静态文件和运维模板，经 SSH/SCP 上传到 Linux 服务器。生产目录统一为 `/data/middle-platform`。数据库 SQL 仅分发，不会自动执行。
+在 Windows/PowerShell 上构建 Linux ELF、Vue 静态文件和 SQL 发布包，经 SSH/SCP 上传到 Linux 服务器。生产目录统一为 `/data/middle-platform`。数据库 SQL 仅分发，不会自动执行。
 
 ## 生产实例拓扑
 
-`publish.config.json` 的 `services` 必须包含完整的 2/5/5 实例及固定本机健康端口：
+固定的 2/4/4 实例及健康检查端口由发布脚本定义，无需在 `publish.config.json` 中重复配置。实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。
+
+如果还需要自动重启不属于 2/4/4 Nginx upstream 的 `config-center-access`，可额外加入：
 
 ```json
-{
-  "remoteDirectory": "/data/middle-platform",
-  "services": {
-    "config-center-1": 8201,
-    "config-center-2": 8202,
-    "sdk-core-1": 8211,
-    "sdk-core-2": 8212,
-    "sdk-core-3": 8213,
-    "sdk-core-4": 8214,
-    "sdk-core-5": 8215,
-    "sdk-service-1": 8221,
-    "sdk-service-2": 8222,
-    "sdk-service-3": 8223,
-    "sdk-service-4": 8224,
-    "sdk-service-5": 8225
-  }
-}
+"services": { "config-center-access": 8291 }
 ```
 
-实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。可额外配置可选的 `config-center-access: 8291`，但它不属于当前 2/5/5 Nginx upstream。
+旧配置中的固定实例条目仍受支持，但名称和端口必须与脚本一致。未配置 `config-center-access` 时，不会自动重启它。
 
 ## 首次部署前必须完成
 
-1. 按 [ops/README.md](../ops/README.md) 安装并启用 Supervisor、Monit。
-2. 按 [ops/nginx/README.md](../ops/nginx/README.md) 安装 Nginx upstream include、合并三个 API location、配置 `worker_shutdown_timeout 75s`，初始化 `/data/middle-platform/run/nginx/`。
-3. 确认 Nginx 由 systemd 管理且处于 active 状态。
+1. 按 [ops/README.md](../ops/README.md) 手动加载 Supervisor、Monit 配置，并确认对应 systemd 服务已由管理员安装、启用。
+2. 按 [ops/nginx/README.md](../ops/nginx/README.md) 将唯一站点配置 `ops/nginx/middle-platform.conf` 复制到 `/etc/nginx/conf.d/middle-platform.conf`，并按文档中的命令手动创建三个动态 upstream 状态文件到 `/data/middle-platform/run/nginx/`；再在 `/etc/nginx/nginx.conf` 的 main context 配置 `worker_shutdown_timeout 75s`。仓库根目录 [`run/nginx/`](../run/nginx/) 提供三个初始配置，可按需手动复制缺失文件。它们不随发布包交付，发布不会自动初始化或覆盖服务器上的运行时文件。
+3. 确认 Nginx 已由 systemd 管理且处于 active 状态，站点配置通过 `nginx -t`。
 4. 为 SSH 部署用户配置受限免密 sudo：仅允许实际路径下的 `nginx -t`、`nginx -T`、`systemctl reload nginx`。发布脚本使用 `sudo -n`，不会交互式提权。
-5. 确认 12 个 Supervisor program 均存在，SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
+5. 确认 10 个 Supervisor program 均存在，Supervisor 以 root 运行并加载三个 `[group:...]` 分组；进程名需使用 `group:program` 形式。每个实例设置 `GOMEMLIMIT=128MiB`（Go Runtime 软限制，不是 RSS 硬上限）。SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
 
-如果这些前置条件未完成，正常发布会在替换应用文件前失败。首次安装 Nginx 与系统服务配置必须由管理员审核，不会由发布脚本自动覆盖。
+项目提供 Nginx、Supervisor 和 Monit 的配置模板及滚动发布控制逻辑，不提供系统服务安装脚本。整个 `ops/` 与 `run/` 均不进入发布包，管理员手动复制、独立维护。首次滚动发布前必须手动部署 `/data/middle-platform/ops/nginx/upstream-control.sh` 并赋予 0755 执行权限；不存在、不可执行或为符号链接时，涉及 Nginx 的滚动发布在替换应用文件前失败。只更新文件（`-SkipRestart`）、只发布管理端或单独重启不经过 Nginx 的 config-center-access 不要求该脚本。
+
+首次从旧版未分组配置迁移时，先备份 Supervisor 配置并安排维护窗口。切换到 `[group:...]` 后，进程标识会从 `sdk-core-1` 变为 `sdk-core:sdk-core-1`，`supervisorctl reread/update` 可能重启所有实例并移除第 5 个 Core/Service 实例；完成后再执行正常的逐实例滚动发布。
+
+如果这些前置条件未完成，正常发布会在替换应用文件前失败。首次配置 Nginx 与系统服务必须由管理员审核，不会由发布脚本自动覆盖。
 
 ## 使用命令
 
 ```powershell
 # 完整打包，不上传
-.\scripts\package.ps1 -Version v1.0.0
+.\publish\package.ps1 -Version v1.0.0
 
 # 完整发布：校验、逐实例 Nginx 摘除、Supervisor 重启、Ready 验活、重新加入
 .\publish\publish.ps1 -Version v1.0.0
 
-# 只滚动更新 SDK Core 的 5 个实例
+# 只滚动更新 SDK Core 的 4 个实例
 .\publish\publish.ps1 -Service sdk-core -Version v1.0.1
 
 # 只滚动更新配置中心的 2 个实例
 .\publish\publish.ps1 -Service config-center -Version v1.0.2
 
-# 只滚动更新 SDK Service 的 5 个实例
+# 只滚动更新 SDK Service 的 4 个实例
 .\publish\publish.ps1 -Service sdk-service -Version v1.0.3
 
 # 只更新文件，不重启、不执行 Nginx 摘除
@@ -64,12 +54,12 @@
 
 ## 滚动发布流程
 
-完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/5/5 进程与 Nginx runtime include，再原子替换文件。随后按 `services` 顺序逐个执行：
+完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/4 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的实例顺序逐个执行：
 
 1. 将当前实例在对应 Nginx upstream 标记为 `down`。
 2. 执行 `nginx -t` 并 graceful reload。
 3. 等待旧 Nginx worker 退出；`worker_shutdown_timeout 75s` 限制排空时间。
-4. 调用 `supervisorctl restart <program>`。
+4. 调用 `supervisorctl restart <group>:<program>`，例如 `supervisorctl restart sdk-core:sdk-core-1`。
 5. 等待 Supervisor RUNNING，并要求本机 `/health/ready` 连续 3 次 HTTP 200。
 6. 移除 `down`，再次校验并 reload Nginx，将实例重新加入流量。
 7. 完成当前实例后才处理下一个实例。
@@ -80,14 +70,14 @@
 
 Nginx Open Source 使用被动健康检查：`max_fails=1 fail_timeout=10s`。实例故障后，真实请求触发摘除；超过失败窗口后，Nginx 会通过后续真实请求重新尝试。它不主动轮询 `/health/ready`。代理重试不启用 `non_idempotent`，避免已发送的订单登记和支付 POST 被重复提交。
 
-生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；`ops/` 只交付模板，不会自动安装或重载 Supervisor/Monit/Nginx；SQL 仅分发，不自动执行。SSH 使用 Ed25519 私钥认证优先；首次连接应先手动确认主机指纹。
+生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；`ops/` 不打包、不上传、不覆盖，系统配置由管理员独立维护；滚动发布调用服务器现有 `upstream-control.sh` 修改 `run/nginx/` 实例状态并重载 Nginx；SQL 仅分发，不自动执行。SSH 使用 Ed25519 私钥认证优先；首次连接应先手动确认主机指纹。
 
 ## CI 与自测
 
-`.github/workflows/package.yml` 会验证 Linux/Windows 发布归档、运维模板、Shell 语法、Monit 检查、Nginx upstream 排空/恢复脚本，以及无实际 SSH 的发布冒烟测试：
+`.github/workflows/package.yml` 会验证 Linux/Windows 发布归档（只允许 `bin/`、`sql/`、`admin/`）、Shell 语法、Monit 检查、Nginx upstream 排空/恢复脚本，以及无实际 SSH 的发布冒烟测试：
 
 ```bash
-python -I publish/ci_publish_smoke.py
+python -I scripts/ci_publish_smoke.py
 bash ops/nginx/test-upstream-control.sh
 ```
 

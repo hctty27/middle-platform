@@ -74,8 +74,8 @@ function Get-RestartPlan {
     param($Config, [string]$SelectedService)
 
     $property = Get-ConfigProperty $Config 'services'
-    if ($null -eq $property -or $property.Value -isnot [System.Management.Automation.PSCustomObject]) {
-        throw "publish.config.json 必须配置 services 对象（Supervisor 进程名: 健康检查端口）。"
+    if ($null -ne $property -and $property.Value -isnot [System.Management.Automation.PSCustomObject]) {
+        throw "publish.config.json 的 services 必须是对象。"
     }
 
     $expected = @(
@@ -85,18 +85,17 @@ function Get-RestartPlan {
         [pscustomobject]@{ Name = 'sdk-core-2'; Module = 'sdk-core'; Port = 8212 },
         [pscustomobject]@{ Name = 'sdk-core-3'; Module = 'sdk-core'; Port = 8213 },
         [pscustomobject]@{ Name = 'sdk-core-4'; Module = 'sdk-core'; Port = 8214 },
-        [pscustomobject]@{ Name = 'sdk-core-5'; Module = 'sdk-core'; Port = 8215 },
         [pscustomobject]@{ Name = 'sdk-service-1'; Module = 'sdk-service'; Port = 8221 },
         [pscustomobject]@{ Name = 'sdk-service-2'; Module = 'sdk-service'; Port = 8222 },
         [pscustomobject]@{ Name = 'sdk-service-3'; Module = 'sdk-service'; Port = 8223 },
-        [pscustomobject]@{ Name = 'sdk-service-4'; Module = 'sdk-service'; Port = 8224 },
-        [pscustomobject]@{ Name = 'sdk-service-5'; Module = 'sdk-service'; Port = 8225 }
+        [pscustomobject]@{ Name = 'sdk-service-4'; Module = 'sdk-service'; Port = 8224 }
     )
     $expectedByName = @{}
     foreach ($item in $expected) { $expectedByName[$item.Name] = $item }
 
     $configured = @{}
-    foreach ($item in $property.Value.PSObject.Properties) {
+    $serviceProperties = if ($null -eq $property) { @() } else { @($property.Value.PSObject.Properties) }
+    foreach ($item in $serviceProperties) {
         $name = [string]$item.Name
         $value = $item.Value
         if ($name -eq 'config-center-access') {
@@ -114,12 +113,6 @@ function Get-RestartPlan {
             throw "services.$name 必须使用端口 $($expectedItem.Port)"
         }
         $configured[$name] = [int]$value
-    }
-
-    foreach ($item in $expected) {
-        if (-not $configured.ContainsKey($item.Name)) {
-            throw "services 缺少必需实例: $($item.Name)"
-        }
     }
 
     $selected = New-Object 'System.Collections.Generic.List[string]'
@@ -332,7 +325,12 @@ try {
     }
 
     if (-not $SkipBuild) {
-        & (Join-Path $PSScriptRoot 'package-local.ps1') -Arch $Arch -Version $Version -SkipFrontend:$SkipFrontend -Service $Service -Fast:$Fast
+        $archiveSource = Join-Path $PSScriptRoot 'package-archive.go'
+        $archiveBytes = [System.IO.File]::ReadAllBytes($archiveSource)
+        if ($archiveBytes -contains [byte]0) {
+            throw 'The archive helper contains NUL bytes. Original files were not changed.'
+        }
+        & (Join-Path $PSScriptRoot 'package.ps1') -Arch $Arch -Version $Version -SkipFrontend:$SkipFrontend -Service $Service -Fast:$Fast
     } else {
         Write-Host "跳过构建，使用已存在的 $Version 归档。"
     }

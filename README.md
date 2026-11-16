@@ -12,7 +12,11 @@
 | `sdk-service/` | 平台主动核验/查询/封解禁、游戏事件上报与订阅消息转发 |
 | `admin/` | Vue 3 管理端与静态接口/运维文档 |
 | `shared/` | Go 公共基础能力：数据库启动、YAML 读取、结构化日志和签名 |
-| `scripts/` | 打包及 CI 测试辅助脚本 |
+| `scripts/` | CI 测试辅助脚本 |
+| `ops/` | 运维配置和控制脚本，手动部署，不进入发布包 |
+| `run/nginx/` | upstream 初始配置，手动复制，不进入发布包 |
+| `publish/` | 应用打包、上传及滚动发布工具 |
+| `tests/load/` | Windows k6 压力测试工具，不进入发布包 |
 
 配置结构为 `game → region → server_group`，`channel_app` 独立维护；渠道包 AppID 全局唯一，每个 `prod/test/review` 环境最多绑定一个区服组。**SDK Core、SDK Service 与配置中心使用同一个 `config_center` 权威库**；只有可选的接入端使用独立 `config_access` 副本库。
 
@@ -37,11 +41,9 @@
 
 **模块**：[配置中心](config-center/README.md) · [配置接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md) · [SDK Service](sdk-service/README.md)
 
-平台原始集成协议保留于 [references/服务端集成文档.md](references/服务端集成文档.md)，仅作为外部原始资料，不代表所有接口均已实现。
-
 ## 安全与部署边界
 
-- 数据库 DDL 由管理员审核后手工执行，服务启动不建表、不自动迁移。
+- 数据库 DDL 由管理员审核后手动执行，服务启动不建表、不自动迁移。
 - `/api/config/admin/**`、`/api/core/admin/**` 始终使用 `adminAuth.secret` 请求签名；生产仍须使用 TLS 和受保护的管理网关，不能只依赖签名或隐藏页面。可能包含密钥的原始配置/同步接口也必须限制访问。
 - 配置同步、接入端本地只读接口与 Webhook 统一使用每个接入端唯一的 `config_subscriber.signing_secret`；请求必须携带并签署 `X-Subscriber-Code`。接入端配置为 `subscriber.code` / `subscriber.secret`，不再使用全局 `configSync.secret` 或单独的 `webhook.secret`。
 - Go 业务路由不包含 `/sdk` 前缀，公网如使用 `/sdk/` 应由 Nginx 负责前缀转换。
