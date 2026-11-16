@@ -77,21 +77,60 @@ function Get-RestartPlan {
     if ($null -eq $property -or $property.Value -isnot [System.Management.Automation.PSCustomObject]) {
         throw "publish.config.json 必须配置 services 对象（Supervisor 进程名: 健康检查端口）。"
     }
-    $selected = New-Object 'System.Collections.Generic.List[string]'
+
+    $expected = @(
+        [pscustomobject]@{ Name = 'config-center-1'; Module = 'config-center'; Port = 8201 },
+        [pscustomobject]@{ Name = 'config-center-2'; Module = 'config-center'; Port = 8202 },
+        [pscustomobject]@{ Name = 'sdk-core-1'; Module = 'sdk-core'; Port = 8211 },
+        [pscustomobject]@{ Name = 'sdk-core-2'; Module = 'sdk-core'; Port = 8212 },
+        [pscustomobject]@{ Name = 'sdk-core-3'; Module = 'sdk-core'; Port = 8213 },
+        [pscustomobject]@{ Name = 'sdk-core-4'; Module = 'sdk-core'; Port = 8214 },
+        [pscustomobject]@{ Name = 'sdk-core-5'; Module = 'sdk-core'; Port = 8215 },
+        [pscustomobject]@{ Name = 'sdk-service-1'; Module = 'sdk-service'; Port = 8221 },
+        [pscustomobject]@{ Name = 'sdk-service-2'; Module = 'sdk-service'; Port = 8222 },
+        [pscustomobject]@{ Name = 'sdk-service-3'; Module = 'sdk-service'; Port = 8223 },
+        [pscustomobject]@{ Name = 'sdk-service-4'; Module = 'sdk-service'; Port = 8224 },
+        [pscustomobject]@{ Name = 'sdk-service-5'; Module = 'sdk-service'; Port = 8225 }
+    )
+    $expectedByName = @{}
+    foreach ($item in $expected) { $expectedByName[$item.Name] = $item }
+
+    $configured = @{}
     foreach ($item in $property.Value.PSObject.Properties) {
         $name = [string]$item.Name
-        if ($name -match '^(config-center-access|config-center|sdk-core|sdk-service)(-[1-9][0-9]*)?$') {
-            $module = $Matches[1]
-        } else {
+        $value = $item.Value
+        if ($name -eq 'config-center-access') {
+            if (($value -isnot [int] -and $value -isnot [long]) -or $value -ne 8291) {
+                throw "services.config-center-access 端口必须为 8291"
+            }
+            $configured[$name] = 8291
+            continue
+        }
+        if (-not $expectedByName.ContainsKey($name)) {
             throw "services 包含不支持的进程名: $name"
         }
-        $value = $item.Value
-        if (($value -isnot [int] -and $value -isnot [long]) -or $value -lt 1 -or $value -gt 65535) {
-            throw "services.$name 的端口必须为 1 到 65535 的整数"
+        $expectedItem = $expectedByName[$name]
+        if (($value -isnot [int] -and $value -isnot [long]) -or $value -ne $expectedItem.Port) {
+            throw "services.$name 必须使用端口 $($expectedItem.Port)"
         }
-        if ($SelectedService -eq 'all' -or $SelectedService -eq $module) {
-            $selected.Add(('{0}:{1}' -f $name, $value))
+        $configured[$name] = [int]$value
+    }
+
+    foreach ($item in $expected) {
+        if (-not $configured.ContainsKey($item.Name)) {
+            throw "services 缺少必需实例: $($item.Name)"
         }
+    }
+
+    $selected = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($item in $expected) {
+        if ($SelectedService -eq 'all' -or $SelectedService -eq $item.Module) {
+            $selected.Add(('{0}:{1}' -f $item.Name, $item.Port))
+        }
+    }
+    if ($configured.ContainsKey('config-center-access') -and
+        ($SelectedService -eq 'all' -or $SelectedService -eq 'config-center-access')) {
+        $selected.Add('config-center-access:8291')
     }
     if ($selected.Count -eq 0) {
         throw "services 未配置 $SelectedService 对应的 Supervisor 进程，无法执行自动重启。"

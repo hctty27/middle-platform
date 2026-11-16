@@ -13,6 +13,19 @@ if [[ ! "$program" =~ ^(config-center(-access)?|sdk-core|sdk-service)(-[1-9][0-9
     printf 'Invalid Supervisor program name\n' >&2
     exit 2
 fi
+lock_file=${PUBLISH_LOCK_FILE:-/data/middle-platform/.publish.lock}
+if [[ -L "$lock_file" ]]; then
+    printf 'Refusing symlinked publish lock: %s\n' "$lock_file" >&2
+    exit 2
+fi
+if [[ -f "$lock_file" ]]; then
+    command -v flock >/dev/null || { printf 'flock is required for coordinated deployment checks\n' >&2; exit 2; }
+    exec 9>"$lock_file"
+    if ! flock -n 9; then
+        exit 0
+    fi
+fi
+
 if [[ ! "$port" =~ ^[0-9]{1,5}$ ]]; then
     printf 'Invalid health-check port\n' >&2
     exit 2

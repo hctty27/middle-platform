@@ -36,6 +36,15 @@ test ! -s "$CURL_LOG"
 TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-core-1 8211
 test -s "$CURL_LOG"
 
+# A live deployment holds the shared lock; Monit must skip its check.
+exec 8>"$tmp/publish.lock"
+flock -n 8
+before_lines=$(wc -l < "$CURL_LOG")
+PUBLISH_LOCK_FILE="$tmp/publish.lock" TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-core-1 8211
+after_lines=$(wc -l < "$CURL_LOG")
+test "$before_lines" -eq "$after_lines"
+exec 8>&-
+
 TEST_CURL_EXIT=7
 export TEST_CURL_EXIT
 if TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-core-1 8211; then
