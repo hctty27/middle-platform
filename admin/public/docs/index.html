@@ -411,6 +411,7 @@ Host: config.example.com</code></pre></div><h3>响应结构</h3><div class="tabl
       &quot;id&quot;: 1,
       &quot;nodeType&quot;: &quot;game&quot;,
       &quot;envType&quot;: null,
+      &quot;marketType&quot;: &quot;domestic&quot;,
       &quot;gameId&quot;: null,
       &quot;regionId&quot;: null,
       &quot;code&quot;: &quot;game_a&quot;,
@@ -423,7 +424,7 @@ Host: config.example.com</code></pre></div><h3>响应结构</h3><div class="tabl
       &quot;parentId&quot;: 0
     }
   ]
-}</code></pre></div><h3>节点关键字段</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>说明</th></tr></thead><tbody><tr><td><code>id</code></td><td>节点数字 ID</td></tr><tr><td><code>nodeType</code></td><td><code>game</code>、<code>region</code> 或 <code>server_group</code></td></tr><tr><td><code>envType</code></td><td>大区环境：<code>test</code>、<code>prod</code>、<code>review</code>；其他节点一般为 null</td></tr><tr><td><code>gameId / regionId / parentId</code></td><td>节点归属与父节点 ID</td></tr><tr><td><code>code / name / status</code></td><td>编码、名称和状态</td></tr><tr><td><code>config</code></td><td><strong>JSON 格式的字符串</strong>，按需再次解析，不能当作已解码对象</td></tr><tr><td><code>remark / createdAt / updatedAt</code></td><td>备注和时间字段，实际完整响应中可能存在</td></tr></tbody></table></div><ul class="points"><li>可以把配置保存到内存、文件或第三方自有数据库；无需复用中台存储结构。</li><li>先验证返回的字段、节点唯一性与 JSON 内容，再构建新配置；不要更新一半就暴露给业务。</li><li>节点集合与 <code>epoch/revision</code> 必须作为一个一致性版本同时生效，不得先提交游标。</li><li>全量拉取期间源配置可能继续变化；应用快照后可再查询版本，落后时继续同步。</li></ul><div class="notice warn">安全提示：<code>nodes[].config</code> 可能包含服务端敏感值。同步接口应仅在可信网络或经过授权的网关开放，不能直接暴露到网页客户端。</div></section>
+}</code></pre></div><h3>节点关键字段</h3><div class="table-wrap"><table><thead><tr><th>字段</th><th>说明</th></tr></thead><tbody><tr><td><code>id</code></td><td>节点数字 ID</td></tr><tr><td><code>nodeType</code></td><td><code>game</code>、<code>region</code> 或 <code>server_group</code></td></tr><tr><td><code>envType</code></td><td>大区环境：<code>test</code>、<code>prod</code>、<code>review</code>；其他节点一般为 null</td></tr><tr><td><code>marketType</code></td><td>仅游戏节点：<code>domestic</code> 国内、<code>overseas</code> 海外；大区和区服组为 null。节点树、子节点分页和搜索的摘要同样返回该字段</td></tr><tr><td><code>gameId / regionId / parentId</code></td><td>节点归属与父节点 ID</td></tr><tr><td><code>code / name / status</code></td><td>编码、名称和状态</td></tr><tr><td><code>config</code></td><td><strong>JSON 格式的字符串</strong>，按需再次解析，不能当作已解码对象</td></tr><tr><td><code>remark / createdAt / updatedAt</code></td><td>备注和时间字段，实际完整响应中可能存在</td></tr></tbody></table></div><ul class="points"><li>可以把配置保存到内存、文件或第三方自有数据库；无需复用中台存储结构。</li><li>先验证返回的字段、节点唯一性与 JSON 内容，再构建新配置；不要更新一半就暴露给业务。</li><li>节点集合与 <code>epoch/revision</code> 必须作为一个一致性版本同时生效，不得先提交游标。</li><li>全量拉取期间源配置可能继续变化；应用快照后可再查询版本，落后时继续同步。</li></ul><div class="notice warn">安全提示：<code>nodes[].config</code> 可能包含服务端敏感值。同步接口应仅在可信网络或经过授权的网关开放，不能直接暴露到网页客户端。</div></section>
 <section id="s-changes" class="section"><div class="section-title"><h2>查询增量变更</h2></div><div class="summary">获取本地游标之后的修改/删除事件</div><div class="route"><span class="verb get">GET</span><code>/api/config/sync/changes</code></div><p>配置量较大时，才需要增量模式。以本地已成功应用的 <code>revision</code> 作为 <code>afterRevision</code>，按版本顺序拉取事件。</p><h3>查询参数</h3><div class="table-wrap"><table><thead><tr><th>参数</th><th>必填</th><th>约束</th></tr></thead><tbody><tr><td><code>afterRevision</code></td><td>否</td><td>起始游标，默认 0，必须 ≥ 0</td></tr><tr><td><code>limit</code></td><td>否</td><td>默认 200，范围 1–500</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>HTTP</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>GET /api/config/sync/changes?afterRevision=12&amp;limit=200 HTTP/1.1
 Host: config.example.com</code></pre></div><h3>HTTP 200 响应示例</h3><div class="codebox"><div class="codehead"><span>JSON</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>[
   {
@@ -448,6 +449,7 @@ Content-Type: application/json
     &quot;id&quot;: 7,
     &quot;nodeType&quot;: &quot;game&quot;,
     &quot;envType&quot;: null,
+    &quot;marketType&quot;: &quot;domestic&quot;,
     &quot;gameId&quot;: null,
     &quot;regionId&quot;: null,
     &quot;code&quot;: &quot;game_b&quot;,
@@ -485,7 +487,7 @@ Content-Type: application/json
 <section id="a-config-schema" class="section"><div class="section-title"><h2>查询基础配置字段定义</h2></div>
 <div class="summary">第三方通过 JSON Schema 自动识别基础配置字段和校验规则</div>
 <div class="route"><span class="verb get">GET</span><code>/api/config/admin/config-schema/{nodeType}</code></div>
-<p>管理签名与其他 <code>/api/config/admin</code> 接口一致。<code>nodeType</code> 支持 <code>game</code>、<code>region</code>、<code>server_group</code>。目前三类基础配置没有预置业务字段，但允许第三方添加自定义 JSON 字段；SDK 密钥与业务回调地址不属于基础配置。</p>
+<p>管理签名与其他 <code>/api/config/admin</code> 接口一致。<code>nodeType</code> 支持 <code>game</code>、<code>region</code>、<code>server_group</code>。<code>game</code> 与 <code>server_group</code> 没有预置业务字段；<code>region</code> 预置一组可选的区服接入字段，见下方字段表。三类都允许额外自定义 JSON 字段；SDK 密钥与业务回调地址不属于基础配置。</p>
 <h3>返回示例</h3><div class="codebox"><div class="codehead"><span>GET /api/config/admin/config-schema/game</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
   "nodeType": "game",
   "schemaVersion": 1,
@@ -497,6 +499,17 @@ Content-Type: application/json
     "additionalProperties": true
   }
 }</code></pre></div>
+<h3>大区预置字段</h3>
+<p>以下字段只出现在 <code>region</code> 的 Schema 里，分组为「区服接入」，都是可选字符串。未传或 JSON <code>null</code> 表示不填。<code>game</code> 与 <code>server_group</code> 的 <code>properties</code> 为空，上面的示例仍然适用。</p>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><code>loginServerIp</code></td><td>登录服 IP，最长 64 个字符</td></tr>
+<tr><td><code>loginDomain</code></td><td>登录服域名，最长 255 个字符</td></tr>
+<tr><td><code>chatDomain</code></td><td>聊天服域名，最长 255 个字符</td></tr>
+<tr><td><code>loginUrl</code></td><td>登录地址，最长 500 个字符</td></tr>
+<tr><td><code>jumpIp</code></td><td>跳板机 IP，最长 32 个字符</td></tr>
+<tr><td><code>regionAlias</code></td><td>大区别名，最长 32 个字符</td></tr>
+<tr><td><code>mergeDomain</code></td><td>合服域名，最长 500 个字符</td></tr>
+</tbody></table></div>
 <p>此接口仅返回字段定义，不返回已保存配置；读取当前配置使用已有节点查询接口。保存时 <code>config</code> 仍传 JSON <strong>字符串</strong>。服务端会拒绝写入属于 SDK 的保留字段。</p></section>
 <section id="a-config-node" class="section"><div class="section-title"><h2>查询 / 修改 / 删除节点</h2></div><div class="summary">按 ID 管理基础节点</div><div class="route"><span class="verb get">GET</span><code>/api/config/admin/nodes/{id}</code></div><div class="route"><span class="verb put">PUT</span><code>/api/config/admin/nodes/{id}</code></div><div class="route"><span class="verb delete">DELETE</span><code>/api/config/admin/nodes/{id}</code></div><p>按节点 ID 读取、更新或删除基础配置。PUT 只允许修改大区环境、游戏运营地区、名称、状态、配置和备注；DELETE 返回 204。操作受业务关联约束。返回的节点对象包含 <code>marketType</code>，字段说明与<a href="#s-snapshot">全量快照</a>中的节点相同。</p><h3>请求参数</h3><div class="table-wrap"><table><thead><tr><th>参数</th><th>位置</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>id</code></td><td>Path</td><td>int64</td><td>基础节点 ID</td></tr><tr><td><code>envType</code></td><td>PUT Body</td><td>string|null</td><td>大区环境分类</td></tr><tr><td><code>marketType</code></td><td>PUT Body</td><td>string|null</td><td>仅游戏可改。<code>domestic</code> 或 <code>overseas</code>；不传则保留当前值。大区和区服组不能携带</td></tr><tr><td><code>name</code></td><td>PUT Body</td><td>string</td><td>节点名称</td></tr><tr><td><code>status</code></td><td>PUT Body</td><td>integer</td><td>0 或 1</td></tr><tr><td><code>config</code></td><td>PUT Body</td><td>string</td><td>JSON 对象字符串</td></tr><tr><td><code>remark</code></td><td>PUT Body</td><td>string|null</td><td>备注</td></tr></tbody></table></div><h3>请求示例</h3><div class="codebox"><div class="codehead"><span>请求示例</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{&quot;name&quot;:&quot;示例游戏&quot;,&quot;status&quot;:1,&quot;config&quot;:&quot;{}&quot;,&quot;remark&quot;:&quot;备注&quot;}</code></pre></div><h3>响应示例 / 状态</h3><div class="codebox"><div class="codehead"><span>响应示例 / 状态</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>GET/PUT 200（节点对象）；DELETE 204（无响应体）</code></pre></div><h3>删除限制与错误响应</h3><p>删除节点不会级联删除下级节点或渠道应用。存在这些关联时，接口返回 HTTP 409，并说明具体原因。节点管理业务错误响应保留 <code>error</code> 字段，同时新增稳定的 <code>code</code>，旧客户端可继续只读取 <code>error</code>。</p><div class="codebox"><div class="codehead"><span>409 Conflict</span><button class="copy" type="button" aria-label="复制示例">复制</button></div><pre><code>{
   &quot;code&quot;: &quot;REGION_HAS_SERVER_GROUPS&quot;,

@@ -82,8 +82,8 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <h2 id="architecture-2">配置数据模型</h2>
 <p><code>config_node</code> 只有三种节点：</p>
 <ol>
-<li><code>game</code>：根节点，<code>game_id</code> 与 <code>region_id</code> 均为空。</li>
-<li><code>region</code>：归属于游戏，<code>env_type</code> 仅支持 <code>test</code>、<code>prod</code>、<code>review</code>（旧数据可能为空）。</li>
+<li><code>game</code>：根节点，<code>game_id</code> 与 <code>region_id</code> 均为空；<code>market_type</code> 仅游戏节点有值，为 <code>domestic</code>（国内）或 <code>overseas</code>（海外）。</li>
+<li><code>region</code>：归属于游戏，<code>env_type</code> 仅支持 <code>test</code>、<code>prod</code>、<code>review</code>（旧数据可能为空）。大区 <code>config</code> 预置登录服、聊天服、跳板机、别名和合服域名等可选字段，见 <a href="index.html#a-config-schema">基础配置字段定义</a>。</li>
 <li><code>server_group</code>：归属于游戏与大区。</li>
 </ol>
 <p>表不再使用 <code>parent_id</code>；接口的 <code>parentId</code> 由 <code>game_id</code> / <code>region_id</code> 推导。<code>sdk_channel_app</code> 是独立表，<code>code</code> 全局唯一，每个 AppID 的 <code>prod_server_group_id</code>、<code>test_server_group_id</code>、<code>review_server_group_id</code> 各指向至多一个区服组。三个环境共享同一份应用 <code>config</code> JSON，不存在独立绑定配置表，也不自动向上继承 JSON。</p>
