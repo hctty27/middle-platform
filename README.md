@@ -40,8 +40,6 @@
 
 **模块**：[配置中心](config-center/README.md) · [配置接入端](config-center-access/README.md) · [SDK Core](sdk-core/README.md) · [SDK Service](sdk-service/README.md)
 
-平台原始集成协议保留于 [references/服务端集成文档.md](references/服务端集成文档.md)，仅作为外部原始资料，不代表所有接口均已实现。
-
 ## 安全与部署边界
 
 - 数据库 DDL 由管理员审核后手动执行，服务启动不建表、不自动迁移。
