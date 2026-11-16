@@ -1,6 +1,7 @@
 # SDK Core：使用 config_center 同一连接池读取配置、更新订单。
 server:
   address: ":8082"
+  requestTimeout: 5s
 
 # 配置表只读、game_order 表读写；订单表须提前手动建好。
 database:
@@ -13,6 +14,20 @@ database:
 orderNotify:
   workers: 4
   idleInterval: 500ms
+  # 每目标非阻塞并发；0 关闭。多 Worker 时须小于 workers。
+  hostConcurrency: 1
+  disableKeepAlives: false
+  maxIdleConns: 32
+  maxIdleConnsPerHost: 4
+  maxConnsPerHost: 4
+  idleConnTimeout: 30s
+
+# 仅缓存公开配置；停用/配置变化存在 TTL 加在途读取的可见延迟。0s 关闭。
+configCache:
+  ttl: 1s
+  maxEntries: 4096
+  maxInflight: 8
+  loadTimeout: 5s
 
 # 管理接口使用 HMAC-SHA256；与 config-center 的 adminAuth.secret 保持一致。始终验签，密钥至少 32 字节。
 adminAuth:

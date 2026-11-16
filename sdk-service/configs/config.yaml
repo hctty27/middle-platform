@@ -1,6 +1,8 @@
 # SDK Service：同库只读，游戏地址与适配器来自 sdk_node_config（SDK Core 管理）。
 server:
   address: ":8221"
+  # 自动预算为 max(game.timeout, 平台 5s) + 3s，不限制接口并发。
+  requestTimeout: auto
 
 database:
   dsn: ""
@@ -10,6 +12,13 @@ database:
 
 game:
   timeout: "5s"
+
+# 含密钥与核验开关，默认不缓存。接受 TTL 加在途读取的撤销延迟后才开启。
+configCache:
+  ttl: 0s
+  maxEntries: 4096
+  maxInflight: 8
+  loadTimeout: 5s
 
 # 游戏上报至平台的地址，未开启相应功能时可留空。
 platform:

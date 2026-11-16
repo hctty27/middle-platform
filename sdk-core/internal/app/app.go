@@ -74,12 +74,27 @@ func Run(configPath string) error {
 		return fmt.Errorf("关闭 game_order 表结构检查结果失败: %w", err)
 	}
 
+	publicReader, err := service.NewCachedReader(repository, cfg.ConfigCache.Options())
+	if err != nil {
+		return err
+	}
+	defer publicReader.Close()
+	idleConnTimeout, _ := time.ParseDuration(cfg.OrderNotify.IdleConnTimeout)
+	notifier := notify.NewClientWithOptions(notify.Options{
+		DisableKeepAlives:   cfg.OrderNotify.DisableKeepAlives,
+		MaxIdleConns:        cfg.OrderNotify.MaxIdleConns,
+		MaxIdleConnsPerHost: cfg.OrderNotify.MaxIdleConnsPerHost,
+		MaxConnsPerHost:     cfg.OrderNotify.MaxConnsPerHost,
+		IdleConnTimeout:     idleConnTimeout,
+	})
+	defer notifier.CloseIdleConnections()
 	orders := &service.OrderService{
 		ConfigReader:         repository,
 		Orders:               store.NewOrderStore(db),
 		PlatformSecretReader: repository,
 		GameSecretReader:     repository,
-		Notifier:             notify.NewClient(),
+		Notifier:             notifier,
+		HostGate:             notify.NewHostGate(cfg.OrderNotify.HostConcurrency),
 	}
 	if err := orders.Validate(); err != nil {
 		return err
@@ -97,13 +112,15 @@ func Run(configPath string) error {
 		<-workerDone
 	}()
 
+	requestTimeout, _ := time.ParseDuration(cfg.Server.RequestTimeout)
+	routerOptions := api.RouterOptions{RequestTimeout: requestTimeout}
 	var ready atomic.Bool
 	ready.Store(true)
 	server := &http.Server{
 		Addr: cfg.Server.Address,
 		Handler: logging.HTTP(cfg.Log, bootstrap.ReadinessMiddleware(
 			signature.AdminMiddleware(
-				api.RouterWithAdmin(service.NewConfigService(repository), db, orders),
+				api.RouterWithAdminOptions(service.NewConfigService(publicReader), db, routerOptions, orders),
 				"/api/core/admin",
 				cfg.AdminAuth.Secret,
 			),

@@ -22,10 +22,12 @@ type Database struct {
 // Config 汇总服务监听、数据库、游戏超时、平台地址及日志配置。
 type Config struct {
 	Server struct {
-		Address string `yaml:"address"`
+		Address        string `yaml:"address"`
+		RequestTimeout string `yaml:"requestTimeout"`
 	} `yaml:"server"`
-	Database Database `yaml:"database"`
-	Game     struct {
+	Database    Database              `yaml:"database"`
+	ConfigCache bootstrap.CacheConfig `yaml:"configCache"`
+	Game        struct {
 		Timeout string `yaml:"timeout"`
 	} `yaml:"game"`
 	Platform struct {
@@ -42,6 +44,8 @@ func Load(path string) (Config, error) {
 	cfg.Server.Address = ":8221"
 	cfg.Database = Database{MaxOpenConns: 10, MaxIdleConns: 5, ConnMaxLifetime: "30m"}
 	cfg.Game.Timeout = "5s"
+	cfg.ConfigCache = bootstrap.DefaultCacheConfig("0s")
+	cfg.Server.RequestTimeout = "auto"
 	cfg.Log = logging.Default()
 	if path == "" {
 		path = "configs/config.yaml"
@@ -73,6 +77,13 @@ func Load(path string) (Config, error) {
 	}
 	if d, err := time.ParseDuration(cfg.Game.Timeout); err != nil || d <= 0 || d > 30*time.Second {
 		return Config{}, errors.New("game.timeout 必须在 0 到 30 秒之间")
+	}
+	if cfg.Server.RequestTimeout == "auto" {
+		gameTimeout, _ := time.ParseDuration(cfg.Game.Timeout)
+		cfg.Server.RequestTimeout = (max(gameTimeout, 5*time.Second) + 3*time.Second).String()
+	}
+	if err := validatePerformance(cfg); err != nil {
+		return Config{}, err
 	}
 	return cfg, nil
 }

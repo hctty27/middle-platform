@@ -9,6 +9,8 @@ var (
 	ErrOrderNotFound = errors.New("订单不存在")
 	ErrOrderConflict = errors.New("订单冲突")
 	ErrOrderNotPaid  = errors.New("订单尚未支付")
+	// ErrNotifyDeferred 表示本地目标配额饱和，不是游戏服发货失败。
+	ErrNotifyDeferred = errors.New("发货通知目标繁忙，本地延期")
 )
 
 // RegisterOrder 是游戏服提交的订单登记内容，金额单位为分。

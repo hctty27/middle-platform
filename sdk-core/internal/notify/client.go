@@ -58,38 +58,42 @@ type Client struct {
 	http *http.Client
 }
 
-// NewClient 直连实际解析的 IP，禁用重定向并拦截敏感地址。
-func NewClient() *Client {
+// Options 配置有界连接池；非正池参数使用默认值。
+type Options struct {
+	DisableKeepAlives   bool
+	MaxIdleConns        int
+	MaxIdleConnsPerHost int
+	MaxConnsPerHost     int
+	IdleConnTimeout     time.Duration
+}
+
+// NewClient 直连实际解析的 IP，禁用代理、重定向并拦截敏感地址。
+func NewClient() *Client { return NewClientWithOptions(Options{}) }
+
+// NewClientWithOptions 创建独立连接池。每次新建连接重新验证全部 DNS 地址。
+func NewClientWithOptions(options Options) *Client {
+	if options.MaxIdleConns <= 0 {
+		options.MaxIdleConns = 32
+	}
+	if options.MaxIdleConnsPerHost <= 0 {
+		options.MaxIdleConnsPerHost = 4
+	}
+	if options.MaxConnsPerHost <= 0 {
+		options.MaxConnsPerHost = 4
+	}
+	if options.IdleConnTimeout <= 0 {
+		options.IdleConnTimeout = 30 * time.Second
+	}
 	transport := &http.Transport{
-		DisableKeepAlives:     true,
+		DisableKeepAlives:     options.DisableKeepAlives,
+		MaxIdleConns:          options.MaxIdleConns,
+		MaxIdleConnsPerHost:   options.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       options.MaxConnsPerHost,
+		IdleConnTimeout:       options.IdleConnTimeout,
 		TLSHandshakeTimeout:   3 * time.Second,
 		ResponseHeaderTimeout: 4 * time.Second,
-		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil || prohibitedMetadataHost(host) {
-				return nil, ErrTarget
-			}
-			resolved, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-			if err != nil || len(resolved) == 0 {
-				return nil, ErrTarget
-			}
-			for _, item := range resolved {
-				ip, ok := netip.AddrFromSlice(item.IP)
-				if !ok || !permittedCallbackIP(ip) {
-					return nil, ErrTarget
-				}
-			}
-			dialer := &net.Dialer{Timeout: 3 * time.Second}
-			var dialErr error
-			for _, item := range resolved {
-				conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(item.IP.String(), port))
-				if err == nil {
-					return conn, nil
-				}
-				dialErr = err
-			}
-			return nil, fmt.Errorf("发货通知连接失败: %w", dialErr)
-		},
+		DialContext: safeDialContext(net.DefaultResolver.LookupIPAddr,
+			(&net.Dialer{Timeout: 3 * time.Second}).DialContext),
 	}
 	return &Client{
 		http: &http.Client{
@@ -102,8 +106,43 @@ func NewClient() *Client {
 	}
 }
 
+// CloseIdleConnections 在消费者停止后释放空闲连接，不中断正在发送的通知。
+func (c *Client) CloseIdleConnections() { c.http.CloseIdleConnections() }
+
+func safeDialContext(lookup func(context.Context, string) ([]net.IPAddr, error),
+	dial func(context.Context, string, string) (net.Conn, error)) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil || prohibitedMetadataHost(host) {
+			return nil, ErrTarget
+		}
+		resolved, err := lookup(ctx, host)
+		if err != nil || len(resolved) == 0 {
+			return nil, ErrTarget
+		}
+		// 必须先验证全部地址，再尝试连接，防止混合 DNS 绕过检查。
+		for _, item := range resolved {
+			ip, ok := netip.AddrFromSlice(item.IP)
+			if !ok || !permittedCallbackIP(ip) {
+				return nil, ErrTarget
+			}
+		}
+		var dialErr error
+		for _, item := range resolved {
+			conn, err := dial(ctx, network, net.JoinHostPort(item.IP.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			dialErr = err
+		}
+		return nil, fmt.Errorf("发货通知连接失败: %w", dialErr)
+	}
+}
+
 // ValidateTarget 不限制合法业务域名、IP 或端口。
-func (c *Client) ValidateTarget(raw string) error {
+func (c *Client) ValidateTarget(raw string) error { return validateTarget(raw) }
+
+func validateTarget(raw string) error {
 	if raw == "" || strings.TrimSpace(raw) != raw || len(raw) > 1024 {
 		return ErrTarget
 	}

@@ -57,10 +57,15 @@ func Run(configPath string) error {
 		return fmt.Errorf("连接配置中心数据库失败: %w", err)
 	}
 
-	routes := store.New(db)
-	if err := routes.VerifySchema(initCtx); err != nil {
+	repository := store.New(db)
+	if err := repository.VerifySchema(initCtx); err != nil {
 		return err
 	}
+	routes, err := store.NewCachedReader(repository, cfg.ConfigCache.Options())
+	if err != nil {
+		return err
+	}
+	defer routes.Close()
 
 	timeout, _ := time.ParseDuration(cfg.Game.Timeout)
 	gameClient := transport.NewHTTPClient(timeout)
@@ -96,14 +101,16 @@ func Run(configPath string) error {
 	checker := &service.UserCheckService{Routes: routes, Sender: publisher}
 	outbound := &service.OutboundService{Routes: routes, Sender: publisher}
 
+	requestTimeout, _ := time.ParseDuration(cfg.Server.RequestTimeout)
+	routerOptions := api.RouterOptions{RequestTimeout: requestTimeout}
 	server := &http.Server{
 		Addr: cfg.Server.Address,
-		Handler: logging.HTTP(cfg.Log, api.RouterWithPublishers(
-			checker, db, roleQuerier, serverQuerier, controller, outbound, outbound,
+		Handler: logging.HTTP(cfg.Log, api.RouterWithOptions(
+			checker, db, roleQuerier, serverQuerier, controller, outbound, outbound, routerOptions,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      timeout + 5*time.Second,
+		WriteTimeout:      max(timeout+5*time.Second, requestTimeout+2*time.Second),
 		IdleTimeout:       60 * time.Second,
 	}
 

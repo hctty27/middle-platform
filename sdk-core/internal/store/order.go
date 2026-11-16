@@ -132,6 +132,16 @@ func (s *OrderStore) CompleteNotify(ctx context.Context, id int64, attempt int, 
               AND notify_attempts=?`, id, attempt)
 		return err
 	}
+	if errors.Is(notifyErr, model.ErrNotifyDeferred) {
+		// 本地延期不修改状态或单调领取序号，也不按游戏失败进行指数退避。
+		// 延期仍计入领取次数，后续真实失败可能因此使用较长的原有退避。
+		_, err := s.db.ExecContext(ctx, `
+		    UPDATE game_order SET last_notify_error=?,
+		        next_notify_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 5 SECOND)
+		    WHERE id=? AND payment_status=1 AND notify_status<>1
+		      AND notify_attempts=?`, model.ErrNotifyDeferred.Error(), id, attempt)
+		return err
+	}
 	summary := strings.ReplaceAll(notifyErr.Error(), "\n", " ")
 	if len(summary) > 256 {
 		summary = summary[:256]
