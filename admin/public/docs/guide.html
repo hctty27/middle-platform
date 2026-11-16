@@ -302,13 +302,18 @@ npm run build</code></pre></div>
 <div class="table-scroll"><table><thead><tr><th scope="col">名称</th><th scope="col">文件</th><th scope="col">作用</th></tr></thead><tbody><tr><td>Build</td><td><code>.github/workflows/build.yml</code></td><td>配置中心、接入端、Vue、人工 SQL 与 Webhook 集成测试</td></tr><tr><td>sdk-core</td><td><code>.github/workflows/sdk-core.yml</code></td><td>Core 单元测试、race、vet 与集成测试</td></tr><tr><td>sdk-service</td><td><code>.github/workflows/sdk-service.yml</code></td><td>Service 与公共签名校验</td></tr><tr><td>Package Linux</td><td><code>.github/workflows/package.yml</code></td><td>tar.gz 构建、ELF 架构与权限验证</td></tr></tbody></table></div>
 <p><code>scripts/ci_schema_sql_smoke.py</code> 和 <code>scripts/ci_smoke.py</code> 是 CI 测试脚本，<strong>不得在生产数据库执行</strong>。Build 的 CI Gate 不会自动覆盖其他独立工作流。发布流程、打包参数统一参见 <a href="#production">生产运维</a>。</p></article>
 <article class="doc-pane" id="production" data-pane="production" aria-labelledby="tab-production" hidden><div class="eyebrow">DEVELOPER GUIDE / PRODUCTION</div><p class="pane-subtitle">Supervisor、Nginx、发布流程与排障</p><h1>生产部署与运维（Supervisor 优先）</h1>
-<p>部署模型：<strong>Linux 二进制 + 独立 MySQL 8.0+ + Nginx + Supervisor</strong>。<code>systemd</code> 可选，但本文以当前采用的 Supervisor 为主要方案。服务管理配置不放入仓库，也不包含在发布包中；生产机无需安装 Go、Node.js。</p>
+<p>部署模型：<strong>Linux 二进制 + 独立 MySQL 8.0+ + Nginx + Supervisor</strong>。<code>systemd</code> 可选，但本文以当前采用的 Supervisor 为主要方案。服务管理配置与控制脚本保留在仓库 <code>ops/</code>，由管理员手动部署，不包含在发布包中；生产机无需安装 Go、Node.js。</p>
 <blockquote>配置中心与 SDK Core 管理 API 始终使用 <code>adminAuth</code> 请求签名，但签名不代替访问控制。管理、同步、接入回调仍须通过可信内网或具备认证、白名单和 TLS 的专用网关暴露。对外开放的业务 API 包括必要的 <code>/api/core/**</code> 与 <code>/api/service/**</code>，其他管理与同步路径仍需保护。</blockquote>
 <h2 id="production-1">1. 部署目录与端口</h2>
 <div class="code-card"><div class="code-header"><span>text</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-text">/data/middle-platform/
 ├── bin/             # 四个 Linux 可执行程序
 ├── config/          # 生产 YAML（禁止提交 Git 或打入归档）
 ├── admin/           # Vue 静态文件
+├── sql/             # 手动执行的数据库脚本
+├── ops/             # 手动维护的运维脚本及模板
+├── run/nginx/       # 动态 upstream 实例状态
+├── packages/        # 已发布归档
+├── .publish.lock    # 共享发布锁
 └── logs/            # 由 Supervisor 或系统负责轮转</code></pre></div>
 <p>建议：<code>config-center:8201</code>、<code>sdk-core-1:8211</code>、<code>sdk-core-2:8212</code>、<code>sdk-service:8221</code>、<code>config-center-access:8291</code>（可选），管理端由内部 Nginx 提供。具体端口按现有主机资源调整；不同实例不得占用同一监听地址。</p>
 <ul>
@@ -350,7 +355,7 @@ sql/
     V0011__add_game_market_type.sql
     V0012__rename_webhook_secret_to_signing_secret.sql
 admin/                     # -SkipFrontend 时不存在</code></pre></div>
-<p>归档不包含生产密钥、YAML、Nginx/Supervisor 配置。Linux 可执行文件保存 0755 权限，可在上传后执行 <code>tar -tzf</code>、<code>file bin/*</code> 校验。GitHub Actions <code>.github/workflows/package.yml</code> 使用同一脚本并检查 ELF 架构与权限。打包不会自动部署、执行 SQL 或管理 Supervisor。</p>
+<p>归档只包含 <code>bin/</code>、<code>sql/</code> 和可选的 <code>admin/</code>，不包含 <code>ops/</code>、<code>run/</code>、生产密钥和 YAML。运维文件由管理员单独手动部署。Linux 可执行文件保存 0755 权限，可在上传后执行 <code>tar -tzf</code>、<code>file bin/*</code> 校验。GitHub Actions <code>.github/workflows/package.yml</code> 使用同一脚本并检查 ELF 架构与权限。打包不会自动部署、执行 SQL 或管理 Supervisor。</p>
 <h2 id="production-3">3. 手动 SQL 先于启动</h2>
 <p>备份并核对目标数据库，<strong>只执行对应场景的 SQL</strong>。现有 V0001～V0012 为不同历史场景的编号归档，不可以不经检查而依次执行：</p>
 <ul>
@@ -481,9 +486,9 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 .\publish\publish.ps1 -Version v1.0.2 -SkipRestart</code></pre></div>
 <ol>
 <li>发布前确认服务与数据库结构兼容。DDL 仍在单独变更窗口由管理员审核并执行，不随脚本自动迁移。</li>
-<li>上传后校验 SHA-256、架构、归档内容、所选服务；校验成功再把文件逐个写入同目录临时文件并重命名替换，保留 <code>config/</code>、<code>logs/</code>、<code>admin/config.js</code>。</li>
-<li>默认读取本地 <code>publish/publish.config.json</code> 的 <code>services</code>（Supervisor 进程名 → 健康检查端口），只重启选中模块对应的实例并逐个验证本机 <code>/health/ready</code>。实例支持 <code>config-center-1/2</code>、<code>sdk-core-1/2/3</code> 等名称；新增实例只需改 JSON。<code>-SkipRestart</code> 可跳过这一阶段。</li>
-<li><strong>单次发布不是跨多个文件的事务</strong>；更新、重启或验活失败不会自动回滚，可能需要人工修复。Nginx 静态 upstream 不自动根据健康端点摘流量，两个 Core 顺序重启不保证零中断。</li>
+<li>上传后校验 SHA-256、架构、归档内容、所选服务；校验成功再把文件逐个写入同目录临时文件并重命名替换，保留 <code>config/</code>、<code>logs/</code>、<code>ops/</code>、<code>admin/config.js</code>，不从归档复制 <code>run/</code>。</li>
+<li>默认按脚本定义的 2/4/4 实例清单重启选中模块，逐个执行 Nginx 流量摘除、Supervisor 重启、<code>/health/ready</code> 检查与流量恢复。可选接入端通过本地 <code>publish/publish.config.json</code> 的 <code>services</code> 配置。<code>-SkipRestart</code> 可跳过这一阶段。</li>
+<li><strong>单次发布不是跨多个文件的事务</strong>；更新、重启或验活失败不会自动回滚，可能需要人工修复。Nginx 不主动探测健康端点；滚动发布由服务器现有控制脚本摘除、恢复实例，但不保证严格零错误。</li>
 <li>发布后还需人工抽查充值订单、配置同步和事件上报等关键业务，确认未发生接口或配置不兼容。</li>
 </ol>
 <h2 id="production-7">7. 日志、停服与排障</h2>
@@ -592,7 +597,7 @@ sudo monit status</code></pre></div>
 <li>发送 SIGTERM：Ready 先变为 503，HTTP 在途请求完成或超时，后台 Worker 停止领取任务，进程在 Supervisor 等待期限内退出。</li>
 <li>确认 SDK Core 未完成的发货任务仍由数据库租约与现有重试机制接管；发货仍是至少一次，游戏侧必须幂等。</li>
 </ul>
-<p>发布包会交付 <code>ops/</code> 模板，但发布脚本不会自动安装或重载 Supervisor/Monit/Nginx。部署细节见仓库 <code>ops/README.md</code>。本节描述基础进程恢复；2/4/4 Nginx 滚动更新见下一节。</p>
+<p><code>ops/</code> 不进入发布包，运维模板和脚本由管理员手动部署及更新。滚动发布会调用服务器现有控制脚本摘除、恢复流量并重载 Nginx，但不会覆盖系统配置。部署细节见仓库 <code>ops/README.md</code>。本节描述基础进程恢复；2/4/4 Nginx 滚动更新见下一节。</p>
 <h2 id="production-13">2/4/4 Nginx 安全滚动更新</h2>
 <p>单机部署固定为 <code>/data/middle-platform</code>，实例为 Config Center 2 个（8201–8202）、SDK Core 4 个（8211–8214）、SDK Service 4 个（8221–8224）。所有 Go 实例只监听 <code>127.0.0.1</code>，由 Nginx 统一接入。Supervisor 管理 Go 进程；systemd 管理 Supervisor、Monit 和 Nginx；Monit 只检测假死并请求 Supervisor 重启，不由 Supervisor 管理 Monit。</p>
 <h3>Nginx upstream 与路由</h3>
@@ -613,7 +618,7 @@ sudo monit status</code></pre></div>
 </ol>
 <p>发布脚本一次只摘除一个实例，并拒绝摘除某个 upstream 的最后一个可用节点。重启、Ready 或 Nginx reload 失败时立即停止后续发布，故障实例保持摘除。脚本不自动回滚二进制；需人工排查并在 Ready 恢复后重新加入流量。</p>
 <h3>首次安装与权限</h3>
-<p>先将 <code>ops/nginx/middle-platform-upstreams.conf</code> 放入 Nginx HTTP include 目录，将 <code>middle-platform-locations.conf</code> 合并进现有 <code>server</code>，在主配置上下文加入 <code>worker_shutdown_timeout 75s</code>，再使用 <code>ops/nginx/install-runtime.sh</code> 初始化 <code>/data/middle-platform/run/nginx/</code>。不要覆盖现有 TLS、域名、访问控制和静态管理端配置。</p>
+<p>手动部署 <code>ops/nginx/middle-platform.conf</code> 到 Nginx HTTP include 目录，在主配置上下文加入 <code>worker_shutdown_timeout 75s</code>，从仓库 <code>run/nginx/</code> 手动复制缺失的三个 upstream 初始文件至 <code>/data/middle-platform/run/nginx/</code>。同时手动复制 <code>ops/nginx/upstream-control.sh</code> 至服务器 <code>/data/middle-platform/ops/nginx/upstream-control.sh</code> 并设置 0755 权限。已有运行状态不要覆盖；不要丢失现有 TLS、域名、访问控制和静态管理端配置。</p>
 <p>SSH 发布用户必须具有对 runtime upstream 文件和 <code>.publish.lock</code> 的写权限，并通过受限 sudo 规则运行实际路径下的 <code>nginx -t</code>、<code>nginx -T</code> 和 <code>systemctl reload nginx</code>。发布脚本使用 <code>sudo -n</code>，权限未配置时会在替换应用文件前失败。Monit 检查与重启也使用共享发布锁，避免与滚动更新并发操作。首次安装步骤、Monit 与 Supervisor 配置见仓库 <code>ops/README.md</code> 和 <code>ops/nginx/README.md</code>。</p>
 <p>这是单机多实例滚动部署，不等于跨机器集群，也不承诺严格零错误或自动版本回滚；共享 MySQL 故障、全部实例故障和应用逻辑错误仍会影响业务。</p>
 </p></article><footer class="footer">研发中台 · 开发与运维手册 · <a href="index.html">统一接口文档</a></footer></div></div>
