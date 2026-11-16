@@ -7,9 +7,10 @@ case "$LOAD_PROFILE" in
   baseline) rates=(25 50 100); duration=30s ;;
   stress) rates=(100 250 500 1000); duration=30s ;;
   soak) rates=(50); duration=30m ;;
+  soak2h) rates=(50); duration=2h ;;
   *) exit 2 ;;
 esac
-if [[ "$LOAD_PROFILE" == soak && "$LOAD_SCENARIO" == all ]]; then LOAD_SCENARIO=mixed; fi
+if [[ ( "$LOAD_PROFILE" == soak || "$LOAD_PROFILE" == soak2h ) && "$LOAD_SCENARIO" == all ]]; then LOAD_SCENARIO=mixed; fi
 requested_scenario="$LOAD_SCENARIO"
 case "$LOAD_SCENARIO" in
   all) scenarios=(config-sync sdk-config user-check order duplicate payment mixed) ;;

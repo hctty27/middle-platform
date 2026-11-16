@@ -113,33 +113,50 @@ func VerifySubscriberHMACRequest(r *http.Request, secret string, body []byte, no
 	return verifyHMACRequest(r, secret, code, body, now)
 }
 
+// Store fixed-size keys and group expirations by second. Full caches reject new
+// requests without evicting live nonces; cleanup never scans the entire key map.
 type adminNonceCache struct {
 	mu          sync.Mutex
-	used        map[string]int64
-	lastCleanup time.Time
+	used        map[[32]byte]int64
+	expirations map[int64][][32]byte
+	lastCleanup int64
+	limit       int
 }
 
 func (c *adminNonceCache) use(nonce string, expiresAt int64, now time.Time) bool {
+	key := sha256.Sum256([]byte(nonce))
+	second := now.Unix()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.used == nil {
-		c.used = make(map[string]int64)
+		c.used = make(map[[32]byte]int64)
+		c.expirations = make(map[int64][][32]byte)
 	}
-	if now.Sub(c.lastCleanup) >= time.Minute || len(c.used) >= adminNonceLimit {
-		for key, until := range c.used {
-			if until <= now.Unix() {
-				delete(c.used, key)
+	limit := c.limit
+	if limit <= 0 {
+		limit = adminNonceLimit
+	}
+	if second != c.lastCleanup {
+		for until, keys := range c.expirations {
+			if until <= second {
+				for _, expiredKey := range keys {
+					if c.used[expiredKey] == until {
+						delete(c.used, expiredKey)
+					}
+				}
+				delete(c.expirations, until)
 			}
 		}
-		c.lastCleanup = now
+		c.lastCleanup = second
 	}
-	if until, ok := c.used[nonce]; ok && until > now.Unix() {
+	if _, ok := c.used[key]; ok {
 		return false
 	}
-	if len(c.used) >= adminNonceLimit {
+	if len(c.used) >= limit {
 		return false
 	}
-	c.used[nonce] = expiresAt
+	c.used[key] = expiresAt
+	c.expirations[expiresAt] = append(c.expirations[expiresAt], key)
 	return true
 }
 
@@ -219,7 +236,13 @@ func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) 
 
 // RequestSubscriberHMACMiddleware 按 X-Subscriber-Code 查询独立密钥并验签。
 func RequestSubscriberHMACMiddleware(next http.Handler, prefixes []string, lookup SubscriberSecretLookup) http.Handler {
-	cache := &adminNonceCache{}
+	return RequestSubscriberHMACMiddlewareWithNonceLimit(next, prefixes, lookup, adminNonceLimit)
+}
+
+// RequestSubscriberHMACMiddlewareWithNonceLimit allows a bounded per-process
+// replay cache sized for the receiving service. A non-positive limit keeps the default.
+func RequestSubscriberHMACMiddlewareWithNonceLimit(next http.Handler, prefixes []string, lookup SubscriberSecretLookup, limit int) http.Handler {
+	cache := &adminNonceCache{limit: limit}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !protectedPath(r.URL.Path, prefixes) {
 			next.ServeHTTP(w, r)

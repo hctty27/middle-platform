@@ -74,10 +74,11 @@ func Run(configPath string) error {
 	var handler http.Handler = signature.AdminMiddleware(
 		api.RouterWithWrites(repository, repository), "/api/config/admin", cfg.AdminSecret,
 	)
-	handler = signature.RequestSubscriberHMACMiddleware(
+	handler = signature.RequestSubscriberHMACMiddlewareWithNonceLimit(
 		handler,
 		[]string{"/api/config/sync", "/api/config/nodes"},
 		repository.SubscriberSecret,
+		320000, // 每实例同步请求 nonce 容量；管理接口保持原有上限。
 	)
 	health := bootstrap.NewHealthState()
 	health.SetReady(true)

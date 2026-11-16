@@ -5,7 +5,7 @@ on:
       profile:
         description: Load profile (all traffic stays on this runner)
         type: choice
-        options: [smoke, baseline, stress, soak]
+        options: [smoke, baseline, stress, soak, soak2h]
         default: smoke
       topology:
         description: Instance topology
@@ -33,7 +33,7 @@ jobs:
   load:
     runs-on: ubuntu-24.04
     name: Load (${{ matrix.label }})
-    timeout-minutes: 55
+    timeout-minutes: ${{ matrix.profile == 'soak2h' && 150 || 55 }}
     strategy:
       fail-fast: false
       matrix:
