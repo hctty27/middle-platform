@@ -552,7 +552,7 @@ var integrationSchema = []string{
 		game_id BIGINT NULL,region_id BIGINT NULL,
 		node_type VARCHAR(20) NOT NULL,env_type VARCHAR(16) NULL,market_type VARCHAR(16) NULL,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
 		name VARCHAR(128) NOT NULL,status TINYINT NOT NULL DEFAULT 1,config JSON NOT NULL,
-		remark VARCHAR(500),created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
+		remark VARCHAR(500),created_at DATETIME(3) NOT NULL,updated_at DATETIME(3) NOT NULL,
 		CONSTRAINT chk_config_node_type CHECK(node_type IN ('game','region','server_group')),
 		CONSTRAINT chk_config_node_status CHECK(status IN(0,1)),
         CONSTRAINT chk_config_node_env_type CHECK(
@@ -598,25 +598,25 @@ var integrationSchema = []string{
 		code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,name VARCHAR(128) NOT NULL,
 		status TINYINT NOT NULL,config JSON NOT NULL,remark VARCHAR(500) NULL,
         prod_server_group_id BIGINT NULL,test_server_group_id BIGINT NULL,review_server_group_id BIGINT NULL,
-        created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
+        created_at DATETIME(3) NOT NULL,updated_at DATETIME(3) NOT NULL,
         UNIQUE KEY uq_channel_app_code(code)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
 	`CREATE TABLE config_node_change_log(
 		revision BIGINT NOT NULL PRIMARY KEY,node_id BIGINT NOT NULL,operation VARCHAR(10) NOT NULL,
-		created_at DATETIME(6) NOT NULL,KEY idx_change_node(node_id),
+		created_at DATETIME(3) NOT NULL,KEY idx_change_node(node_id),
 		CONSTRAINT chk_change_operation CHECK(operation IN ('UPSERT','DELETE'))
 	) ENGINE=InnoDB`,
 	`CREATE TABLE config_subscriber(
 		id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,code VARCHAR(128) COLLATE utf8mb4_bin NOT NULL UNIQUE,
 		callback_url VARCHAR(1024) NOT NULL,signing_secret VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,enabled TINYINT NOT NULL DEFAULT 1,
-		created_at DATETIME(6) NOT NULL,updated_at DATETIME(6) NOT NULL,
+		created_at DATETIME(3) NOT NULL,updated_at DATETIME(3) NOT NULL,
 		UNIQUE KEY uq_config_subscriber_signing_secret(signing_secret)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	`CREATE TABLE config_subscriber_delivery_state(
 		subscriber_id BIGINT NOT NULL PRIMARY KEY,acknowledged_revision BIGINT NOT NULL DEFAULT 0,
-		acknowledged_epoch CHAR(36) NULL,lease_owner VARCHAR(64) NULL,lease_until DATETIME(6) NULL,
-		next_attempt_at DATETIME(6) NOT NULL,failure_count INT NOT NULL DEFAULT 0,last_error VARCHAR(500) NULL,
-		updated_at DATETIME(6) NOT NULL,
+		acknowledged_epoch CHAR(36) NULL,lease_owner VARCHAR(64) NULL,lease_until DATETIME(3) NULL,
+		next_attempt_at DATETIME(3) NOT NULL,failure_count INT NOT NULL DEFAULT 0,last_error VARCHAR(500) NULL,
+		updated_at DATETIME(3) NOT NULL,
 		FOREIGN KEY(subscriber_id) REFERENCES config_subscriber(id) ON DELETE CASCADE
 	) ENGINE=InnoDB`,
 }

@@ -108,7 +108,7 @@ func TestLocalDateTimeContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, field := range []string{"createdAt", "updatedAt"} {
-		if fields[field] != "2026-11-15T18:05:06.123456Z" {
+		if fields[field] != "2026-11-15T18:05:06Z" {
 			t.Fatalf("%s is not UTC: %s", field, out)
 		}
 	}

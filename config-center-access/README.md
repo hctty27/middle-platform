@@ -28,7 +28,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 
 ## 内部 UTC 时间
 
-接入端接受新带时区 RFC3339 时间并转 UTC，旧无时区字符串按 UTC 解释；本地 revision 的 `updated_at` 以 UTC RFC3339Nano（带 `Z`）输出，详见[权威接口文档的内部时间约定](../admin/public/docs/index.html#s-intro)。部署必须先升级所有 access，再升级 center；回滚顺序相反，先由 center 恢复旧输出，再回滚 access。历史无时区字段不得自动批量加减 8 小时，详见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
+接入端接受带时区的 RFC3339 时间并转 UTC，也接受更长的小数秒；旧无时区字符串按 UTC 解释。本地 revision 的 `updated_at` 以 UTC 的 RFC3339 输出，不带小数秒，详见[权威接口文档的内部时间约定](../admin/public/docs/index.html#s-intro)。已有副本库执行 `db/incremental/V0017__config_access_millisecond_timestamps.sql`。历史无时区字段不得自动批量加减 8 小时，详见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
 
 ```bash
 go test -race ./...

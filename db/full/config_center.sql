@@ -23,8 +23,8 @@ CREATE TABLE config_node (
     status TINYINT NOT NULL DEFAULT 1,
     config JSON NOT NULL,
     remark VARCHAR(500) NULL,
-    created_at DATETIME(6) NOT NULL,
-    updated_at DATETIME(6) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
     UNIQUE KEY uq_config_node_sibling (node_type, code, ((COALESCE(region_id, game_id, 0)))),
     KEY idx_config_node_game_type (game_id, node_type),
     KEY idx_config_node_region_type (region_id, node_type),
@@ -59,7 +59,7 @@ CREATE TABLE config_node_change_log (
     revision BIGINT NOT NULL PRIMARY KEY,
     node_id BIGINT NOT NULL,
     operation VARCHAR(10) NOT NULL,
-    created_at DATETIME(6) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
     KEY idx_change_node (node_id),
     CONSTRAINT chk_change_operation CHECK (operation IN ('UPSERT', 'DELETE'))
 ) ENGINE=InnoDB COMMENT='三级配置节点变更日志';
@@ -70,8 +70,8 @@ CREATE TABLE config_subscriber (
     callback_url VARCHAR(1024) NOT NULL,
     signing_secret VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
     enabled TINYINT NOT NULL DEFAULT 1,
-    created_at DATETIME(6) NOT NULL,
-    updated_at DATETIME(6) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
     UNIQUE KEY uq_config_subscriber_signing_secret(signing_secret)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='配置订阅者与回调接入信息';
 
@@ -79,11 +79,11 @@ CREATE TABLE config_subscriber_delivery_state (
     subscriber_id BIGINT NOT NULL PRIMARY KEY,
     acknowledged_revision BIGINT NOT NULL DEFAULT 0,
     lease_owner VARCHAR(64) NULL,
-    lease_until DATETIME(6) NULL,
-    next_attempt_at DATETIME(6) NOT NULL,
+    lease_until DATETIME(3) NULL,
+    next_attempt_at DATETIME(3) NOT NULL,
     failure_count INT NOT NULL DEFAULT 0,
     last_error VARCHAR(500) NULL,
-    updated_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
     acknowledged_epoch CHAR(36) NULL,
     FOREIGN KEY (subscriber_id) REFERENCES config_subscriber(id) ON DELETE CASCADE
 ) ENGINE=InnoDB COMMENT='订阅者回调投递状态、租约和失败重试';
@@ -96,8 +96,8 @@ CREATE TABLE sdk_channel_app (
     status TINYINT NOT NULL DEFAULT 1,
     config JSON NOT NULL,
     remark VARCHAR(500) NULL,
-    created_at DATETIME(6) NOT NULL,
-    updated_at DATETIME(6) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
     prod_server_group_id BIGINT NULL COMMENT '正式服区服组',
     test_server_group_id BIGINT NULL COMMENT '测试服区服组',
     review_server_group_id BIGINT NULL COMMENT '提审服区服组',

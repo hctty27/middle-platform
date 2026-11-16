@@ -94,7 +94,7 @@ WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", 
       (id,node_type,market_type,code,name,status,config,created_at,updated_at)
       VALUES(801,'game','domestic','sdk_demo','SDK Demo',1,
       '{"gameSecret":"example-key","serviceAdapters":{"user_check":"standard"},"custom":"keep"}',
-      UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+      UTC_TIMESTAMP(3),UTC_TIMESTAMP(3));""")
     mysql("RENAME TABLE manual_fresh.sdk_channel_app TO manual_fresh.config_channel_app")
     sdk_migration = source("db/incremental/V0009__migrate_sdk_node_config.sql")
     # 新库已有 sdk_node_config，只执行数据复制段和表重命名，完整 SQL 应在旧库执行。
@@ -112,7 +112,7 @@ WHERE table_schema='manual_fresh' AND table_name='config_schema_migrations'""", 
 ALTER TABLE manual_market_upgrade.config_node DROP COLUMN market_type;
 INSERT INTO manual_market_upgrade.config_node
 (id,node_type,code,name,status,config,created_at,updated_at)
-VALUES(901,'game','legacy','Legacy',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+VALUES(901,'game','legacy','Legacy',1,'{}',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3));""")
     market_migration = source("db/incremental/V0011__add_game_market_type.sql")
     mysql(database="manual_market_upgrade", script=market_migration)
     assert_sql("SELECT market_type FROM manual_market_upgrade.config_node WHERE id=901", "domestic")
@@ -154,7 +154,7 @@ id TINYINT PRIMARY KEY,version INT NOT NULL,dirty BOOLEAN NOT NULL,updated_at DA
 INSERT INTO manual_existing.config_schema_migrations VALUES(1,11,0,UTC_TIMESTAMP(6));
 INSERT INTO manual_existing.config_node
 (id,node_type,market_type,code,name,status,config,created_at,updated_at)
-VALUES(101,'game','domestic','demo','Demo',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
+VALUES(101,'game','domestic','demo','Demo',1,'{}',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3));""")
     mysql(database="manual_existing", script=order)
     assert_sql("SELECT COUNT(*) FROM manual_existing.config_node WHERE id=101", "1")
     assert_sql("SELECT version,dirty FROM manual_existing.config_schema_migrations WHERE id=1", "11\t0")

@@ -44,7 +44,7 @@ func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequ
 	}
 	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `INSERT INTO config_subscriber(code,callback_url,signing_secret,enabled,created_at,updated_at)
-		VALUES(?,?,?,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`, input.Code, input.CallbackURL, input.Secret)
+		VALUES(?,?,?,1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`, input.Code, input.CallbackURL, input.Secret)
 	if err != nil {
 		return databaseError(err)
 	}
@@ -53,7 +53,7 @@ func (s *Store) CreateSubscriber(ctx context.Context, input CreateSubscriberRequ
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO config_subscriber_delivery_state(subscriber_id,next_attempt_at,updated_at)
-		VALUES(?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`, id)
+		VALUES(?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`, id)
 	if err != nil {
 		return err
 	}
@@ -89,10 +89,10 @@ func (s *Store) UpdateSubscriber(ctx context.Context, id int64, input UpdateSubs
 	}
 	if input.Secret == "" {
 		_, err = tx.ExecContext(ctx, `UPDATE config_subscriber
-			SET callback_url=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`, input.CallbackURL, id)
+			SET callback_url=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?`, input.CallbackURL, id)
 	} else {
 		_, err = tx.ExecContext(ctx, `UPDATE config_subscriber
-			SET callback_url=?,signing_secret=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`,
+			SET callback_url=?,signing_secret=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?`,
 			input.CallbackURL, input.Secret, id)
 	}
 	if err != nil {
@@ -115,7 +115,7 @@ func (s *Store) SetSubscriberEnabled(ctx context.Context, id int64, enabled bool
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE config_subscriber
-		SET enabled=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`, enabled, id); err != nil {
+		SET enabled=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?`, enabled, id); err != nil {
 		return err
 	}
 	return tx.Commit()

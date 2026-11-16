@@ -112,7 +112,7 @@ func newHandler(output io.Writer, c Config) slog.Handler {
 		Level: levels[strings.ToLower(c.Level)],
 		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
 			if len(groups) == 0 && attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
-				return slog.Time(attr.Key, attr.Value.Time().UTC())
+				return slog.String(attr.Key, attr.Value.Time().UTC().Format(time.RFC3339))
 			}
 			return attr
 		},

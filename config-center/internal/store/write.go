@@ -46,7 +46,7 @@ func recordChange(ctx context.Context, tx *sql.Tx, nodeID int64, operation strin
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO config_node_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))", current.Revision, nodeID, operation)
+	_, err = tx.ExecContext(ctx, "INSERT INTO config_node_change_log(revision,node_id,operation,created_at) VALUES(?,?,?,UTC_TIMESTAMP(3))", current.Revision, nodeID, operation)
 	return err
 }
 
@@ -103,7 +103,7 @@ func (s *Store) Create(ctx context.Context, input CreateNodeRequest) (Node, erro
 		marketType = &defaultMarket
 	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO config_node(game_id,region_id,node_type,env_type,market_type,code,name,status,config,remark,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,
+        VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
 		gameID, regionID, input.NodeType, input.EnvType, marketType, input.Code, input.Name, *input.Status, input.Config, input.Remark)
 	if err != nil {
 		return Node{}, databaseError(err)
@@ -173,7 +173,7 @@ func (s *Store) Update(ctx context.Context, id int64, input UpdateNodeRequest) (
 		return Node{}, err
 	}
 	if !unchanged.Valid || !unchanged.Bool {
-		_, err := tx.ExecContext(ctx, `UPDATE config_node SET name=?,status=?,config=?,remark=?,env_type=?,market_type=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?`,
+		_, err := tx.ExecContext(ctx, `UPDATE config_node SET name=?,status=?,config=?,remark=?,env_type=?,market_type=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?`,
 			input.Name, *input.Status, input.Config, input.Remark, input.EnvType, marketType, id)
 		if err != nil {
 			return Node{}, databaseError(err)

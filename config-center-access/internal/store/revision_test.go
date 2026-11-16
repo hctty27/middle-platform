@@ -57,7 +57,7 @@ func TestRevisionTimeUTC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got["epoch"] != "epoch-1" || got["revision"] != int64(7) || got["updated_at"] != "2026-11-15T18:05:06.123456Z" {
+	if got["epoch"] != "epoch-1" || got["revision"] != int64(7) || got["updated_at"] != "2026-11-15T18:05:06Z" {
 		t.Fatalf("unexpected revision: %v", got)
 	}
 }

@@ -183,7 +183,7 @@ func (s *Replica) Apply(ctx context.Context, expected, next State, nodes []remot
 		epoch = nil
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE config_sync_state
-		SET epoch=?,revision=?,updated_at=UTC_TIMESTAMP(6) WHERE id=1`,
+		SET epoch=?,revision=?,updated_at=UTC_TIMESTAMP(3) WHERE id=1`,
 		epoch, next.Revision)
 	if err != nil {
 		return false, err
@@ -280,7 +280,7 @@ func (s *Replica) Revision(ctx context.Context) (map[string]any, error) {
 		val = epoch.String
 	}
 	return map[string]any{"epoch": val, "revision": rev,
-		"updated_at": updated.UTC().Format(time.RFC3339Nano)}, nil
+		"updated_at": updated.UTC().Format(time.RFC3339)}, nil
 }
 
 // Ready 用真实数据库 Ping 校验服务是否可工作。

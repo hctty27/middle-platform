@@ -182,7 +182,7 @@ func (h *adminStore) createChannelApp(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO sdk_channel_app
       (game_id,code,name,status,config,remark,prod_server_group_id,test_server_group_id,review_server_group_id,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))`,
+      VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
 		req.GameID, req.Code, req.Name, *req.Status, req.Config, nullableText(req.Remark),
 		nullableID(req.ProdServerGroupID), nullableID(req.TestServerGroupID), nullableID(req.ReviewServerGroupID))
 	if err != nil {
@@ -248,7 +248,7 @@ func (h *adminStore) updateChannelApp(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE sdk_channel_app SET name=?,status=?,config=?,remark=?,
       prod_server_group_id=?,test_server_group_id=?,review_server_group_id=?,
-      updated_at=UTC_TIMESTAMP(6) WHERE id=?`, req.Name, *req.Status, req.Config, nullableText(req.Remark),
+      updated_at=UTC_TIMESTAMP(3) WHERE id=?`, req.Name, *req.Status, req.Config, nullableText(req.Remark),
 		nullableID(req.ProdServerGroupID), nullableID(req.TestServerGroupID), nullableID(req.ReviewServerGroupID), id)
 	if err != nil {
 		adminError(w, 409, "更新渠道包违反数据库约束")

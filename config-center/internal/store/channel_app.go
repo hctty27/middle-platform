@@ -101,7 +101,7 @@ func (s *Store) CreateChannelApp(ctx context.Context, input model.CreateChannelA
 	if err := validateAppGroups(ctx, tx, input.GameID, input.ProdServerGroupID, input.TestServerGroupID, input.ReviewServerGroupID); err != nil {
 		return model.ChannelApp{}, err
 	}
-	res, err := tx.ExecContext(ctx, "INSERT INTO sdk_channel_app(game_id,code,name,status,config,remark,prod_server_group_id,test_server_group_id,review_server_group_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))", input.GameID, input.Code, input.Name, *input.Status, input.Config, input.Remark, input.ProdServerGroupID, input.TestServerGroupID, input.ReviewServerGroupID)
+	res, err := tx.ExecContext(ctx, "INSERT INTO sdk_channel_app(game_id,code,name,status,config,remark,prod_server_group_id,test_server_group_id,review_server_group_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", input.GameID, input.Code, input.Name, *input.Status, input.Config, input.Remark, input.ProdServerGroupID, input.TestServerGroupID, input.ReviewServerGroupID)
 	if err != nil {
 		return model.ChannelApp{}, databaseError(err)
 	}
@@ -136,7 +136,7 @@ func (s *Store) UpdateChannelApp(ctx context.Context, id int64, input model.Upda
 	if err := validateAppGroups(ctx, tx, existing.GameID, input.ProdServerGroupID, input.TestServerGroupID, input.ReviewServerGroupID); err != nil {
 		return model.ChannelApp{}, err
 	}
-	_, err = tx.ExecContext(ctx, "UPDATE sdk_channel_app SET name=?,status=?,config=?,remark=?,prod_server_group_id=?,test_server_group_id=?,review_server_group_id=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?", input.Name, *input.Status, input.Config, input.Remark, input.ProdServerGroupID, input.TestServerGroupID, input.ReviewServerGroupID, id)
+	_, err = tx.ExecContext(ctx, "UPDATE sdk_channel_app SET name=?,status=?,config=?,remark=?,prod_server_group_id=?,test_server_group_id=?,review_server_group_id=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?", input.Name, *input.Status, input.Config, input.Remark, input.ProdServerGroupID, input.TestServerGroupID, input.ReviewServerGroupID, id)
 	if err != nil {
 		return model.ChannelApp{}, databaseError(err)
 	}

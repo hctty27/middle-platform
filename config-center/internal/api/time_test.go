@@ -42,7 +42,7 @@ func TestSyncHTTPTimeUTC(t *testing.T) {
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
-			if !json.Valid(recorder.Body.Bytes()) || strings.Count(recorder.Body.String(), `"2026-11-15T18:05:06.123456Z"`) != tc.count {
+			if !json.Valid(recorder.Body.Bytes()) || strings.Count(recorder.Body.String(), `"2026-11-15T18:05:06Z"`) != tc.count {
 				t.Fatalf("unexpected sync times: %s", recorder.Body.String())
 			}
 		})

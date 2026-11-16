@@ -29,7 +29,7 @@ var (
 type LocalDateTime time.Time
 
 func (t LocalDateTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Time(t).UTC().Format(time.RFC3339Nano))
+	return json.Marshal(time.Time(t).UTC().Format(time.RFC3339))
 }
 
 // Node 定义完整配置节点及层级字段。

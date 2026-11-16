@@ -18,7 +18,7 @@ go run ./cmd/config-center -config configs/config-dev.yaml
 
 ## 内部 UTC 时间
 
-内部时间输出遵循[权威接口文档的内部时间约定](../admin/public/docs/index.html#s-intro)。本次统一 DB 驱动和会话时区，不改变连接池、超时、表精度或历史数据，也不改变外部 Unix 秒、签名及支付回调协议。部署必须先升级所有 access，再升级 center；回滚先由 center 恢复旧输出，再回滚 access，详见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
+内部时间输出遵循[权威接口文档的内部时间约定](../admin/public/docs/index.html#s-intro)：UTC 的 RFC3339，不带小数秒。已有权威库执行 `db/incremental/V0016__config_center_millisecond_timestamps.sql`。不改变外部 Unix 秒、签名及支付回调协议。时区升级的发布顺序见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
 
 ## 安全与参考
 
