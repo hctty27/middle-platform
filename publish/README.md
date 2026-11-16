@@ -1,74 +1,94 @@
-# 本地打包与发布
+# 本地打包与安全滚动发布
 
-在 Windows/PowerShell 上构建 Linux ELF、Vue 静态文件和运维模板，经 SSH/SCP 上传到现有服务器目录并直接更新。**不使用 releases 版本目录，不提供自动或手动回滚功能**；数据库 SQL 永远由管理员手动执行。
+在 Windows/PowerShell 上构建 Linux ELF、Vue 静态文件和运维模板，经 SSH/SCP 上传到 Linux 服务器。生产目录统一为 `/data/middle-platform`。数据库 SQL 仅分发，不会自动执行。
 
-## 首次配置
+## 生产实例拓扑
 
-复制 `publish.config.example.json` 为本地 `publish.config.json`，填写 `host`、`port`、`user`、`remoteDirectory`。该文件已加入 `.gitignore`，不要提交账号或密码。
-
-自动重启只需在本地 `publish.config.json` 配置 `services`：**键是 Supervisor 进程名，值是该实例的本机健康检查端口**。
+`publish.config.json` 的 `services` 必须包含完整的 2/5/5 实例及固定本机健康端口：
 
 ```json
-"services": {
-  "config-center-1": 8201,
-  "config-center-2": 8202,
-  "sdk-core-1": 8211,
-  "sdk-core-2": 8212,
-  "sdk-core-3": 8213,
-  "sdk-service": 8221
+{
+  "remoteDirectory": "/data/middle-platform",
+  "services": {
+    "config-center-1": 8201,
+    "config-center-2": 8202,
+    "sdk-core-1": 8211,
+    "sdk-core-2": 8212,
+    "sdk-core-3": 8213,
+    "sdk-core-4": 8214,
+    "sdk-core-5": 8215,
+    "sdk-service-1": 8221,
+    "sdk-service-2": 8222,
+    "sdk-service-3": 8223,
+    "sdk-service-4": 8224,
+    "sdk-service-5": 8225
+  }
 }
 ```
 
-示例对应 `ops/supervisor/middle-platform.conf`。如需部署多个配置中心实例，可将 Supervisor program 扩展为 `config-center-1`、`config-center-2` 并分别配置端口；`sdk-core`、`sdk-service` 和 `config-center-access` 也支持相同的实例命名规则。只接受 **模块名** 或 **模块名-正整数**，不会将 `config-center-access` 误认为 `config-center`。
+实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。可额外配置可选的 `config-center-access: 8291`，但它不属于当前 2/5/5 Nginx upstream。
 
-例如 `-Service config-center` 只重启已配置的 `config-center-1`、`config-center-2`；全量发布仅重启 `services` 中列出的实例，不执行 `supervisorctl restart all`。发布时按 JSON 声明的顺序逐个重启，每个都使用 `http://127.0.0.1:<端口>/health/ready` 验活。后续添加实例只改 JSON，不改脚本。若未配置匹配实例，发布在本地就会终止，避免更新文件后无法重启。执行 `-SkipRestart` 时不需要配置 `services`。
+## 首次部署前必须完成
 
-仅将经过严格校验的进程名与端口计划传给远端脚本，**绝不上传含主机、密码的完整 publish.config.json**。
+1. 按 [ops/README.md](../ops/README.md) 安装并启用 Supervisor、Monit。
+2. 按 [ops/nginx/README.md](../ops/nginx/README.md) 安装 Nginx upstream include、合并三个 API location、配置 `worker_shutdown_timeout 75s`，初始化 `/data/middle-platform/run/nginx/`。
+3. 确认 Nginx 由 systemd 管理且处于 active 状态。
+4. 为 SSH 部署用户配置受限免密 sudo：仅允许实际路径下的 `nginx -t`、`nginx -T`、`systemctl reload nginx`。发布脚本使用 `sudo -n`，不会交互式提权。
+5. 确认 12 个 Supervisor program 均存在，SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
 
-推荐 SSH Ed25519 私钥认证（`password` 留空，SSH 可以交互输入口令）；若配置了明文 `password`，现有兼容逻辑会临时调用 `askpass.exe`，并只响应密码提示，不会自动信任未知 SSH 主机指纹。首次发布应手动 `ssh` 确认指纹。
+如果这些前置条件未完成，正常发布会在替换应用文件前失败。首次安装 Nginx 与系统服务配置必须由管理员审核，不会由发布脚本自动覆盖。
 
 ## 使用命令
 
 ```powershell
-# 完整打包，不上传；正式构建仍使用 npm ci
+# 完整打包，不上传
 .\scripts\package.ps1 -Version v1.0.0
 
-# 单独构建 SDK Core，或者仅构建管理端
-.\scripts\package.ps1 -Version local-core -Service sdk-core
-.\scripts\package.ps1 -Version local-admin -Service admin -Fast
-
-# 默认：打包、上传、校验、直接更新、重启 Supervisor 并验活
+# 完整发布：校验、逐实例 Nginx 摘除、Supervisor 重启、Ready 验活、重新加入
 .\publish\publish.ps1 -Version v1.0.0
 
-# 只发布 sdk-core；保留其他服务二进制和 admin
+# 只滚动更新 SDK Core 的 5 个实例
 .\publish\publish.ps1 -Service sdk-core -Version v1.0.1
 
-# 快速构建：仅当 lock 文件哈希匹配时复用 node_modules
-.\publish\publish.ps1 -Version v1.0.2 -Fast
+# 只滚动更新配置中心的 2 个实例
+.\publish\publish.ps1 -Service config-center -Version v1.0.2
 
-# 已有同名归档，跳过编译；归档必须符合所选 Service
-.\publish\publish.ps1 -Version v1.0.2 -SkipBuild
+# 只滚动更新 SDK Service 的 5 个实例
+.\publish\publish.ps1 -Service sdk-service -Version v1.0.3
 
-# 只更新文件，不重启进程
-.\publish\publish.ps1 -Version v1.0.3 -SkipRestart
+# 只更新文件，不重启、不执行 Nginx 摘除
+.\publish\publish.ps1 -Version v1.0.4 -SkipRestart
 ```
 
-`-Service` 可选 `all`（默认）、`config-center`、`config-center-access`、`sdk-core`、`sdk-service`、`admin`。单独选服务时不构建 Vue；仅 `all` 模式默认构建 Vue，`admin` 仅构建 Vue。兼容 `-SkipFrontend`（不能与 `-Service admin` 同时使用）、`-Arch amd64|arm64` 和覆盖服务器参数 `-ServerHost`、`-Port`、`-User`、`-RemoteDirectory`。
+`-Service` 支持 `all`（默认）、`config-center`、`sdk-core`、`sdk-service`、可选的 `config-center-access` 和 `admin`。单独发布后端服务时不构建 Vue；`admin` 只构建前端。兼容 `-SkipFrontend`、`-Arch amd64|arm64`、`-Fast`、`-SkipBuild`、`-SkipRestart` 和覆盖服务器参数。
 
-`-SkipBuild` 必须显式指定 `-Version`，避免错误地上传历史文件。归档由本地包校验和服务器 SHA-256、架构、文件类型、服务选择器等多重检查拦截。构建失败不会连接服务器。
+## 滚动发布流程
 
-## 生产发布行为
+完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/5/5 进程与 Nginx runtime include，再原子替换文件。随后按 `services` 顺序逐个执行：
 
-本地完成构建和归档校验后上传到服务器临时目录，验证 SHA-256、文件类型、架构与选定服务，再直接更新固定的 `bin/`、`admin/`、`sql/`、`ops/`。生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；SQL 仅分发，不会自动执行；`ops/` 只交付模板，不会自动安装或重载 Supervisor/Monit。升级旧版配置同步协议时，必须先备份 `config_center`，检查并处理重复、长度不在 32–255 字节范围内或包含首尾空格的旧 `webhook_secret`，再由管理员手工执行 `sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql`。随后为每个接入端配置匹配的 `subscriber.code` / `subscriber.secret`，并同步发布配置中心与接入端；不要只更新一侧。
+1. 将当前实例在对应 Nginx upstream 标记为 `down`。
+2. 执行 `nginx -t` 并 graceful reload。
+3. 等待旧 Nginx worker 退出；`worker_shutdown_timeout 75s` 限制排空时间。
+4. 调用 `supervisorctl restart <program>`。
+5. 等待 Supervisor RUNNING，并要求本机 `/health/ready` 连续 3 次 HTTP 200。
+6. 移除 `down`，再次校验并 reload Nginx，将实例重新加入流量。
+7. 完成当前实例后才处理下一个实例。
 
-默认按 `publish.config.json` 中的 `services` 逐实例执行 Supervisor 重启与 `/health/ready` 验活；未列出的实例不会被重启。本发布流程**不提供自动回滚或零中断保证**，失败时需人工处置。Supervisor、Monit 安装和故障恢复以 [ops/README.md](../ops/README.md) 及 [生产运维](../admin/public/docs/guide.html#production) 为准。
+发布前会验证所有 Supervisor program 和 Nginx upstream 配置。一次只摘除一个实例，并拒绝摘除某个 upstream 的最后一个可用实例。若重启、Ready 或 Nginx reload 失败，发布立即停止，故障实例保持摘除，未处理的实例不再重启。修复原因并确认 Ready 后，管理员再手动恢复该实例。
 
-## CI 和自测
+这是单机多实例滚动更新，不承诺严格零错误：共享 MySQL 故障、应用逻辑错误、全部实例故障、Nginx reload 失败仍会影响业务。远端发布期间持有 `/data/middle-platform/.publish.lock`；Monit 健康检查和重启共用该锁，发布期间 Monit 跳过本轮检查，Monit 正在重启时发布会在改文件前退出。本流程不提供自动二进制回滚；发布失败时旧进程可能仍在运行，但新二进制文件已原子替换，需人工排查。
 
-仓库 `.github/workflows/package.yml` 在 Go/Vue/共享库/打包发布脚本修改后验证完整 Linux 归档，同时运行无实际 SSH 的发布冒烟测试：
+Nginx Open Source 使用被动健康检查：`max_fails=1 fail_timeout=10s`。实例故障后，真实请求触发摘除；超过失败窗口后，Nginx 会通过后续真实请求重新尝试。它不主动轮询 `/health/ready`。代理重试不启用 `non_idempotent`，避免已发送的订单登记和支付 POST 被重复提交。
+
+生产 `config/`、`logs/` 和现有 `admin/config.js` 不会覆盖；`ops/` 只交付模板，不会自动安装或重载 Supervisor/Monit/Nginx；SQL 仅分发，不自动执行。SSH 使用 Ed25519 私钥认证优先；首次连接应先手动确认主机指纹。
+
+## CI 与自测
+
+`.github/workflows/package.yml` 会验证 Linux/Windows 发布归档、运维模板、Shell 语法、Monit 检查、Nginx upstream 排空/恢复脚本，以及无实际 SSH 的发布冒烟测试：
 
 ```bash
 python -I publish/ci_publish_smoke.py
+bash ops/nginx/test-upstream-control.sh
 ```
 
-在 CI 中优先复用各 Go 模块依赖缓存；`-Fast` 只供本地快速构建，正式发布建议省略以执行 `npm ci`。
+正式发布建议省略 `-Fast`，使用锁文件执行 `npm ci`。

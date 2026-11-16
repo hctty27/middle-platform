@@ -47,6 +47,7 @@ class RemotePublishTests(unittest.TestCase):
         self.stage = self.root / (".publish-" + "a" * 32)
         self.stage.mkdir(parents=True)
         self.archive = self.stage / ARCHIVE
+        self.events = self.root / "events.log"
 
     def make_package(self, frontend=True, extra=None, omit=None, only=None):
         files = {f"bin/{name}": b"#!/bin/sh\nexit 0\n" for name in BINARIES
@@ -54,6 +55,10 @@ class RemotePublishTests(unittest.TestCase):
         files["sql/full/config_center.sql"] = b"DO NOT EXECUTE"
         files["ops/README.md"] = b"Operations templates"
         files["ops/monit/check-http-live.sh"] = b"#!/usr/bin/env bash\\nexit 0\\n"
+        files["ops/nginx/upstream-control.sh"] = (
+            b"#!/usr/bin/env bash\n"
+            b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
+        )
         if frontend:
             files.update({"admin/index.html": b"new-index", "admin/config.js": b"default-config"})
         with tarfile.open(self.archive, "w:gz") as archive:
@@ -69,19 +74,23 @@ class RemotePublishTests(unittest.TestCase):
                     restart=False, restart_fail=False, plan=None):
         digest = digest or hashlib.sha256(self.archive.read_bytes()).hexdigest()
         if plan is None:
-            plan = "sdk-core-1:8211,sdk-core-2:8212" if restart else "-"
+            plan = ",".join(f"sdk-core-{i}:{8210 + i}" for i in range(1, 6)) if restart else "-"
         extra_args = ["1" if restart else "0", service, plan] if service else []
         commands = """
 uname() { printf '%s\\n' "$TEST_MACHINE"; }
-export -f uname
+flock() { return 0; }
+export -f uname flock
 if [[ "$TEST_RESTART" == 1 ]]; then
     supervisorctl() {
         case "$1" in
             status) printf '%s RUNNING pid 100\\n' "$2" ;;
-            restart) [[ "$TEST_RESTART_FAIL" == 0 ]] ;;
+            restart)
+                printf 'restart %s\\n' "$2" >> "$TEST_EVENTS"
+                [[ "$TEST_RESTART_FAIL" == 0 ]]
+                ;;
         esac
     }
-    curl() { return 0; }
+    curl() { printf 'ready\\n' >> "$TEST_EVENTS"; return 0; }
     export -f supervisorctl curl
 fi
 exec bash "$@"
@@ -91,7 +100,8 @@ exec bash "$@"
              bash_path(self.root), bash_path(self.archive), digest, *extra_args],
             env={**os.environ, "TEST_MACHINE": machine,
                  "TEST_RESTART": "1" if restart else "0",
-                 "TEST_RESTART_FAIL": "1" if restart_fail else "0"},
+                 "TEST_RESTART_FAIL": "1" if restart_fail else "0",
+                 "TEST_EVENTS": bash_path(self.events)},
             capture_output=True, text=True,
         )
 
@@ -115,6 +125,7 @@ exec bash "$@"
         self.assertTrue((self.root / "packages" / ARCHIVE).is_file())
         self.assertEqual((self.root / "ops/README.md").read_bytes(), b"Operations templates")
         self.assertTrue((self.root / "ops/monit/check-http-live.sh").is_file())
+        self.assertTrue((self.root / "ops/nginx/upstream-control.sh").is_file())
         self.assertFalse(self.stage.exists())
         self.assertIn("SQL was NOT executed", result.stdout)
 
@@ -163,7 +174,17 @@ exec bash "$@"
         result = self.run_publish(service="sdk-core", restart=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Healthy: sdk-core-1", result.stdout)
-        self.assertIn("Healthy: sdk-core-2 (port 8212)", result.stdout)
+        for i in range(1, 6):
+            self.assertIn(f"Healthy: sdk-core-{i} (port {8210 + i})", result.stdout)
+        self.assertIn("Draining sdk-core-1 from Nginx", result.stdout)
+        self.assertLess(result.stdout.index("Draining sdk-core-1 from Nginx"),
+                        result.stdout.index("Restarting sdk-core-1"))
+        self.assertLess(result.stdout.index("Healthy: sdk-core-1"),
+                        result.stdout.index("Restored sdk-core-1 to Nginx traffic"))
+        events = self.events.read_text().splitlines()
+        self.assertEqual(sum(line.startswith("validate sdk-core") for line in events), 5)
+        self.assertLess(events.index("drain sdk-core 8211"), events.index("restart sdk-core-1"))
+        self.assertLess(events.index("restart sdk-core-1"), events.index("enable sdk-core 8211"))
 
     def test_config_center_instances_use_configured_ports(self):
         self.make_package(frontend=False, only="config-center")
@@ -184,19 +205,25 @@ exec bash "$@"
 
     def test_invalid_restart_plan_is_rejected_before_replacing_files(self):
         self.make_package(frontend=False, only="sdk-core")
-        for plan in ("-", "sdk-core-1:65536", "sdk-core-1:8211,sdk-core-1:8212",
+        for plan in ("-", "sdk-core-1:65536", "sdk-core-1:8211,sdk-core-1:8211",
                      "sdk-core-a:8211", "config-center-1:8201",
-                     "sdk-core-1:8211;whoami"):
+                     "sdk-core-1:8211;whoami", "sdk-core-1:8211"):
             with self.subTest(plan=plan):
                 self.assert_rejected(service="sdk-core", restart=True, plan=plan)
 
     def test_full_publish_restarts_only_configured_instances(self):
         self.make_package(frontend=False)
-        result = self.run_publish(service="all", restart=True,
-                                  plan="sdk-core-3:8213")
+        full_plan = ",".join(
+            [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
+            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 6)] +
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 6)]
+        )
+        result = self.run_publish(service="all", restart=True, plan=full_plan)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("Healthy: sdk-core-3 (port 8213)", result.stdout)
-        self.assertNotIn("Restarting config-center", result.stdout)
+        self.assertIn("Healthy: config-center-1 (port 8201)", result.stdout)
+        self.assertIn("Healthy: sdk-core-5 (port 8215)", result.stdout)
+        self.assertIn("Healthy: sdk-service-5 (port 8225)", result.stdout)
+        self.assertNotIn("Restarting config-center-access", result.stdout)
 
     def test_restart_failure_reports_error_without_rollback(self):
         self.make_package(frontend=False, only="sdk-core")
@@ -204,6 +231,9 @@ exec bash "$@"
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue((self.root / "bin/sdk-core").is_file())
         self.assertIn("Restarting sdk-core-1", result.stdout)
+        events = self.events.read_text().splitlines()
+        self.assertIn("drain sdk-core 8211", events)
+        self.assertNotIn("enable sdk-core 8211", events)
 
     def test_bad_checksum(self):
         self.make_package()
@@ -340,8 +370,17 @@ exit $code
         self.write_config(services={
             "config-center-1": 8201,
             "config-center-2": 8202,
-            "config-center-access": 8291,
+            "sdk-core-1": 8211,
+            "sdk-core-2": 8212,
             "sdk-core-3": 8213,
+            "sdk-core-4": 8214,
+            "sdk-core-5": 8215,
+            "sdk-service-1": 8221,
+            "sdk-service-2": 8222,
+            "sdk-service-3": 8223,
+            "sdk-service-4": 8224,
+            "sdk-service-5": 8225,
+            "config-center-access": 8291,
         })
         result, calls = self.invoke("restart-plan")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -454,6 +493,50 @@ exit $code
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(len(calls), 3)
         self.assertNotIn("Published archive:", result.stdout)
+
+
+class DeploymentTopologyTests(unittest.TestCase):
+    def test_supervisor_monit_nginx_and_publish_share_the_2_5_5_topology(self):
+        root = SCRIPTS.parent
+        expected = {}
+        for index in range(1, 3):
+            expected[f"config-center-{index}"] = ("config-center", 8200 + index)
+        for index in range(1, 6):
+            expected[f"sdk-core-{index}"] = ("sdk-core", 8210 + index)
+            expected[f"sdk-service-{index}"] = ("sdk-service", 8220 + index)
+
+        supervisor = (root / "ops/supervisor/middle-platform.conf").read_text()
+        monit = (root / "ops/monit/middle-platform.conf").read_text()
+        config = json.loads((root / "publish/publish.config.example.json").read_text())
+        publish_script = (root / "publish/publish.ps1").read_text(encoding="utf-8-sig")
+        for name, (module, port) in expected.items():
+            self.assertIn(f"[program:{name}]", supervisor)
+            self.assertIn(f"127.0.0.1:{port}", supervisor)
+            self.assertIn(f"check-http-live.sh {name} {port}", monit)
+            self.assertIn(f"restart-supervisor-program.sh {name}", monit)
+            self.assertEqual(config["services"][name], port)
+            self.assertIn(f"Name = '{name}'", publish_script)
+
+        runtime = {
+            "config-center": (root / "ops/nginx/runtime/config-center-upstream.conf").read_text(),
+            "sdk-core": (root / "ops/nginx/runtime/sdk-core-upstream.conf").read_text(),
+            "sdk-service": (root / "ops/nginx/runtime/sdk-service-upstream.conf").read_text(),
+        }
+        for name, (module, port) in expected.items():
+            self.assertIn(f"server 127.0.0.1:{port} ", runtime[module])
+        self.assertEqual(len(expected), 12)
+        self.assertEqual(config["remoteDirectory"], "/data/middle-platform")
+        upstream_config = (root / "ops/nginx/middle-platform-upstreams.conf").read_text()
+        self.assertIn("upstream config_center", upstream_config)
+        self.assertIn("upstream sdk_core", upstream_config)
+        self.assertIn("upstream sdk_service", upstream_config)
+        locations = (root / "ops/nginx/middle-platform-locations.conf").read_text()
+        self.assertIn("location ^~ /api/config/", locations)
+        self.assertIn("location ^~ /api/core/", locations)
+        self.assertIn("location ^~ /api/service/", locations)
+        self.assertIn(".publish.lock", (root / "ops/monit/check-http-live.sh").read_text())
+        self.assertIn(".publish.lock", (root / "ops/monit/restart-supervisor-program.sh").read_text())
+        self.assertIn(".publish.lock", (root / "publish/publish-remote.sh").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

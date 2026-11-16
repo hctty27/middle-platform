@@ -1,0 +1,3 @@
+# Add this directive at the top-level main context in nginx.conf,
+# outside the events {} and http {} blocks.
+worker_shutdown_timeout 75s;
