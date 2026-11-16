@@ -13,8 +13,8 @@ on:
       - 'admin/**'
       - 'publish/**'
       - 'ops/**'
-      - 'scripts/package.ps1'
-      - 'scripts/package-archive.go'
+      - 'run/nginx/**'
+      - 'scripts/ci_publish_smoke.py'
       - '.github/workflows/package.yml'
   push:
     branches: [main]
@@ -27,8 +27,8 @@ on:
       - 'admin/**'
       - 'publish/**'
       - 'ops/**'
-      - 'scripts/package.ps1'
-      - 'scripts/package-archive.go'
+      - 'run/nginx/**'
+      - 'scripts/ci_publish_smoke.py'
       - '.github/workflows/package.yml'
 
 permissions:
@@ -53,7 +53,7 @@ jobs:
           cache-dependency-path: admin/package-lock.json
       - name: Build binary and frontend release package
         shell: pwsh
-        run: ./scripts/package.ps1 -Arch amd64 -Version ${{ github.sha }}
+        run: ./publish/package.ps1 -Arch amd64 -Version ${{ github.sha }}
       - name: Validate deployment script syntax
         run: |
           bash -n publish/publish-remote.sh
@@ -67,7 +67,7 @@ jobs:
       - name: Test Monit Supervisor group restart
         run: bash ops/monit/test-restart-supervisor-program.sh
       - name: Publishing smoke tests
-        run: python3 -I publish/ci_publish_smoke.py
+        run: python3 -I scripts/ci_publish_smoke.py
       # 验证完整归档的内容、ELF 架构及 Linux 执行位。
       - name: Verify Linux executable archive
         shell: bash
@@ -143,10 +143,10 @@ jobs:
           cache-dependency-path: '**/go.sum'
       - name: Build from Windows PowerShell
         shell: pwsh
-        run: .\scripts\package.ps1 -Arch amd64 -Version windows-test -SkipFrontend
+        run: .\publish\package.ps1 -Arch amd64 -Version windows-test -SkipFrontend
       - name: Publishing smoke tests on Windows
         shell: pwsh
-        run: python -I publish/ci_publish_smoke.py
+        run: python -I scripts/ci_publish_smoke.py
       - name: Verify tar.gz on Windows
         shell: pwsh
         run: |

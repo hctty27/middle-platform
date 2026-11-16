@@ -323,7 +323,7 @@ npm run build</code></pre></div>
 </ul>
 <h2 id="production-2">2. 打包上传与首次安装</h2>
 <p>在开发机执行：</p>
-<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\scripts\package.ps1 -Arch amd64 -Version v1.0.0</code></pre></div>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\publish\package.ps1 -Arch amd64 -Version v1.0.0</code></pre></div>
 <p>将 <code>dist/middle-platform-v1.0.0-linux-amd64.tar.gz</code> 上传到服务器 <code>/tmp/</code>。<strong>仅首次部署且确认程序尚未运行时</strong>，可用以下命令安装：</p>
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">sudo mkdir -p /data/middle-platform/{bin,config,admin,logs}
 sudo mkdir -p /tmp/middle-platform-stage
@@ -334,10 +334,10 @@ sudo cp -a /tmp/middle-platform-stage/bin/. /data/middle-platform/bin/
 sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/</code></pre></div>
 <p>使用 <code>-SkipFrontend</code> 构建的包没有 <code>admin/</code>，不要执行对应 <code>cp</code>。Go 服务由 Supervisor 按要求以 <code>root</code> 运行，不需要创建 <code>middle-platform</code> 服务账号；SSH 发布仍使用独立的 <code>deploy</code> 账号，不要开放 root SSH 登录。root 运行会扩大漏洞影响范围，必须限制二进制、YAML、日志目录和发布权限；真实 <code>config-center.yaml</code>、<code>config-center-access.yaml</code>、<code>sdk-core.yaml</code>、<code>sdk-service.yaml</code> 单独放在 <code>/data/middle-platform/config/</code>。</p>
 <h3>打包参数及产物</h3>
-<p><code>scripts/package.ps1</code> 是唯一手动打包入口，支持 Windows PowerShell 与 GitHub Actions 统一生成 Linux ELF + tar.gz。依赖 Go 1.27.3；包含前端时还需要 Node.js 22 / npm。</p>
-<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
-.\scripts\package.ps1 -Arch arm64 -Version v1.0.0
-.\scripts\package.ps1 -SkipFrontend -Version v1.0.0</code></pre></div>
+<p><code>publish/package.ps1</code> 是唯一手动打包入口，支持 Windows PowerShell 与 GitHub Actions 统一生成 Linux ELF + tar.gz。依赖 Go 1.27.3；包含前端时还需要 Node.js 22 / npm。</p>
+<div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\publish\package.ps1 -Arch amd64 -Version v1.0.0
+.\publish\package.ps1 -Arch arm64 -Version v1.0.0
+.\publish\package.ps1 -SkipFrontend -Version v1.0.0</code></pre></div>
 <p>省略 <code>-Version</code> 时使用提交号或本地时间作为版本标识；Go 交叉编译加 <code>-buildvcs=false</code>。正常情况下 <code>dist/</code> 只保留一个版本归档，没有中间目录。</p>
 <p>归档结构以打包脚本为准：</p>
 <div class="code-card"><div class="code-header"><span>text</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-text">bin/

@@ -32,7 +32,7 @@
 
 ```powershell
 # 完整打包，不上传
-.\scripts\package.ps1 -Version v1.0.0
+.\publish\package.ps1 -Version v1.0.0
 
 # 完整发布：校验、逐实例 Nginx 摘除、Supervisor 重启、Ready 验活、重新加入
 .\publish\publish.ps1 -Version v1.0.0
@@ -77,7 +77,7 @@ Nginx Open Source 使用被动健康检查：`max_fails=1 fail_timeout=10s`。�
 `.github/workflows/package.yml` 会验证 Linux/Windows 发布归档（只允许 `bin/`、`sql/`、`admin/`）、Shell 语法、Monit 检查、Nginx upstream 排空/恢复脚本，以及无实际 SSH 的发布冒烟测试：
 
 ```bash
-python -I publish/ci_publish_smoke.py
+python -I scripts/ci_publish_smoke.py
 bash ops/nginx/test-upstream-control.sh
 ```
 
