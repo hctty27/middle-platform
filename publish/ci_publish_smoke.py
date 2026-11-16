@@ -367,19 +367,7 @@ exit $code
         )
 
     def test_local_services_selects_config_center_instances(self):
-        self.write_config(services={
-            "config-center-1": 8201,
-            "config-center-2": 8202,
-            "sdk-core-1": 8211,
-            "sdk-core-2": 8212,
-            "sdk-core-3": 8213,
-            "sdk-core-4": 8214,
-            "sdk-service-1": 8221,
-            "sdk-service-2": 8222,
-            "sdk-service-3": 8223,
-            "sdk-service-4": 8224,
-            "config-center-access": 8291,
-        })
+        self.write_config()
         result, calls = self.invoke("restart-plan")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         remote_calls = [line for line in calls if line.startswith("ssh|")]
@@ -387,13 +375,36 @@ exit $code
         self.assertNotIn("config-center-access:8291", remote_calls[-1])
         self.assertNotIn("sdk-core-3:8213", remote_calls[-1])
 
+    def test_empty_services_uses_fixed_topology(self):
+        self.write_config(services={})
+        result, calls = self.invoke("restart-plan")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("config-center-1:8201,config-center-2:8202", calls[-1])
+
+    def test_optional_access_and_legacy_configuration(self):
+        self.write_config(services={"config-center-1": 8201, "config-center-access": 8291})
+        (self.root / "cli-override.txt").write_text("Service=all\n", encoding="ascii")
+        result, calls = self.invoke("restart-plan")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        remote = [line for line in calls if line.startswith("ssh|")][-1]
+        self.assertIn("sdk-core-4:8214", remote)
+        self.assertIn("sdk-service-4:8224", remote)
+        self.assertIn("config-center-access:8291", remote)
+
+    def test_access_requires_optional_configuration(self):
+        self.write_config()
+        (self.root / "cli-override.txt").write_text("Service=config-center-access\n", encoding="ascii")
+        result, calls = self.invoke("restart-plan")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
+
     def test_invalid_local_services_fails_before_upload(self):
         for services in (
-            {"config-center-access": 8291},
+            {"config-center-access": 8292},
             {"config-center-1": "8201"},
             {"config-center-1": 65536},
             {"other-project": 9000},
-            {},
+            [],
         ):
             with self.subTest(services=services):
                 self.write_config(services=services)
@@ -506,14 +517,14 @@ class DeploymentTopologyTests(unittest.TestCase):
         supervisor = (root / "ops/supervisor/middle-platform.conf").read_text()
         monit = (root / "ops/monit/middle-platform.conf").read_text()
         config = json.loads((root / "publish/publish.config.example.json").read_text())
+        self.assertNotIn("services", config)
         publish_script = (root / "publish/publish.ps1").read_text(encoding="utf-8-sig")
         for name, (module, port) in expected.items():
             self.assertIn(f"[program:{name}]", supervisor)
             self.assertIn(f"127.0.0.1:{port}", supervisor)
             self.assertIn(f"check-http-live.sh {name} {port}", monit)
             self.assertIn(f"restart-supervisor-program.sh {name}", monit)
-            self.assertEqual(config["services"][name], port)
-            self.assertIn(f"Name = '{name}'", publish_script)
+            self.assertIn(f"Name = '{name}'; Module = '{module}'; Port = {port}", publish_script)
 
         runtime = {
             "config-center": (root / "ops/nginx/runtime/config-center-upstream.conf").read_text(),

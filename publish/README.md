@@ -4,29 +4,15 @@
 
 ## 生产实例拓扑
 
-`publish.config.json` 的 `services` 必须包含完整的 2/4/4 实例及固定本机健康端口：
+固定的 2/4/4 实例及健康检查端口由发布脚本定义，无需在 `publish.config.json` 中重复配置。实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。
+
+如果还需要自动重启不属于 2/4/4 Nginx upstream 的 `config-center-access`，可额外加入：
 
 ```json
-{
-  "remoteDirectory": "/data/middle-platform",
-  "services": {
-    "config-center-1": 8201,
-    "config-center-2": 8202,
-    "sdk-core-1": 8211,
-    "sdk-core-2": 8212,
-    "sdk-core-3": 8213,
-    "sdk-core-4": 8214,
-    "sdk-core-4": 8214,
-    "sdk-service-1": 8221,
-    "sdk-service-2": 8222,
-    "sdk-service-3": 8223,
-    "sdk-service-4": 8224,
-    "sdk-service-4": 8224
-  }
-}
+"services": { "config-center-access": 8291 }
 ```
 
-实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。可额外配置可选的 `config-center-access: 8291`，但它不属于当前 2/4/4 Nginx upstream。
+旧配置中的固定实例条目仍受支持，但名称和端口必须与脚本一致。未配置 `config-center-access` 时，不会自动重启它。
 
 ## 首次部署前必须完成
 
@@ -66,7 +52,7 @@
 
 ## 滚动发布流程
 
-完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/4 进程与 Nginx runtime include，再原子替换文件。随后按 `services` 顺序逐个执行：
+完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/4 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的实例顺序逐个执行：
 
 1. 将当前实例在对应 Nginx upstream 标记为 `down`。
 2. 执行 `nginx -t` 并 graceful reload。
