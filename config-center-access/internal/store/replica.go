@@ -58,7 +58,7 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 		return err
 	}
 	if marketColumn != 1 {
-		return errors.New("本地副本缺少 market_type，请先备份并手工执行 db/incremental/V0016__add_config_access_game_market_type.sql")
+		return errors.New("本地副本缺少 market_type，请先备份并手工执行 db/incremental/V0018__add_config_access_game_market_type.sql")
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT id,game_id,region_id,env_type,market_type,node_type,
 		code,name,status,config,remark,created_at,updated_at FROM config_node LIMIT 0`)
@@ -104,12 +104,12 @@ func (s *Replica) VerifySchema(ctx context.Context) error {
 	if err := s.DB.QueryRowContext(ctx, `SELECT check_clause FROM information_schema.check_constraints
 		WHERE constraint_schema=DATABASE() AND constraint_name='chk_replica_node_market_type'`).Scan(&clause); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return errors.New("本地副本缺少游戏运营地区 CHECK 约束，请先备份并手工执行 db/incremental/V0016__add_config_access_game_market_type.sql")
+			return errors.New("本地副本缺少游戏运营地区 CHECK 约束，请先备份并手工执行 db/incremental/V0018__add_config_access_game_market_type.sql")
 		}
 		return err
 	}
 	if !strings.Contains(clause, "domestic") || !strings.Contains(clause, "overseas") {
-		return errors.New("本地副本游戏运营地区 CHECK 约束已过时，请先手工执行 db/incremental/V0016__add_config_access_game_market_type.sql")
+		return errors.New("本地副本游戏运营地区 CHECK 约束已过时，请先手工执行 db/incremental/V0018__add_config_access_game_market_type.sql")
 	}
 	var stateRows int
 	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM config_sync_state WHERE id=1").Scan(&stateRows); err != nil {

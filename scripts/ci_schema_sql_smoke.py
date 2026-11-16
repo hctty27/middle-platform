@@ -263,7 +263,7 @@ VALUES (11,900,'test',0,'{}');""", ok=False)
       INSERT INTO manual_replica_upgrade.config_node
       (id,game_id,node_type,env_type,code,name,status,config,created_at,updated_at)
       VALUES (12,11,'region','test','r','Region',1,'{}',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6));""")
-    access_market = source("db/incremental/V0016__add_config_access_game_market_type.sql")
+    access_market = source("db/incremental/V0018__add_config_access_game_market_type.sql")
     mysql(database="manual_replica_upgrade", script=access_market)
     assert_sql("SELECT market_type FROM manual_replica_upgrade.config_node WHERE id=11", "domestic")
     assert_sql("SELECT market_type FROM manual_replica_upgrade.config_node WHERE id=12", "NULL")
