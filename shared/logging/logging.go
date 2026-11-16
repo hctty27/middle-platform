@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -89,27 +90,37 @@ func Init(service string, c Config) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	levels := map[string]slog.Level{
-		"debug": slog.LevelDebug, "info": slog.LevelInfo,
-		"warn": slog.LevelWarn, "error": slog.LevelError,
-	}
 	output := os.Stdout
 	if strings.EqualFold(c.Output, "stderr") {
 		output = os.Stderr
 	}
-	opts := &slog.HandlerOptions{Level: levels[strings.ToLower(c.Level)]}
-	var handler slog.Handler
-	if strings.EqualFold(c.Format, "text") {
-		handler = slog.NewTextHandler(output, opts)
-	} else {
-		handler = slog.NewJSONHandler(output, opts)
-	}
+	handler := newHandler(output, c)
 	instance := os.Getenv("INSTANCE_ID")
 	if instance == "" {
 		instance, _ = os.Hostname()
 	}
 	slog.SetDefault(slog.New(handler).With("service", service, "instance", instance))
 	return nil
+}
+
+func newHandler(output io.Writer, c Config) slog.Handler {
+	levels := map[string]slog.Level{
+		"debug": slog.LevelDebug, "info": slog.LevelInfo,
+		"warn": slog.LevelWarn, "error": slog.LevelError,
+	}
+	opts := &slog.HandlerOptions{
+		Level: levels[strings.ToLower(c.Level)],
+		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+			if len(groups) == 0 && attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
+				return slog.Time(attr.Key, attr.Value.Time().UTC())
+			}
+			return attr
+		},
+	}
+	if strings.EqualFold(c.Format, "text") {
+		return slog.NewTextHandler(output, opts)
+	}
+	return slog.NewJSONHandler(output, opts)
 }
 
 type requestIDKey struct{}

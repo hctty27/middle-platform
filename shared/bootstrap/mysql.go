@@ -15,6 +15,21 @@ type MySQLConfig struct {
 	ConnMaxLifetime string
 }
 
+// ParseMySQLUTC 固定时间解析与会话时区，其他连接参数保留 DSN 配置。
+func ParseMySQLUTC(dsn string) (*mysql.Config, error) {
+	parsed, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("数据库 DSN 不合法: %w", err)
+	}
+	parsed.ParseTime = true
+	parsed.Loc = time.UTC
+	if parsed.Params == nil {
+		parsed.Params = make(map[string]string)
+	}
+	parsed.Params["time_zone"] = "'+00:00'"
+	return parsed, nil
+}
+
 // OpenMySQL 保持 SDK Core / Service 现有的超时、UTC 与连接池行为。
 func OpenMySQL(cfg MySQLConfig) (*sql.DB, error) {
 	if cfg.MaxOpenConns < 1 || cfg.MaxIdleConns < 0 || cfg.MaxIdleConns > cfg.MaxOpenConns {
@@ -24,19 +39,13 @@ func OpenMySQL(cfg MySQLConfig) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("数据库 connMaxLifetime 配置不合法: %w", err)
 	}
-	parsed, err := mysql.ParseDSN(cfg.DSN)
+	parsed, err := ParseMySQLUTC(cfg.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("数据库 DSN 不合法: %w", err)
+		return nil, err
 	}
-	parsed.ParseTime = true
-	parsed.Loc = time.UTC
 	parsed.Timeout = 5 * time.Second
 	parsed.ReadTimeout = 10 * time.Second
 	parsed.WriteTimeout = 10 * time.Second
-	if parsed.Params == nil {
-		parsed.Params = make(map[string]string)
-	}
-	parsed.Params["time_zone"] = "'+00:00'"
 	db, err := sql.Open("mysql", parsed.FormatDSN())
 	if err != nil {
 		return nil, err

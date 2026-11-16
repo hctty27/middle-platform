@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/go-sql-driver/mysql"
 	"hitall.com/middle-platform/config-center/internal/api"
 	"hitall.com/middle-platform/config-center/internal/schema"
 	"hitall.com/middle-platform/config-center/internal/settings"
@@ -33,13 +32,10 @@ func Run(configPath string) error {
 	if err := logging.Init("config-center", cfg.Log); err != nil {
 		return err
 	}
-	dsn := cfg.DSN
-	parsed, err := mysql.ParseDSN(dsn)
+	parsed, err := bootstrap.ParseMySQLUTC(cfg.DSN)
 	if err != nil {
 		return err
 	}
-	parsed.ParseTime = true
-	parsed.Loc = time.UTC
 	parsed.Timeout = 5 * time.Second
 	parsed.ReadTimeout = 10 * time.Second
 	parsed.WriteTimeout = 10 * time.Second

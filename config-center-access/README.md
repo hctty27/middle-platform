@@ -26,6 +26,10 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 - 轮换密钥时，必须同步更新配置中心订阅记录和本接入端 `subscriber.secret`，再重启接入端，不能只改其中一侧。
 - 旧版全局 `configSync.secret`、独立 `webhook.secret` 及未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。多实例场景应通过共享存储实现全局 nonce 去重。
 
+## 内部 UTC 时间
+
+接入端接受新带时区 RFC3339 时间并转 UTC，旧无时区字符串按 UTC 解释；本地 revision 的 `updated_at` 以 UTC RFC3339Nano（带 `Z`）输出，详见[权威接口文档的内部时间约定](../admin/public/docs/index.html#s-intro)。部署必须先升级所有 access，再升级 center；回滚顺序相反，先由 center 恢复旧输出，再回滚 access。历史无时区字段不得自动批量加减 8 小时，详见[升级与历史数据边界](../admin/public/docs/guide.html#production-11)。
+
 ```bash
 go test -race ./...
 go vet ./...

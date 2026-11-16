@@ -9,20 +9,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
+	"hitall.com/middle-platform/shared/bootstrap"
 )
 
 // Validate 校验权威库所需的表、字段、索引及约束，不依赖旧迁移版本记录。
 func Validate(ctx context.Context, dsn string) error {
-	cfg, err := mysql.ParseDSN(dsn)
+	cfg, err := bootstrap.ParseMySQLUTC(dsn)
 	if err != nil {
 		return err
 	}
 	if cfg.DBName == "" {
 		return errors.New("必须配置数据库名称")
 	}
-	cfg.ParseTime = true
-	cfg.Loc = time.UTC
 	cfg.Timeout = 5 * time.Second
 	cfg.ReadTimeout = 10 * time.Second
 	db, err := sql.Open("mysql", cfg.FormatDSN())

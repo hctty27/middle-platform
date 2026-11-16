@@ -224,7 +224,11 @@ func validateNode(n remote.Node) error {
 }
 
 func parseDate(v string) (time.Time, error) {
-	parsed, err := time.Parse("2006-01-02T15:04:05.999999999", v)
+	if parsed, err := time.Parse(time.RFC3339Nano, v); err == nil {
+		return parsed.UTC(), nil
+	}
+	// 旧版配置中心的无时区时间约定为 UTC。
+	parsed, err := time.ParseInLocation("2006-01-02T15:04:05.999999999", v, time.UTC)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("配置节点日期时间 %q 不合法: %w", v, err)
 	}
@@ -276,7 +280,7 @@ func (s *Replica) Revision(ctx context.Context) (map[string]any, error) {
 		val = epoch.String
 	}
 	return map[string]any{"epoch": val, "revision": rev,
-		"updated_at": updated.UTC().Format("2006-01-02T15:04:05.999999")}, nil
+		"updated_at": updated.UTC().Format(time.RFC3339Nano)}, nil
 }
 
 // Ready 用真实数据库 Ping 校验服务是否可工作。
