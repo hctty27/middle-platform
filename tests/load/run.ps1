@@ -7,7 +7,7 @@ param(
     [string]$Scenario = "smoke",
 
     [ValidateRange(1, 200)]
-    [int]$MaxRps = 5,
+    [int]$MaxRps = 1,
 
     [string]$Duration = "5m",
 
@@ -73,6 +73,16 @@ if ($Scenario -eq "sdk-core-orders") {
     }
     Require-Env "CORE_GAME_SECRET"
     Require-Env "ORDER_ID_PREFIX"
+    $durationMatch = [regex]::Match($Duration, '^(\d+)([smh])$')
+    $durationValue = [int]$durationMatch.Groups[1].Value
+    $durationSeconds = switch ($durationMatch.Groups[2].Value) {
+        "s" { $durationValue }
+        "m" { $durationValue * 60 }
+        "h" { $durationValue * 3600 }
+    }
+    if ($durationSeconds -gt 300) {
+        throw "Order-write test duration is capped at 5 minutes."
+    }
     $env:ALLOW_ORDER_WRITES = "true"
     $env:ORDER_NOTIFY_SINK_CONFIRMED = "true"
 }
@@ -106,6 +116,7 @@ if ($Scenario -eq "sdk-service-user-check" -and $MaxRps -gt 50) {
 $env:BASE_URL = $BaseUrl.TrimEnd("/")
 $env:MAX_RPS = [string]$MaxRps
 $env:DURATION = $Duration
+$env:HOLD_DURATION = $Duration
 $env:LOADTEST_SCENARIO = $Scenario
 $env:LOADTEST_RUN_ID = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
 $env:MIX_INCLUDE_SERVICE = if ($IncludeServiceInMix) { "true" } else { "false" }
@@ -119,7 +130,7 @@ try {
     Write-Host "Scenario: $Scenario"
     Write-Host "Target: $BaseUrl"
     Write-Host "Max RPS: $MaxRps"
-    Write-Host "Duration: $Duration"
+    Write-Host "Duration / ramp hold: $Duration"
     Write-Host "Run ID: $env:LOADTEST_RUN_ID"
     Write-Host "Reports: $reports"
 

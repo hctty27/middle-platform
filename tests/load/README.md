@@ -99,7 +99,7 @@ notepad .\tests\load\config.local.ps1
 
 每档确认无异常后，再考虑 50、100、150、200 RPS。runner 限制最高 200 RPS；达到上限不代表服务器容量上限，也不代表必须测到该值。
 
-长稳测试先以已验证稳定速率的 50%–70% 运行：
+ramp 场景的升压阶段按 5、10、20 RPS 逐级展开，-Duration 控制最后一档保持时间；例如 5 RPS 时总时长约为 2 分钟升压 + 5 分钟保持 + 1 分钟降压。sdk-core-orders 与 sdk-service-user-check 使用恒定到达速率，-Duration 控制整个测试时长。长稳测试先以已验证稳定速率的 50%–70% 运行：
 
 ~~~powershell
 .\tests\load\run.ps1 -BaseUrl "https://你的正式域名" -Scenario soak -MaxRps 5 -Duration 30m -ConfirmProduction
@@ -138,9 +138,9 @@ $env:CONFIG_SYNC_OPERATION = "revision"
 | 阶段 | 测试 | 初始速率 | 时长 |
 | --- | --- | ---: | --- |
 | 1 | smoke | 1 次 | 单次 |
-| 2 | config-center | 5 RPS | 5 分钟 |
-| 3 | sdk-core | 5 RPS | 5 分钟 |
-| 4 | mixed/ramp | 5、10、20 RPS | 每档约 10–15 分钟 |
+| 2 | config-center | 5 RPS | 约 8 分钟（2 分钟升压、5 分钟保持、1 分钟降压） |
+| 3 | sdk-core | 5 RPS | 约 8 分钟（2 分钟升压、5 分钟保持、1 分钟降压） |
+| 4 | mixed/ramp | 5、10、20 RPS | 每档约 8、11、14 分钟 |
 | 5 | mixed/ramp | 50、100、150、200 RPS | 每档单独评估 |
 | 6 | soak | 已验证稳定速率的 50%–70% | 先 30 分钟，再 2 小时 |
 | 7 | availability-watch | 1 RPS | 人工故障窗口 |

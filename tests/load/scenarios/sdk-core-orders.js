@@ -1,10 +1,10 @@
 import http from 'k6/http';
 import { check } from 'k6';
-import { baseUrl, requiredEnv, requireTestEnv, rampingOptions } from '../lib/config.js';
+import { baseUrl, requiredEnv, requireTestEnv, constantRateOptions } from '../lib/config.js';
 import { gameHeaders } from '../lib/signature.js';
 import { summaryOutputs } from '../lib/report.js';
 
-export const options = rampingOptions(1, 5);
+export const options = constantRateOptions(1, '5m');
 
 export default function () {
   if (requiredEnv('ALLOW_ORDER_WRITES') !== 'true' ||

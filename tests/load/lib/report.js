@@ -23,6 +23,7 @@ export function summaryOutputs(data) {
     loadProfile: {
       maxRps: Number(__ENV.MAX_RPS || 0),
       duration: __ENV.DURATION || null,
+      rampHoldDuration: __ENV.HOLD_DURATION || null,
       mixIncludesSdkService: __ENV.MIX_INCLUDE_SERVICE === 'true',
     },
     metrics: metrics,
