@@ -21,10 +21,6 @@ func (s *HealthState) SetReady(ready bool) {
 	s.ready.Store(ready)
 }
 
-func (s *HealthState) Ready() bool {
-	return s.ready.Load()
-}
-
 func (s *HealthState) Middleware(next http.Handler) http.Handler {
 	return ReadinessMiddleware(next, &s.ready)
 }

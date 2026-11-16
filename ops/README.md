@@ -50,6 +50,7 @@ set daemon 10
 
 ```bash
 sudo chmod 0755 /data/middle-platform/ops/monit/check-http-live.sh
+sudo install -d /etc/monit/conf-enabled
 sudo install -m 0644 /data/middle-platform/ops/monit/middle-platform.conf /etc/monit/conf-enabled/middle-platform
 sudo monit -t
 sudo monit reload

@@ -114,7 +114,7 @@ func Run(configPath string) error {
 			listenErr = err
 		}
 	}
-	// 收到终止信号后立即撤销就绪状态，使网关停止分发新请求。
+	// 收到终止信号后立即撤销就绪状态，供主动健康检查的网关摘除实例。
 	health.SetReady(false)
 	stop()
 	started := time.Now()

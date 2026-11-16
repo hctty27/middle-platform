@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
         run: ./scripts/package.ps1 -Arch amd64 -Version ${{ github.sha }}
       - name: Validate deployment script syntax
-        run: bash -n publish/publish-remote.sh ops/monit/check-http-live.sh ops/monit/test-check-http-live.sh
+        run: bash -n publish/publish-remote.sh && bash -n ops/monit/check-http-live.sh && bash -n ops/monit/test-check-http-live.sh
       - name: Test Monit liveness check
         run: bash ops/monit/test-check-http-live.sh
       - name: Publishing smoke tests
