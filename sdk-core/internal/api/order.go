@@ -95,8 +95,8 @@ func orderError(w http.ResponseWriter, err error) {
 	writeJSON(w, code, response{Code: code, Message: message})
 }
 
-func registerOrderRoutes(mux *http.ServeMux, svc OrderAPI) {
-	mux.HandleFunc("POST /api/core/orders/{env}/{appid}", func(w http.ResponseWriter, r *http.Request) {
+func registerOrderRoutes(mux *http.ServeMux, svc OrderAPI, options RouterOptions) {
+	registerWithTimeout(mux, "POST /api/core/orders/{env}/{appid}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.RawQuery != "" {
 			orderError(w, service.ErrInvalidOrder)
 			return
@@ -124,7 +124,7 @@ func registerOrderRoutes(mux *http.ServeMux, svc OrderAPI) {
 		writeJSON(w, http.StatusOK, response{Code: 0, Message: "success",
 			Data: map[string]string{"game_order_id": req.GameOrderID, "registration_status": "REGISTERED"}})
 	})
-	mux.HandleFunc("POST /api/core/pay/notify/{appid}", func(w http.ResponseWriter, r *http.Request) {
+	registerWithTimeout(mux, "POST /api/core/pay/notify/{appid}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.RawQuery != "" {
 			orderError(w, service.ErrInvalidOrder)
 			return

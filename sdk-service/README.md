@@ -31,6 +31,15 @@ go run ./cmd/sdk-service -config configs/config-dev.yaml
 
 默认端口 `:8221`。首次部署或升级前按 [数据库文档](../admin/public/docs/guide.html#database) 核对功能服务表与增量 SQL；平台事件/订阅目标 URL 在 `platform.eventReportURL`、`platform.subscribeMessageURL` 和 `platform.userCheckURL` 配置；核验平台路径为 `/cp/user/check`。旧的 `/api/core/events/{env}` 不再存在。
 
+## 并发保护与缓存一致性
+
+- 不设置六类业务接口的在途额度，不因并发数量主动拒绝请求。`server.requestTimeout: auto` 默认总预算为 `max(game.timeout, 平台固定 5s) + 3s`（默认 `8s`），也可显式设置不超过 `35s` 的正时长；下游单次超时保留原值。context 取消不是强制结束 handler，数据库或下游超时仍可能返回错误。
+- `configCache.ttl` 默认 `0s`，保持实时查库；路由含上下游密钥、启停和用户核验开关，**只有接受旧密钥撤销、停用和核验开关变更的短暂延迟后才能开启**，例如 `1s`。TTL 上限 `5s`，实际可见延迟还包含在途读取时间，不保证即时撤销。
+- 开启后最多缓存 `4096` 条，各服务命名空间合计；最多 `8` 个不同键回源、单次预算 `5s`，同键合并，回源槽满时等待空位，等待受请求取消与超时约束。仅缓存成功值，过期回源失败不使用旧值兜底；TTL 不滑动延长。键隔离 AppID、环境、服务类型，用户核验保留原缺省开关语义。
+- 三级节点 revision 不覆盖渠道、SDK 配置和服务开关的全部修改，不能依赖它保证缓存即时失效。`ttl: 0s` 可回退；不会改变同步接口成功含义，不增加消息队列、落库或自动重试。
+
+新参数见 [示例配置](configs/config.yaml)，通过单份 YAML 调整，现有 DSN/监听/日志环境变量覆盖行为不变，修改后需重启。应按 DB 连接等待、缓存回源等待、下游延迟和 P99 测量调节资源；移除主动拒绝不代表无限处理能力，高峰时可能排队或超时，不能外推为百万级容量。具体灰度与回退边界见 [并发保护运维说明](../admin/public/docs/guide.html#production-capacity)。
+
 ```bash
 go test -race ./...
 go vet ./...

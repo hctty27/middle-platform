@@ -23,20 +23,20 @@ type Pinger interface{ PingContext(context.Context) error }
 
 // Router 仅提供 SDK 核心配置、订单和充值相关接口。
 func Router(fetcher Fetcher, db Pinger, orders ...OrderAPI) http.Handler {
-	return router(fetcher, db, nil, orders...)
+	return router(fetcher, db, nil, RouterOptions{}, orders...)
 }
 
 // RouterWithAdmin 额外注册受网关保护的 SDK 管理接口。
 func RouterWithAdmin(fetcher Fetcher, db *sql.DB, orders ...OrderAPI) http.Handler {
-	return router(fetcher, db, db, orders...)
+	return router(fetcher, db, db, RouterOptions{}, orders...)
 }
 
-func router(fetcher Fetcher, db Pinger, admin *sql.DB, orders ...OrderAPI) http.Handler {
+func router(fetcher Fetcher, db Pinger, admin *sql.DB, options RouterOptions, orders ...OrderAPI) http.Handler {
 	mux := http.NewServeMux()
 	if admin != nil {
 		registerAdminRoutes(mux, admin)
 	}
-	mux.HandleFunc("GET /api/core/config/{env}/{appid}", func(w http.ResponseWriter, r *http.Request) {
+	registerWithTimeout(mux, "GET /api/core/config/{env}/{appid}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -61,7 +61,7 @@ func router(fetcher Fetcher, db Pinger, admin *sql.DB, orders ...OrderAPI) http.
 		writeJSON(w, http.StatusOK, response{Code: 0, Message: "success", Data: data})
 	})
 	if len(orders) > 0 && orders[0] != nil {
-		registerOrderRoutes(mux, orders[0])
+		registerOrderRoutes(mux, orders[0], options)
 	}
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "UP"})

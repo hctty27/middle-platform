@@ -99,39 +99,39 @@ func RouterWithServices(checker UserChecker, db Pinger, role RoleQuerier, server
 	if len(controls) > 0 {
 		control = controls[0]
 	}
-	return routerServices(checker, db, role, server, control, nil, nil)
+	return routerServices(checker, db, role, server, control, nil, nil, RouterOptions{})
 }
 
 // RouterWithPublishers 额外接入事件上报与订阅消息的转发服务。
 func RouterWithPublishers(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier,
 	control RoleController, events EventReporter, subscriptions SubscribeSender) http.Handler {
-	return routerServices(checker, db, role, server, control, events, subscriptions)
+	return routerServices(checker, db, role, server, control, events, subscriptions, RouterOptions{})
 }
 
 // routerServices 仅暴露已经注入实现的业务接口，并统一提供存活和就绪探针。
 func routerServices(checker UserChecker, db Pinger, role RoleQuerier, server ServerQuerier,
-	control RoleController, events EventReporter, subscriptions SubscribeSender) http.Handler {
+	control RoleController, events EventReporter, subscriptions SubscribeSender, options RouterOptions) http.Handler {
 	mux := http.NewServeMux()
 	if role != nil {
-		mux.HandleFunc("POST /api/service/role/query/{env}", roleQueryHandler(role))
+		registerWithTimeout(mux, "POST /api/service/role/query/{env}", options.RequestTimeout, roleQueryHandler(role))
 	}
 	if server != nil {
-		mux.HandleFunc("POST /api/service/server/query/{env}", serverQueryHandler(server))
+		registerWithTimeout(mux, "POST /api/service/server/query/{env}", options.RequestTimeout, serverQueryHandler(server))
 	}
 	if control != nil {
-		mux.HandleFunc("POST /api/service/role/control/{env}", roleControlHandler(control))
+		registerWithTimeout(mux, "POST /api/service/role/control/{env}", options.RequestTimeout, roleControlHandler(control))
 	}
 	if events != nil {
-		mux.HandleFunc("POST /api/service/events/{env}", func(w http.ResponseWriter, r *http.Request) {
+		registerWithTimeout(mux, "POST /api/service/events/{env}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
 			serveOutbound(w, r, "event_report", events.ReportEvent)
 		})
 	}
 	if subscriptions != nil {
-		mux.HandleFunc("POST /api/service/subscribe/{env}", func(w http.ResponseWriter, r *http.Request) {
+		registerWithTimeout(mux, "POST /api/service/subscribe/{env}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
 			serveOutbound(w, r, "subscribe_message", subscriptions.SendSubscribe)
 		})
 	}
-	mux.HandleFunc("POST /api/service/user/check/{env}", func(w http.ResponseWriter, r *http.Request) {
+	registerWithTimeout(mux, "POST /api/service/user/check/{env}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
 		env := r.PathValue("env")
 		appID := r.Header.Get("x-app-id")
 		if (env != "prod" && env != "test" && env != "review") || !appIDPattern.MatchString(appID) {

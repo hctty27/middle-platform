@@ -22,19 +22,27 @@ type Database struct {
 
 // OrderNotify 保存异步发货任务的并发和空闲轮询参数。
 type OrderNotify struct {
-	Workers      int    `yaml:"workers"`
-	IdleInterval string `yaml:"idleInterval"`
+	Workers             int    `yaml:"workers"`
+	IdleInterval        string `yaml:"idleInterval"`
+	HostConcurrency     int    `yaml:"hostConcurrency"`
+	DisableKeepAlives   bool   `yaml:"disableKeepAlives"`
+	MaxIdleConns        int    `yaml:"maxIdleConns"`
+	MaxIdleConnsPerHost int    `yaml:"maxIdleConnsPerHost"`
+	MaxConnsPerHost     int    `yaml:"maxConnsPerHost"`
+	IdleConnTimeout     string `yaml:"idleConnTimeout"`
 }
 
 // Config 保存 SDK Core 的监听、数据库和日志配置。
 type Config struct {
 	Log    logging.Config `yaml:"log"`
 	Server struct {
-		Address string `yaml:"address"`
+		Address        string `yaml:"address"`
+		RequestTimeout string `yaml:"requestTimeout"`
 	} `yaml:"server"`
-	Database    Database    `yaml:"database"`
-	OrderNotify OrderNotify `yaml:"orderNotify"`
-	AdminAuth struct {
+	Database    Database              `yaml:"database"`
+	OrderNotify OrderNotify           `yaml:"orderNotify"`
+	ConfigCache bootstrap.CacheConfig `yaml:"configCache"`
+	AdminAuth   struct {
 		Secret string `yaml:"secret"`
 	} `yaml:"adminAuth"`
 }
@@ -69,7 +77,10 @@ func Load(path string) (Config, error) {
 	cfg.Log = logging.Default()
 	cfg.Server.Address = ":8082"
 	cfg.Database = defaultDB()
-	cfg.OrderNotify = OrderNotify{Workers: 4, IdleInterval: "500ms"}
+	cfg.OrderNotify = OrderNotify{Workers: 4, IdleInterval: "500ms", HostConcurrency: 1,
+		MaxIdleConns: 32, MaxIdleConnsPerHost: 4, MaxConnsPerHost: 4, IdleConnTimeout: "30s"}
+	cfg.ConfigCache = bootstrap.DefaultCacheConfig("1s")
+	cfg.Server.RequestTimeout = "5s"
 	if path == "" {
 		path = "configs/config.yaml"
 	}
@@ -98,6 +109,9 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 	if err := validateOrderNotify(cfg.OrderNotify); err != nil {
+		return Config{}, err
+	}
+	if err := validatePerformance(cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

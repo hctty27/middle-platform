@@ -49,6 +49,10 @@ type OrderService struct {
 	PlatformSecretReader interface {
 		LookupPlatformSecret(context.Context, string) (string, error)
 	}
+	// HostGate 为可选的每目标非阻塞配额；nil 保持旧行为。
+	HostGate interface {
+		TryAcquire(string) (func(), bool)
+	}
 	Notifier interface {
 		ValidateTarget(string) error
 		Send(context.Context, model.Order, []byte) error
@@ -166,19 +170,30 @@ func (s *OrderService) Receive(ctx context.Context, appid string, h http.Header,
 
 // deliver 使用游戏主密钥按平台风格签名通知，并持久化通知结果。
 func (s *OrderService) deliver(ctx context.Context, o model.Order) error {
-	sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	raw, err := s.GameSecretReader.LookupGameConfig(sendCtx, o.GameID)
-	var key []byte
-	if err == nil {
-		key, err = auth.ParseGameSecret(raw)
-		if err != nil {
-			err = model.ErrInvalidConfig
+	// 额度满时不读密钥、不发送、不等待；网络阶段结束后即释放，保存不占额度。
+	err := func() error {
+		if s.HostGate != nil {
+			release, ok := s.HostGate.TryAcquire(o.GameNotifyURL)
+			if !ok {
+				return model.ErrNotifyDeferred
+			}
+			defer release()
 		}
-	}
-	if err == nil {
-		err = s.Notifier.Send(sendCtx, o, key)
-	}
+		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		raw, err := s.GameSecretReader.LookupGameConfig(sendCtx, o.GameID)
+		var key []byte
+		if err == nil {
+			key, err = auth.ParseGameSecret(raw)
+			if err != nil {
+				err = model.ErrInvalidConfig
+			}
+		}
+		if err == nil {
+			err = s.Notifier.Send(sendCtx, o, key)
+		}
+		return err
+	}()
 	commitCtx, commitCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer commitCancel()
 	if saveErr := s.Orders.CompleteNotify(commitCtx, o.ID, o.NotifyAttempts, err); saveErr != nil {
@@ -212,7 +227,7 @@ func (s *OrderService) runNotifyWorker(ctx context.Context, idleInterval time.Du
 		order, err := s.Orders.ClaimDue(jobCtx)
 		cancel()
 		if err == nil && order != nil {
-			if notifyErr := s.deliver(ctx, *order); notifyErr != nil && ctx.Err() == nil {
+			if notifyErr := s.deliver(ctx, *order); notifyErr != nil && !errors.Is(notifyErr, model.ErrNotifyDeferred) && ctx.Err() == nil {
 				slog.Warn("游戏发货通知失败", "order_id", order.ID,
 					"attempt", order.NotifyAttempts, "error", notifyErr)
 			}
