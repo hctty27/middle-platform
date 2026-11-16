@@ -1,0 +1,91 @@
+name: Runner Load Test
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Load profile (all traffic stays on this runner)
+        type: choice
+        options: [smoke, baseline, stress]
+        default: smoke
+      topology:
+        description: Instance topology
+        type: choice
+        options: [compact, cluster]
+        default: compact
+      scenario:
+        description: Business scenario
+        type: choice
+        options: [all, config-sync, sdk-config, user-check, order, duplicate, payment, mixed]
+        default: all
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/load-test.yml'
+      - 'tests/load/**'
+
+permissions:
+  contents: read
+concurrency:
+  group: runner-load-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  load:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GOWORK: 'off'
+      LOAD_DIR: ${{ runner.temp }}/middle-platform-load
+      LOAD_PROFILE: ${{ inputs.profile || 'smoke' }}
+      LOAD_TOPOLOGY: ${{ inputs.topology || 'compact' }}
+      LOAD_SCENARIO: ${{ inputs.scenario || 'all' }}
+      MYSQL_PWD: runner-load-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: '**/go.sum'
+      - uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: '1.0.0'
+      - name: Validate scripts
+        run: |
+          bash -n tests/load/setup.sh tests/load/run.sh
+          python3 -m py_compile tests/load/topology.py tests/load/report.py
+          test -z "$(gofmt -l tests/load/mock.go)"
+          k6 inspect tests/load/scenarios.js
+      - name: Install local services
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y nginx supervisor
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'runner-load-only';"
+      - name: Start isolated application stack
+        run: bash tests/load/setup.sh
+      - name: Run load scenarios
+        run: bash tests/load/run.sh
+      - name: Collect diagnostics and report
+        if: always()
+        run: |
+          mkdir -p "$LOAD_DIR/results"
+          mysql -uroot -h127.0.0.1 -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Max_used_connections','Slow_queries','Questions','Innodb_buffer_pool_reads','Innodb_row_lock_waits');" > "$LOAD_DIR/results/mysql-status.txt" 2>&1 || true
+          python3 tests/load/report.py "$LOAD_DIR/results" >> "$GITHUB_STEP_SUMMARY"
+      - name: Stop local services
+        if: always()
+        run: |
+          if [ -f "$LOAD_DIR/supervisor.conf" ]; then
+            supervisorctl -c "$LOAD_DIR/supervisor.conf" shutdown || true
+          fi
+          if [ -f "$LOAD_DIR/nginx.conf" ]; then
+            nginx -c "$LOAD_DIR/nginx.conf" -s quit || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runner-load-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.LOAD_DIR }}/results/
+            ${{ env.LOAD_DIR }}/logs/
+          retention-days: 14
+          if-no-files-found: warn
