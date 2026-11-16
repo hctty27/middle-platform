@@ -526,13 +526,7 @@ class DeploymentTopologyTests(unittest.TestCase):
             self.assertIn(f"restart-supervisor-program.sh {name}", monit)
             self.assertIn(f"Name = '{name}'; Module = '{module}'; Port = {port}", publish_script)
 
-        runtime = {
-            "config-center": (root / "ops/nginx/runtime/config-center-upstream.conf").read_text(encoding="utf-8"),
-            "sdk-core": (root / "ops/nginx/runtime/sdk-core-upstream.conf").read_text(encoding="utf-8"),
-            "sdk-service": (root / "ops/nginx/runtime/sdk-service-upstream.conf").read_text(encoding="utf-8"),
-        }
-        for name, (module, port) in expected.items():
-            self.assertIn(f"server 127.0.0.1:{port} ", runtime[module])
+        self.assertFalse((root / "ops/nginx/runtime").exists())
         self.assertEqual(len(expected), 10)
         self.assertEqual(config["remoteDirectory"], "/data/middle-platform")
         self.assertEqual(supervisor.count("user=root"), 10)
