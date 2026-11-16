@@ -10,6 +10,7 @@ cat > "$tmp/supervisorctl" <<'SH'
 if [[ "$1" != status ]]; then
     exit 2
 fi
+printf '%s\n' "$*" >> "$SUPERVISOR_LOG"
 state=$TEST_SUPERVISOR_STATE
 if [[ -z "$state" ]]; then
     state=RUNNING
@@ -25,6 +26,7 @@ SH
 
 chmod 0755 "$tmp/supervisorctl" "$tmp/curl"
 export SUPERVISORCTL="$tmp/supervisorctl"
+export SUPERVISOR_LOG="$tmp/supervisor.log"
 export CURL="$tmp/curl"
 export CURL_LOG="$tmp/curl.log"
 TEST_CURL_EXIT=0
@@ -35,6 +37,11 @@ test ! -s "$CURL_LOG"
 
 TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-core-1 8211
 test -s "$CURL_LOG"
+grep -Fxq 'status sdk-core:sdk-core-1' "$SUPERVISOR_LOG"
+TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" config-center-1 8201
+TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-service-4 8224
+grep -Fxq 'status config-center:config-center-1' "$SUPERVISOR_LOG"
+grep -Fxq 'status sdk-service:sdk-service-4' "$SUPERVISOR_LOG"
 
 # A live deployment holds the shared lock; Monit must skip its check.
 exec 8>"$tmp/publish.lock"
@@ -49,6 +56,11 @@ TEST_CURL_EXIT=7
 export TEST_CURL_EXIT
 if TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-core-1 8211; then
     printf 'Expected a failed liveness check\n' >&2
+    exit 1
+fi
+
+if "$script_dir/check-http-live.sh" sdk-core-5 8215; then
+    printf 'Expected removed fifth SDK Core instance to be rejected\n' >&2
     exit 1
 fi
 

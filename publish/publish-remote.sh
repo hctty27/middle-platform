@@ -157,8 +157,8 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
         fi
         case "$program:$port" in
             config-center-1:8201|config-center-2:8202) group=config-center ;;
-            sdk-core-1:8211|sdk-core-2:8212|sdk-core-3:8213|sdk-core-4:8214|sdk-core-5:8215) group=sdk-core ;;
-            sdk-service-1:8221|sdk-service-2:8222|sdk-service-3:8223|sdk-service-4:8224|sdk-service-5:8225) group=sdk-service ;;
+            sdk-core-1:8211|sdk-core-2:8212|sdk-core-3:8213|sdk-core-4:8214) group=sdk-core ;;
+            sdk-service-1:8221|sdk-service-2:8222|sdk-service-3:8223|sdk-service-4:8224) group=sdk-service ;;
             config-center-access:8291) group=none ;;
             *) printf 'Supervisor process and health port do not match: %s:%s\n' "$program" "$port" >&2; exit 1 ;;
         esac
@@ -180,12 +180,12 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
     case "$service" in
         all)
             required=(config-center-1 config-center-2
-                sdk-core-1 sdk-core-2 sdk-core-3 sdk-core-4 sdk-core-5
-                sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4 sdk-service-5)
+                sdk-core-1 sdk-core-2 sdk-core-3 sdk-core-4
+                sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4)
             ;;
         config-center) required=(config-center-1 config-center-2) ;;
-        sdk-core) required=(sdk-core-1 sdk-core-2 sdk-core-3 sdk-core-4 sdk-core-5) ;;
-        sdk-service) required=(sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4 sdk-service-5) ;;
+        sdk-core) required=(sdk-core-1 sdk-core-2 sdk-core-3 sdk-core-4) ;;
+        sdk-service) required=(sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4) ;;
         config-center-access) required=(config-center-access) ;;
     esac
     for required_program in "${required[@]}"; do
@@ -204,8 +204,10 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
         program="${programs[$index]}"
         group="${groups[$index]}"
         port="${ports[$index]}"
-        if ! supervisorctl status "$program" >/dev/null 2>&1; then
-            printf 'Supervisor program is unavailable: %s; no application files were changed\n' "$program" >&2
+        supervisor_process="$program"
+        if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
+        if ! supervisorctl status "$supervisor_process" >/dev/null 2>&1; then
+            printf 'Supervisor program is unavailable: %s; no application files were changed\n' "$supervisor_process" >&2
             exit 1
         fi
         if ! curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
@@ -239,19 +241,21 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         program="${programs[$index]}"
         port="${ports[$index]}"
         group="${groups[$index]}"
+        supervisor_process="$program"
+        if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
         if [[ "$group" != none ]]; then
             printf 'Draining %s from Nginx...\n' "$program"
             MIDDLE_PLATFORM_ROOT="$root" "$root/ops/nginx/upstream-control.sh" drain "$group" "$port"
         fi
         printf 'Restarting %s...\n' "$program"
-        if ! supervisorctl restart "$program"; then
-            printf 'Supervisor restart failed: %s; instance remains drained\n' "$program" >&2
+        if ! supervisorctl restart "$supervisor_process"; then
+            printf 'Supervisor restart failed: %s; instance remains drained\n' "$supervisor_process" >&2
             exit 1
         fi
         ready=0
         stable=0
         for attempt in {1..60}; do
-            if supervisorctl status "$program" | grep -Eq '[[:space:]]RUNNING[[:space:]]' &&
+            if supervisorctl status "$supervisor_process" | grep -Eq '[[:space:]]RUNNING[[:space:]]' &&
                curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
                 stable=$((stable + 1))
                 if [[ $stable -ge 3 ]]; then

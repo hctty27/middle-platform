@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 1 || ! "$1" =~ ^(config-center-[12]|sdk-core-[1-5]|sdk-service-[1-5])$ ]]; then
+if [[ $# -ne 1 ]]; then
     printf 'Usage: restart-supervisor-program.sh <supervisor-program>\n' >&2
     exit 2
 fi
+case "$1" in
+    config-center-[12]) supervisor_process="config-center:$1" ;;
+    sdk-core-[1-4]) supervisor_process="sdk-core:$1" ;;
+    sdk-service-[1-4]) supervisor_process="sdk-service:$1" ;;
+    config-center-access) supervisor_process=$1 ;;
+    *) printf 'Invalid Supervisor program name\n' >&2; exit 2 ;;
+esac
 
 lock_file=${PUBLISH_LOCK_FILE:-/data/middle-platform/.publish.lock}
 if [[ -L "$lock_file" ]]; then
@@ -26,4 +33,4 @@ if [[ -z "$supervisorctl_bin" || ! -x "$supervisorctl_bin" ]]; then
     exit 1
 fi
 
-exec "$supervisorctl_bin" restart "$1"
+exec "$supervisorctl_bin" restart "$supervisor_process"

@@ -54,7 +54,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
   <aside class="sidebar" id="sidebar" aria-label="文档目录"><input class="search" id="search" type="search" placeholder="搜索章节与内容..." aria-label="搜索章节与内容"><nav id="toc" aria-label="章节导航"><div class="toc-group" data-group="architecture"><div class="toc-title">系统架构</div><a class="toc-link" data-cat="architecture" href="#architecture-1">服务与数据流</a><a class="toc-link" data-cat="architecture" href="#architecture-2">配置数据模型</a><a class="toc-link" data-cat="architecture" href="#architecture-3">节点变更与同步一致性</a><a class="toc-link" data-cat="architecture" href="#architecture-4">边界与演进原则</a><a class="toc-link" data-cat="architecture" href="#architecture-5">SDK 业务与密钥边界</a><a class="toc-link" data-cat="architecture" href="#architecture-6">SDK Core 与 SDK Service 职责</a><a class="toc-link" data-cat="architecture" href="#architecture-7">统一 SDK 节点配置</a><a class="toc-link" data-cat="architecture" href="#architecture-8">内部路由与健康检查</a></div>
 <div class="toc-group" data-group="database"><div class="toc-title">数据库</div><a class="toc-link" data-cat="database" href="#database-1">核心约定</a><a class="toc-link" data-cat="database" href="#database-2">SQL 目录与增量编号</a><a class="toc-link" data-cat="database" href="#database-3">本地 MySQL 示例</a><a class="toc-link" data-cat="database" href="#database-4">权威库的业务表</a><a class="toc-link" data-cat="database" href="#database-5">SDK 功能配置与数据安全</a><a class="toc-link" data-cat="database" href="#database-6">SDK 配置拆分上线顺序</a></div>
 <div class="toc-group" data-group="development"><div class="toc-title">开发指南</div><a class="toc-link" data-cat="development" href="#development-1">环境</a><a class="toc-link" data-cat="development" href="#development-2">1. 权威配置中心</a><a class="toc-link" data-cat="development" href="#development-3">2. 接入端（可选）</a><a class="toc-link" data-cat="development" href="#development-4">3. SDK Core</a><a class="toc-link" data-cat="development" href="#development-5">4. SDK Service（平台查询与游戏消息转发）</a><a class="toc-link" data-cat="development" href="#development-6">5. Vue 管理端</a><a class="toc-link" data-cat="development" href="#development-7">6. 检查与排障</a><a class="toc-link" data-cat="development" href="#development-8">7. 测试与 CI</a></div>
-<div class="toc-group" data-group="production"><div class="toc-title">生产运维</div><a class="toc-link" data-cat="production" href="#production-1">1. 部署目录与端口</a><a class="toc-link" data-cat="production" href="#production-2">2. 打包上传与首次安装</a><a class="toc-link" data-cat="production" href="#production-3">3. 手动 SQL 先于启动</a><a class="toc-link" data-cat="production" href="#production-4">4. Supervisor 管理服务</a><a class="toc-link" data-cat="production" href="#production-5">5. Nginx 网关与访问边界</a><a class="toc-link" data-cat="production" href="#production-6">6. 直接发布与失败排查</a><a class="toc-link" data-cat="production" href="#production-7">7. 日志、停服与排障</a><a class="toc-link" data-cat="production" href="#production-capacity">SDK 并发保护、缓存与灰度</a><a class="toc-link" data-cat="production" href="#production-8">上线发布前检查</a><a class="toc-link" data-cat="production" href="#production-9">8. 事件上报迁移发布顺序（重要）</a><a class="toc-link" data-cat="production" href="#production-10">SDK 管理接口的 Nginx 隔离</a><a class="toc-link" data-cat="production" href="#production-11">内部 UTC 与秒级时间升级</a><a class="toc-link" data-cat="production" href="#production-12">故障恢复与健康检查</a><a class="toc-link" data-cat="production" href="#production-13">2/5/5 Nginx 安全滚动更新</a></div></nav><p class="empty" id="empty" hidden>没有匹配的章节</p></aside>
+<div class="toc-group" data-group="production"><div class="toc-title">生产运维</div><a class="toc-link" data-cat="production" href="#production-1">1. 部署目录与端口</a><a class="toc-link" data-cat="production" href="#production-2">2. 打包上传与首次安装</a><a class="toc-link" data-cat="production" href="#production-3">3. 手动 SQL 先于启动</a><a class="toc-link" data-cat="production" href="#production-4">4. Supervisor 管理服务</a><a class="toc-link" data-cat="production" href="#production-5">5. Nginx 网关与访问边界</a><a class="toc-link" data-cat="production" href="#production-6">6. 直接发布与失败排查</a><a class="toc-link" data-cat="production" href="#production-7">7. 日志、停服与排障</a><a class="toc-link" data-cat="production" href="#production-capacity">SDK 并发保护、缓存与灰度</a><a class="toc-link" data-cat="production" href="#production-8">上线发布前检查</a><a class="toc-link" data-cat="production" href="#production-9">8. 事件上报迁移发布顺序（重要）</a><a class="toc-link" data-cat="production" href="#production-10">SDK 管理接口的 Nginx 隔离</a><a class="toc-link" data-cat="production" href="#production-11">内部 UTC 与秒级时间升级</a><a class="toc-link" data-cat="production" href="#production-12">故障恢复与健康检查</a><a class="toc-link" data-cat="production" href="#production-13">2/4/4 Nginx 安全滚动更新</a></div></nav><p class="empty" id="empty" hidden>没有匹配的章节</p></aside>
   <div class="content"><div class="inner"><article class="doc-pane" id="architecture" data-pane="architecture" aria-labelledby="tab-architecture" ><div class="eyebrow">DEVELOPER GUIDE / ARCHITECTURE</div><p class="pane-subtitle">服务职责、数据流、配置同步与安全边界</p><h1>研发中台架构（当前实现）</h1>
 <p>本文仅描述当前系统结构；具体表结构见 <a href="#database">数据库文档</a>，接口与签名规范见 <a href="index.html">统一接口文档</a>。</p>
 <h2 id="architecture-1">服务与数据流</h2>
@@ -327,7 +327,7 @@ file /tmp/middle-platform-stage/bin/*
 ls -l /tmp/middle-platform-stage/bin/
 sudo cp -a /tmp/middle-platform-stage/bin/. /data/middle-platform/bin/
 sudo cp -a /tmp/middle-platform-stage/admin/. /data/middle-platform/admin/</code></pre></div>
-<p>使用 <code>-SkipFrontend</code> 构建的包没有 <code>admin/</code>，不要执行对应 <code>cp</code>。创建低权限服务账号 <code>middle-platform</code>，按实际用户/组授予 <code>bin/</code>、<code>config/</code> 和 <code>logs/</code> 最小权限；真实 <code>config-center.yaml</code>、<code>config-center-access.yaml</code>、<code>sdk-core.yaml</code>、<code>sdk-service.yaml</code> 单独放在 <code>/data/middle-platform/config/</code>。</p>
+<p>使用 <code>-SkipFrontend</code> 构建的包没有 <code>admin/</code>，不要执行对应 <code>cp</code>。Go 服务由 Supervisor 按要求以 <code>root</code> 运行，不需要创建 <code>middle-platform</code> 服务账号；SSH 发布仍使用独立的 <code>deploy</code> 账号，不要开放 root SSH 登录。root 运行会扩大漏洞影响范围，必须限制二进制、YAML、日志目录和发布权限；真实 <code>config-center.yaml</code>、<code>config-center-access.yaml</code>、<code>sdk-core.yaml</code>、<code>sdk-service.yaml</code> 单独放在 <code>/data/middle-platform/config/</code>。</p>
 <h3>打包参数及产物</h3>
 <p><code>scripts/package.ps1</code> 是唯一手动打包入口，支持 Windows PowerShell 与 GitHub Actions 统一生成 Linux ELF + tar.gz。依赖 Go 1.27.3；包含前端时还需要 Node.js 22 / npm。</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">.\scripts\package.ps1 -Arch amd64 -Version v1.0.0
@@ -390,7 +390,7 @@ WHERE EXISTS (
 <div class="code-card"><div class="code-header"><span>ini</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-ini">[program:config-center]
 command=/data/middle-platform/bin/config-center -config /data/middle-platform/config/config-center.yaml
 directory=/data/middle-platform
-user=middle-platform
+user=root
 autostart=true
 autorestart=unexpected
 stopsignal=TERM
@@ -399,13 +399,15 @@ redirect_stderr=true
 stdout_logfile=/data/middle-platform/logs/config-center.log
 stdout_logfile_maxbytes=50MB
 stdout_logfile_backups=5
-environment=CONFIG_GO_ADDR=&quot;:8201&quot;</code></pre></div>
-<p>对于 <code>sdk-core-1</code> / <code>sdk-core-2</code>，可复用 <code>bin/sdk-core</code> 与 <code>config/sdk-core.yaml</code>，但分别配置 <code>SDK_CORE_ADDR=&quot;:8211&quot;</code> / <code>&quot;:8212&quot;</code>、独立 <code>[program:...]</code> 名称和日志文件。<code>sdk-service</code> 使用独立的 <code>bin/sdk-service</code>、<code>config/sdk-service.yaml</code>，默认监听 <code>:8221</code>；接入端同理使用独立进程、DSN 与端口。配置变更后：</p>
+environment=GOMEMLIMIT=&quot;128MiB&quot;,CONFIG_GO_ADDR=&quot;127.0.0.1:8201&quot;</code></pre></div>
+<p>部署拓扑为 Config Center 2 个实例（8201–8202）、SDK Core 4 个实例（8211–8214）、SDK Service 4 个实例（8221–8224）。每个 Go program 均设置 <code>GOMEMLIMIT=&quot;128MiB&quot;</code>，并归入 <code>[group:config-center]</code>、<code>[group:sdk-core]</code>、<code>[group:sdk-service]</code> 三个 Supervisor 分组。实例以 <code>user=root</code> 启动；SSH 发布账号仍使用独立的 <code>deploy</code> 账号。分组后实例名使用 <code>sdk-core:sdk-core-1</code> 形式。配置变更后：</p>
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">sudo supervisorctl reread
 sudo supervisorctl update
-sudo supervisorctl status
-sudo supervisorctl restart config-center
-sudo supervisorctl tail -f config-center</code></pre></div>
+sudo supervisorctl status config-center:*
+sudo supervisorctl status sdk-core:*
+sudo supervisorctl status sdk-service:*
+sudo supervisorctl restart config-center:config-center-1
+sudo supervisorctl tail -f config-center:config-center-1</code></pre></div>
 <p>生产机原有 Supervisor 配置应以实际路径、命名和用户为准，<strong>不要因为示例而覆盖已有服务定义</strong>。如改用 <code>systemd</code>，请配置 <code>Restart=on-failure</code>、<code>KillSignal=SIGTERM</code>、<code>TimeoutStopSec=40s</code>，日志由 <code>journald</code> 收集；两种管理器不要同时控制同一个进程。</p>
 <h2 id="production-5">5. Nginx 网关与访问边界</h2>
 <p>以下示例按后端内部路由 <code>/api/...</code> 转发。若公网使用 <code>/sdk/api/...</code>，需在 Nginx 明确移除 <code>/sdk</code> 前缀后再交给后端，避免出现双重前缀。</p>
@@ -557,7 +559,7 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 </ol>
 <p>SDK Service 已补齐退出时的 Ready 状态切换，并在监听异常时也执行统一关闭流程。SDK Core 的发货 Worker 关闭等待受同一 30 秒超时约束。当前普通 HTTP 请求适用此流程；未来增加 WebSocket/Hijacked 连接时必须单独实现排空。</p>
 <h3>Supervisor 自动恢复</h3>
-<p>模板位于 <code>ops/supervisor/middle-platform.conf</code>。默认参数为 <code>autostart=true</code>、<code>autorestart=unexpected</code>、<code>startsecs=30</code>、<code>startretries=20</code>、<code>stopsignal=TERM</code>、<code>stopwaitsecs=60</code>、<code>stopasgroup=true</code>。</p>
+<p>模板位于 <code>ops/supervisor/middle-platform.conf</code>。10 个 Go 实例以 root 运行，设置 <code>GOMEMLIMIT=128MiB</code>，并分入 <code>config-center</code>、<code>sdk-core</code>、<code>sdk-service</code> 三组。该内存值是 Go Runtime 软限制，不是进程 RSS 硬上限。默认参数为 <code>autostart=true</code>、<code>autorestart=unexpected</code>、<code>startsecs=30</code>、<code>startretries=20</code>、<code>stopsignal=TERM</code>、<code>stopwaitsecs=60</code>、<code>stopasgroup=true</code>。</p>
 <ul>
 <li>服务器启动时自动启动已配置服务。</li>
 <li>进程进入 RUNNING 后异常非零退出，由 Supervisor 自动重启。</li>
@@ -569,7 +571,7 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 sudo supervisorctl update
 sudo supervisorctl status</code></pre></div>
 <h3>Monit 假死检测</h3>
-<p><code>ops/monit/check-http-live.sh</code> 只检查 <code>/health/live</code>，<code>ops/monit/middle-platform.conf</code> 配置为每 10 秒检查一次，连续 3 个周期失败后执行对应的 <code>supervisorctl restart</code>。</p>
+<p><code>ops/monit/check-http-live.sh</code> 只检查 <code>/health/live</code>，<code>ops/monit/middle-platform.conf</code> 为 2/4/4 共 10 个 Go 实例分别配置每 10 秒检查；连续 3 个周期失败后，通过 <code>group:program</code> 名称请求 Supervisor 重启对应实例。</p>
 <ul>
 <li>脚本先检查 Supervisor program 状态；不是 RUNNING 时跳过，避免和 Supervisor 启动重试冲突。</li>
 <li>只监控 Liveness，不以 Readiness 作为重启条件。MySQL 故障应表现为 Ready DOWN，而不是应用重启风暴。</li>
@@ -589,20 +591,20 @@ sudo monit status</code></pre></div>
 <li>发送 SIGTERM：Ready 先变为 503，HTTP 在途请求完成或超时，后台 Worker 停止领取任务，进程在 Supervisor 等待期限内退出。</li>
 <li>确认 SDK Core 未完成的发货任务仍由数据库租约与现有重试机制接管；发货仍是至少一次，游戏侧必须幂等。</li>
 </ul>
-<p>发布包会交付 <code>ops/</code> 模板，但发布脚本不会自动安装或重载 Supervisor/Monit/Nginx。部署细节见仓库 <code>ops/README.md</code>。本节描述基础进程恢复；2/5/5 Nginx 滚动更新见下一节。</p>
-<h2 id="production-13">2/5/5 Nginx 安全滚动更新</h2>
-<p>单机部署固定为 <code>/data/middle-platform</code>，实例为 Config Center 2 个（8201–8202）、SDK Core 5 个（8211–8215）、SDK Service 5 个（8221–8225）。所有 Go 实例只监听 <code>127.0.0.1</code>，由 Nginx 统一接入。Supervisor 管理 Go 进程；systemd 管理 Supervisor、Monit 和 Nginx；Monit 只检测假死并请求 Supervisor 重启，不由 Supervisor 管理 Monit。</p>
+<p>发布包会交付 <code>ops/</code> 模板，但发布脚本不会自动安装或重载 Supervisor/Monit/Nginx。部署细节见仓库 <code>ops/README.md</code>。本节描述基础进程恢复；2/4/4 Nginx 滚动更新见下一节。</p>
+<h2 id="production-13">2/4/4 Nginx 安全滚动更新</h2>
+<p>单机部署固定为 <code>/data/middle-platform</code>，实例为 Config Center 2 个（8201–8202）、SDK Core 4 个（8211–8214）、SDK Service 4 个（8221–8224）。所有 Go 实例只监听 <code>127.0.0.1</code>，由 Nginx 统一接入。Supervisor 管理 Go 进程；systemd 管理 Supervisor、Monit 和 Nginx；Monit 只检测假死并请求 Supervisor 重启，不由 Supervisor 管理 Monit。</p>
 <h3>Nginx upstream 与路由</h3>
 <ul>
 <li><code>/api/config/</code> → <code>config_center</code>：config-center-1/2。</li>
-<li><code>/api/core/</code> → <code>sdk_core</code>：sdk-core-1..5。</li>
-<li><code>/api/service/</code> → <code>sdk_service</code>：sdk-service-1..5。</li>
+<li><code>/api/core/</code> → <code>sdk_core</code>：sdk-core-1..4。</li>
+<li><code>/api/service/</code> → <code>sdk_service</code>：sdk-service-1..4。</li>
 </ul>
 <p>Nginx Open Source 使用被动健康检查：每个 upstream 节点设置 <code>max_fails=1 fail_timeout=10s</code>。真实请求发生连接错误、超时或无效响应时，Nginx 暂时避开该节点；失败窗口结束后，通过后续真实请求重新尝试。它不会主动请求 <code>/health/ready</code>；主动健康检查和 slow start 属于 NGINX Plus 能力。只有一个 upstream 节点时，<code>max_fails</code>/<code>fail_timeout</code> 不会将唯一节点摘除，因此当前每组至少配置两个实例。</p>
 <p>代理重试只配置传输错误、超时、无效响应及 HTTP 502/504，不启用 <code>non_idempotent</code>。对于已经发送到上游的 POST，Nginx 不会因此无条件重放订单登记、支付回调等写请求。HTTP 503 不作为节点故障条件，以免共享 MySQL 故障导致所有实例同时被误摘除。</p>
 <h3>安全滚动更新顺序</h3>
 <ol>
-<li>发布前校验完整 2/5/5 进程清单、Supervisor program、Nginx runtime include、配置语法及部署权限。</li>
+<li>发布前校验完整 2/4/4 进程清单、Supervisor program、Nginx runtime include、配置语法及部署权限。</li>
 <li>只将当前实例标记为 upstream <code>down</code>，执行 <code>nginx -t</code> 和 graceful reload。</li>
 <li>设置主配置上下文 <code>worker_shutdown_timeout 75s</code>，等待旧 Nginx worker 排空后才重启实例。</li>
 <li>执行 <code>supervisorctl restart</code>，等待 Supervisor 进入 RUNNING，并要求本机 <code>/health/ready</code> 连续 3 次返回 HTTP 200。</li>

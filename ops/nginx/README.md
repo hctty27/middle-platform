@@ -7,10 +7,10 @@ These files target the single-host deployment at `/data/middle-platform`. They u
 | Upstream | Supervisor programs | Local ports |
 |---|---|---|
 | `config_center` | `config-center-1..2` | 8201–8202 |
-| `sdk_core` | `sdk-core-1..5` | 8211–8215 |
-| `sdk_service` | `sdk-service-1..5` | 8221–8225 |
+| `sdk_core` | `sdk-core-1..4` | 8211–8214 |
+| `sdk_service` | `sdk-service-1..4` | 8221–8224 |
 
-All Go instances bind to loopback. Nginx is the only public ingress. The app routes are `/api/config/`, `/api/core/`, and `/api/service/`; `config-center-access` is intentionally not part of this 2/5/5 deployment.
+Supervisor uses the heterogeneous groups `config-center`, `sdk-core`, and `sdk-service`; process names are group-qualified (for example `sdk-core:sdk-core-1`). All Go instances bind to loopback. Nginx is the only public ingress. The app routes are `/api/config/`, `/api/core/`, and `/api/service/`; `config-center-access` is intentionally not part of this 2/4/4 deployment.
 
 ## One-time installation
 
@@ -74,7 +74,7 @@ For each selected Supervisor instance, in configured order:
 
 If restart or readiness fails, deployment halts and leaves that instance drained so Nginx does not send it traffic. Remaining instances are not restarted. The script does not perform automatic binary rollback; inspect logs, fix the cause, then restore the instance after it passes Ready.
 
-A full release drains and restores 12 instances individually. It does not stop the entire upstream group. This is rolling availability, not a mathematical zero-error guarantee: clients can still see failures caused by application bugs, shared MySQL outages, Nginx reload errors, or all peers failing.
+A full release drains and restores 10 instances individually. It does not stop the entire upstream group. This is rolling availability, not a mathematical zero-error guarantee: clients can still see failures caused by application bugs, shared MySQL outages, Nginx reload errors, or all peers failing.
 
 ## Manual operations
 
