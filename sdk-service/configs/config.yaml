@@ -25,6 +25,10 @@ platform:
   eventReportURL: ""
   subscribeMessageURL: ""
   userCheckURL: ""
+  # 独立核验/事件连接池；仅限制每目标连接数（等待受原请求预算约束）。
+  isolateConnections: true
+  maxIdlePerHost: 32
+  eventMaxConns: 0
 
 log:
   level: info
@@ -32,3 +36,5 @@ log:
   output: stdout
   accessEnabled: true
   slowThreshold: 500ms
+  # 1 保留全部访问和平台成功日志；仅快速成功事件可选采样。
+  sdkEventSampleEvery: 1

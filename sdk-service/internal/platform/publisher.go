@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"hitall.com/middle-platform/shared/logging"
@@ -27,8 +29,69 @@ var ErrPublishRejected = errors.New("平台拒绝请求或平台调用失败")
 
 // Publisher 复用 HTTP 客户端并按服务代码选择平台上报地址。
 type Publisher struct {
-	client    *http.Client
-	endpoints map[string]string
+	client          *http.Client
+	eventClient     *http.Client
+	endpoints       map[string]string
+	eventSample     int
+	slowThreshold   time.Duration
+	eventSuccesses  atomic.Uint64
+}
+
+// PublisherOptions controls separate transport pools, without adding retries or
+// changing the platform protocol. A zero connection cap means unlimited.
+type PublisherOptions struct {
+	IsolateConnections bool
+	MaxIdlePerHost     int
+	EventMaxConns      int
+	EventSampleEvery   int
+	SlowThreshold      time.Duration
+}
+
+// NewPublisherWithOptions keeps the existing endpoint validation and allows
+// separate, reusable HTTP transports for user checks and outbound events.
+func NewPublisherWithOptions(eventURL, subscribeURL, userCheckURL string, options PublisherOptions) (*Publisher, error) {
+	if options.MaxIdlePerHost < 1 || options.MaxIdlePerHost > 256 ||
+		options.EventMaxConns < 0 || options.EventMaxConns > 4096 ||
+		(!options.IsolateConnections && options.EventMaxConns != 0) ||
+		options.EventSampleEvery < 0 || options.EventSampleEvery > 10000 ||
+		options.SlowThreshold <= 0 {
+		return nil, errors.New("平台连接池或日志采样配置不合法")
+	}
+	p, err := NewPublisher(eventURL, subscribeURL, userCheckURL)
+	if err != nil {
+		return nil, err
+	}
+	makeClient := func(capacity int) *http.Client {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.MaxIdleConnsPerHost = options.MaxIdlePerHost
+		transport.MaxIdleConns = max(100, options.MaxIdlePerHost*2)
+		transport.MaxConnsPerHost = capacity
+		return &http.Client{
+			Transport:     transport,
+			Timeout:       5 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
+	}
+	p.client = makeClient(0)
+	p.eventClient = p.client
+	if options.IsolateConnections {
+		p.eventClient = makeClient(options.EventMaxConns)
+	}
+	p.eventSample = options.EventSampleEvery
+	p.slowThreshold = options.SlowThreshold
+	return p, nil
+}
+
+// CloseIdleConnections releases owned transport pools on shutdown. The legacy
+// constructor uses the shared default transport, which must not be closed here.
+func (p *Publisher) CloseIdleConnections() {
+	if p == nil || p.client == nil || p.client.Transport == nil {
+		return
+	}
+	p.client.CloseIdleConnections()
+	if p.eventClient != nil && p.eventClient != p.client {
+		p.eventClient.CloseIdleConnections()
+	}
 }
 
 // NewPublisher 校验平台接口地址的协议、路径和其他限制，禁止请求重定向。
@@ -92,8 +155,14 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	}[code]
 	logger := logging.FromContext(ctx)
 	defer func() {
+		elapsed := time.Since(start)
+		if publishErr == nil && success && code == "event_report" &&
+			p != nil && p.eventSample > 1 && elapsed < p.slowThreshold &&
+			p.eventSuccesses.Add(1)%uint64(p.eventSample) != 0 {
+			return
+		}
 		attrs := []any{"service_code", code, "app_id", appID, "method", http.MethodPost,
-			"path", path, "request_bytes", len(body), "http_status", status, "duration_ms", time.Since(start).Milliseconds()}
+			"path", path, "request_bytes", len(body), "http_status", status, "duration_ms", elapsed.Milliseconds()}
 		if businessCode != nil {
 			attrs = append(attrs, "business_code", *businessCode)
 		}
@@ -131,7 +200,11 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	// 平台开放服务仅签 Header 四值，不包含业务 Body。
 	req.Header.Set("x-signature", signature.SignValues(secret, appID, timestamp, nonce))
 	failure = "transport"
-	response, err := p.client.Do(req)
+	client := p.client
+	if code != "user_check" && p.eventClient != nil {
+		client = p.eventClient
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("%w: %w", ErrPublishRejected, err)
 	}
@@ -144,9 +217,11 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	if truncated {
 		loggedBody = raw[:8*1024]
 	}
-	logger.DebugContext(ctx, "平台接口请求和响应", "service_code", code, "http_status", status,
-		"request_body", string(body), "response_body", string(loggedBody),
-		"response_truncated", truncated, "response_read_error", err != nil)
+	if logger.Enabled(ctx, slog.LevelDebug) {
+		logger.DebugContext(ctx, "平台接口请求和响应", "service_code", code, "http_status", status,
+			"request_body", string(body), "response_body", string(loggedBody),
+			"response_truncated", truncated, "response_read_error", err != nil)
+	}
 	if err != nil || len(raw) > 8*1024 || response.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("%w: 平台 HTTP %d 或响应读取失败", ErrPublishRejected, response.StatusCode)
 	}

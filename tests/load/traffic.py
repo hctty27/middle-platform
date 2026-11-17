@@ -1,6 +1,7 @@
 """Runner-only 1:1:2 business mix and critical-interface isolation checks."""
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -44,6 +45,35 @@ def metric(data, name, field, scenario):
 
 def fmt(v, digits=2):
     return "—" if v is None else f"{v:.{digits}f}"
+
+
+def service_config(ttl, isolated, idle, event_cap, sample):
+    """Only edit the disposable runner's service YAML, then restart its instances."""
+    config = root / "config" / "sdk-service.yaml"
+    content = config.read_text()
+    for key, value in {
+        "ttl": ttl, "isolateConnections": str(isolated).lower(),
+        "maxIdlePerHost": idle, "eventMaxConns": event_cap, "sdkEventSampleEvery": sample,
+    }.items():
+        content, count = re.subn(r"(?m)^(  " + key + r":)[ \t]*[^#\r\n]+$", lambda m: m.group(1) + " " + str(value), content)
+        if count != 1:
+            raise RuntimeError("missing or duplicate fixture setting " + key)
+    config.write_text(content)
+    ports = [int(p) for p in (root / "ports.txt").read_text().splitlines() if 8221 <= int(p) <= 8224]
+    if not ports:
+        raise RuntimeError("no SDK Service fixture ports")
+    names = [f"sdk-service-{port - 8220}" for port in ports]
+    subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *names], check=True)
+    for port in ports:
+        for attempt in range(30):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/health/ready", timeout=2):
+                    break
+            except OSError:
+                if attempt == 29:
+                    raise
+                time.sleep(1)
+    print(f"Service fixture: ttl={ttl}, isolated={isolated}, idle={idle}, event cap={event_cap}, sample={sample}", flush=True)
 
 
 def stage(label, config, user, event, delay=0, fail=False, required=False, seconds=20):
@@ -107,20 +137,43 @@ def stage(label, config, user, event, delay=0, fail=False, required=False, secon
 
 
 try:
-    # A baseline for both critical routes, then independent event traffic.
-    stage("critical-baseline", 100, 100, 0, required=True)
-    stage("event-only-smoke", 0, 0, 10, required=True, seconds=10)
-    for rate in (100, 250, 500, 1000, 2500, 5000):
-        passed = stage(f"mix-{rate}", rate, rate, 2*rate, required=(rate == 100))
-        if not passed:
-            print("Saturation or threshold crossed: stop increasing the combined rate.", flush=True)
-            break
-    # Dedicated impact checks at a known lower critical load; higher overload is exploratory.
-    for delay in (1, 10, 50, 100):
-        stage(f"event-delay-{delay}ms", 100, 100, 200, delay=delay, required=(delay <= 10))
-    stage("event-overload", 100, 100, 2000, delay=50)
-    stage("event-platform-failure", 100, 100, 200, fail=True, required=True)
-    stage("critical-recovery", 100, 100, 200, required=True)
+    if os.environ.get("LOAD_PROFILE") == "traffic-quick":
+        # Fast mandatory PR regressions; use unchanged per-endpoint thresholds.
+        # Each stage has its own 1:1:2 schedule and verified Mock receipt counts.
+        stage("quick-mix", 100, 100, 200, required=True, seconds=10)
+        stage("quick-event-delay", 100, 100, 200, delay=10, required=True, seconds=10)
+        stage("quick-event-failure", 100, 100, 200, fail=True, required=True, seconds=10)
+        stage("quick-recovery", 100, 100, 200, required=True, seconds=10)
+    else:
+        # Same-instance A/B: keep the production default cache disabled.
+        service_config("0s", False, 2, 0, 1)
+        stage("ab-legacy-1000", 250, 250, 500)
+        service_config("0s", True, 32, 0, 1)
+        stage("ab-pools-1000", 250, 250, 500)
+        service_config("0s", True, 32, 0, 10)
+        stage("ab-sampling-1000", 250, 250, 500)
+        service_config("1s", True, 32, 0, 10)
+        stage("ab-cache-1000", 250, 250, 500)
+        stage("ab-cache-2000", 500, 500, 1000)
+        # Connection cap experiment keeps synchronous completion, never fabricates success.
+        service_config("1s", True, 32, 64, 10)
+        stage("ab-capped-overload", 100, 100, 2000, delay=50)
+        # Restore the conservative production-like settings before required stages.
+        service_config("0s", True, 32, 0, 1)
+        # A baseline for both critical routes, then independent event traffic.
+        stage("critical-baseline", 100, 100, 0, required=True)
+        stage("event-only-smoke", 0, 0, 10, required=True, seconds=10)
+        for rate in (100, 250, 500, 1000, 2500, 5000):
+            passed = stage(f"mix-{rate}", rate, rate, 2*rate, required=(rate == 100))
+            if not passed:
+                print("Saturation or threshold crossed: stop increasing the combined rate.", flush=True)
+                break
+        # Dedicated impact checks at a known lower critical load; higher overload is exploratory.
+        for delay in (1, 10, 50, 100):
+            stage(f"event-delay-{delay}ms", 100, 100, 200, delay=delay, required=(delay <= 10))
+        stage("event-overload", 100, 100, 2000, delay=50)
+        stage("event-platform-failure", 100, 100, 200, fail=True, required=True)
+        stage("critical-recovery", 100, 100, 200, required=True)
 finally:
     mode(0, False)
     print("\n## Per-endpoint results\n")
