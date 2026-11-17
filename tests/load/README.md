@@ -2,10 +2,21 @@
 
 全部业务程序、MySQL、Nginx、Supervisor、模拟发行平台/游戏和 k6 均运行在同一 GitHub 托管 Ubuntu Runner，不使用生产地址、密钥、数据，也不参与正式发布。脚本拒绝在非 GitHub 托管 Runner 执行。业务 API 和数据库结构不修改。
 
+## 全接口覆盖（api-coverage）
+
+Actions → Runner Load Test → Run workflow：选择 profile=api-coverage、topology=compact、scenario=all。该任务只在 GitHub 托管 Ubuntu Runner 上运行，所有 HTTP 目标固定为 127.0.0.1。它会启动配置中心、SDK Core、SDK Service、Nginx、MySQL、模拟游戏/平台，以及带独立临时 config_access 数据库的 config-center-access。
+
+- 通过 k6 api-coverage.js 验证当前注册的 **52 种 HTTP 方法 + 路由组合**（包含 4 个服务的健康检查）；每个路由必须有可判定的 HTTP/业务结果，不把 401/404 当成成功压测。
+- 覆盖完整配置同步、基础配置增删改查、订阅者管理、SDK 节点配置与渠道包、服务开关、订单管理、支付回调、角色/区服查询、封解禁、事件、订阅消息、接入端签名查询与 Webhook。
+- 使用一次性合成游戏/大区/区服组/渠道/订单，CRUD 在同次运行中有序创建、读取和清理；对本地模拟游戏/发行平台执行真实签名和协议校验；接入端需要在回调后追平版本。
+- tests/load/test_api_coverage.py 对照 Go 实际注册路由与 k6 覆盖调用；新增/删除 HTTP 路由若未同步维护压测场景，CI 直接失败。
+- 此 profile 是**全接口正确性和覆盖率检查**，不是把所有危险的增删改操作同时放大到高 QPS。原有 stress/traffic/capacity/soak 才提供高频性能数据；后续可针对具体读写链路做独立、可重复的负载档位。
+- 对于订单补偿 API，目前覆盖已完成订单不可重试的 409 条件；符合条件的成功补偿和 Worker 时序需通过现有订单单测和专项集成测试确认，不应把 409 冒充成功业务补偿。
+
 ## 运行
 在 Actions → Runner Load Test → Run workflow 选择参数。涉及服务、共享模块、数据库、Nginx 或压测脚本的 PR 自动执行 compact/cluster smoke 与 compact traffic-quick；完整压力测试按需手动触发。
 
-- profile: smoke（5 次迭代/s × 10 秒）、traffic-quick（四档 × 10 秒）、baseline（25/50/100 × 30 秒）、stress（100/250/500/1000 × 30 秒）、capacity、traffic、soak（50 次迭代/s × 30 分钟）、soak2h（50 次迭代/s × 2 小时）。capacity / traffic / traffic-quick 固定场景，忽略 scenario；soak 默认 mixed。
+- profile: api-coverage（52 类接口覆盖和业务断言，仅单次）、smoke（5 次迭代/s × 10 秒）、traffic-quick（四档 × 10 秒）、baseline（25/50/100 × 30 秒）、stress（100/250/500/1000 × 30 秒）、capacity、traffic、soak（50 次迭代/s × 30 分钟）、soak2h（50 次迭代/s × 2 小时）。capacity / traffic / traffic-quick 固定场景，忽略 scenario；soak 默认 mixed。
 - topology: compact (2/1/1) 或 cluster (2/4/4)，both 对比二者，每个 Go 实例 GOMEMLIMIT=128MiB（软目标）。
 - scenario: all（逐项运行）或 config-sync、sdk-config、user-check、order、duplicate、payment、mixed。所有场景固定访问 127.0.0.1，不能指定外部地址。
 
@@ -14,7 +25,7 @@
 ## 结果
 Actions Summary 显示每档实际 HTTP QPS、P50/P95/P99、业务失败率、丢弃迭代和退出码。摘要同时打印到 Actions 日志。Artifacts 保留 1 天，尽力上传；额度不足仅警告。每档采集 MySQL 状态与 Performance Schema SQL 摘要差值、vmstat 和 iostat。初始门槛为 P95 < 500ms、P99 < 1500ms、HTTP 和业务失败率 < 1%、非持续档位无丢弃迭代；不是线上 SLA。
 
-局限：标准私有仓库 Runner CPU 有限、压测与被测程序同机竞争资源；本地 HTTP 不含公网/TLS；单一游戏、渠道与 mock 不代表真实分布；当前只覆盖上述场景，不覆盖所有 SDK 转发路由、配置写入、故障恢复和滚动更新。实际线上容量需独立压测机和隔离环境验证。对比版本时固定 topology/profile/scenario 并重复运行。
+局限：标准私有仓库 Runner CPU 有限、压测与被测程序同机竞争资源；本地 HTTP 不含公网/TLS；单一游戏、渠道与 mock 不代表真实分布；常规压力 profiles 只覆盖各自列出的热点业务；api-coverage 单独覆盖当前全部 HTTP 路由，不对 CRUD 执行高并发，也不覆盖故障恢复及滚动更新。实际线上容量需独立压测机和隔离环境验证。对比版本时固定 topology/profile/scenario 并重复运行。
 
 高档位是探索目标，不是已验证容量；丢弃迭代可能来自负载发生器资源不足或被测服务慢。历史 PR 的订单 stress 曾复用 smoke 后的数据库，与独立运行不可直接比较。
 

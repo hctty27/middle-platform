@@ -30,6 +30,7 @@ export ADMIN_AUTH_SECRET='runner-load-admin-only-0123456789abcdef'
 # Keep service defaults; only point the platform URL at our local mock.
 sed -i 's|userCheckURL: ""|userCheckURL: "http://127.0.0.1:8290/cp/user/check"|' "$LOAD_DIR/config/sdk-service.yaml"
 sed -i 's|eventReportURL: ""|eventReportURL: "http://127.0.0.1:8290/report/event"|' "$LOAD_DIR/config/sdk-service.yaml"
+sed -i 's|subscribeMessageURL: ""|subscribeMessageURL: "http://127.0.0.1:8290/game/subscribe/send-message"|' "$LOAD_DIR/config/sdk-service.yaml"
 python3 tests/load/topology.py "$LOAD_DIR" "$LOAD_TOPOLOGY"
 # Supervisor inherits the disposable local DB settings above.
 supervisord -c "$LOAD_DIR/supervisor.conf"

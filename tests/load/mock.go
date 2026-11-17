@@ -122,6 +122,59 @@ func main() {
 		}
 		_, _ = io.WriteString(w, nonce)
 	})
+	// Synthetic platform subscription endpoint. Validate the outgoing platform
+	// signature, rather than treating a bypassed outbound call as success.
+	mux.HandleFunc("POST /game/subscribe/send-message", func(w http.ResponseWriter, r *http.Request) {
+		app := r.Header.Get("x-app-id")
+		secret, ok := platformKey(app)
+		values := []string{secret, app, r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}
+		sort.Strings(values)
+		sum := sha1.Sum([]byte(strings.Join(values, "_")))
+		var payload map[string]any
+		err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536)).Decode(&payload)
+		if !ok || !hmac.Equal([]byte(r.Header.Get("x-signature")), []byte(hex.EncodeToString(sum[:]))) ||
+			err != nil || payload["tpl_id"] == nil || payload["open_id"] == nil {
+			http.Error(w, "invalid signed subscription", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, "{\"code\":0,\"data\":true}")
+	})
+	// Platform->SDK->game signed adapter calls. Empty role/server collections
+	// are valid successful fixtures and still exercise real routing and HMAC.
+	gameHandler := func(path, output string) {
+		mux.HandleFunc("POST "+path, func(w http.ResponseWriter, r *http.Request) {
+			raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+			ts, nonce := r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")
+			mac := hmac.New(sha256.New, []byte("runner-load-game-only"))
+			_, _ = io.WriteString(mac, "HITALK-HMAC-SHA256\nPOST\n"+path+"\nload-app\n"+ts+"\n"+nonce+"\n")
+			_, _ = mac.Write(raw)
+			if err != nil || r.Header.Get("x-app-id") != "load-app" || len(nonce) != 16 ||
+				!hmac.Equal([]byte(r.Header.Get("x-signature")), []byte(hex.EncodeToString(mac.Sum(nil)))) {
+				http.Error(w, "invalid game signature", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, output)
+		})
+	}
+	gameHandler("/game/role/query", "{\"code\":0,\"data\":[]}")
+	gameHandler("/game/server/query", "{\"code\":0,\"message\":\"ok\",\"data\":{\"total\":0,\"list\":[]}}")
+	gameHandler("/game/role/control", "{\"code\":0,\"message\":\"ok\",\"data\":null}")
+	// Webhook notification receiver used only within this disposable Runner.
+	mux.HandleFunc("POST /config/webhook", func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+		code, ts, nonce := r.Header.Get("X-Subscriber-Code"), r.Header.Get("X-Timestamp"), r.Header.Get("X-Nonce")
+		mac := hmac.New(sha256.New, []byte("runner-load-subscriber-only-0123456789"))
+		_, _ = io.WriteString(mac, "HITALK-HMAC-SHA256\nSUBSCRIBER\n"+code+"\nPOST\n/config/webhook\n\n"+ts+"\n"+nonce+"\n")
+		_, _ = mac.Write(raw)
+		if err != nil || code != "load-subscriber" || len(nonce) != 16 ||
+			!hmac.Equal([]byte(r.Header.Get("X-Signature")), []byte(hex.EncodeToString(mac.Sum(nil)))) {
+			http.Error(w, "invalid webhook signature", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	srv := &http.Server{Addr: "127.0.0.1:8290", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	log.Fatal(srv.ListenAndServe())
 }
