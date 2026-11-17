@@ -53,6 +53,9 @@ class RemotePublishTests(unittest.TestCase):
         self.nginx_control.parent.mkdir(parents=True, exist_ok=True)
         self.nginx_control.write_bytes((
             b"#!/usr/bin/env bash\n"
+            # A legacy helper does not advertise batch support. The read-only
+            # capability probe must not create the operation log.
+            b"if [[ \"$1\" == capabilities ]]; then exit 2; fi\n"
             b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
         ))
         self.nginx_control.chmod(0o755)
@@ -153,6 +156,19 @@ exec bash "$@"
         self.assertFalse(self.stage.exists())
         self.assertIn("SQL was NOT executed", result.stdout)
 
+    def test_identical_file_is_not_replaced(self):
+        self.make_package(frontend=False, only="sdk-core")
+        target = self.seed("bin/sdk-core", "#!/bin/sh\nexit 0\n")
+        # Git Bash on Windows cannot reliably represent Unix mode bits.
+        target.chmod(0o755)
+        before = target.stat().st_mtime_ns
+        result = self.run_publish(service="sdk-core")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        if os.name != "nt":
+            self.assertIn("Unchanged bin/sdk-core", result.stdout)
+            self.assertEqual(target.stat().st_mtime_ns, before)
+        self.assertIn("Remote publish duration:", result.stdout)
+
     def test_backend_only_does_not_touch_frontend(self):
         self.make_package(frontend=False)
         index = self.seed("admin/index.html", "old-index")
@@ -252,6 +268,51 @@ exec bash "$@"
         self.assertIn("Healthy: sdk-service-4 (port 8224)", result.stdout)
         self.assertNotIn("Restarting config-center-access", result.stdout)
 
+    def enable_batch_helper(self):
+        self.nginx_control.write_bytes((
+            b'#!/usr/bin/env bash\n'
+            b'if [[ "$1" == capabilities ]]; then printf "batch-v1\\n"; exit 0; fi\n'
+            b'if [[ "$1" == batch ]]; then\n'
+            b'  printf "%s\\n" "$*" >> "$TEST_EVENTS"\n'
+            b'  if [[ "$2" == validate ]]; then\n'
+            b'    shift 2; for peer in "$@"; do printf "Validated %s upstream port %s\\n" "${peer%:*}" "${peer#*:}"; done\n'
+            b'  fi\n'
+            b'else printf "%s %s %s\\n" "$1" "$2" "$3" >> "$TEST_EVENTS"; fi\n'
+        ))
+        self.nginx_control.chmod(0o755)
+
+    def test_batch_full_rollout_has_four_rounds(self):
+        self.enable_batch_helper()
+        self.make_package(frontend=False)
+        plan = ",".join(
+            [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
+            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 5)] +
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)])
+        result = self.run_publish(service="all", restart=True, plan=plan)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        events = self.events.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(sum(e.startswith("batch validate ") for e in events), 1)
+        drains = [e for e in events if e.startswith("batch drain ")]
+        self.assertEqual(len(drains), 4)
+        self.assertEqual(drains[0], "batch drain config-center:8201 sdk-core:8211 sdk-service:8221")
+        self.assertEqual(sum(e.startswith("batch enable ") for e in events), 4)
+        self.assertEqual(sum(e.startswith("restart ") for e in events), 10)
+        self.assertIn("Completed rolling batch 4", result.stdout)
+
+    def test_batch_failure_never_starts_next_round(self):
+        self.enable_batch_helper()
+        self.make_package(frontend=False)
+        plan = ",".join(
+            [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
+            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 5)] +
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)])
+        result = self.run_publish(service="all", restart=True, restart_fail=True, plan=plan)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        events = self.events.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(sum(e.startswith("batch drain ") for e in events), 1)
+        self.assertEqual(sum(e.startswith("restart ") for e in events), 3)
+        self.assertFalse(any(e.startswith("batch enable ") for e in events))
+
     def test_restart_failure_reports_error_without_rollback(self):
         self.make_package(frontend=False, only="sdk-core")
         result = self.run_publish(service="sdk-core", restart=True, restart_fail=True)
@@ -284,6 +345,9 @@ exec bash "$@"
     def simulate_drained_core(self, recover_fail=False):
         self.nginx_control.write_bytes((
             b"#!/usr/bin/env bash\n"
+            # A legacy helper does not advertise batch support. The read-only
+            # capability probe must not create the operation log.
+            b"if [[ \"$1\" == capabilities ]]; then exit 2; fi\n"
             b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
             b"if [[ \"$3\" == 8211 && \"$1\" == validate ]] && "
             b"! grep -Fxq 'recover sdk-core 8211' \"$TEST_EVENTS\"; then\n"

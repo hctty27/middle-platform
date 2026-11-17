@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+publish_started=$SECONDS
 
 if [[ $# -ne 3 && $# -ne 5 && $# -ne 6 ]]; then
     printf 'Usage: publish-remote.sh <target-directory> <archive> <sha256> [restart-flag service name:port,...]\n' >&2
@@ -26,7 +27,7 @@ if [[ "$(dirname -- "$stage")" != "$root" || ! "$(basename -- "$stage")" =~ ^\.p
     printf 'Invalid upload arguments\n' >&2
     exit 2
 fi
-for command in sha256sum tar find mktemp cp mv chmod mkdir uname flock; do
+for command in sha256sum tar find mktemp cp mv chmod mkdir uname flock cmp stat; do
     command -v "$command" >/dev/null || { printf 'Required command not found: %s\n' "$command" >&2; exit 1; }
 done
 if [[ ! -d "$root" || -L "$root" ]]; then
@@ -133,6 +134,8 @@ done < "$stage/files"
 programs=()
 ports=()
 groups=()
+batch_capable=0
+batch_peers=()
 if [[ "$restart" == 1 && "$service" != admin ]]; then
     for command in supervisorctl curl grep sleep; do
         command -v "$command" >/dev/null || { printf 'Required command not found: %s\n' "$command" >&2; exit 1; }
@@ -230,6 +233,10 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
                 printf 'Invalid Bash syntax in Nginx upstream helper: %s; no application files were changed\n' "$nginx_control" >&2
                 exit 1
             fi
+            # Older independently deployed helpers remain supported.
+            if [[ "$(MIDDLE_PLATFORM_ROOT="$root" bash "$nginx_control" capabilities 2>/dev/null || true)" == batch-v1 ]]; then
+                batch_capable=1
+            fi
             break
         fi
     done
@@ -249,7 +256,9 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
             printf 'Instance is not Ready: %s on port %s; no application files were changed\n' "$program" "$port" >&2
             exit 1
         fi
-        if [[ "$group" != none ]]; then
+        if [[ "$group" != none && "$batch_capable" -eq 1 ]]; then
+            batch_peers+=("$group:$port")
+        elif [[ "$group" != none ]]; then
             if validation_output=$(MIDDLE_PLATFORM_ROOT="$root" bash "$nginx_control" validate "$group" "$port"); then
                 if [[ -n "$validation_output" ]]; then printf '%s\n' "$validation_output"; fi
             else
@@ -266,6 +275,36 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
             fi
         fi
     done
+
+    if [[ "$batch_capable" -eq 1 && -n "${batch_peers[0]:-}" ]]; then
+        validation_status=0
+        validation_output=$(MIDDLE_PLATFORM_ROOT="$root" bash "$nginx_control" batch validate "${batch_peers[@]}") || validation_status=$?
+        if [[ "$validation_status" -ne 0 && "$validation_status" -ne 3 ]]; then
+            printf 'Nginx batch validation failed (exit %s); no application files were changed\n' "$validation_status" >&2
+            exit 1
+        fi
+        down_count=0
+        for index in "${!groups[@]}"; do
+            group=${groups[$index]}
+            port=${ports[$index]}
+            [[ "$group" != none ]] || continue
+            if grep -Fxq "UPSTREAM_DOWN $group $port" <<< "$validation_output"; then
+                recovery_indices+=("$index")
+                down_count=$((down_count + 1))
+                printf 'Found drained instance: %s (port %s); health verification required before recovery\n' "${programs[$index]}" "$port"
+            elif grep -Fxq "Validated $group upstream port $port" <<< "$validation_output"; then
+                printf 'Validated %s upstream port %s\n' "$group" "$port"
+            else
+                printf 'Incomplete Nginx batch validation; no application files were changed\n' >&2
+                exit 1
+            fi
+        done
+        if [[ ( "$down_count" -gt 0 && "$validation_status" -ne 3 ) ||
+              ( "$down_count" -eq 0 && "$validation_status" -ne 0 ) ]]; then
+            printf 'Inconsistent Nginx batch validation; no application files were changed\n' >&2
+            exit 1
+        fi
+    fi
 
     # The publish lock is held. Restore only explicitly selected, verified healthy peers.
     # Bash 4.2/4.3 with nounset rejects expansion of an empty array.
@@ -291,6 +330,8 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
     fi
 fi
 
+printf 'Preflight duration: %ss\n' "$((SECONDS - publish_started))"
+install_started=$SECONDS
 temporary=''
 trap 'if [[ -n "$temporary" ]]; then rm -f -- "$temporary"; fi' EXIT
 while IFS= read -r -d '' source; do
@@ -300,6 +341,13 @@ while IFS= read -r -d '' source; do
         printf 'Preserved admin/config.js\n'
         continue
     fi
+    # 同内容、同权限的普通文件无需覆盖；禁止跟随目标符号链接。
+    if [[ -f "$target" && ! -L "$target" ]] &&
+       cmp -s -- "$source" "$target" &&
+       [[ "$(stat -c %a -- "$source")" == "$(stat -c %a -- "$target")" ]]; then
+        printf 'Unchanged %s\n' "$relative"
+        continue
+    fi
     temporary=$(mktemp "$(dirname -- "$target")/.publish-file-XXXXXXXX")
     cp -p -- "$source" "$temporary"
     # 使用同目录原子重命名，避免直接覆盖运行中的可执行文件。
@@ -307,53 +355,168 @@ while IFS= read -r -d '' source; do
     temporary=''
     printf 'Updated %s\n' "$relative"
 done < "$stage/files"
-if [[ "${#programs[@]}" -gt 0 ]]; then
-    for index in "${!programs[@]}"; do
-        program="${programs[$index]}"
-        port="${ports[$index]}"
-        group="${groups[$index]}"
-        supervisor_process="$program"
-        if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
-        if [[ "$group" != none ]]; then
-            printf 'Draining %s from Nginx...\n' "$program"
-            run_nginx_control drain "$group" "$port"
-        fi
-        printf 'Restarting %s...\n' "$program"
-        if ! supervisorctl restart "$supervisor_process"; then
-            printf 'Supervisor restart failed: %s; instance remains drained\n' "$supervisor_process" >&2
-            exit 1
-        fi
-        ready=0
-        stable=0
-        for attempt in {1..60}; do
-            if supervisorctl status "$supervisor_process" | grep -Eq '[[:space:]]RUNNING[[:space:]]' &&
-               curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
-                stable=$((stable + 1))
-                if [[ $stable -ge 3 ]]; then
-                    ready=1
-                    break
-                fi
-            else
-                stable=0
+printf 'File update duration: %ss\n' "$((SECONDS - install_started))"
+rollout_started=$SECONDS
+
+# 不根据磁盘上的 bin 或上次发布记录猜测运行版本：必须核对 Supervisor
+# 当前进程的 /proc/PID/exe。任何无法验证的情况都保守地执行滚动重启。
+running_matches_package() {
+    local process=$1 binary=$2 status pid expected_hash running_hash
+    [[ -r "$stage/unpacked/bin/$binary" ]] || return 1
+    status=$(supervisorctl status "$process") || return 1
+    [[ "$status" =~ ^"$process"[[:space:]]+RUNNING[[:space:]]+pid[[:space:]]+([1-9][0-9]*)(,|[[:space:]]|$) ]] || return 1
+    pid=${BASH_REMATCH[1]}
+    [[ -r "/proc/$pid/exe" ]] || return 1
+    expected_hash=$(sha256sum -- "$stage/unpacked/bin/$binary") || return 1
+    running_hash=$(sha256sum -- "/proc/$pid/exe" 2>/dev/null) || return 1
+    [[ "${expected_hash%% *}" == "${running_hash%% *}" ]] || return 1
+    status=$(supervisorctl status "$process") || return 1
+    [[ "$status" =~ ^"$process"[[:space:]]+RUNNING[[:space:]]+pid[[:space:]]+([1-9][0-9]*)(,|[[:space:]]|$) ]] || return 1
+    [[ "${BASH_REMATCH[1]}" == "$pid" ]]
+}
+restart_instance() {
+    local index=$1 program port group supervisor_process ready stable attempt
+    program=${programs[$index]}
+    port=${ports[$index]}
+    group=${groups[$index]}
+    supervisor_process="$program"
+    if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
+    printf 'Restarting %s...\n' "$program"
+    if ! supervisorctl restart "$supervisor_process"; then
+        printf 'Supervisor restart failed: %s; instance remains drained\n' "$supervisor_process" >&2
+        return 1
+    fi
+    ready=0
+    stable=0
+    for attempt in {1..60}; do
+        if supervisorctl status "$supervisor_process" | grep -Eq '[[:space:]]RUNNING[[:space:]]' &&
+           curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
+            stable=$((stable + 1))
+            if [[ $stable -ge 3 ]]; then
+                ready=1
+                break
             fi
-            sleep 2
-        done
-        if [[ $ready -ne 1 ]]; then
-            printf 'Health check failed: %s on port %s; instance remains drained and rollout stopped\n' "$program" "$port" >&2
-            exit 1
+        else
+            stable=0
         fi
-        printf 'Healthy: %s (port %s)\n' "$program" "$port"
-        if [[ "$group" != none ]]; then
-            run_nginx_control enable "$group" "$port"
-            printf 'Restored %s to Nginx traffic\n' "$program"
-        fi
+        sleep 2
     done
+    if [[ $ready -ne 1 ]]; then
+        printf 'Health check failed: %s on port %s; instance remains drained and rollout stopped\n' "$program" "$port" >&2
+        return 1
+    fi
+    printf 'Healthy: %s (port %s)\n' "$program" "$port"
+}
+needs_restart() {
+    local index=$1 program port group supervisor_process binary
+    program=${programs[$index]}
+    port=${ports[$index]}
+    group=${groups[$index]}
+    supervisor_process="$program"
+    binary="$program"
+    if [[ "$group" != none ]]; then supervisor_process="$group:$program"; binary="$group"; fi
+    if running_matches_package "$supervisor_process" "$binary" &&
+       curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
+        printf 'Unchanged running instance: %s (port %s); no restart needed\n' "$program" "$port"
+        return 1
+    fi
+    return 0
+}
+rollout_one() {
+    local index=$1 program port group
+    program=${programs[$index]}
+    port=${ports[$index]}
+    group=${groups[$index]}
+    if ! needs_restart "$index"; then return 0; fi
+    if [[ "$group" != none ]]; then
+        printf 'Draining %s from Nginx...\n' "$program"
+        run_nginx_control drain "$group" "$port"
+    fi
+    restart_instance "$index" || exit 1
+    if [[ "$group" != none ]]; then
+        run_nginx_control enable "$group" "$port"
+        printf 'Restored %s to Nginx traffic\n' "$program"
+    fi
+}
+run_batch_control() {
+    local action=$1
+    shift
+    if ! MIDDLE_PLATFORM_ROOT="$root" bash "$nginx_control" batch "$action" "$@"; then
+        printf 'Nginx batch %s failed; rollout stopped; inspect runtime upstream state\n' "$action" >&2
+        exit 1
+    fi
+}
+if [[ -n "${programs[0]:-}" ]]; then
+    if [[ "$batch_capable" -eq 1 && "$service" == all ]]; then
+        # One peer per upstream per round, with a single drain/reload and restore/reload.
+        # No parallel mutations of Nginx files; only Supervisor and Ready checks run concurrently.
+        pending=()
+        access_indices=()
+        for index in "${!programs[@]}"; do
+            if [[ "${groups[$index]}" == none ]]; then
+                access_indices+=("$index")
+            else
+                pending+=("$index")
+            fi
+        done
+        round=0
+        while [[ -n "${pending[0]:-}" ]]; do
+            unset selected_groups
+            declare -A selected_groups=()
+            round_indices=() next_pending=() peers=() jobs=() healthy_peers=()
+            for index in "${pending[@]}"; do
+                group=${groups[$index]}
+                if [[ -n "${selected_groups[$group]:-}" ]]; then
+                    next_pending+=("$index")
+                elif needs_restart "$index"; then
+                    selected_groups[$group]=1
+                    round_indices+=("$index")
+                    peers+=("$group:${ports[$index]}")
+                fi
+            done
+            pending=()
+            if [[ -n "${next_pending[0]:-}" ]]; then pending=("${next_pending[@]}"); fi
+            [[ -n "${round_indices[0]:-}" ]] || continue
+            round=$((round + 1))
+            printf 'Rolling batch %s: %s\n' "$round" "${peers[*]}"
+            run_batch_control drain "${peers[@]}"
+            for index in "${round_indices[@]}"; do
+                restart_instance "$index" &
+                jobs+=("$!")
+            done
+            failed=0
+            for offset in "${!jobs[@]}"; do
+                index=${round_indices[$offset]}
+                if wait "${jobs[$offset]}"; then
+                    healthy_peers+=("${groups[$index]}:${ports[$index]}")
+                else
+                    failed=1
+                fi
+            done
+            # Restore successful peers even if another group failed, then abort.
+            if [[ -n "${healthy_peers[0]:-}" ]]; then
+                run_batch_control enable "${healthy_peers[@]}"
+            fi
+            if [[ "$failed" -ne 0 ]]; then
+                printf 'Rolling batch failed; unhealthy instances remain drained; no later batch will run\n' >&2
+                exit 1
+            fi
+            printf 'Completed rolling batch %s\n' "$round"
+        done
+        if [[ -n "${access_indices[0]:-}" ]]; then
+            for index in "${access_indices[@]}"; do rollout_one "$index"; done
+        fi
+    else
+        for index in "${!programs[@]}"; do rollout_one "$index"; done
+    fi
 fi
+printf 'Rollout duration: %ss\n' "$((SECONDS - rollout_started))"
 mv -fT -- "$archive" "$root/packages/$name"
 rm -rf -- "$stage"
 printf 'Upload and extraction complete. SQL was NOT executed.\n'
 if [[ "$restart" == 0 || "$service" == admin ]]; then
     printf 'No services were restarted.\n'
 else
-    printf 'Selected Supervisor programs were restarted and health-checked.\n'
+    printf 'Selected Supervisor programs were checked; changed or unverifiable instances were restarted.\n'
 fi
+printf 'Remote publish duration: %ss\n' "$((SECONDS - publish_started))"

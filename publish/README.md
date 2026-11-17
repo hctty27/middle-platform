@@ -54,7 +54,7 @@
 
 ## 滚动发布流程
 
-完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/4 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的实例顺序逐个执行：
+完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/4 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的方式滚动更新（仅更新实际运行二进制不一致或无法验证的实例）：
 
 1. 将当前实例在对应 Nginx upstream 标记为 `down`。
 2. 执行 `nginx -t` 并 graceful reload。
@@ -64,7 +64,7 @@
 6. 移除 `down`，再次校验并 reload Nginx，将实例重新加入流量。
 7. 完成当前实例后才处理下一个实例。
 
-发布前会验证所有 Supervisor program 和 Nginx upstream 配置。一次只摘除一个实例，并拒绝摘除某个 upstream 的最后一个可用实例。若重启、Ready 或 Nginx reload 失败，发布立即停止，故障实例保持摘除，未处理的实例不再重启。修复原因并确认 Ready 后，管理员再手动恢复该实例。
+发布前会验证所有 Supervisor program 和 Nginx upstream 配置。若服务器手动安装了新版 upstream-control.sh（支持 batch-v1），全量发布按 config-center / sdk-core / sdk-service 每组每轮至多一个实例并行更新：批量摘除、一次 reload 并等待旧 worker 退出，随后并行重启与连续 Ready 检查，再批量恢复健康实例。2/4/4 拓扑最多四轮。单服务仍逐实例更新；旧版 helper 自动回退到原串行模式。每组拒绝摘除最后一个可用实例；全量并行要求新旧服务版本兼容，且剩余实例能够承担流量。需要避免跨组并行时，分别使用 -Service 发布。若本轮任一实例重启或 Ready 失败，等待本轮任务结束并恢复健康实例，失败实例保持摘除，不启动下一轮。Nginx 操作失败则立即停止。修复原因并确认 Ready 后，管理员再手动恢复该实例。
 
 这是单机多实例滚动更新，不承诺严格零错误：共享 MySQL 故障、应用逻辑错误、全部实例故障、Nginx reload 失败仍会影响业务。远端发布期间持有 `/data/middle-platform/.publish.lock`；Monit 健康检查和重启共用该锁，发布期间 Monit 跳过本轮检查，Monit 正在重启时发布会在改文件前退出。本流程不提供自动二进制回滚；发布失败时旧进程可能仍在运行，但新二进制文件已原子替换，需人工排查。
 
@@ -81,4 +81,6 @@ python -I scripts/ci_publish_smoke.py
 bash ops/nginx/test-upstream-control.sh
 ```
 
-正式发布建议省略 `-Fast`，使用锁文件执行 `npm ci`。
+正式发布建议省略 `-Fast`。前端源码（含本地文件）、构建工具链、相关环境及 dist 内容的 SHA-256 指纹一致时，直接复用已成功构建的 dist；任一项变化或缓存缺失时重新构建，默认仍使用锁文件执行 `npm ci`。指定 `-Fast` 时，仅在依赖指纹匹配时复用 node_modules。需要强制重新构建时，可删除 admin/node_modules/.middle-platform-build.sha256；若还需重新安装依赖，则省略 -Fast。
+
+服务器跳过字节和权限完全一致的普通文件。仅在 Supervisor 当前运行的 PID 对应 /proc/PID/exe 与本次包中的二进制 SHA-256 相同，且 Ready 检查通过时，才跳过该实例重启；不以磁盘文件是否已更新作为运行版本依据。未能读取或确认运行产物时仍执行安全滚动重启。发布日志记录打包、上传、远程预检、文件更新和滚动发布耗时。

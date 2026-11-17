@@ -29,6 +29,39 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $outputRoot = Join-Path $repoRoot 'dist'
 $gitCommit = 'unknown'
 
+# 内容指纹同时包含相对路径，包含未提交/本地 .env 文件但不输出其内容。
+function Get-TextFingerprint {
+    param([string]$Text)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Text)))).Replace('-', '')
+    } finally {
+        $sha.Dispose()
+    }
+}
+function Get-TreeFingerprint {
+    param([string]$Directory, [string[]]$Exclude = @())
+    $items = @(Get-ChildItem -LiteralPath $Directory -Force | Where-Object { $_.Name -notin $Exclude })
+    $entries = foreach ($item in $items) {
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Cannot fingerprint linked frontend path: $($item.Name)"
+        }
+        $item
+        if ($item.PSIsContainer) { Get-ChildItem -LiteralPath $item.FullName -Recurse -Force }
+    }
+    $lines = foreach ($item in @($entries | Sort-Object FullName)) {
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Cannot fingerprint linked frontend path: $($item.Name)"
+        }
+        if (-not $item.PSIsContainer) {
+            $relative = $item.FullName.Substring($Directory.Length + 1).Replace('\', '/')
+            $pathKey = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($relative))
+            "$pathKey $((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash)"
+        }
+    }
+    return Get-TextFingerprint ($lines -join [char]10)
+}
+
 # 校验本地构建工具是否存在，缺失时直接失败，避免生成不完整发布包。
 function Require-Command {
     param([string]$Name)
@@ -54,6 +87,7 @@ if ($goHost.Count -ne 2) {
 if ($buildFrontend) {
     $npmCommand = if ($env:OS -eq 'Windows_NT') { 'npm.cmd' } else { 'npm' }
     Require-Command $npmCommand
+    Require-Command 'node'
 }
 
 # Git 提交信息仅用于版本追踪；工作树不可读取时仍允许构建。
@@ -183,26 +217,81 @@ try {
         try {
             $lockFile = Join-Path $frontendDir 'package-lock.json'
             $marker = Join-Path $frontendDir 'node_modules/.middle-platform-lock.sha256'
-            $lockStream = [System.IO.File]::OpenRead($lockFile)
-            $hasher = [System.Security.Cryptography.SHA256]::Create()
+            $buildMarker = Join-Path $frontendDir 'node_modules/.middle-platform-build.sha256'
+            $distDir = Join-Path $frontendDir 'dist'
+            $nodeVersion = (& node --version | Out-String).Trim()
+            Assert-ExitCode 'node --version'
+            $npmVersion = (& $npmCommand --version | Out-String).Trim()
+            Assert-ExitCode 'npm --version'
+            $buildEnvironment = @(Get-ChildItem Env: | Where-Object {
+                $_.Name -match '^(VITE_|NODE_ENV$|NODE_OPTIONS$|CI$|NPM_CONFIG_)'
+            } | Sort-Object Name | ForEach-Object {
+                Get-TextFingerprint ($_.Name + '=' + $_.Value)
+            })
+            $toolchainKey = Get-TextFingerprint (@($nodeVersion, $npmVersion, $goHost[0], $goHost[1]) + $buildEnvironment -join [char]10)
+            $dependencyKey = Get-TextFingerprint (@(
+                (Get-FileHash -LiteralPath $lockFile -Algorithm SHA256).Hash
+                (Get-FileHash -LiteralPath (Join-Path $frontendDir 'package.json') -Algorithm SHA256).Hash
+                $toolchainKey
+                $(if (Test-Path -LiteralPath (Join-Path $frontendDir '.npmrc') -PathType Leaf) {
+                    (Get-FileHash -LiteralPath (Join-Path $frontendDir '.npmrc') -Algorithm SHA256).Hash
+                } else { 'no-npmrc' })
+            ) -join [char]10)
+            $sourceKey = $null
+            $reuseBuild = $false
             try {
-                $lockHash = ([System.BitConverter]::ToString($hasher.ComputeHash($lockStream))).Replace('-', '')
-            } finally {
-                $lockStream.Dispose()
-                $hasher.Dispose()
+                $sourceKey = Get-TextFingerprint (@(
+                    $toolchainKey
+                    (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
+                    (Get-TreeFingerprint $frontendDir @('node_modules', 'dist', '.git'))
+                ) -join [char]10)
+                if ((Test-Path -LiteralPath $buildMarker -PathType Leaf) -and
+                    (Test-Path -LiteralPath (Join-Path $distDir 'index.html') -PathType Leaf) -and
+                    (Test-Path -LiteralPath (Join-Path $distDir 'docs/index.html') -PathType Leaf) -and
+                    (Test-Path -LiteralPath (Join-Path $distDir 'docs/guide.html') -PathType Leaf)) {
+                    $cached = [System.IO.File]::ReadAllText($buildMarker).Trim()
+                    $reuseBuild = ($cached -eq ($sourceKey + ':' + (Get-TreeFingerprint $distDir)))
+                }
+            } catch {
+                $sourceKey = $null
+                Write-Host '无法验证前端构建缓存，执行完整构建。'
             }
-            $reuseModules = $Fast -and (Test-Path -LiteralPath $marker -PathType Leaf) -and
-                (Test-Path -LiteralPath (Join-Path $frontendDir 'node_modules/.package-lock.json') -PathType Leaf) -and
-                ([System.IO.File]::ReadAllText($marker).Trim() -eq $lockHash)
-            if (-not $reuseModules) {
-                & $npmCommand ci --no-audit --no-fund
-                Assert-ExitCode 'npm ci'
-                [System.IO.File]::WriteAllText($marker, $lockHash, (New-Object System.Text.UTF8Encoding($false)))
+            if ($reuseBuild) {
+                Write-Host '前端源码、构建环境及产物未变化，跳过 npm ci 和 Vue 构建。'
             } else {
-                Write-Host '依赖锁文件未变化，快速模式复用前端 node_modules。'
+                Remove-Item -LiteralPath $buildMarker -Force -ErrorAction SilentlyContinue
+                $reuseModules = $Fast -and (Test-Path -LiteralPath $marker -PathType Leaf) -and
+                    (Test-Path -LiteralPath (Join-Path $frontendDir 'node_modules/.package-lock.json') -PathType Leaf) -and
+                    ([System.IO.File]::ReadAllText($marker).Trim() -eq $dependencyKey)
+                if (-not $reuseModules) {
+                    & $npmCommand ci --no-audit --no-fund
+                    Assert-ExitCode 'npm ci'
+                    [System.IO.File]::WriteAllText($marker, $dependencyKey, (New-Object System.Text.UTF8Encoding($false)))
+                } else {
+                    Write-Host '依赖指纹未变化，快速模式复用前端 node_modules。'
+                }
+                # 不允许构建失败或旧 dist 残留被误认为本次成功产物。
+                if (Test-Path -LiteralPath $distDir) { Remove-Item -LiteralPath $distDir -Recurse -Force }
+                & $npmCommand run build
+                Assert-ExitCode 'npm run build'
+                if ($sourceKey -and (Test-Path -LiteralPath (Join-Path $distDir 'index.html') -PathType Leaf) -and
+                    (Test-Path -LiteralPath (Join-Path $distDir 'docs/index.html') -PathType Leaf) -and
+                    (Test-Path -LiteralPath (Join-Path $distDir 'docs/guide.html') -PathType Leaf)) {
+                    try {
+                        $currentSourceKey = Get-TextFingerprint (@(
+                            $toolchainKey
+                            (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
+                            (Get-TreeFingerprint $frontendDir @('node_modules', 'dist', '.git'))
+                        ) -join [char]10)
+                        if ($currentSourceKey -eq $sourceKey) {
+                            $cacheValue = $sourceKey + ':' + (Get-TreeFingerprint $distDir)
+                            [System.IO.File]::WriteAllText($buildMarker, $cacheValue, (New-Object System.Text.UTF8Encoding($false)))
+                        }
+                    } catch {
+                        Write-Host '前端构建成功，但未保存构建缓存。'
+                    }
+                }
             }
-            & $npmCommand run build
-            Assert-ExitCode 'npm run build'
         }
         finally {
             Pop-Location
