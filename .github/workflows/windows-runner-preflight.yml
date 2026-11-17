@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Verify runner identity and k6 without checking out repository code
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') {
