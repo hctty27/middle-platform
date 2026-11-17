@@ -26,6 +26,7 @@ if [[ ! -f "$file" || -L "$file" ]]; then
 fi
 target="127.0.0.1:$port"
 if ! counts=$(awk -v target="$target" '
+    { sub(/\r$/, "", $0) }
     NF == 0 { next }
     {
         if ($1 != "server" || $2 !~ /^127[.]0[.]0[.]1:[0-9]+$/ ||
@@ -131,6 +132,7 @@ cleanup() { rm -f -- "$temporary" "$backup"; }
 trap cleanup EXIT
 cp -p -- "$file" "$backup"
 if ! awk -v target="$target" -v action="$action" '
+    { sub(/\r$/, "", $0) }
     $1 == "server" && $2 == target {
         matched++
         down = 0
