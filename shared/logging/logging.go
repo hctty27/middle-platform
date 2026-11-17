@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	_ "time/tzdata"
 )
 
 // RequestIDHeader 约定服务间 HTTP 请求追踪所使用的请求头。
@@ -125,6 +126,23 @@ func Init(service string, c Config) error {
 	return nil
 }
 
+const logTimestampLayout = "2006-01-02T15:04:05.000-07:00"
+
+// Asia/Shanghai is embedded through time/tzdata so minimal runtime images do not
+// depend on the host's timezone database. The fixed-offset fallback is defensive.
+var logTimezone = func() *time.Location {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return time.FixedZone("UTC+08:00", 8*60*60)
+	}
+	return location
+}()
+
+// formatRecordTime changes only the log record timestamp, never the represented instant.
+func formatRecordTime(value time.Time) string {
+	return value.In(logTimezone).Truncate(time.Millisecond).Format(logTimestampLayout)
+}
+
 func newHandler(output io.Writer, c Config) slog.Handler {
 	levels := map[string]slog.Level{
 		"debug": slog.LevelDebug, "info": slog.LevelInfo,
@@ -134,7 +152,7 @@ func newHandler(output io.Writer, c Config) slog.Handler {
 		Level: levels[strings.ToLower(c.Level)],
 		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
 			if len(groups) == 0 && attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
-				return slog.String(attr.Key, attr.Value.Time().UTC().Format(time.RFC3339))
+				return slog.String(attr.Key, formatRecordTime(attr.Value.Time()))
 			}
 			return attr
 		},
