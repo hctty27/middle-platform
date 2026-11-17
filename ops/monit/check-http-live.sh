@@ -11,7 +11,7 @@ port=$2
 case "$program" in
     config-center-[12]) supervisor_process="config-center:$program" ;;
     sdk-core-[1-4]) supervisor_process="sdk-core:$program" ;;
-    sdk-service-[1-4]) supervisor_process="sdk-service:$program" ;;
+    sdk-service-[1-6]) supervisor_process="sdk-service:$program" ;;
     config-center-access) supervisor_process=$program ;;
     *) printf 'Invalid Supervisor program name\n' >&2; exit 2 ;;
 esac

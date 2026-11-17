@@ -18,7 +18,7 @@ else
 fi
 root=${MIDDLE_PLATFORM_ROOT:-/data/middle-platform}
 case "$action" in validate|drain|enable|recover) ;; *) printf 'Invalid upstream action\n' >&2; exit 2 ;; esac
-[[ ${#peers[@]} -le 10 ]] || exit 2
+[[ ${#peers[@]} -le 12 ]] || exit 2
 declare -A selected_peers=() selected_groups=()
 groups=() ports=() files=() upstream_names=() targets=() downs=()
 for peer in "${peers[@]}"; do
@@ -39,8 +39,8 @@ for peer in "${peers[@]}"; do
             expected_count=2; upstream_name=config_center; file="$root/run/nginx/config-center-upstream.conf" ;;
         sdk-core:8211|sdk-core:8212|sdk-core:8213|sdk-core:8214)
             expected_count=4; upstream_name=sdk_core; file="$root/run/nginx/sdk-core-upstream.conf" ;;
-        sdk-service:8221|sdk-service:8222|sdk-service:8223|sdk-service:8224)
-            expected_count=4; upstream_name=sdk_service; file="$root/run/nginx/sdk-service-upstream.conf" ;;
+        sdk-service:8221|sdk-service:8222|sdk-service:8223|sdk-service:8224|sdk-service:8225|sdk-service:8226)
+            expected_count=6; upstream_name=sdk_service; file="$root/run/nginx/sdk-service-upstream.conf" ;;
         *) printf 'Unsupported upstream group or port: %s:%s\n' "$group" "$port" >&2; exit 2 ;;
     esac
     for directory in "$root" "$root/run" "$root/run/nginx"; do

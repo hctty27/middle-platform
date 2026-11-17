@@ -8,7 +8,7 @@
 
 - group：quick（单接口快速验证）/ read（32 个只读或查询类场景）/ write（20 个写入、上报、回调场景）/ all（52 类路由）。
 - tiers：basic 读 50/200/500 QPS、写 10/30/60 QPS；high 读 100/500/1000/3000/5000/10000/20000 QPS、写 20/50/100/250 QPS。每个接口前一档失败就停止升级、保留失败指标；quick 固定 50/200/500 QPS。高档仅为探索目标。
-- topology：compact（2/1/1）或 cluster（2/4/4），每实例 GOMEMLIMIT=128MiB。
+- topology：compact（2/1/1）或 cluster（2/4/6），每实例 GOMEMLIMIT=128MiB。
 - seconds：每档 3–15 秒。endpoint：可填 tests/load/endpoint-qps-catalog.json 中某个接口 ID 单独测试。
 
 执行前先跑一次 api-coverage.js，要求 52/52 合约成功；之后单接口逐档固定 arrival-rate，**每次迭代只发一次被测 API 请求**。记录目标 QPS、实际 HTTP/s、P95、P99、业务失败率、未启动迭代、MySQL 行锁等待增量和进程 CPU/RSS；导出 endpoint-qps-summary.csv/json 与各档原始日志。
@@ -32,7 +32,7 @@ Actions → Runner Load Test → Run workflow：选择 profile=api-coverage、to
 在 Actions → Runner Load Test → Run workflow 选择参数。涉及服务、共享模块、数据库、Nginx 或压测脚本的 PR 自动执行 compact/cluster smoke 与 compact traffic-quick；完整压力测试按需手动触发。
 
 - profile: api-coverage（52 类接口覆盖和业务断言，仅单次）、smoke（5 次迭代/s × 10 秒）、traffic-quick（四档 × 10 秒）、baseline（25/50/100 × 30 秒）、stress（100/250/500/1000 × 30 秒）、capacity、traffic、soak（50 次迭代/s × 30 分钟）、soak2h（50 次迭代/s × 2 小时）。capacity / traffic / traffic-quick 固定场景，忽略 scenario；soak 默认 mixed。
-- topology: compact (2/1/1) 或 cluster (2/4/4)，both 对比二者，每个 Go 实例 GOMEMLIMIT=128MiB（软目标）。
+- topology: compact (2/1/1) 或 cluster (2/4/6)，both 对比二者，每个 Go 实例 GOMEMLIMIT=128MiB（软目标）。
 - scenario: all（逐项运行）或 config-sync、sdk-config、user-check、order、duplicate、payment、mixed。所有场景固定访问 127.0.0.1，不能指定外部地址。
 
 配置同步读 revision；SDK 配置读热点渠道；用户核验真实经过 DB、验签和本地模拟发行平台；订单写入临时 DB；重复登记走真实幂等接口；payment 先登记再发送平台 V1 回调，最后检验持久化发货状态；mixed 轮流执行以上业务。支付与重复订单每次迭代最多两次 HTTP 请求，因此迭代速率不是 HTTP QPS。

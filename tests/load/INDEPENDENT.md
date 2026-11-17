@@ -21,7 +21,7 @@ Windows Runner 已验证可以读取本机安装的 k6；JSON 只放 Runner 本�
 ## 准备
 
 - Windows 安装 k6（建议与 CI 一致 1.0.0）、PowerShell，确认 k6 version。
-- 单独部署与生产拓扑一致的隔离服务（2 config-center、4 sdk-core、4 sdk-service），独立测试数据库、专用 TLS 域名及测试平台，设置访问白名单。生产服务器上部署隔离环境需评估 CPU、内存与 DB 竞争；优先使用独立测试服务器。
+- 单独部署与生产拓扑一致的隔离服务（2 config-center、4 sdk-core、6 sdk-service），独立测试数据库、专用 TLS 域名及测试平台，设置访问白名单。生产服务器上部署隔离环境需评估 CPU、内存与 DB 竞争；优先使用独立测试服务器。
 - 在仓库之外保存 JSON 数组，如 C:\load-private\fixtures.json；只使用测试 GameSecret，禁止提交 Git 或 CI Artifact。每项必须有 appId、gameSecret、zoneKey（区服组 code），同一游戏可共享游戏密钥，渠道 AppSecret 由服务端读取。示例（均为占位值）：
 
     [
