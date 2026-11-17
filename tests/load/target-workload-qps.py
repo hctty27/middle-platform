@@ -185,8 +185,14 @@ monitor = subprocess.Popen([
 ])
 summary_path = results / "quarter-workload-summary.json"
 log_path = results / "quarter-workload.log"
+# Webhook request validation requires the current local revision, not a
+# zero/empty fallback that would measure rejected callbacks as config traffic.
+revision = mysql("SELECT epoch,revision FROM config_revision WHERE id=1").split("\t")
+if len(revision) != 2 or not revision[0] or not revision[1].isdigit():
+    raise SystemExit("Cannot read local revision fixture for webhook QPS")
 env = dict(os.environ, QPS_WORKLOAD="quarter-target",
-           QPS_SECONDS=str(duration), QPS_STAGE=stage)
+           QPS_SECONDS=str(duration), QPS_STAGE=stage,
+           QPS_EPOCH=revision[0], QPS_REVISION=revision[1])
 try:
     with log_path.open("w") as output:
         run = subprocess.run(
@@ -244,7 +250,7 @@ for case in cases:
         db_rows = payment_paid
     vu_count = max(20, math.ceil(case["rate"] * 0.05))
     qualified = bool(
-        run.returncode == 0 and requests >= planned * 0.99
+        requests >= planned * 0.99
         and iterations >= planned * 0.999 and dropped <= planned * 0.001
         and bad_rate is not None and bad_rate < 0.01
         and p95 is not None and p95 < 500
@@ -300,6 +306,7 @@ while notify_pending and time.monotonic() < deadline:
 
 summary = {
     "source": "github-hosted-loopback",
+    "runner_exit_code": run.returncode,
     "duration_seconds": duration,
     "scale": scale,
     "total_target_qps": target_total,
@@ -348,7 +355,8 @@ print(f"\nPayment DB verification: seeded={payment_total}, paid={payment_paid}, 
       f"notify_failed={notify_failed}", flush=True)
 print(f"MySQL status delta: {json.dumps({k: after.get(k,0)-before.get(k,0) for k in before}, ensure_ascii=False)}", flush=True)
 print_process_report(results)
-if failures:
-    print("Quarter workload failed endpoints: " + ", ".join(failures), flush=True)
+if failures or run.returncode != 0:
+    print("Quarter workload failed endpoints: " + (", ".join(failures) or "none") +
+          f", k6 exit code: {run.returncode}", flush=True)
     sys.exit(1)
 print("All quarter-target non-admin API categories passed.", flush=True)
