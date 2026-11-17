@@ -51,17 +51,46 @@ cat > "$bin/systemctl" <<'EOF'
 set -e
 case "$1" in
     is-active) exit 0 ;;
-    reload) exit 0 ;;
+    show) printf 'MainPID=100\n' ;;
+    reload)
+        read -r generation < "$TEST_GENERATION"
+        printf '%s\n' "$((generation + 1))" > "$TEST_GENERATION"
+        printf '0\n' > "$TEST_POLLS"
+        ;;
     *) exit 2 ;;
 esac
 EOF
 cat > "$bin/ps" <<'EOF'
 #!/usr/bin/env bash
-exit 0
+set -e
+read -r generation < "$TEST_GENERATION"
+read -r polls < "$TEST_POLLS"
+printf '%s\n' "$((polls + 1))" > "$TEST_POLLS"
+# Include a lookalike command, even with the same PPID as the workers.
+printf '999 100 awk /nginx: worker process is shutting down/\n'
+mode=${TEST_PS_MODE:-normal}
+start=${TEST_START_GENERATION:-0}
+if [[ "$mode" == fail_before ]]; then exit 1; fi
+if (( generation > start )); then
+    case "$mode" in
+        fail_after) exit 1 ;;
+        sticky)
+            printf '%s 100 nginx: worker process\n' "$((200 + start))"
+            exit 0 ;;
+        delayed)
+            if (( polls == 0 )); then
+                printf '%s 100 nginx: worker process\n' "$((200 + start))"
+                exit 0
+            elif (( polls == 1 )); then
+                printf '%s 100 nginx: worker process is shutting down\n' "$((200 + start))"
+            fi ;;
+    esac
+fi
+printf '%s 100 nginx: worker process\n' "$((200 + generation))"
 EOF
 cat > "$bin/sleep" <<'EOF'
 #!/usr/bin/env bash
-exit 0
+printf 'wait\n' >> "$TEST_SLEEP_LOG"
 EOF
 chmod 0755 "$bin"/*
 export MIDDLE_PLATFORM_ROOT="$root"
@@ -71,7 +100,11 @@ export SUDO_BIN="$bin/sudo"
 export PS_BIN="$bin/ps"
 export SLEEP_BIN="$bin/sleep"
 export AWK_BIN="$(command -v awk)"
-export NGINX_DRAIN_TIMEOUT_SECONDS=2
+export TEST_GENERATION="$tmp/generation" TEST_POLLS="$tmp/polls" TEST_SLEEP_LOG="$tmp/sleeps"
+printf '0\n' > "$TEST_GENERATION"
+printf '0\n' > "$TEST_POLLS"
+: > "$TEST_SLEEP_LOG"
+export NGINX_DRAIN_TIMEOUT_SECONDS=3
 control="$script_dir/upstream-control.sh"
 "$control" validate config-center 8201
 "$control" drain config-center 8201
@@ -125,4 +158,41 @@ printf 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;\r\nserver 127.0
 grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s;' "$file"
 printf 'server 127.0.0.1:8201 max_fails=9 fail_timeout=10s;\r\nserver 127.0.0.1:8202 max_fails=1 fail_timeout=10s;\r\n' > "$file"
 if "$control" validate config-center 8201; then echo 'Accepted malformed upstream' >&2; exit 1; fi
+# A reload can return before the old workers change their process titles.
+reset_upstream() {
+    printf 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s;\nserver 127.0.0.1:8202 max_fails=1 fail_timeout=10s;\n' > "$file"
+    read -r TEST_START_GENERATION < "$TEST_GENERATION"
+    export TEST_START_GENERATION
+    printf '0\n' > "$TEST_POLLS"
+    : > "$TEST_SLEEP_LOG"
+}
+reset_upstream
+TEST_PS_MODE=delayed "$control" drain config-center 8201
+[[ $(wc -l < "$TEST_SLEEP_LOG") -eq 2 ]]
+grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;' "$file"
+"$control" enable config-center 8201
+
+reset_upstream
+if TEST_PS_MODE=sticky "$control" drain config-center 8201 >"$tmp/timeout.log" 2>&1; then
+    echo 'Old worker still active but drain succeeded' >&2; exit 1
+fi
+grep -Fq "pending worker PIDs=$((200 + TEST_START_GENERATION))" "$tmp/timeout.log"
+grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;' "$file"
+
+# Retrying a down instance must issue another HUP before reporting safe drain.
+read -r before < "$TEST_GENERATION"
+"$control" drain config-center 8201
+read -r after < "$TEST_GENERATION"
+[[ "$after" -eq $((before + 1)) ]]
+
+reset_upstream
+if TEST_PS_MODE=fail_before "$control" drain config-center 8201; then
+    echo 'Failed ps before reload was treated as successful drain' >&2; exit 1
+fi
+grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s;' "$file"
+reset_upstream
+if TEST_PS_MODE=fail_after "$control" drain config-center 8201; then
+    echo 'Failed ps after reload was treated as successful drain' >&2; exit 1
+fi
+grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;' "$file"
 printf 'Nginx upstream control tests passed\n'
