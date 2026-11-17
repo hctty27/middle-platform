@@ -13,13 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 )
 
 const (
-	adminWindow     = 5 * time.Minute
-	adminBodyLimit  = 1 << 20
-	adminNonceLimit = DefaultNonceCapacity
+	adminWindow    = DefaultReplayWindow
+	adminBodyLimit = 1 << 20
 )
 
 // SubscriberSecretLookup 根据接入端编码读取其启用状态和独立签名密钥。
