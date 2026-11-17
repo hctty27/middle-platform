@@ -202,8 +202,12 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
             return 0
         else
             status=$?
-            if [[ "$action" == validate ]]; then
-                printf 'Nginx upstream validation failed: %s port %s (exit %s); no application files were changed\n' "$group" "$port" "$status" >&2
+            if [[ "$action" == validate || "$action" == recover ]]; then
+                if [[ "$action" == validate ]]; then
+                    printf 'Nginx upstream validation failed: %s port %s (exit %s); no application files were changed\n' "$group" "$port" "$status" >&2
+                else
+                    printf 'Nginx upstream recovery failed: %s port %s (exit %s); no application files were changed\n' "$group" "$port" "$status" >&2
+                fi
             else
                 printf 'Nginx upstream %s failed: %s port %s (exit %s); rollout stopped; inspect runtime upstream state\n' "$action" "$group" "$port" "$status" >&2
             fi
@@ -229,23 +233,58 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
             break
         fi
     done
+    # First check all selected instances before changing any upstream membership.
+    recovery_indices=()
     for index in "${!programs[@]}"; do
         program="${programs[$index]}"
         group="${groups[$index]}"
         port="${ports[$index]}"
         supervisor_process="$program"
         if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
-        if ! supervisorctl status "$supervisor_process" >/dev/null 2>&1; then
-            printf 'Supervisor program is unavailable: %s; no application files were changed\n' "$supervisor_process" >&2
+        if ! supervisorctl status "$supervisor_process" | grep -Eq "^$supervisor_process[[:space:]]+RUNNING([[:space:]]|$)"; then
+            printf 'Supervisor program is unavailable or not RUNNING: %s; no application files were changed\n' "$supervisor_process" >&2
             exit 1
         fi
         if ! curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
-            printf 'Instance is not Ready: %s on port %s; no application files were changed\\n' "$program" "$port" >&2
+            printf 'Instance is not Ready: %s on port %s; no application files were changed\n' "$program" "$port" >&2
             exit 1
         fi
         if [[ "$group" != none ]]; then
-            run_nginx_control validate "$group" "$port"
+            if validation_output=$(MIDDLE_PLATFORM_ROOT="$root" bash "$nginx_control" validate "$group" "$port"); then
+                if [[ -n "$validation_output" ]]; then printf '%s\n' "$validation_output"; fi
+            else
+                validation_status=$?
+                # Only the explicit, fully validated down result is recoverable.
+                if [[ "$validation_status" -eq 3 && "$validation_output" == "UPSTREAM_DOWN $group $port" ]]; then
+                    recovery_indices+=("$index")
+                    printf 'Found drained instance: %s (port %s); health verification required before recovery\n' "$program" "$port"
+                else
+                    if [[ -n "$validation_output" ]]; then printf '%s\n' "$validation_output" >&2; fi
+                    printf 'Nginx upstream validation failed: %s port %s (exit %s); no application files were changed\n' "$group" "$port" "$validation_status" >&2
+                    exit "$validation_status"
+                fi
+            fi
         fi
+    done
+
+    # The publish lock is held. Restore only explicitly selected, verified healthy peers.
+    for index in "${recovery_indices[@]}"; do
+        program="${programs[$index]}"
+        group="${groups[$index]}"
+        port="${ports[$index]}"
+        supervisor_process="$group:$program"
+        for attempt in 1 2 3; do
+            if ! supervisorctl status "$supervisor_process" | grep -Eq "^$supervisor_process[[:space:]]+RUNNING([[:space:]]|$)" ||
+               ! http_status=$(curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 -w '%{http_code}' "http://127.0.0.1:$port/health/ready") ||
+               [[ "$http_status" != 200 ]]; then
+                printf 'Cannot recover %s on port %s: health check %s/3 failed; instance remains down; no application files were changed\n' "$program" "$port" "$attempt" >&2
+                exit 1
+            fi
+            if [[ "$attempt" -lt 3 ]]; then sleep 2; fi
+        done
+        run_nginx_control recover "$group" "$port"
+        run_nginx_control validate "$group" "$port"
+        printf 'Recovered %s to Nginx traffic before rollout (port %s)\n' "$program" "$port"
     done
 fi
 
