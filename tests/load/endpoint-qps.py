@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+from urllib.request import urlopen
 
 from process_monitor import print_process_report
 
@@ -92,6 +94,35 @@ def value(data, name, field):
 def number(x, places=2):
     return "—" if x is None else f"{x:.{places}f}"
 
+def reset_auth_nonce_cache(case_id):
+    """Keep independent stage results free of accumulated 5-minute HMAC nonces."""
+    name = ""
+    if case_id.startswith("config-") and case_id not in (
+        "config-revision", "config-snapshot", "config-changes", "config-node", "config-batch"):
+        name = "config-center"
+    elif case_id.startswith("core-") and case_id not in (
+        "core-config", "core-order-register", "core-payment-duplicate"):
+        name = "sdk-core"
+    if not name:
+        return
+    count = 2 if name == "config-center" else (4 if os.environ["LOAD_TOPOLOGY"] == "cluster" else 1)
+    first = 8201 if name == "config-center" else 8211
+    programs = [f"{name}-{i+1}" for i in range(count)]
+    subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *programs],
+                   check=True, timeout=60, stdout=subprocess.DEVNULL)
+    for offset in range(count):
+        address = f"http://127.0.0.1:{first+offset}/health/ready"
+        for attempt in range(30):
+            try:
+                with urlopen(address, timeout=2) as response:
+                    if response.status == 200:
+                        break
+            except OSError:
+                pass
+            if attempt == 29:
+                raise RuntimeError("Auth-cache reset failed: " + address)
+            time.sleep(0.25)
+
 # Prove all 52 API contracts before any load stages and create a paid order fixture.
 preflight = results / "endpoint-qps-preflight"
 with open(str(preflight) + ".log", "w") as output:
@@ -154,6 +185,7 @@ for pos, case in enumerate(chosen):
                    3000000 if case["id"] == "core-delete-channel" else 0) + tier * 5000
         if case["mode"] == "delete":
             seed_delete(case["id"], base_id, planned + 5)
+        reset_auth_nonce_cache(case["id"])
         prefix = results / f"qps-{pos:02d}-{case['id']}-{rate}"
         env = dict(os.environ, **common, QPS_CASE=case["id"], QPS_RATE=str(rate),
                    QPS_SECONDS=str(duration), QPS_VUS=str(vus),
