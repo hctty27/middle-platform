@@ -13,8 +13,8 @@ esac
 if [[ ( "$LOAD_PROFILE" == soak || "$LOAD_PROFILE" == soak2h ) && "$LOAD_SCENARIO" == all ]]; then LOAD_SCENARIO=mixed; fi
 requested_scenario="$LOAD_SCENARIO"
 case "$LOAD_SCENARIO" in
-  all) scenarios=(config-sync sdk-config user-check order duplicate payment mixed) ;;
-  config-sync|sdk-config|user-check|order|duplicate|payment|mixed) scenarios=("$LOAD_SCENARIO") ;;
+  all) scenarios=(config-sync sdk-config user-check event-report order duplicate payment mixed) ;;
+  config-sync|sdk-config|user-check|event-report|order|duplicate|payment|mixed) scenarios=("$LOAD_SCENARIO") ;;
   *) exit 2 ;;
 esac
 vmstat -w 2 >> "$LOAD_DIR/results/vmstat.txt" &

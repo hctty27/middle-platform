@@ -5,7 +5,7 @@ on:
       profile:
         description: Load profile (all traffic stays on this runner)
         type: choice
-        options: [smoke, baseline, stress, soak, soak2h]
+        options: [smoke, baseline, stress, soak, soak2h, capacity, traffic]
         default: smoke
       topology:
         description: Instance topology
@@ -15,7 +15,7 @@ on:
       scenario:
         description: Business scenario
         type: choice
-        options: [all, config-sync, sdk-config, user-check, order, duplicate, payment, mixed]
+        options: [all, config-sync, sdk-config, user-check, event-report, order, duplicate, payment, mixed]
         default: all
   pull_request:
     branches: [main]
@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"soak-compact","topology":"compact","profile":"soak"}]' || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"soak-compact","topology":"compact","profile":"soak"},{"label":"capacity-compact","topology":"compact","profile":"capacity"},{"label":"traffic-compact","topology":"compact","profile":"traffic"}]' || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
 
     env:
       GOWORK: 'off'
@@ -58,10 +58,14 @@ jobs:
           k6-version: '1.0.0'
       - name: Validate scripts
         run: |
-          bash -n tests/load/setup.sh tests/load/run.sh
-          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py
+          bash -n tests/load/setup.sh
+          bash -n tests/load/run.sh
+          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py
+          python3 -m unittest discover -s tests/load -p 'test_*.py'
+          if [[ "$LOAD_PROFILE" == capacity ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
           test -z "$(gofmt -l tests/load/mock.go)"
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
+          LOAD_SCENARIO=mixed k6 inspect tests/load/traffic.js
       - name: Install local services
         run: |
           sudo apt-get update -q
@@ -71,7 +75,16 @@ jobs:
       - name: Start isolated application stack
         run: bash tests/load/setup.sh
       - name: Run load scenarios
+        if: matrix.profile != 'capacity' && matrix.profile != 'traffic'
         run: bash tests/load/run.sh
+      - name: Explore 10000 QPS and profile services
+        if: matrix.profile == 'capacity'
+        shell: bash
+        run: python3 -u tests/load/capacity.py "$LOAD_DIR" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Critical endpoint isolation and weighted traffic
+        if: matrix.profile == 'traffic'
+        shell: bash
+        run: python3 -u tests/load/traffic.py "$LOAD_DIR" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Explore all scenario saturation (PR only)
         if: github.event_name == 'pull_request' && matrix.profile == 'smoke'
         continue-on-error: true
@@ -85,7 +98,7 @@ jobs:
         run: |
           mkdir -p "$LOAD_DIR/results"
           mysql -uroot -h127.0.0.1 -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Max_used_connections','Slow_queries','Questions','Innodb_buffer_pool_reads','Innodb_row_lock_waits');" > "$LOAD_DIR/results/mysql-status.txt" 2>&1 || true
-          python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ "$LOAD_PROFILE" != capacity && "$LOAD_PROFILE" != traffic ]]; then python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"; fi
           if [[ '${{ steps.stress.outcome }}' == failure ]]; then
             echo 'Exploratory stress reached a threshold or execution error; see individual stage results.' | tee -a "$GITHUB_STEP_SUMMARY"
           fi

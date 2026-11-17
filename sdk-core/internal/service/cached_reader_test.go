@@ -107,3 +107,31 @@ func BenchmarkCachedReaderPublic(b *testing.B) {
 		})
 	}
 }
+
+func TestCachedJSONSharesTTLAndValue(t *testing.T) {
+	key := "<>&\\"
+	f := &cachedPublicFake{value: model.ConfigResponse{SnKey: "sn", ZoneKey: "zone", TsKey: &key}}
+	r, err := NewCachedReader(f, cache.Options{TTL: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ctx := context.Background()
+	first, err := r.LookupPublicConfigJSON(ctx, "app", "prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := r.LookupPublicConfig(ctx, "app", "prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := model.EncodePublicConfig(value)
+	if err != nil || first != expected || f.calls != 1 {
+		t.Fatalf("cached response mismatch: %q %q calls=%d err=%v", first, expected, f.calls, err)
+	}
+	*value.TsKey = "mutated"
+	again, err := r.LookupPublicConfigJSON(ctx, "app", "prod")
+	if err != nil || again != first {
+		t.Fatalf("cached JSON mutated: %q %v", again, err)
+	}
+}
