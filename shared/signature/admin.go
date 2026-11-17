@@ -6,19 +6,18 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 const (
-	adminWindow     = 5 * time.Minute
-	adminBodyLimit  = 1 << 20
-	adminNonceLimit = 10000
+	adminWindow    = DefaultReplayWindow
+	adminBodyLimit = 1 << 20
 )
 
 // SubscriberSecretLookup 根据接入端编码读取其启用状态和独立签名密钥。
@@ -113,53 +112,6 @@ func VerifySubscriberHMACRequest(r *http.Request, secret string, body []byte, no
 	return verifyHMACRequest(r, secret, code, body, now)
 }
 
-// Store fixed-size keys and group expirations by second. Full caches reject new
-// requests without evicting live nonces; cleanup never scans the entire key map.
-type adminNonceCache struct {
-	mu          sync.Mutex
-	used        map[[32]byte]int64
-	expirations map[int64][][32]byte
-	lastCleanup int64
-	limit       int
-}
-
-func (c *adminNonceCache) use(nonce string, expiresAt int64, now time.Time) bool {
-	key := sha256.Sum256([]byte(nonce))
-	second := now.Unix()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.used == nil {
-		c.used = make(map[[32]byte]int64)
-		c.expirations = make(map[int64][][32]byte)
-	}
-	limit := c.limit
-	if limit <= 0 {
-		limit = adminNonceLimit
-	}
-	if second != c.lastCleanup {
-		for until, keys := range c.expirations {
-			if until <= second {
-				for _, expiredKey := range keys {
-					if c.used[expiredKey] == until {
-						delete(c.used, expiredKey)
-					}
-				}
-				delete(c.expirations, until)
-			}
-		}
-		c.lastCleanup = second
-	}
-	if _, ok := c.used[key]; ok {
-		return false
-	}
-	if len(c.used) >= limit {
-		return false
-	}
-	c.used[key] = expiresAt
-	c.expirations[expiresAt] = append(c.expirations[expiresAt], key)
-	return true
-}
-
 func protectedPath(path string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		if prefix != "" && (path == prefix || strings.HasPrefix(path, prefix+"/")) {
@@ -194,7 +146,13 @@ func restoreSignedBody(r *http.Request, body []byte) {
 
 // RequestHMACMiddleware 对指定路径前缀执行固定密钥 HMAC-SHA256 验签和进程内 nonce 去重。
 func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) http.Handler {
-	cache := &adminNonceCache{}
+	return RequestHMACMiddlewareWithNonceStore(next, prefixes, secret, DefaultNonceStore())
+}
+
+// RequestHMACMiddlewareWithNonceStore allows multiple signed endpoints to share
+// one replay store, or to inject an atomic distributed NonceStore.
+func RequestHMACMiddlewareWithNonceStore(next http.Handler, prefixes []string, secret string, nonces NonceStore) http.Handler {
+	nonces = ResolveNonceStore(nonces)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !protectedPath(r.URL.Path, prefixes) {
 			next.ServeHTTP(w, r)
@@ -221,12 +179,12 @@ func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) 
 			rejectAdminSignature(w)
 			return
 		}
-		expiresAt := now.Unix() + int64(adminWindow.Seconds())
-		if futureExpiry := stamp + int64(adminWindow.Seconds()); futureExpiry > expiresAt {
-			expiresAt = futureExpiry
-		}
-		if !cache.use(nonce, expiresAt, now) {
-			http.Error(w, "请求 nonce 已使用或过于频繁", http.StatusConflict)
+		if err := AcceptNonce(r.Context(), nonces, "admin", nonce, timestamp, now, adminWindow); err != nil {
+			if errors.Is(err, ErrNonceReplay) {
+				http.Error(w, "请求 nonce 已使用或防重放缓存已满", http.StatusConflict)
+			} else {
+				http.Error(w, "防重放校验服务暂不可用", http.StatusServiceUnavailable)
+			}
 			return
 		}
 		restoreSignedBody(r, body)
@@ -236,13 +194,19 @@ func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) 
 
 // RequestSubscriberHMACMiddleware 按 X-Subscriber-Code 查询独立密钥并验签。
 func RequestSubscriberHMACMiddleware(next http.Handler, prefixes []string, lookup SubscriberSecretLookup) http.Handler {
-	return RequestSubscriberHMACMiddlewareWithNonceLimit(next, prefixes, lookup, adminNonceLimit)
+	return RequestSubscriberHMACMiddlewareWithNonceStore(next, prefixes, lookup, DefaultNonceStore())
 }
 
-// RequestSubscriberHMACMiddlewareWithNonceLimit allows a bounded per-process
-// replay cache sized for the receiving service. A non-positive limit keeps the default.
+// RequestSubscriberHMACMiddlewareWithNonceLimit configures a bounded per-process
+// replay cache. A non-positive limit selects the shared default capacity.
 func RequestSubscriberHMACMiddlewareWithNonceLimit(next http.Handler, prefixes []string, lookup SubscriberSecretLookup, limit int) http.Handler {
-	cache := &adminNonceCache{limit: limit}
+	return RequestSubscriberHMACMiddlewareWithNonceStore(next, prefixes, lookup, NewNonceGuard(limit))
+}
+
+// RequestSubscriberHMACMiddlewareWithNonceStore shares replay state with other
+// signed routes and supports an atomic distributed NonceStore implementation.
+func RequestSubscriberHMACMiddlewareWithNonceStore(next http.Handler, prefixes []string, lookup SubscriberSecretLookup, nonces NonceStore) http.Handler {
+	nonces = ResolveNonceStore(nonces)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !protectedPath(r.URL.Path, prefixes) {
 			next.ServeHTTP(w, r)
@@ -280,12 +244,12 @@ func RequestSubscriberHMACMiddlewareWithNonceLimit(next http.Handler, prefixes [
 			rejectAdminSignature(w)
 			return
 		}
-		expiresAt := now.Unix() + int64(adminWindow.Seconds())
-		if futureExpiry := stamp + int64(adminWindow.Seconds()); futureExpiry > expiresAt {
-			expiresAt = futureExpiry
-		}
-		if !cache.use(code+"\x00"+nonce, expiresAt, now) {
-			http.Error(w, "请求 nonce 已使用或过于频繁", http.StatusConflict)
+		if err := AcceptNonce(r.Context(), nonces, "subscriber:"+code, nonce, timestamp, now, adminWindow); err != nil {
+			if errors.Is(err, ErrNonceReplay) {
+				http.Error(w, "请求 nonce 已使用或防重放缓存已满", http.StatusConflict)
+			} else {
+				http.Error(w, "防重放校验服务暂不可用", http.StatusServiceUnavailable)
+			}
 			return
 		}
 		restoreSignedBody(r, body)
@@ -296,6 +260,11 @@ func RequestSubscriberHMACMiddlewareWithNonceLimit(next http.Handler, prefixes [
 // AdminMiddleware 保护管理 API；GET、POST、PUT、PATCH、DELETE 均须签名。
 func AdminMiddleware(next http.Handler, prefix, secret string) http.Handler {
 	return RequestHMACMiddleware(next, []string{prefix}, secret)
+}
+
+// AdminMiddlewareWithNonceStore shares anti-replay state with other protocols.
+func AdminMiddlewareWithNonceStore(next http.Handler, prefix, secret string, nonces NonceStore) http.Handler {
+	return RequestHMACMiddlewareWithNonceStore(next, []string{prefix}, secret, nonces)
 }
 
 func rejectAdminSignature(w http.ResponseWriter) {

@@ -75,15 +75,16 @@ func Run(configPath string) error {
 
 	address := cfg.Address
 	repository := &store.Store{DB: db}
-	// 管理接口使用管理密钥；配置同步接口根据接入端编码读取订阅者独立密钥。
-	var handler http.Handler = signature.AdminMiddleware(
-		api.RouterWithWrites(repository, repository), "/api/config/admin", cfg.AdminSecret,
+	// 管理、同步接口共享有界 nonce 存储；不同协议身份通过 scope 隔离。
+	nonceStore := signature.NewNonceGuard(signature.DefaultNonceCapacity)
+	var handler http.Handler = signature.AdminMiddlewareWithNonceStore(
+		api.RouterWithWrites(repository, repository), "/api/config/admin", cfg.AdminSecret, nonceStore,
 	)
-	handler = signature.RequestSubscriberHMACMiddlewareWithNonceLimit(
+	handler = signature.RequestSubscriberHMACMiddlewareWithNonceStore(
 		handler,
 		[]string{"/api/config/sync", "/api/config/nodes"},
 		repository.SubscriberSecret,
-		320000, // 每实例同步请求 nonce 容量；管理接口保持原有上限。
+		nonceStore,
 	)
 	health := bootstrap.NewHealthState()
 	health.SetReady(true)

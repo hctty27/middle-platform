@@ -234,3 +234,94 @@ func TestRequestSubscriberHMACMiddleware(t *testing.T) {
 		t.Fatalf("subscriber lookup failure: %d", recorder.Code)
 	}
 }
+
+
+func TestHMACMiddlewaresShareInjectedNonceStore(t *testing.T) {
+	store := NewNonceGuard(8)
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	adminA := AdminMiddlewareWithNonceStore(next, "/api/admin", testAdminSecret, store)
+	adminB := AdminMiddlewareWithNonceStore(next, "/api/admin", testAdminSecret, store)
+	adminRequest := func() *http.Request {
+		return signedAdminRequest(http.MethodPost, "/api/admin/action", "", "aaaaaaaaaaaaaaaa")
+	}
+	call := func(handler http.Handler, req *http.Request) int {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder.Code
+	}
+	if got := call(adminA, adminRequest()); got != http.StatusNoContent {
+		t.Fatalf("first admin request: %d", got)
+	}
+	if got := call(adminB, adminRequest()); got != http.StatusConflict {
+		t.Fatalf("admin replay across middleware instances: %d", got)
+	}
+
+	const code = "access-a"
+	const secret = "subscriber-secret-0123456789abcdef0123456789"
+	lookup := func(_ context.Context, requested string) (string, bool, error) {
+		return secret, requested == code, nil
+	}
+	subscriberA := RequestSubscriberHMACMiddlewareWithNonceStore(next, []string{"/api/sync"}, lookup, store)
+	subscriberB := RequestSubscriberHMACMiddlewareWithNonceStore(next, []string{"/api/sync"}, lookup, store)
+	subscriberRequest := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/api/sync/changes", nil)
+		ts, nonce := strconv.FormatInt(time.Now().Unix(), 10), "aaaaaaaaaaaaaaaa"
+		req.Header.Set("X-Subscriber-Code", code)
+		req.Header.Set("X-Timestamp", ts)
+		req.Header.Set("X-Nonce", nonce)
+		req.Header.Set("X-Signature", SignSubscriberHMACRequest(secret, code, req.Method,
+			req.URL.EscapedPath(), "", ts, nonce, nil))
+		return req
+	}
+	// 同一 nonce 在不同协议身份域中独立计数。
+	if got := call(subscriberA, subscriberRequest()); got != http.StatusNoContent {
+		t.Fatalf("subscriber request should be isolated from admin scope: %d", got)
+	}
+	if got := call(subscriberB, subscriberRequest()); got != http.StatusConflict {
+		t.Fatalf("subscriber replay across middleware instances: %d", got)
+	}
+}
+
+
+type failedNonceStore struct{}
+
+func (failedNonceStore) Use(context.Context, string, string, string, time.Time, time.Duration) (bool, error) {
+	return false, errors.New("nonce backend unavailable")
+}
+
+func TestHMACMiddlewareDoesNotConsumeInvalidSignature(t *testing.T) {
+	store := NewNonceGuard(4)
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := RequestHMACMiddlewareWithNonceStore(next, []string{"/api/admin"}, testAdminSecret, store)
+	bad := signedAdminRequest(http.MethodPost, "/api/admin/action", "", "bbbbbbbbbbbbbbbb")
+	bad.Header.Set("X-Signature", "invalid")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, bad)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid signature status: %d", recorder.Code)
+	}
+	good := signedAdminRequest(http.MethodPost, "/api/admin/action", "", "bbbbbbbbbbbbbbbb")
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, good)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("valid request after invalid signature was rejected: %d", recorder.Code)
+	}
+}
+
+func TestHMACMiddlewareFailsClosedWhenNonceStoreUnavailable(t *testing.T) {
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := RequestHMACMiddlewareWithNonceStore(next, []string{"/api/admin"}, testAdminSecret, failedNonceStore{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, signedAdminRequest(http.MethodPost, "/api/admin/action", "", "cccccccccccccccc"))
+	if recorder.Code != http.StatusServiceUnavailable || called {
+		t.Fatalf("nonce store failure must fail closed: status=%d called=%v", recorder.Code, called)
+	}
+}

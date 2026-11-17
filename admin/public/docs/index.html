@@ -789,7 +789,7 @@ public final class AdminSigner {
         return HexFormat.of().formatHex(mac.doFinal());
     }
 }</code></pre></div>
-<div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>原因</th></tr></thead><tbody><tr><td>401</td><td>缺失、过期、格式错误或签名不匹配</td></tr><tr><td>409</td><td>当前进程内 nonce 已使用或缓存达到上限</td></tr><tr><td>413</td><td>Body 超过 1 MiB</td></tr><tr><td>503</td><td>管理密钥缺失或不足 32 字节</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>HTTP 状态</th><th>原因</th></tr></thead><tbody><tr><td>401</td><td>缺失、过期、格式错误或签名不匹配</td></tr><tr><td>409</td><td>当前进程内 nonce 已使用或缓存达到上限</td></tr><tr><td>413</td><td>Body 超过 1 MiB</td></tr><tr><td>503</td><td>管理密钥缺失或不足 32 字节，或防重放存储不可用</td></tr></tbody></table></div>
 <div class="notice warn">Nonce 目前仅在单进程内去重，多实例不保证全局防重放。生产仍需使用 HTTPS、限制管理路由网络访问，并确保管理写操作具备业务幂等性。</div></section>
 <section id="sig-sync" class="section"><div class="section-title"><h2>配置同步签名（HMAC-SHA256）</h2></div><div class="summary">每个接入端使用自己的 HMAC-SHA256 密钥完成双向同步认证；管理密钥保持独立。</div>
 <p>配置同步包含两个方向：配置中心向订阅者发送 Webhook 通知；接入端向配置中心拉取 revision、changes、snapshot 和节点数据。两个方向都必须签名，不能因为 Webhook 已验签就认为后续拉取接口也已受保护。</p>
@@ -819,7 +819,7 @@ X-Nonce: 0123456789abcdef
 X-Signature: &lt;64 位 HMAC-SHA256 小写 hex&gt;
 
 {&quot;epoch&quot;:&quot;550e8400-e29b-41d4-a716-446655440000&quot;,&quot;revision&quot;:12}</code></pre></div>
-<ul class="points"><li>Webhook 发送端每次投递和重试都会重新生成时间戳、nonce 与签名。</li><li>接入端先限制 Body 大小并保留原始字节，验签通过后再解析 JSON；时间戳窗口为前后 5 分钟。</li><li>重复 nonce 在同一进程内返回 409；多实例部署若要求全局防重放，需要共享 nonce 存储。</li><li>Webhook 可能重复或乱序，接收后仍须根据 <code>epoch + revision</code> 拉取并校验配置版本。</li><li>旧版固定 <code>configSync.secret</code> 与独立 <code>webhook.secret</code> 的分离密钥配置，以及未绑定接入端身份的签名协议均不再兼容；配置中心和接入端必须同步升级。</li></ul>
+<ul class="points"><li>Webhook 发送端每次投递和重试都会重新生成时间戳、nonce 与签名。</li><li>接入端先限制 Body 大小并保留原始字节，验签通过后再解析 JSON；时间戳窗口为前后 5 分钟。</li><li>重复 nonce 或每进程 320,000 条缓存达到上限时返回 409；只有验签成功的请求才会占用 nonce。防重放存储异常时返回 503。配置中心的管理接口与同步接口共用同一进程缓存；接入端的本地只读接口与 Webhook 回调也共用同一进程缓存。</li><li>当前缓存仅在单进程内有效，进程重启后清空，多实例之间不共享；需要集群级防重放时必须注入 Redis 等共享 NonceStore。</li><li>Webhook 可能重复或乱序，接收后仍须根据 <code>epoch + revision</code> 拉取并校验配置版本。</li><li>旧版固定 <code>configSync.secret</code> 与独立 <code>webhook.secret</code> 的分离密钥配置，以及未绑定接入端身份的签名协议均不再兼容；配置中心和接入端必须同步升级。</li></ul>
 <p>生产必须使用 HTTPS 或可信内网，并限制配置同步接口的网络访问范围。</p></section>
 <section id="sig-examples" class="section"><div class="section-title"><h2>Go / Node.js HMAC-SHA256 示例</h2></div><div class="summary">管理接口使用 adminAuth.secret；配置同步与 Webhook 使用每个接入端独立的 signing_secret。</div>
 <p>以下示例签署实际 HTTP 请求的原始 Body 字节。<code>path</code> 必须与 Go 服务端收到的 <code>URL.EscapedPath()</code> 一致，<code>query</code> 必须按 Go <code>url.Values.Encode()</code> 规范化。</p>

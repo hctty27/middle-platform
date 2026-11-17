@@ -12,37 +12,55 @@ import (
 	"time"
 )
 
-func TestNonceCacheCapacityAndExpiry(t *testing.T) {
+func TestNonceGuardCapacityAndExpiry(t *testing.T) {
 	now := time.Unix(1800000000, 0)
-	c := &adminNonceCache{limit: 2}
-	if !c.use("a", now.Unix()+300, now) || !c.use("b", now.Unix()+600, now) {
+	guard := NewNonceGuard(2)
+	use := func(nonce string, timestamp time.Time, at time.Time) bool {
+		accepted, err := guard.Use(context.Background(), "admin", nonce,
+			strconv.FormatInt(timestamp.Unix(), 10), at, DefaultReplayWindow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return accepted
+	}
+	if !use("a", now, now) || !use("b", now.Add(5*time.Minute), now) {
 		t.Fatal("initial nonces rejected")
 	}
-	if c.use("a", now.Unix()+300, now) || c.use("c", now.Unix()+300, now) {
+	if use("a", now, now) || use("c", now, now) {
 		t.Fatal("replay or overflow accepted")
 	}
-	later := now.Add(300 * time.Second)
-	if !c.use("c", later.Unix()+300, later) {
+	atBoundary := now.Add(5 * time.Minute)
+	if use("c", atBoundary, atBoundary) {
+		t.Fatal("nonce was evicted at the inclusive timestamp boundary")
+	}
+	later := atBoundary.Add(time.Second)
+	if !use("c", later, later) {
 		t.Fatal("expired slot not reclaimed")
 	}
-	if c.use("b", later.Unix()+300, later) {
+	if use("b", later, later) {
 		t.Fatal("future timestamp nonce evicted early")
 	}
-	if len(c.used) != 2 {
-		t.Fatalf("unexpected size: %d", len(c.used))
+	if len(guard.used) != 2 {
+		t.Fatalf("unexpected size: %d", len(guard.used))
 	}
 }
 
-func TestNonceCacheConcurrentReplay(t *testing.T) {
+func TestNonceGuardConcurrentReplay(t *testing.T) {
 	now := time.Unix(1800000000, 0)
-	c := &adminNonceCache{limit: 10}
+	guard := NewNonceGuard(10)
 	var accepted atomic.Int32
 	var wg sync.WaitGroup
 	for i := 0; i < 64; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if c.use("same", now.Unix()+300, now) {
+			ok, err := guard.Use(context.Background(), "admin", "same",
+				strconv.FormatInt(now.Unix(), 10), now, DefaultReplayWindow)
+			if err != nil {
+				t.Errorf("Use returned error: %v", err)
+				return
+			}
+			if ok {
 				accepted.Add(1)
 			}
 		}()
@@ -50,6 +68,22 @@ func TestNonceCacheConcurrentReplay(t *testing.T) {
 	wg.Wait()
 	if accepted.Load() != 1 {
 		t.Fatalf("accepted %d concurrent replays", accepted.Load())
+	}
+}
+
+func TestNonceGuardScopesAndTimestampWindow(t *testing.T) {
+	now := time.Unix(1800000000, 0)
+	guard := NewNonceGuard(10)
+	timestamp := strconv.FormatInt(now.Unix(), 10)
+	for _, scope := range []string{"admin", "subscriber:access-a"} {
+		ok, err := guard.Use(context.Background(), scope, "same", timestamp, now, DefaultReplayWindow)
+		if err != nil || !ok {
+			t.Fatalf("scope %q should accept an independent nonce: ok=%v err=%v", scope, ok, err)
+		}
+	}
+	stale := strconv.FormatInt(now.Add(-6*time.Minute).Unix(), 10)
+	if ok, err := guard.Use(context.Background(), "admin", "stale", stale, now, DefaultReplayWindow); err == nil || ok {
+		t.Fatalf("stale timestamp accepted: ok=%v err=%v", ok, err)
 	}
 }
 
