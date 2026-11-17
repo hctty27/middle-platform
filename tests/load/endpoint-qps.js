@@ -54,6 +54,8 @@ function randomStamp() {
     nonce: Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('') };
 }
 function signature(kind, method, path, body, extras) {
+  // Public/health routes do not use HMAC; avoid wasting generator CPU on nonce creation.
+  if (!kind) return body ? { 'Content-Type': 'application/json' } : {};
   const { timestamp, nonce } = randomStamp();
   const pure = path.split('?')[0];
   const query = (path.split('?')[1] || '').split('&').filter(Boolean).sort().join('&');
