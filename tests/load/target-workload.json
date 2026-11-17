@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "scale": 0.25,
+  "duration_seconds": 30,
+  "full_target_qps": {
+    "config": 10000,
+    "verify": 10000,
+    "report": 20000,
+    "order": 2000,
+    "payment": 2000,
+    "subscribe": 800,
+    "role_query": 400,
+    "server_query": 400,
+    "role_control": 400,
+    "other": 400
+  },
+  "categories": {
+    "config": [
+      "config-revision",
+      "config-snapshot",
+      "config-changes",
+      "config-node",
+      "config-batch",
+      "core-config",
+      "access-webhook",
+      "access-revision",
+      "access-nodes"
+    ],
+    "verify": [
+      "service-user-check"
+    ],
+    "report": [
+      "service-event"
+    ],
+    "order": [
+      "core-order-register"
+    ],
+    "payment": [
+      "core-payment-notify"
+    ],
+    "subscribe": [
+      "service-subscribe"
+    ],
+    "role_query": [
+      "service-role-query"
+    ],
+    "server_query": [
+      "service-server-query"
+    ],
+    "role_control": [
+      "service-role-control"
+    ],
+    "other": [
+      "health-live",
+      "health-ready"
+    ]
+  },
+  "notes": {
+    "config": "Configuration sync, SDK public configuration, and config-access APIs; aggregate category target is distributed evenly across these routes.",
+    "payment": "First-time payment callbacks use pre-seeded unique unpaid synthetic orders; duplicate callback replay is not counted as payment throughput.",
+    "other": "Only non-admin health endpoints. All /admin/ routes are excluded from high-QPS traffic."
+  }
+}
