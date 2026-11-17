@@ -65,8 +65,8 @@ jobs:
         include: ${{ fromJSON(github.event_name == 'pull_request' && (contains(github.event.pull_request.title, 'QPS') && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"},{"label":"api-coverage","topology":"compact","profile":"api-coverage"},{"label":"endpoint-qps","topology":"compact","profile":"endpoint-qps"}]' || '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"},{"label":"api-coverage","topology":"compact","profile":"api-coverage"}]') || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
 
     env:
-      ENDPOINT_GROUP: ${{ github.event_name == 'pull_request' && 'all' || inputs.endpoint_group }}
-      ENDPOINT_TIERS: ${{ github.event_name == 'pull_request' && 'basic' || inputs.endpoint_tiers }}
+      ENDPOINT_GROUP: ${{ github.event_name == 'pull_request' && (contains(github.event.pull_request.title, '[HIGH-READ-QPS]') && 'read' || 'all') || inputs.endpoint_group }}
+      ENDPOINT_TIERS: ${{ github.event_name == 'pull_request' && (contains(github.event.pull_request.title, '[HIGH-READ-QPS]') && 'high' || 'basic') || inputs.endpoint_tiers }}
       ENDPOINT_SECONDS: ${{ github.event_name == 'pull_request' && '3' || inputs.endpoint_seconds }}
       ENDPOINT_CASE: ${{ inputs.endpoint_id || '' }}
       GOWORK: 'off'
