@@ -103,7 +103,7 @@ func (g *NonceGuard) Use(ctx context.Context, scope, nonce, timestamp string, no
 
 	if nowSecond != g.lastCleanup {
 		for until, keys := range g.expirations {
-			if until <= nowSecond {
+			if until < nowSecond {
 				for _, key := range keys {
 					if g.used[key] == until {
 						delete(g.used, key)
