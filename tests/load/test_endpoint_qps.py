@@ -10,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[2]
 CATALOG=ROOT/"tests/load/endpoint-qps-catalog.json"
 SCRIPT=ROOT/"tests/load/endpoint-qps.js"
 PYTHON=ROOT/"tests/load/endpoint-qps.py"
-WORKFLOW=ROOT/".github/workflows/endpoint-qps.yml"
+WORKFLOW=ROOT/".github/workflows/load-test.yml"
 
 class TestEndpointQPS(unittest.TestCase):
     def test_every_registered_http_route_has_an_independent_case(self):
