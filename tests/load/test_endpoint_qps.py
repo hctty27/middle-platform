@@ -53,6 +53,31 @@ class TestEndpointQPS(unittest.TestCase):
             if item["route"].startswith("DELETE "):
                 self.assertEqual(item["mode"],"delete")
 
+    def test_quarter_workload_has_bounded_vus_and_counted_failures(self):
+        import math
+        workload=json.loads((ROOT/"tests/load/target-workload.json").read_text())
+        js=SCRIPT.read_text()
+        py=(ROOT/"tests/load/target-workload-qps.py").read_text()
+        workflow=WORKFLOW.read_text()
+        for marker in ("QPS_VU_SECONDS", "QPS_VU_BUDGET"):
+            self.assertIn(marker, js)
+            self.assertIn(marker, workflow)
+        self.assertIn("workloadVUCount(item.rate)", js)
+        self.assertIn("workload_bad_count_", js)
+        self.assertIn("workload_http0_", js)
+        self.assertIn("bad_count / requests", py)
+        self.assertIn("k6_preallocated_vus", py)
+        rates=[]
+        for category, ids in workload["categories"].items():
+            total=int(workload["full_target_qps"][category] * workload["scale"])
+            base,remainder=divmod(total,len(ids))
+            rates.extend(base+(i<remainder) for i in range(len(ids)))
+        self.assertEqual(sum(rates),11600)
+        old=sum(max(20,math.ceil(rate*0.05)) for rate in rates)
+        new=sum(max(20,math.ceil(rate*0.12)) for rate in rates)
+        self.assertGreater(new,old)
+        self.assertLessEqual(new,2000)
+
     def test_runner_only_no_external_control(self):
         js=SCRIPT.read_text()
         py=PYTHON.read_text()

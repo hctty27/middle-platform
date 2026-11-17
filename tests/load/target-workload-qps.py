@@ -82,6 +82,15 @@ if len(cases) != 19 or target_total != 11600:
     raise SystemExit(f"Unexpected workload composition: {len(cases)} routes / {target_total} QPS")
 if len({case["id"] for case in cases}) != len(cases):
     raise SystemExit("Duplicate route IDs in workload")
+vu_seconds = float(os.environ.get("QPS_VU_SECONDS", "0.12"))
+vu_budget = int(os.environ.get("QPS_VU_BUDGET", "2000"))
+if not math.isfinite(vu_seconds) or not 0.05 <= vu_seconds <= 1.0:
+    raise SystemExit(f"Invalid per-QPS VU seconds: {vu_seconds}")
+vu_allocations = {case["id"]: max(20, math.ceil(case["rate"] * vu_seconds))
+                  for case in cases}
+vu_total = sum(vu_allocations.values())
+if vu_budget < 100 or vu_total > vu_budget:
+    raise SystemExit(f"k6 VU budget exceeded: {vu_total} > {vu_budget}")
 
 def mysql(query, database="config_center"):
     command = ["mysql", "-uroot", "-h127.0.0.1", "-N", "-B"]
@@ -168,6 +177,7 @@ print("## Concurrent quarter-target business workload\n", flush=True)
 print(f"- Runner-only target: {target_total:,} QPS aggregate for {duration}s")
 print(f"- Cluster: config-center=2, sdk-core=4, sdk-service={len(service_instances)}")
 print(f"- SDK Service configCache TTL: {expected_ttl}")
+print(f"- k6 preallocated VUs: {vu_total}, per-QPS VU seconds: {vu_seconds}, budget: {vu_budget}")
 print("- Scope: 19 non-admin routes; all /admin/ routes excluded from high-QPS traffic.")
 print("- First-time payment callbacks use unique pre-seeded unpaid orders; no duplicate replay is counted as payment throughput.\n")
 print("| Category | Full target | Quarter target | Routes |", flush=True)
@@ -230,7 +240,13 @@ for case in cases:
     planned = case["rate"] * duration
     iterations = int(metric_number(data, "workload_iterations_" + suffix, "count") or 0)
     requests = int(metric_number(data, "workload_requests_" + suffix, "count") or 0)
+    # A companion Counter distinguishes zero failures from an omitted Rate value.
     bad_rate = metric_number(data, "workload_bad_" + suffix, "rate")
+    if bad_rate is None:
+        bad_rate = metric_number(data, "workload_bad_" + suffix, "value")
+    bad_count = metric_number(data, "workload_bad_count_" + suffix, "count")
+    if bad_rate is None and bad_count is not None and requests:
+        bad_rate = bad_count / requests
     p95 = metric_number(data, "workload_latency_" + suffix, "p(95)")
     p99 = metric_number(data, "workload_latency_" + suffix, "p(99)")
     builtin_dropped = scenario_dropped(data, case["id"])
@@ -238,6 +254,7 @@ for case in cases:
     if builtin_dropped is not None:
         dropped = max(dropped, builtin_dropped)
     actual_qps = requests / duration
+    http_0 = int(metric_number(data, "workload_http0_" + suffix, "count") or 0)
     http_401 = int(metric_number(data, "workload_http401_" + suffix, "count") or 0)
     http_409 = int(metric_number(data, "workload_http409_" + suffix, "count") or 0)
     http_429 = int(metric_number(data, "workload_http429_" + suffix, "count") or 0)
@@ -248,7 +265,7 @@ for case in cases:
         db_rows = registered_orders
     elif case["id"] == "core-payment-notify":
         db_rows = payment_paid
-    vu_count = max(20, math.ceil(case["rate"] * 0.05))
+    vu_count = vu_allocations[case["id"]]
     qualified = bool(
         requests >= planned * 0.99
         and iterations >= planned * 0.999 and dropped <= planned * 0.001
@@ -265,7 +282,7 @@ for case in cases:
         "actual_qps": actual_qps, "planned_iterations": planned,
         "iterations": iterations, "requests": requests, "dropped": dropped,
         "bad_rate": bad_rate, "p95_ms": p95, "p99_ms": p99,
-        "http_401": http_401, "http_409": http_409, "http_429": http_429,
+        "http_0": http_0, "http_401": http_401, "http_409": http_409, "http_429": http_429,
         "http_503": http_503, "http_5xx": http_5xx,
         "db_rows": db_rows, "qualified": qualified,
     }
@@ -312,6 +329,9 @@ summary = {
     "total_target_qps": target_total,
     "total_actual_qps": sum(row["requests"] for row in rows) / duration,
     "sdk_service_instances": service_instances,
+    "k6_preallocated_vus": vu_total,
+    "k6_vu_seconds_per_qps": vu_seconds,
+    "k6_vu_budget": vu_budget,
     "sdk_service_cache_ttl": expected_ttl,
     "topology": "cluster 2/4/6",
     "category_rows": category_rows,
@@ -328,6 +348,7 @@ summary = {
     "warnings": [
         "All workload traffic is loopback-only on a GitHub-hosted runner.",
         "The load generator and SUT share one runner; generator saturation can limit achieved QPS.",
+        "Dropped iterations can be caused by insufficient k6 VUs or slow SUT responses; they do not prove a server capacity ceiling.",
         "Category targets are aggregate QPS evenly distributed across their listed routes.",
         "Payment callback uses one unique unpaid synthetic order per iteration.",
         "Async game delivery status is reported separately from synchronous payment callback acceptance.",

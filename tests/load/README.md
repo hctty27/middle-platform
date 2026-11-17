@@ -8,7 +8,7 @@
 
 - group：quick（单接口快速验证）/ read（32 个只读或查询类场景）/ write（20 个写入、上报、回调场景）/ all（52 类路由）。
 - tiers：basic 读 50/200/500 QPS、写 10/30/60 QPS；high 读 100/500/1000/3000/5000/10000/20000 QPS、写 20/50/100/250 QPS。每个接口前一档失败就停止升级、保留失败指标；quick 固定 50/200/500 QPS。高档仅为探索目标。
-- topology：compact（2/1/1）或 cluster（2/4/4），每实例 GOMEMLIMIT=128MiB。
+- topology：compact（2/1/1）或 cluster（2/4/6），每实例 GOMEMLIMIT=128MiB。
 - seconds：每档 3–15 秒。endpoint：可填 tests/load/endpoint-qps-catalog.json 中某个接口 ID 单独测试。
 
 执行前先跑一次 api-coverage.js，要求 52/52 合约成功；之后单接口逐档固定 arrival-rate，**每次迭代只发一次被测 API 请求**。记录目标 QPS、实际 HTTP/s、P95、P99、业务失败率、未启动迭代、MySQL 行锁等待增量和进程 CPU/RSS；导出 endpoint-qps-summary.csv/json 与各档原始日志。
@@ -23,9 +23,18 @@
 
 对比上一轮 [Run #44076911792](https://github.com/hctty27/middle-platform/actions/runs/44076911792)（`0s`），重点观察用户核验、角色查询、区服查询 5,000 QPS 档的 P95/P99、实际 HTTP/s、Dropped、HTTP 状态与 MySQL CPU。两次运行在**不同 GitHub-hosted Runner**，只能作为初步对照，不能保证同硬件或严格因果归因。此缓存只存业务路由和鉴权配置（含密钥、开关），不缓存用户核验结论或角色数据；启用后配置撤销可能在 TTL 加在途读取期间延迟生效。生产是否开启须独立评估。
 
+## 19 路四分之一并发负载：受控 VU 复测（PR #160）
+
+专项使用 2/4/6 拓扑、SDK Service 临时缓存 TTL=1s，19 个非管理场景并发 30 秒，目标 11,600 QPS。Run #44087742126 实测约 2,200 QPS，大量迭代无法启动，尚不能归因于服务端吞吐量上限。
+
+- k6 `constant-arrival-rate` 根据 `QPS_VU_SECONDS=0.12` 按每个场景的目标速率预留 VU（原为 0.05s），限制全局 `QPS_VU_BUDGET=2000`。超预算拒绝执行，避免在单台 Runner 上无上限增加 VU。
+- 利用并发估算 `VU≈QPS×迭代耗时`，这是实验参数而非容量承诺。场景响应变慢仍可能产生 Dropped；应结合 k6/服务端 CPU、RSS、延迟、超时等区分瓶颈。
+- 按场景统计 HTTP 0、业务失败计数和比率（Rate 汇总缺失时由 Counter 回填）、P95/P99、实际请求量与 Dropped。
+- 仍是 **k6 与被测集群同机**。GitHub-hosted Job 隔离在不同虚拟机，跨 Job 不能直接访问另一个 Job 的本机 `127.0.0.1`。真正的负载机隔离需要独立授权、可达的测试目标，CI 不会直接向正式域名发起高压。
+
 ## 合并后的 Nonce 高压验证（只修改测试）
 
-标题包含 `[NONCE-HIGH-QPS]` 的专项 PR 从最新 `main` 派生，不改业务服务代码。该 PR 在 GitHub 托管 Runner 上自动使用 cluster 2/4/4 拓扑，**只对 13 个非管理查询类路由**执行 5000、10000、20000 QPS × 每档 5 秒，单接口上档失败即停止继续升档。其余 19 个 `/admin/` 查询路由（含订单管理）全部排除，不参加 QPS 测试。
+标题包含 `[NONCE-HIGH-QPS]` 的专项 PR 从最新 `main` 派生，不改业务服务代码。该 PR 在 GitHub 托管 Runner 上自动使用 cluster 2/4/6 拓扑，**只对 13 个非管理查询类路由**执行 5000、10000、20000 QPS × 每档 5 秒，单接口上档失败即停止继续升档。其余 19 个 `/admin/` 查询路由（含订单管理）全部排除，不参加 QPS 测试。
 
 被测范围包括健康检查、配置同步、配置节点查询、SDK 配置查询、用户核验、角色查询、区服查询和配置接入端查询。**充值另行进行写入类专项压测**：通过现有 `scenarios.js` 的 `payment` 场景，每次迭代先用唯一订单号登记，再发送首次平台充值回调，按 20/50/100/250 **TPS**（每次成功交易包含 2 次 HTTP 请求）逐档测试，并核对本地数据库已登记订单数与已支付数。另将同一笔已支付测试订单的重复回调按 50/200/500 **QPS** 测量，单独标注为幂等重复通知性能，不冒充首次充值吞吐。首次充值或重复回调在某档不合格时，停止其后续升压，但保留另一项独立报告。
 
@@ -50,7 +59,7 @@ Actions → Runner Load Test → Run workflow：选择 profile=api-coverage、to
 在 Actions → Runner Load Test → Run workflow 选择参数。涉及服务、共享模块、数据库、Nginx 或压测脚本的 PR 自动执行 compact/cluster smoke 与 compact traffic-quick；完整压力测试按需手动触发。
 
 - profile: api-coverage（52 类接口覆盖和业务断言，仅单次）、smoke（5 次迭代/s × 10 秒）、traffic-quick（四档 × 10 秒）、baseline（25/50/100 × 30 秒）、stress（100/250/500/1000 × 30 秒）、capacity、traffic、soak（50 次迭代/s × 30 分钟）、soak2h（50 次迭代/s × 2 小时）。capacity / traffic / traffic-quick 固定场景，忽略 scenario；soak 默认 mixed。
-- topology: compact (2/1/1) 或 cluster (2/4/4)，both 对比二者，每个 Go 实例 GOMEMLIMIT=128MiB（软目标）。
+- topology: compact (2/1/1) 或 cluster (2/4/6)，both 对比二者，每个 Go 实例 GOMEMLIMIT=128MiB（软目标）。
 - scenario: all（逐项运行）或 config-sync、sdk-config、user-check、order、duplicate、payment、mixed。所有场景固定访问 127.0.0.1，不能指定外部地址。
 
 配置同步读 revision；SDK 配置读热点渠道；用户核验真实经过 DB、验签和本地模拟发行平台；订单写入临时 DB；重复登记走真实幂等接口；payment 先登记再发送平台 V1 回调，最后检验持久化发货状态；mixed 轮流执行以上业务。支付与重复订单每次迭代最多两次 HTTP 请求，因此迭代速率不是 HTTP QPS。

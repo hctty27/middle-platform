@@ -14,6 +14,21 @@ const workloadCases = workloadMode ? Object.entries(workloadConfig.categories).f
   return ids.map((id, index) => ({ id, category, rate: base + (index < remainder ? 1 : 0) }));
 }) : [];
 const workloadByID = Object.fromEntries(workloadCases.map(item => [item.id, item]));
+// Little's Law: VUs ~= arrival rate * iteration duration. Bound total VUs on a shared Runner.
+const workloadVuSeconds = Number(__ENV.QPS_VU_SECONDS || '0.12');
+const workloadVuBudget = Number(__ENV.QPS_VU_BUDGET || '2000');
+function workloadVUCount(qps) {
+  return Math.max(20, Math.ceil(qps * workloadVuSeconds));
+}
+const workloadAllocatedVUs = workloadMode ?
+  workloadCases.reduce((sum, item) => sum + workloadVUCount(item.rate), 0) : 0;
+if (workloadMode && (!Number.isFinite(workloadVuSeconds) ||
+    workloadVuSeconds < 0.05 || workloadVuSeconds > 1 ||
+    !Number.isInteger(workloadVuBudget) || workloadVuBudget < 100 ||
+    workloadAllocatedVUs > workloadVuBudget)) {
+  throw new Error('Unsafe k6 VU allocation: ' + workloadAllocatedVUs +
+    ' requested (budget ' + workloadVuBudget + ', seconds ' + workloadVuSeconds + ')');
+}
 const spec = catalog.find(x => x.id === __ENV.QPS_CASE) || catalog[0];
 const rate = Number(__ENV.QPS_RATE || '10');
 const seconds = Number(__ENV.QPS_SECONDS || (workloadMode ? workloadConfig.duration_seconds : 5));
@@ -68,6 +83,8 @@ if (workloadMode) {
       requests: new Counter('workload_requests_' + suffix),
       iterations: new Counter('workload_iterations_' + suffix),
       bad: new Rate('workload_bad_' + suffix),
+      badCount: new Counter('workload_bad_count_' + suffix),
+      http0: new Counter('workload_http0_' + suffix),
       latency: new Trend('workload_latency_' + suffix),
       http401: new Counter('workload_http401_' + suffix),
       http409: new Counter('workload_http409_' + suffix),
@@ -84,7 +101,7 @@ const workloadScenarios = workloadMode ? Object.fromEntries(workloadCases.map(it
     rate: item.rate,
     timeUnit: '1s',
     duration: seconds + 's',
-    preAllocatedVUs: Math.max(20, Math.ceil(item.rate * 0.05)),
+    preAllocatedVUs: workloadVUCount(item.rate),
     gracefulStop: '5s',
   },
 ])) : null;
@@ -273,6 +290,8 @@ export default function () {
     metric.iterations.add(1);
     metric.requests.add(1);
     metric.bad.add(!ok);
+    if (!ok) metric.badCount.add(1);
+    if (response.status === 0) metric.http0.add(1);
     metric.latency.add(response.timings.duration);
     if (response.status === 401) metric.http401.add(1);
     if (response.status === 409) metric.http409.add(1);

@@ -73,6 +73,8 @@ jobs:
       ENDPOINT_BUSINESS_ONLY: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && 'true' || 'false' }}
       SDK_SERVICE_CACHE_TTL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && matrix.profile == 'endpoint-qps' && '1s' || '0s' }}
       QUARTER_WORKLOAD: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[QUARTER-LOAD]') && matrix.profile == 'endpoint-qps' && 'true' || 'false' }}
+      QPS_VU_SECONDS: '0.12'
+      QPS_VU_BUDGET: '2000'
       ENDPOINT_CASE: ${{ inputs.endpoint_id || '' }}
       GOWORK: 'off'
       LOAD_PROFILE: ${{ matrix.profile }}
