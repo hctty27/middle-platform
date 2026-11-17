@@ -17,6 +17,12 @@
 
 写接口有明确数据边界：创建操作每请求生成唯一对象；删除操作每档预置独立临时行；更新使用可重复的测试数据；支付回调只测**已支付订单重复回调**；订单重试只测**不可重试订单返回 409**。后两项不代表首次支付或成功补偿的吞吐。Mock 链路和单机 Runner 的数据也不能当作生产环境最大性能。
 
+### SDK Service 1 秒配置缓存复测
+
+专项 PR 的 `endpoint-qps` Job 在复制配置文件到**临时 Runner** 后，通过 `SDK_SERVICE_CACHE_TTL=1s` 仅覆盖 `sdk-service.yaml` 的 `configCache.ttl`。原仓库 `sdk-service/configs/config.yaml` 依旧为 `0s`，`api-coverage`、Compact、Cluster、混合流量和正式部署**不会受到影响**。Runner 产物 `sdk-service-cache-ttl.txt` 记录实际加载的 TTL。
+
+对比上一轮 [Run #44076911792](https://github.com/hctty27/middle-platform/actions/runs/44076911792)（`0s`），重点观察用户核验、角色查询、区服查询 5,000 QPS 档的 P95/P99、实际 HTTP/s、Dropped、HTTP 状态与 MySQL CPU。两次运行在**不同 GitHub-hosted Runner**，只能作为初步对照，不能保证同硬件或严格因果归因。此缓存只存业务路由和鉴权配置（含密钥、开关），不缓存用户核验结论或角色数据；启用后配置撤销可能在 TTL 加在途读取期间延迟生效。生产是否开启须独立评估。
+
 ## 合并后的 Nonce 高压验证（只修改测试）
 
 标题包含 `[NONCE-HIGH-QPS]` 的专项 PR 从最新 `main` 派生，不改业务服务代码。该 PR 在 GitHub 托管 Runner 上自动使用 cluster 2/4/4 拓扑，**只对 13 个非管理查询类路由**执行 5000、10000、20000 QPS × 每档 5 秒，单接口上档失败即停止继续升档。其余 19 个 `/admin/` 查询路由（含订单管理）全部排除，不参加 QPS 测试。
