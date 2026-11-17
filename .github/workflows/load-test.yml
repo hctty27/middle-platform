@@ -32,7 +32,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: runner-load-test-${{ github.event_name }}-${{ github.ref }}
+  # Keep the historical PR group so superseded long PR runs are cancelled.
+  group: runner-load-test-${{ github.event_name == 'pull_request' && github.ref || format('manual-{0}', github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
