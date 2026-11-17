@@ -428,6 +428,10 @@ function global:Note-AskPass {
     $global:Calls.Add('askpass|set')
     if ($env:SSH_ASKPASS_REQUIRE -ne 'force') { throw 'askpass was not forced' }
     if ($global:TestMode -ne 'password') { return }
+    $helperDir = Split-Path -Parent $env:SSH_ASKPASS
+    foreach ($name in @('askpass-ok.bin', 'askpass-no.bin', 'askpass-ok.err', 'askpass-no.err')) {
+        if (Test-Path -LiteralPath (Join-Path $helperDir $name)) { throw 'askpass self-check wrote a temporary output file' }
+    }
     $fed = @(& $env:SSH_ASKPASS 'password:' 2>$null)
     if (($fed -join '') -cne 's3cret-value') { throw 'askpass mismatch' }
     $global:Calls.Add('askpass|ok')

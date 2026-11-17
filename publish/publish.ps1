@@ -214,7 +214,9 @@ function Invoke-PublishAskPassCheck {
             $process.WaitForExit()
             throw 'SSH password helper self-check timed out.'
         }
-        $copy.GetAwaiter().GetResult()
+        # Task.GetResult may emit VoidTaskResult into the PowerShell success
+        # stream. Discard both task results; this function returns one object.
+        $null = $copy.GetAwaiter().GetResult()
         $null = $stderr.GetAwaiter().GetResult()
         return [pscustomobject]@{ ExitCode = $process.ExitCode; Bytes = $buffer.ToArray() }
     } finally {
