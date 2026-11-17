@@ -79,9 +79,9 @@ jobs:
               },
             },
             thresholds: {
-              http_req_failed: ['rate<0.01'],
-              business_failed: ['rate<0.01'],
-              http_req_duration: ['p(95)<500', 'p(99)<1500'],
+              http_req_failed: ['rate<0.000001'],
+              business_failed: ['rate<0.000001'],
+              http_req_duration: ['p(95)<100', 'p(99)<300'],
               dropped_iterations: ['count<1'],
               http_reqs: ['count>=' + Math.floor(qps * seconds * 0.999)],
             },
@@ -96,10 +96,15 @@ jobs:
               tags: { name: 'sdk-config-read' },
             });
             let success = false;
+            let businessCode = 'NA';
+            let returnedApp = 'NA';
             try {
               const body = res.json();
+              businessCode = String(body.code);
+              returnedApp = body.data && body.data.snKey ? String(body.data.snKey) : 'NA';
               success = res.status === 200 && body.code === 0 && body.data && body.data.snKey === appId;
             } catch (_) {}
+            if (!success) console.error('CONFIG_READ_FAIL app=' + appId + ' status=' + res.status + ' code=' + businessCode + ' returnedApp=' + returnedApp);
             businessFailed.add(!success);
           }
           '@
@@ -111,7 +116,7 @@ jobs:
           $env:BASE_URL = $base
           $env:SECONDS = '20'
           try {
-            foreach ($rate in @(100,200,400)) {
+            foreach ($rate in @(400)) {
               $env:QPS = [string]$rate
               $summary = Join-Path $work ('summary-' + $rate + '.json')
               Write-Host ("START stage target={0} QPS duration=20s channels=256" -f $rate)
@@ -127,7 +132,7 @@ jobs:
               Write-Host ("PASS stage={0} QPS; k6 thresholds and request-count target all passed. See k6 summary above." -f $rate)
               Start-Sleep -Seconds 5
             }
-            Write-Host 'PASS all stages: 50/100/200/400 QPS; GET-only; 256 channels; no write APIs.'
+            Write-Host 'PASS 400 QPS repeat: zero errors required; GET-only; 256 channels; no write APIs.'
           } finally {
             Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item Env:BASE_URL -ErrorAction SilentlyContinue
