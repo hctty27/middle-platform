@@ -283,3 +283,45 @@ func TestHMACMiddlewaresShareInjectedNonceStore(t *testing.T) {
 		t.Fatalf("subscriber replay across middleware instances: %d", got)
 	}
 }
+
+
+type failedNonceStore struct{}
+
+func (failedNonceStore) Use(context.Context, string, string, string, time.Time, time.Duration) (bool, error) {
+	return false, errors.New("nonce backend unavailable")
+}
+
+func TestHMACMiddlewareDoesNotConsumeInvalidSignature(t *testing.T) {
+	store := NewNonceGuard(4)
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := RequestHMACMiddlewareWithNonceStore(next, []string{"/api/admin"}, testAdminSecret, store)
+	bad := signedAdminRequest(http.MethodPost, "/api/admin/action", "", "bbbbbbbbbbbbbbbb")
+	bad.Header.Set("X-Signature", "invalid")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, bad)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid signature status: %d", recorder.Code)
+	}
+	good := signedAdminRequest(http.MethodPost, "/api/admin/action", "", "bbbbbbbbbbbbbbbb")
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, good)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("valid request after invalid signature was rejected: %d", recorder.Code)
+	}
+}
+
+func TestHMACMiddlewareFailsClosedWhenNonceStoreUnavailable(t *testing.T) {
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := RequestHMACMiddlewareWithNonceStore(next, []string{"/api/admin"}, testAdminSecret, failedNonceStore{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, signedAdminRequest(http.MethodPost, "/api/admin/action", "", "cccccccccccccccc"))
+	if recorder.Code != http.StatusServiceUnavailable || called {
+		t.Fatalf("nonce store failure must fail closed: status=%d called=%v", recorder.Code, called)
+	}
+}
