@@ -43,5 +43,26 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertIn("seed_delete",py)
         self.assertIn("api-coverage.js",py)
 
+    def test_main_nonce_high_qps_is_runner_only_and_reports_http_classes(self):
+        script=SCRIPT.read_text()
+        py=PYTHON.read_text()
+        workflow=WORKFLOW.read_text()
+        monitor=(ROOT/"tests/load/process_monitor.py").read_text()
+        self.assertIn("ENDPOINT_RATES", workflow)
+        self.assertIn("[NONCE-HIGH-QPS]", workflow)
+        self.assertIn("'5000,10000,20000'", workflow)
+        self.assertIn("ENDPOINT_VUS_CAP", workflow)
+        self.assertIn("RUNNER_ENVIRONMENT", py)
+        self.assertIn("config-center-access", py)
+        self.assertIn("endpoint_http_409", script)
+        self.assertIn("endpoint_http_429", script)
+        self.assertIn("endpoint_http_503", script)
+        self.assertIn('"http_409":http_409', py)
+        self.assertIn('"preallocated_vus":vus', py)
+        self.assertIn("config-center-access", monitor)
+        self.assertIn("if (!kind)", script)
+        self.assertNotIn("mp.skybluek.com", workflow+script+py)
+
+
 if __name__=="__main__":
     unittest.main()
