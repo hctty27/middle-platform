@@ -217,7 +217,18 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
                 printf 'Missing or unsafe Nginx upstream control helper: %s; no application files were changed\n' "$nginx_control" >&2
                 exit 1
             fi
-            if grep -q 
+            if grep -q $'\r$' "$nginx_control"; then
+                printf 'Nginx upstream helper has CRLF line endings: %s; convert to LF; no application files were changed\n' "$nginx_control" >&2
+                exit 1
+            fi
+            if ! bash -n "$nginx_control"; then
+                printf 'Invalid Bash syntax in Nginx upstream helper: %s; no application files were changed\n' "$nginx_control" >&2
+                exit 1
+            fi
+            break
+        fi
+    done
+    for index in "${!programs[@]}"; do
         program="${programs[$index]}"
         group="${groups[$index]}"
         port="${ports[$index]}"
@@ -291,189 +302,6 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         printf 'Healthy: %s (port %s)\n' "$program" "$port"
         if [[ "$group" != none ]]; then
             run_nginx_control enable "$group" "$port"
-            printf 'Restored %s to Nginx traffic\n' "$program"
-        fi
-    done
-fi
-mv -fT -- "$archive" "$root/packages/$name"
-rm -rf -- "$stage"
-printf 'Upload and extraction complete. SQL was NOT executed.\n'
-if [[ "$restart" == 0 || "$service" == admin ]]; then
-    printf 'No services were restarted.\n'
-else
-    printf 'Selected Supervisor programs were restarted and health-checked.\n'
-fi
-\r
-        program="${programs[$index]}"
-        group="${groups[$index]}"
-        port="${ports[$index]}"
-        supervisor_process="$program"
-        if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
-        if ! supervisorctl status "$supervisor_process" >/dev/null 2>&1; then
-            printf 'Supervisor program is unavailable: %s; no application files were changed\n' "$supervisor_process" >&2
-            exit 1
-        fi
-        if ! curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
-            printf 'Instance is not Ready: %s on port %s; no application files were changed\\n' "$program" "$port" >&2
-            exit 1
-        fi
-        if [[ "$group" != none ]]; then
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" validate "$group" "$port"
-        fi
-    done
-fi
-
-temporary=''
-trap 'if [[ -n "$temporary" ]]; then rm -f -- "$temporary"; fi' EXIT
-while IFS= read -r -d '' source; do
-    relative=${source#"$stage/unpacked/"}
-    target="$root/$relative"
-    if [[ "$relative" == admin/config.js && ( -e "$target" || -L "$target" ) ]]; then
-        printf 'Preserved admin/config.js\n'
-        continue
-    fi
-    temporary=$(mktemp "$(dirname -- "$target")/.publish-file-XXXXXXXX")
-    cp -p -- "$source" "$temporary"
-    # 使用同目录原子重命名，避免直接覆盖运行中的可执行文件。
-    mv -fT -- "$temporary" "$target"
-    temporary=''
-    printf 'Updated %s\n' "$relative"
-done < "$stage/files"
-if [[ "${#programs[@]}" -gt 0 ]]; then
-    for index in "${!programs[@]}"; do
-        program="${programs[$index]}"
-        port="${ports[$index]}"
-        group="${groups[$index]}"
-        supervisor_process="$program"
-        if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
-        if [[ "$group" != none ]]; then
-            printf 'Draining %s from Nginx...\n' "$program"
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" drain "$group" "$port"
-        fi
-        printf 'Restarting %s...\n' "$program"
-        if ! supervisorctl restart "$supervisor_process"; then
-            printf 'Supervisor restart failed: %s; instance remains drained\n' "$supervisor_process" >&2
-            exit 1
-        fi
-        ready=0
-        stable=0
-        for attempt in {1..60}; do
-            if supervisorctl status "$supervisor_process" | grep -Eq '[[:space:]]RUNNING[[:space:]]' &&
-               curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
-                stable=$((stable + 1))
-                if [[ $stable -ge 3 ]]; then
-                    ready=1
-                    break
-                fi
-            else
-                stable=0
-            fi
-            sleep 2
-        done
-        if [[ $ready -ne 1 ]]; then
-            printf 'Health check failed: %s on port %s; instance remains drained and rollout stopped\n' "$program" "$port" >&2
-            exit 1
-        fi
-        printf 'Healthy: %s (port %s)\n' "$program" "$port"
-        if [[ "$group" != none ]]; then
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" enable "$group" "$port"
-            printf 'Restored %s to Nginx traffic\n' "$program"
-        fi
-    done
-fi
-mv -fT -- "$archive" "$root/packages/$name"
-rm -rf -- "$stage"
-printf 'Upload and extraction complete. SQL was NOT executed.\n'
-if [[ "$restart" == 0 || "$service" == admin ]]; then
-    printf 'No services were restarted.\n'
-else
-    printf 'Selected Supervisor programs were restarted and health-checked.\n'
-fi
- "$nginx_control"; then
-                printf 'Nginx upstream helper has CRLF line endings: %s; convert to LF; no application files were changed\n' "$nginx_control" >&2
-                exit 1
-            fi
-            if ! bash -n "$nginx_control"; then
-                printf 'Invalid Bash syntax in Nginx upstream helper: %s; no application files were changed\n' "$nginx_control" >&2
-                exit 1
-            fi
-            break
-        fi
-    done
-    for index in "${!programs[@]}"; do
-        program="${programs[$index]}"
-        group="${groups[$index]}"
-        port="${ports[$index]}"
-        supervisor_process="$program"
-        if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
-        if ! supervisorctl status "$supervisor_process" >/dev/null 2>&1; then
-            printf 'Supervisor program is unavailable: %s; no application files were changed\n' "$supervisor_process" >&2
-            exit 1
-        fi
-        if ! curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
-            printf 'Instance is not Ready: %s on port %s; no application files were changed\\n' "$program" "$port" >&2
-            exit 1
-        fi
-        if [[ "$group" != none ]]; then
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" validate "$group" "$port"
-        fi
-    done
-fi
-
-temporary=''
-trap 'if [[ -n "$temporary" ]]; then rm -f -- "$temporary"; fi' EXIT
-while IFS= read -r -d '' source; do
-    relative=${source#"$stage/unpacked/"}
-    target="$root/$relative"
-    if [[ "$relative" == admin/config.js && ( -e "$target" || -L "$target" ) ]]; then
-        printf 'Preserved admin/config.js\n'
-        continue
-    fi
-    temporary=$(mktemp "$(dirname -- "$target")/.publish-file-XXXXXXXX")
-    cp -p -- "$source" "$temporary"
-    # 使用同目录原子重命名，避免直接覆盖运行中的可执行文件。
-    mv -fT -- "$temporary" "$target"
-    temporary=''
-    printf 'Updated %s\n' "$relative"
-done < "$stage/files"
-if [[ "${#programs[@]}" -gt 0 ]]; then
-    for index in "${!programs[@]}"; do
-        program="${programs[$index]}"
-        port="${ports[$index]}"
-        group="${groups[$index]}"
-        supervisor_process="$program"
-        if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
-        if [[ "$group" != none ]]; then
-            printf 'Draining %s from Nginx...\n' "$program"
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" drain "$group" "$port"
-        fi
-        printf 'Restarting %s...\n' "$program"
-        if ! supervisorctl restart "$supervisor_process"; then
-            printf 'Supervisor restart failed: %s; instance remains drained\n' "$supervisor_process" >&2
-            exit 1
-        fi
-        ready=0
-        stable=0
-        for attempt in {1..60}; do
-            if supervisorctl status "$supervisor_process" | grep -Eq '[[:space:]]RUNNING[[:space:]]' &&
-               curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
-                stable=$((stable + 1))
-                if [[ $stable -ge 3 ]]; then
-                    ready=1
-                    break
-                fi
-            else
-                stable=0
-            fi
-            sleep 2
-        done
-        if [[ $ready -ne 1 ]]; then
-            printf 'Health check failed: %s on port %s; instance remains drained and rollout stopped\n' "$program" "$port" >&2
-            exit 1
-        fi
-        printf 'Healthy: %s (port %s)\n' "$program" "$port"
-        if [[ "$group" != none ]]; then
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" enable "$group" "$port"
             printf 'Restored %s to Nginx traffic\n' "$program"
         fi
     done
