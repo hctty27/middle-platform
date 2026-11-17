@@ -52,6 +52,14 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertIn("[NONCE-HIGH-QPS]", workflow)
         self.assertIn("'5000,10000,20000'", workflow)
         self.assertIn("ENDPOINT_VUS_CAP", workflow)
+        self.assertIn("ENDPOINT_BUSINESS_ONLY", workflow)
+        self.assertIn('"/admin/" not in c["route"]', endpoint_py)
+        catalog=json.loads(CATALOG.read_text())
+        read=[entry for entry in catalog if entry["group"] == "read"]
+        non_admin=[entry for entry in read if "/admin/" not in entry["route"].split(" ", 1)[1]]
+        self.assertEqual(len(non_admin),13)
+        self.assertTrue(all("/admin/" not in item["route"] for item in non_admin))
+        self.assertEqual(len(read)-len(non_admin),19)
         self.assertIn("RUNNER_ENVIRONMENT", py)
         self.assertIn("config-center-access", py)
         self.assertIn("endpoint_http_409", script)
