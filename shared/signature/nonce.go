@@ -86,6 +86,9 @@ func (g *NonceGuard) Use(ctx context.Context, scope, nonce, timestamp string, no
 		return false, errors.New("防重放时间戳不合法")
 	}
 	signedAt := time.Unix(stamp, 0)
+	if signedAt.Before(now.Add(-window)) || signedAt.After(now.Add(window)) {
+		return false, errors.New("请求时间戳超出防重放窗口")
+	}
 	expiresAt := now.Add(window)
 	if signedExpiry := signedAt.Add(window); signedExpiry.After(expiresAt) {
 		expiresAt = signedExpiry
