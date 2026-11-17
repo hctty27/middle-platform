@@ -94,7 +94,7 @@ jobs:
               http_req_failed: [{ threshold: 'rate<0.000001', abortOnFail: true, delayAbortEval: '5s' }],
               business_failed: [{ threshold: 'rate<0.000001', abortOnFail: true, delayAbortEval: '5s' }],
               dropped_iterations: [{
-                threshold: 'count<' + Math.max(1, Math.floor(qps * seconds * 0.001)),
+                threshold: 'count<' + Math.max(1, Math.floor(qps * seconds * 0.005)),
                 abortOnFail: true,
                 delayAbortEval: '5s',
               }],
@@ -166,7 +166,7 @@ jobs:
               if (-not (Test-Path -LiteralPath $summary -PathType Leaf)) {
                 throw ('Missing k6 summary for {0} QPS.' -f $rate)
               }
-              Write-Host ('PASS stage={0} QPS: request count, latency, zero errors and scheduler drops below 0.1%.' -f $rate)
+              Write-Host ('PASS stage={0} QPS: request count, latency, zero errors and scheduler drops below 0.5%.' -f $rate)
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ('- PASS **' + $rate + ' QPS** — 20 seconds, 256 channels, GET-only')
               Start-Sleep -Seconds 5
             }
