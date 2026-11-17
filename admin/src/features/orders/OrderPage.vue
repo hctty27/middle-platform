@@ -250,7 +250,7 @@ onBeforeUnmount(() => { ++listSeq; ++statSeq; ++detailSeq; listController?.abort
         <el-button @click="reset">重置</el-button>
       </el-form-item>
     </el-form>
-    <p class="order-hint">日期未选时默认查询今日，精确订单号可跨日期查询。普通查询最多 30 天；统计不受订单号、状态及创建日期筛选影响，最多缓存 60 秒。</p>
+    <p class="order-hint">日期未选时查询全部历史订单；选择日期后按所选范围查询，不限制跨度。统计不受订单号、状态及创建日期筛选影响，最多缓存 60 秒。</p>
     <el-table :data="items" v-loading="loading" row-key="id" stripe>
       <el-table-column prop="gameOrderId" label="游戏订单号" min-width="175" show-overflow-tooltip />
       <el-table-column prop="platformOrderNo" label="平台订单号" min-width="175" show-overflow-tooltip />

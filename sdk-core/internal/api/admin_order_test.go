@@ -21,23 +21,30 @@ func TestAdminOrderFilter(t *testing.T) {
 		fragment string
 		ok bool
 	}{
-		{"gameId=1&env=prod", "created_at>=?", true},
+		{"gameId=1&env=prod", "env=?", true},
+		{"gameId=1", "game_id=?", true},
 		{"gameId=1&gameOrderId=abc", "game_order_id=?", true},
 		{"gameId=1&notifyStatus=2", "payment_status=1", true},
 		{"gameId=1&pageSize=101", "", false},
 		{"gameId=1&env=bad", "", false},
 		{"gameId=1&cursor=bad", "", false},
-		{"gameId=1&startTime=2026-01-01T00:00:00Z&endTime=2026-03-01T00:00:00Z", "", false},
+		{"gameId=1&startTime=2026-01-01T00:00:00Z&endTime=2026-03-01T00:00:00Z", "created_at>=? AND created_at<?", true},
+		{"gameId=551&startTime=2026-10-31T16:00:00.000Z&endTime=2026-12-31T16:00:00.000Z", "created_at>=? AND created_at<?", true},
+		{"gameId=1&startTime=2020-01-01T00:00:00Z&endTime=2027-01-01T00:00:00Z", "created_at>=? AND created_at<?", true},
+		{"gameId=1&gameOrderId=abc&startTime=2020-01-01T00:00:00Z&endTime=2027-01-01T00:00:00Z", "created_at>=? AND created_at<?", true},
+		{"gameId=1&startTime=2026-03-01T00:00:00Z&endTime=2026-01-01T00:00:00Z", "", false},
+		{"gameId=1&startTime=2026-01-01T00:00:00Z", "", false},
+		{"gameId=1&startTime=invalid&endTime=2026-03-01T00:00:00Z", "", false},
 		{"env=prod", "", false},
 	}
 	for _, tc := range cases {
 		req := httptest.NewRequest(http.MethodGet, "/?"+tc.query, nil)
-		where, args, size, ok := orderListFilter(req, now)
+		where, args, size, ok := orderListFilter(req)
 		if ok != tc.ok || (ok && (!strings.Contains(where, tc.fragment) || len(args)==0 || size!=20)) {
 			t.Errorf("%s: where=%q args=%v size=%d ok=%v",tc.query,where,args,size,ok)
 		}
-		if ok && strings.Contains(tc.query,"gameOrderId") && strings.Contains(where,"created_at>=?") {
-			t.Fatal("exact order number must allow history lookup")
+		if ok && !strings.Contains(tc.query,"startTime") && strings.Contains(where,"created_at>=?") {
+			t.Fatal("no date filter must allow all historical orders")
 		}
 	}
 	start,end:=orderAdminDay(now)
@@ -45,7 +52,7 @@ func TestAdminOrderFilter(t *testing.T) {
 		t.Fatal("incorrect Beijing day boundary")
 	}
 	cursor:=base64.RawURLEncoding.EncodeToString([]byte("2026-11-17T00:00:00Z|123"))
-	where,_,_,ok:=orderListFilter(httptest.NewRequest(http.MethodGet,"/?gameId=1&cursor="+cursor,nil),now)
+	where,_,_,ok:=orderListFilter(httptest.NewRequest(http.MethodGet,"/?gameId=1&cursor="+cursor,nil))
 	if !ok || !strings.Contains(where,"id<?") {t.Fatal("missing stable keyset cursor")}
 }
 

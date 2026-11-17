@@ -119,17 +119,15 @@ func orderAdminDay(now time.Time) (time.Time,time.Time) {
 	return start.UTC(),start.AddDate(0,0,1).UTC()
 }
 
-func orderListFilter(r *http.Request,now time.Time) (string,[]any,int,bool) {
+func orderListFilter(r *http.Request) (string,[]any,int,bool) {
 	where,args,ok:=orderScope(r)
 	if !ok {return "",nil,0,false}
 	q:=r.URL.Query()
-	exact:=false
 	for _,field:=range []struct{param,column string}{{"gameOrderId","game_order_id"},{"platformOrderNo","platform_order_no"}} {
 		if v:=q.Get(field.param);v!="" {
 			if len(v)>128 {return "",nil,0,false}
 			where+=" AND "+field.column+"=?"
 			args=append(args,v)
-			exact=true
 		}
 	}
 	for _,field:=range []struct{param,column string;max int}{{"paymentStatus","payment_status",1},{"notifyStatus","notify_status",2}} {
@@ -141,15 +139,11 @@ func orderListFilter(r *http.Request,now time.Time) (string,[]any,int,bool) {
 			if field.param=="notifyStatus" {where+=" AND payment_status=1"}
 		}
 	}
-	start,end:=orderAdminDay(now)
+	// 日期筛选可选，不限制历史跨度；只校验时间格式及区间顺序。
 	if q.Get("startTime")!="" || q.Get("endTime")!="" {
-		var e1,e2 error
-		start,e1=time.Parse(time.RFC3339,q.Get("startTime"))
-		end,e2=time.Parse(time.RFC3339,q.Get("endTime"))
-		if e1!=nil || e2!=nil || !end.After(start) || end.Sub(start)>30*24*time.Hour {return "",nil,0,false}
-		exact=false
-	}
-	if !exact {
+		start,e1:=time.Parse(time.RFC3339,q.Get("startTime"))
+		end,e2:=time.Parse(time.RFC3339,q.Get("endTime"))
+		if e1!=nil || e2!=nil || !end.After(start) {return "",nil,0,false}
 		where+=" AND created_at>=? AND created_at<?"
 		args=append(args,start.UTC(),end.UTC())
 	}
@@ -179,7 +173,7 @@ func orderAdminDBError(w http.ResponseWriter,r *http.Request,err error) {
 	orderAdminError(w,503,"订单管理服务暂时不可用")
 }
 func (a *adminOrders) list(w http.ResponseWriter,r *http.Request) {
-	where,args,size,ok:=orderListFilter(r,time.Now())
+	where,args,size,ok:=orderListFilter(r)
 	if !ok {orderAdminError(w,400,"订单查询参数不合法");return}
 	args=append(args,size+1)
 	rows,err:=a.db.QueryContext(r.Context(),"SELECT "+adminOrderColumns+" FROM game_order WHERE "+where+" ORDER BY created_at DESC,id DESC LIMIT ?",args...)
