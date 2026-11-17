@@ -76,14 +76,39 @@ def service_config(ttl, isolated, idle, event_cap, sample):
     print(f"Service fixture: ttl={ttl}, isolated={isolated}, idle={idle}, event cap={event_cap}, sample={sample}", flush=True)
 
 
-def stage(label, config, user, event, delay=0, fail=False, required=False, seconds=20):
+def runtime_snapshot():
+    if os.environ.get("LOAD_PROFILE") != "traffic-multi":
+        return {}
+    result = {}
+    for line in (root / "diagnostics.tsv").read_text().splitlines():
+        name, port = line.split("\t")
+        values = {}
+        for endpoint in ("dbstats", "runtime"):
+            with urllib.request.urlopen(f"http://127.0.0.1:{int(port)}/debug/{endpoint}", timeout=3) as response:
+                values[endpoint] = json.load(response)
+        result[name] = values
+    if not result:
+        raise RuntimeError("missing multi-channel diagnostics")
+    return result
+
+
+def report_runtime(label, before, after):
+    for name, current in after.items():
+        previous = before[name]
+        db, old_db = current["dbstats"], previous["dbstats"]
+        gc, old_gc = current["runtime"], previous["runtime"]
+        print(f"Runtime {label} {name}: DB waits={db['WaitCount']-old_db['WaitCount']}, wait_ms={(db['WaitDuration']-old_db['WaitDuration'])/1e6:.2f}, open={db['OpenConnections']}, in_use={db['InUse']}, GC={gc['num_gc']-old_gc['num_gc']}, gc_pause_ms={(gc['pause_total_ns']-old_gc['pause_total_ns'])/1e6:.2f}, heap_mib={gc['heap_alloc']/1048576:.2f}, goroutines={gc['goroutines']}", flush=True)
+
+
+def stage(label, config, user, event, delay=0, fail=False, required=False, seconds=20, apps=0):
     global valid
     mode(delay, fail)
     before, sql_before = stats(), mysql()
+    runtime_before = runtime_snapshot()
     prefix = results / label
     env = dict(os.environ, LOAD_PROFILE="traffic", LOAD_SCENARIO="mixed", LOAD_TARGET="nginx",
                TRAFFIC_CONFIG=str(config), TRAFFIC_USER=str(user), TRAFFIC_EVENT=str(event),
-               TRAFFIC_SECONDS=str(seconds), TRAFFIC_EVENT_DELAY=str(delay), TRAFFIC_EVENT_FAIL="1" if fail else "0")
+               TRAFFIC_SECONDS=str(seconds), TRAFFIC_EVENT_DELAY=str(delay), TRAFFIC_EVENT_FAIL="1" if fail else "0", TRAFFIC_APPS=str(apps))
     print(f"\n### {label}: {config}/{user}/{event} QPS, event delay={delay}ms fail={fail}", flush=True)
     monitor = subprocess.Popen([sys.executable, "tests/load/process_monitor.py", str(prefix) + ".process.tsv"])
     try:
@@ -96,6 +121,7 @@ def stage(label, config, user, event, delay=0, fail=False, required=False, secon
     # Let timed-out upstream requests settle before taking mock counters.
     time.sleep(1)
     after, sql_after = stats(), mysql()
+    report_runtime(label, runtime_before, runtime_snapshot())
     delta = {key: after[key] - before[key] for key in after}
     sql_delta = {key: sql_after[key] - sql_before[key] for key in sql_after
                  if key not in ("Threads_running", "Threads_connected")}
@@ -144,6 +170,21 @@ try:
         stage("quick-event-delay", 100, 100, 200, delay=10, required=True, seconds=10)
         stage("quick-event-failure", 100, 100, 200, fail=True, required=True, seconds=10)
         stage("quick-recovery", 100, 100, 200, required=True, seconds=10)
+        stage("quick-multi-16", 100, 100, 200, required=True, seconds=10, apps=16)
+    elif os.environ.get("LOAD_PROFILE") == "traffic-multi":
+        # Uniform cyclic traffic across 16 games, 16 apps each. Both A/B arms
+        # use the same app count, connection settings and sampling rate.
+        service_config("0s", True, 32, 0, 10)
+        stage("multi-no-cache-400", 100, 100, 200, apps=256, required=True)
+        stage("multi-no-cache-1000", 250, 250, 500, apps=256)
+        service_config("1s", True, 32, 0, 10)
+        stage("multi-cache-400", 100, 100, 200, apps=256, required=True)
+        stage("multi-cache-1000", 250, 250, 500, apps=256)
+        for rate in (500, 750, 1250):
+            if not stage(f"multi-cache-{rate*4}", rate, rate, rate*2, apps=256):
+                break
+        stage("multi-recovery", 100, 100, 200, apps=256, required=True)
+        service_config("0s", True, 32, 0, 1)
     else:
         # Same-instance A/B: keep the production default cache disabled.
         service_config("0s", False, 2, 0, 1)

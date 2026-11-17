@@ -17,6 +17,19 @@ import (
 	"time"
 )
 
+// Only the synthetic fixture app IDs are accepted; each channel has its own key.
+func platformKey(app string) (string, bool) {
+	if app == "load-app" {
+		return "runner-load-platform-only", true
+	}
+	suffix, ok := strings.CutPrefix(app, "load-app-")
+	n, err := strconv.Atoi(suffix)
+	if !ok || err != nil || n < 0 || n >= 256 || strconv.Itoa(n) != suffix {
+		return "", false
+	}
+	return "runner-load-platform-only-" + suffix, true
+}
+
 func main() {
 	mux := http.NewServeMux()
 	var eventDelay atomic.Int64
@@ -45,10 +58,12 @@ func main() {
 		})
 	})
 	mux.HandleFunc("POST /report/event", func(w http.ResponseWriter, r *http.Request) {
-		values := []string{"runner-load-platform-only", "load-app", r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}
+		app := r.Header.Get("x-app-id")
+		secret, ok := platformKey(app)
+		values := []string{secret, app, r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}
 		sort.Strings(values)
 		sum := sha1.Sum([]byte(strings.Join(values, "_")))
-		if r.Header.Get("x-app-id") != "load-app" || !hmac.Equal([]byte(r.Header.Get("x-signature")), []byte(hex.EncodeToString(sum[:]))) {
+		if !ok || !hmac.Equal([]byte(r.Header.Get("x-signature")), []byte(hex.EncodeToString(sum[:]))) {
 			http.Error(w, "bad platform signature", http.StatusUnauthorized)
 			return
 		}
@@ -81,10 +96,12 @@ func main() {
 		_, _ = io.WriteString(w, "UP")
 	})
 	mux.HandleFunc("POST /cp/user/check", func(w http.ResponseWriter, r *http.Request) {
-		values := []string{"runner-load-platform-only", "load-app", r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}
+		app := r.Header.Get("x-app-id")
+		secret, ok := platformKey(app)
+		values := []string{secret, app, r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}
 		sort.Strings(values)
 		sum := sha1.Sum([]byte(strings.Join(values, "_")))
-		if r.Header.Get("x-app-id") != "load-app" || !hmac.Equal([]byte(r.Header.Get("x-signature")), []byte(hex.EncodeToString(sum[:]))) {
+		if !ok || !hmac.Equal([]byte(r.Header.Get("x-signature")), []byte(hex.EncodeToString(sum[:]))) {
 			http.Error(w, "bad platform signature", http.StatusUnauthorized)
 			return
 		}
