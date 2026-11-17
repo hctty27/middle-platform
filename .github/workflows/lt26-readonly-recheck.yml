@@ -1,0 +1,32 @@
+name: One-shot LT26 read-only config recheck
+on:
+  push:
+    branches: [test/lt26-readonly-recheck-20261117]
+permissions: {}
+jobs:
+  readonly:
+    if: github.repository == 'hctty27/middle-platform' && github.actor == 'hctty27' && github.ref == 'refs/heads/test/lt26-readonly-recheck-20261117'
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 3
+    steps:
+      - name: Check three imported channels using SDK Core read-only GET
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') { throw 'Unexpected runner; refusing request.' }
+          $apps = @('lt26-app-000','lt26-app-127','lt26-app-255')
+          foreach ($app in $apps) {
+            $url = 'https://mp.skybluek.com/api/core/config/test/' + $app
+            try {
+              $response = Invoke-WebRequest -Uri $url -Method Get -UseBasicParsing -TimeoutSec 10 -MaximumRedirection 0
+              $body = $response.Content | ConvertFrom-Json
+              $valid = ($response.StatusCode -eq 200 -and $body.code -eq 0 -and $body.data.snKey -ceq $app)
+              $result = if ($valid) { 'PASS' } else { 'MISMATCH' }
+              Write-Host ('{0} {1} HTTP={2} code={3}' -f $app,$result,$response.StatusCode,$body.code)
+            } catch {
+              $status = 'N/A'
+              if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+              Write-Host ('{0} FAILED HTTP={1}' -f $app,$status)
+            }
+          }
+          Write-Host 'Completed: 3 read-only GETs only; no writes and no load test.'
