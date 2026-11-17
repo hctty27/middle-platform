@@ -96,9 +96,7 @@ SSH 发布用户必须拥有动态 upstream 状态目录和共享发布锁的写
 systemd journal 的时间显示遵循主机本地时区；如果主机时区不是北京时间，可在查看时临时指定，不必修改系统设置：
 
 ```bash
-TZ=Asia/Shanghai journalctl -u nginx -n 100 --no-pager
-TZ=Asia/Shanghai journalctl -u supervisord -n 100 --no-pager
-TZ=Asia/Shanghai journalctl -u monit -n 100 --no-pager
+TZ=Asia/Shanghai journalctl -u nginx -u supervisor -u supervisord -u monit -n 100 --no-pager
 ```
 
 数据库存储、MySQL 会话和内部 API 仍保持 UTC。日志展示时区转换不改变时间瞬间，不执行数据库数据迁移或业务时间加减 8 小时。
