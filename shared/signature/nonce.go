@@ -25,6 +25,21 @@ var (
 	ErrNonceStoreUnavailable = errors.New("防重放存储不可用")
 )
 
+var defaultNonceStore NonceStore = NewNonceGuard(DefaultNonceCapacity)
+
+// DefaultNonceStore returns the process-wide bounded replay store used when a
+// service does not inject a dedicated store. Applications should inject one
+// shared store into all signed endpoints in the same process.
+func DefaultNonceStore() NonceStore { return defaultNonceStore }
+
+// ResolveNonceStore returns the supplied store, or the process-wide default.
+func ResolveNonceStore(store NonceStore) NonceStore {
+	if store != nil {
+		return store
+	}
+	return DefaultNonceStore()
+}
+
 // NonceStore atomically accepts a nonce once within its signature validity window.
 // Implementations may be process-local or distributed (for example Redis SET NX PX).
 type NonceStore interface {
