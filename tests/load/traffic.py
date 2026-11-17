@@ -137,35 +137,43 @@ def stage(label, config, user, event, delay=0, fail=False, required=False, secon
 
 
 try:
-    # Same-instance A/B: keep the production default cache disabled.
-    service_config("0s", False, 2, 0, 1)
-    stage("ab-legacy-1000", 250, 250, 500)
-    service_config("0s", True, 32, 0, 1)
-    stage("ab-pools-1000", 250, 250, 500)
-    service_config("0s", True, 32, 0, 10)
-    stage("ab-sampling-1000", 250, 250, 500)
-    service_config("1s", True, 32, 0, 10)
-    stage("ab-cache-1000", 250, 250, 500)
-    stage("ab-cache-2000", 500, 500, 1000)
-    # Connection cap experiment keeps synchronous completion, never fabricates success.
-    service_config("1s", True, 32, 64, 10)
-    stage("ab-capped-overload", 100, 100, 2000, delay=50)
-    # Restore the conservative production-like settings before required stages.
-    service_config("0s", True, 32, 0, 1)
-    # A baseline for both critical routes, then independent event traffic.
-    stage("critical-baseline", 100, 100, 0, required=True)
-    stage("event-only-smoke", 0, 0, 10, required=True, seconds=10)
-    for rate in (100, 250, 500, 1000, 2500, 5000):
-        passed = stage(f"mix-{rate}", rate, rate, 2*rate, required=(rate == 100))
-        if not passed:
-            print("Saturation or threshold crossed: stop increasing the combined rate.", flush=True)
-            break
-    # Dedicated impact checks at a known lower critical load; higher overload is exploratory.
-    for delay in (1, 10, 50, 100):
-        stage(f"event-delay-{delay}ms", 100, 100, 200, delay=delay, required=(delay <= 10))
-    stage("event-overload", 100, 100, 2000, delay=50)
-    stage("event-platform-failure", 100, 100, 200, fail=True, required=True)
-    stage("critical-recovery", 100, 100, 200, required=True)
+    if os.environ.get("LOAD_PROFILE") == "traffic-quick":
+        # Fast mandatory PR regressions; use unchanged per-endpoint thresholds.
+        # Each stage has its own 1:1:2 schedule and verified Mock receipt counts.
+        stage("quick-mix", 100, 100, 200, required=True, seconds=10)
+        stage("quick-event-delay", 100, 100, 200, delay=10, required=True, seconds=10)
+        stage("quick-event-failure", 100, 100, 200, fail=True, required=True, seconds=10)
+        stage("quick-recovery", 100, 100, 200, required=True, seconds=10)
+    else:
+        # Same-instance A/B: keep the production default cache disabled.
+        service_config("0s", False, 2, 0, 1)
+        stage("ab-legacy-1000", 250, 250, 500)
+        service_config("0s", True, 32, 0, 1)
+        stage("ab-pools-1000", 250, 250, 500)
+        service_config("0s", True, 32, 0, 10)
+        stage("ab-sampling-1000", 250, 250, 500)
+        service_config("1s", True, 32, 0, 10)
+        stage("ab-cache-1000", 250, 250, 500)
+        stage("ab-cache-2000", 500, 500, 1000)
+        # Connection cap experiment keeps synchronous completion, never fabricates success.
+        service_config("1s", True, 32, 64, 10)
+        stage("ab-capped-overload", 100, 100, 2000, delay=50)
+        # Restore the conservative production-like settings before required stages.
+        service_config("0s", True, 32, 0, 1)
+        # A baseline for both critical routes, then independent event traffic.
+        stage("critical-baseline", 100, 100, 0, required=True)
+        stage("event-only-smoke", 0, 0, 10, required=True, seconds=10)
+        for rate in (100, 250, 500, 1000, 2500, 5000):
+            passed = stage(f"mix-{rate}", rate, rate, 2*rate, required=(rate == 100))
+            if not passed:
+                print("Saturation or threshold crossed: stop increasing the combined rate.", flush=True)
+                break
+        # Dedicated impact checks at a known lower critical load; higher overload is exploratory.
+        for delay in (1, 10, 50, 100):
+            stage(f"event-delay-{delay}ms", 100, 100, 200, delay=delay, required=(delay <= 10))
+        stage("event-overload", 100, 100, 2000, delay=50)
+        stage("event-platform-failure", 100, 100, 200, fail=True, required=True)
+        stage("critical-recovery", 100, 100, 200, required=True)
 finally:
     mode(0, False)
     print("\n## Per-endpoint results\n")
