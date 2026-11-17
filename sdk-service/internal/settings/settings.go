@@ -34,6 +34,9 @@ type Config struct {
 		EventReportURL      string `yaml:"eventReportURL"`
 		SubscribeMessageURL string `yaml:"subscribeMessageURL"`
 		UserCheckURL        string `yaml:"userCheckURL"`
+		IsolateConnections bool   `yaml:"isolateConnections"`
+		MaxIdlePerHost     int    `yaml:"maxIdlePerHost"`
+		EventMaxConns      int    `yaml:"eventMaxConns"`
 	} `yaml:"platform"`
 	Log logging.Config `yaml:"log"`
 }
@@ -46,6 +49,8 @@ func Load(path string) (Config, error) {
 	cfg.Game.Timeout = "5s"
 	cfg.ConfigCache = bootstrap.DefaultCacheConfig("0s")
 	cfg.Server.RequestTimeout = "auto"
+	cfg.Platform.IsolateConnections = true
+	cfg.Platform.MaxIdlePerHost = 32
 	cfg.Log = logging.Default()
 	if path == "" {
 		path = "configs/config.yaml"

@@ -6,6 +6,11 @@ import (
 )
 
 func validatePerformance(cfg Config) error {
+	if cfg.Platform.MaxIdlePerHost < 1 || cfg.Platform.MaxIdlePerHost > 256 ||
+		cfg.Platform.EventMaxConns < 0 || cfg.Platform.EventMaxConns > 4096 ||
+		(!cfg.Platform.IsolateConnections && cfg.Platform.EventMaxConns != 0) {
+		return errors.New("platform 连接池配置不合法")
+	}
 	if err := cfg.ConfigCache.Validate(); err != nil {
 		return err
 	}

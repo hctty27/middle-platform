@@ -27,13 +27,14 @@ type Config struct {
 	AccessEnabled bool   `yaml:"accessEnabled"`
 	SlowThreshold string `yaml:"slowThreshold"`
 	SDKConfigSampleEvery int `yaml:"sdkConfigSampleEvery"`
+	SDKEventSampleEvery int `yaml:"sdkEventSampleEvery"`
 }
 
 // Default 返回统一日志的安全默认值。
 func Default() Config {
 	return Config{
 		Level: "info", Format: "json", Output: "stdout",
-		AccessEnabled: true, SlowThreshold: "500ms", SDKConfigSampleEvery: 1,
+		AccessEnabled: true, SlowThreshold: "500ms", SDKConfigSampleEvery: 1, SDKEventSampleEvery: 1,
 	}
 }
 
@@ -66,6 +67,13 @@ func (c *Config) ApplyEnv() error {
 		}
 		c.SDKConfigSampleEvery = parsed
 	}
+	if value, ok := os.LookupEnv("LOG_SDK_EVENT_SAMPLE_EVERY"); ok {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("LOG_SDK_EVENT_SAMPLE_EVERY 配置不合法: %w", err)
+		}
+		c.SDKEventSampleEvery = parsed
+	}
 	return c.Validate()
 }
 
@@ -88,6 +96,9 @@ func (c Config) Validate() error {
 	}
 	if c.SDKConfigSampleEvery < 0 || c.SDKConfigSampleEvery > 10000 {
 		return fmt.Errorf("log.sdkConfigSampleEvery 必须在 0 到 10000 之间")
+	}
+	if c.SDKEventSampleEvery < 0 || c.SDKEventSampleEvery > 10000 {
+		return fmt.Errorf("log.sdkEventSampleEvery 必须在 0 到 10000 之间")
 	}
 	threshold, err := time.ParseDuration(c.SlowThreshold)
 	if err != nil || threshold <= 0 {
@@ -213,10 +224,20 @@ func publicSDKConfigRead(r *http.Request) bool {
 	return ok && (env == "test" || env == "review" || env == "prod") && app != "" && !strings.Contains(app, "/")
 }
 
+// eventReport identifies exactly the public event route.
+func eventReport(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	env, ok := strings.CutPrefix(r.URL.Path, "/api/service/events/")
+	return ok && (env == "test" || env == "review" || env == "prod")
+}
+
 // HTTP 统一生成或校验 Request ID，记录状态码和耗时，捕获 panic；不会记录 URL 查询串、请求体或密钥。
 func HTTP(c Config, next http.Handler) http.Handler {
 	threshold, _ := time.ParseDuration(c.SlowThreshold)
 	var successfulConfigReads atomic.Uint64
+	var successfulEvents atomic.Uint64
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(RequestIDHeader)
 		if !validRequestID(id) {
@@ -252,6 +273,11 @@ func HTTP(c Config, next http.Handler) http.Handler {
 			if !panicked && !slow && writer.status >= 200 && writer.status < 300 &&
 				c.SDKConfigSampleEvery > 1 && publicSDKConfigRead(r) &&
 				successfulConfigReads.Add(1)%uint64(c.SDKConfigSampleEvery) != 0 {
+				return
+			}
+			if !panicked && !slow && writer.status >= 200 && writer.status < 300 &&
+				c.SDKEventSampleEvery > 1 && eventReport(r) &&
+				successfulEvents.Add(1)%uint64(c.SDKEventSampleEvery) != 0 {
 				return
 			}
 			level := slog.LevelInfo

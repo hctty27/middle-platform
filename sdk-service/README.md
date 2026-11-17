@@ -47,3 +47,9 @@ go build ./cmd/sdk-service
 ```
 
 [架构与内部路由](../admin/public/docs/guide.html#architecture) · [本地开发](../admin/public/docs/guide.html#development) · [生产部署与迁移](../admin/public/docs/guide.html#production)
+
+## 平台连接池与事件日志
+
+`platform.isolateConnections` 默认 `true`：用户核验使用独立 HTTP transport，事件/订阅共用另一 transport。`maxIdlePerHost` 默认 32（范围 1～256），复用长连接；`eventMaxConns` 默认 0（无限制），仅开启隔离时可选 1～4096。设为非零会让事件/订阅按目标等待连接（HTTP/2 多路复用并非请求并发限制），仍受原 5 秒平台预算约束；不主动拒绝、不新增重试。`isolateConnections: false`、`maxIdlePerHost: 2`、`eventMaxConns: 0` 可回退共享连接池行为。两池仍共享进程 CPU、数据库和网络，不是完整隔离。
+
+`log.sdkEventSampleEvery` / `LOG_SDK_EVENT_SAMPLE_EVERY` 默认 1（全量）；仅快速成功事件的 HTTP 访问及平台成功日志按各自计数采样，错误、慢请求、核验和订阅日志保留。两类采样不承诺保留同一请求的两条日志。Debug 请求/响应内容保留原行为。配置缓存仍默认 0s；1s 仅作压测对照，不默认启用含密钥和核验开关的缓存。

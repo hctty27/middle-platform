@@ -33,3 +33,7 @@ PR 增加独立 compact Runner；手动选择 capacity 也可运行。固定 SDK
 新增 event-report 单接口（`POST /api/service/events/test`），使用真实游戏 HMAC、平台 Header 签名及本地 Mock `/report/event`。原 mixed 保持历史 6 场景配比，方便跨轮对比；新增 traffic 使用三个独立 constant-arrival-rate 场景，配置查询:用户核验:事件上报=1:1:2，从 100/100/200 到 5000/5000/10000（单 Runner 探索，失败停止升档）。独立配置 P95/P99 20/50ms、核验 100/250ms、上报 500/1500ms；错误率 <1%、丢弃预算 0.1%、完成数至少计划 99.9%。Mock 注入仅事件 1/10/50/100ms 和 HTTP 503，验证核心接口独立阈值及恢复，并校验实际平台签名到达计数，避免跳过上游造成虚假成功。低档基线、事件冒烟、1/10ms、故障及恢复为必测；高档和 50/100ms 为探索。生产代码、缓存、签名与部署不变。100ms 延迟和更高吞吐可能受同机器 k6/VU 容量限制。
 
 压测数据显式启用 `load-app/test` 的 `event_report` 与 `user_check`，启动前校验两个绑定；仅本地一次性数据库。容量脚本按 `database` / `log` 两个顶层配置段修改标量，并通过真实 YAML 模板回归测试，保证 `orderNotify.maxIdleConns` 不受影响。
+
+## SDK Service A/B 对照
+
+traffic 先比较共享连接池(每目标空闲2)、独立池(32)、仅快速事件日志采样1/10、路由 TTL 1s、可选事件每目标连接数64（50ms平台延迟冲击）。每次仅修改隔离 Runner 的 YAML 并重启 SDK Service，保留业务验签、真实 Mock 到达计数、各接口阈值；A/B 为探索，之后恢复默认 TTL=0s、采样=1、独立池32、无连接上限并执行原必测场景。不假定 CPU/DB 已隔离，不将 HTTP/2 连接上限视为请求并发限制。

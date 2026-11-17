@@ -101,10 +101,18 @@ func Run(configPath string) error {
 	}
 	controller := &service.RoleControlService{Routes: routes, Adapters: controlRegistry}
 
-	publisher, err := platform.NewPublisher(cfg.Platform.EventReportURL, cfg.Platform.SubscribeMessageURL, cfg.Platform.UserCheckURL)
+	slowThreshold, _ := time.ParseDuration(cfg.Log.SlowThreshold)
+	publisher, err := platform.NewPublisherWithOptions(cfg.Platform.EventReportURL, cfg.Platform.SubscribeMessageURL, cfg.Platform.UserCheckURL, platform.PublisherOptions{
+		IsolateConnections: cfg.Platform.IsolateConnections,
+		MaxIdlePerHost:     cfg.Platform.MaxIdlePerHost,
+		EventMaxConns:      cfg.Platform.EventMaxConns,
+		EventSampleEvery:   cfg.Log.SDKEventSampleEvery,
+		SlowThreshold:      slowThreshold,
+	})
 	if err != nil {
 		return fmt.Errorf("初始化平台上报客户端失败: %w", err)
 	}
+	defer publisher.CloseIdleConnections()
 	checker := &service.UserCheckService{Routes: routes, Sender: publisher}
 	outbound := &service.OutboundService{Routes: routes, Sender: publisher}
 
