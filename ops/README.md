@@ -32,7 +32,7 @@ SDK Core 的 `orderNotify.workers: 4` 是每进程配置，4 个实例最多同�
 
 本部署按要求让 Go 实例以 `root` 运行：Supervisor 的 systemd unit 必须由 root 启动，模板中的每个 program 显式设置 `user=root`。SSH 发布账号仍建议使用独立的 `deploy` 用户，不要为了运行 Go 程序而开放 root SSH 登录。root 运行会扩大应用漏洞的影响范围，请确保二进制、YAML、日志目录和发布权限只允许可信管理员修改。
 
-12 个 Go 实例的 Supervisor 环境变量都设置 `GOMEMLIMIT=128MiB`，软限制预算合计 1536 MiB。它不是 RSS/cgroup 硬上限，不是 RSS/cgroup 硬上限；Go Runtime 管理的内存会更积极触发 GC，但二进制映射、内核代管内存和部分外部内存不在该限制内。若要硬性隔离，后续仍需单独配置 cgroup v2。
+12 个 Go 实例的 Supervisor 环境变量都设置 `GOMEMLIMIT=128MiB`，软限制预算合计 1536 MiB。它不是 RSS/cgroup 硬上限；Go Runtime 管理的内存会更积极触发 GC，但二进制映射、内核代管内存和部分外部内存不在该限制内。若要硬性隔离，后续仍需单独配置 cgroup v2。
 
 Supervisor 使用三个异构分组：`config-center`、`sdk-core`、`sdk-service`。组内进程名在 Supervisor 中带组前缀，例如 `config-center:config-center-1`。可以使用 `supervisorctl status config-center:*`、`supervisorctl restart sdk-core:*` 等命令按组管理。
 

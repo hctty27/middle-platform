@@ -738,7 +738,7 @@ class DeploymentTopologyTests(unittest.TestCase):
         self.assertFalse((root / "ops/nginx/runtime").exists())
         self.assertEqual(len(expected), 12)
         self.assertEqual(config["remoteDirectory"], "/data/middle-platform")
-        self.assertEqual(supervisor.count("user=root"), 10)
+        self.assertEqual(supervisor.count("user=root"), 12)
         self.assertEqual(supervisor.count('GOMEMLIMIT="128MiB"'), 12)
         for group in ("config-center", "sdk-core", "sdk-service"):
             self.assertIn(f"[group:{group}]", supervisor)
