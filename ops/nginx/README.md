@@ -165,7 +165,7 @@ Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败�
 1. 验证 Nginx 正在运行、加载了对应 upstream 和 location，且该组至少还有一个可用实例。
 2. 在对应的 `/data/middle-platform/run/nginx/*.conf` 中将当前实例标记为 `down`。
 3. 执行 `nginx -t` 并 graceful reload。
-4. 等待旧 Nginx worker 退出。顶层 `worker_shutdown_timeout 75s` 限制排空时间；超时则停止发布，实例保持摘除。
+4. Reload 前记录 systemd 管理的 Nginx master PID 和旧 worker PID；等待旧 PID 全部消失且出现新一代 active worker。只识别该 master 的真实 worker 进程；Reload 后进程查询失败、master 变化或超时均停止发布，实例保持摘除。顶层 `worker_shutdown_timeout 75s` 与发布默认等待上限 90 秒不变；超时日志输出剩余 PID。发布期间不得并行执行其他 Nginx reload/restart 或热升级。
 5. 仅重启当前 Supervisor program。
 6. 要求 Supervisor 状态为 RUNNING，并且本机 `/health/ready` 连续 3 次返回 HTTP 200。
 7. 移除 `down`，再次校验并 reload Nginx，将实例恢复到流量中。
@@ -184,5 +184,7 @@ Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败�
 /data/middle-platform/ops/nginx/upstream-control.sh drain sdk-core 8211
 /data/middle-platform/ops/nginx/upstream-control.sh enable sdk-core 8211
 ```
+
+重复 `drain` 已标记 down 的实例时会重新 reload 并确认 worker 换代，而不是仅根据磁盘标记判断已排空。恢复实例之前应确认 Supervisor RUNNING 和 `/health/ready` 正常。
 
 执行手动操作时使用实际发布用户；操作后检查 `/data/middle-platform/run/nginx/*.conf` 并运行 `nginx -t`。
