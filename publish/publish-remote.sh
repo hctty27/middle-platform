@@ -268,24 +268,27 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
     done
 
     # The publish lock is held. Restore only explicitly selected, verified healthy peers.
-    for index in "${recovery_indices[@]}"; do
-        program="${programs[$index]}"
-        group="${groups[$index]}"
-        port="${ports[$index]}"
-        supervisor_process="$group:$program"
-        for attempt in 1 2 3; do
-            if ! supervisorctl status "$supervisor_process" | grep -Eq "^$supervisor_process[[:space:]]+RUNNING([[:space:]]|$)" ||
-               ! http_status=$(curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 -w '%{http_code}' "http://127.0.0.1:$port/health/ready") ||
-               [[ "$http_status" != 200 ]]; then
-                printf 'Cannot recover %s on port %s: health check %s/3 failed; instance remains down; no application files were changed\n' "$program" "$port" "$attempt" >&2
-                exit 1
-            fi
-            if [[ "$attempt" -lt 3 ]]; then sleep 2; fi
+    # Bash 4.2/4.3 with nounset rejects expansion of an empty array.
+    if [[ -n "${recovery_indices[0]:-}" ]]; then
+        for index in "${recovery_indices[@]}"; do
+            program="${programs[$index]}"
+            group="${groups[$index]}"
+            port="${ports[$index]}"
+            supervisor_process="$group:$program"
+            for attempt in 1 2 3; do
+                if ! supervisorctl status "$supervisor_process" | grep -Eq "^$supervisor_process[[:space:]]+RUNNING([[:space:]]|$)" ||
+                   ! http_status=$(curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 -w '%{http_code}' "http://127.0.0.1:$port/health/ready") ||
+                   [[ "$http_status" != 200 ]]; then
+                    printf 'Cannot recover %s on port %s: health check %s/3 failed; instance remains down; no application files were changed\n' "$program" "$port" "$attempt" >&2
+                    exit 1
+                fi
+                if [[ "$attempt" -lt 3 ]]; then sleep 2; fi
+            done
+            run_nginx_control recover "$group" "$port"
+            run_nginx_control validate "$group" "$port"
+            printf 'Recovered %s to Nginx traffic before rollout (port %s)\n' "$program" "$port"
         done
-        run_nginx_control recover "$group" "$port"
-        run_nginx_control validate "$group" "$port"
-        printf 'Recovered %s to Nginx traffic before rollout (port %s)\n' "$program" "$port"
-    done
+    fi
 fi
 
 temporary=''
