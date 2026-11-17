@@ -51,6 +51,13 @@ elif group == "quick":
     chosen = [by_name["core-config"]]
 else:
     chosen = [c for c in catalog if group == "all" or c["group"] == group]
+business_only = os.environ.get("ENDPOINT_BUSINESS_ONLY", "false") == "true"
+if business_only:
+    # Exclude all admin API routes, including order management. Keep separate
+    # correctness preflight unchanged; this filter only controls high-QPS stages.
+    chosen = [c for c in chosen if "/admin/" not in c["route"].split(" ", 1)[1]]
+    if not chosen:
+        raise SystemExit("Business-only benchmark cannot target admin routes")
 
 def mysql(query, database="config_center"):
     cmd = ["mysql", "-uroot", "-h127.0.0.1", "-N", "-B"]
@@ -183,7 +190,7 @@ common = {
 rows = []
 baseline_failures = []
 print("## GitHub-hosted endpoint QPS ladder (local-only)\n", flush=True)
-print(f"Selected {len(chosen)} routes, group={group}, tiers={tiers}, seconds={duration}, rates={rate_override or 'default'}, max_vus={vu_cap}. "
+print(f"Selected {len(chosen)} routes, group={group}, tiers={tiers}, business_only={business_only}, seconds={duration}, rates={rate_override or 'default'}, max_vus={vu_cap}. "
       "One measured target request per iteration; no production traffic.\n", flush=True)
 print("| Endpoint | Mode | Target QPS | VUs | Actual HTTP/s | P95 ms | P99 ms | Bad % | 401 | 409 | 429 | 503 | 5xx | Dropped | MySQL locks | Result |")
 print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|", flush=True)
@@ -277,7 +284,7 @@ for pos, case in enumerate(chosen):
 
 (results/"endpoint-qps-summary.json").write_text(json.dumps({
     "source":"github-hosted-loopback", "group":group,"tiers":tiers,
-    "seconds":duration,"rates":overrides,"vu_cap":vu_cap,
+    "seconds":duration,"rates":overrides,"vu_cap":vu_cap,"business_only":business_only,
     "rows":rows, "baseline_failures":baseline_failures,
     "warnings":["single runner shared CPU: not production capacity",
                 "duplicate-payment and retry-rejection are not success-path capacity",
