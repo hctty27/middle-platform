@@ -99,7 +99,7 @@ jobs:
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
           LOAD_SCENARIO=mixed k6 inspect tests/load/traffic.js
           k6 inspect tests/load/api-coverage.js
-          QPS_CASE=core-config k6 inspect tests/load/endpoint-qps.js > /dev/null
+          QPS_CASE=core-config k6 inspect --include-system-env-vars tests/load/endpoint-qps.js > /dev/null
       - name: Install local services
         run: |
           sudo apt-get update -q
