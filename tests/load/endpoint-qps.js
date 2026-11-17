@@ -2,18 +2,54 @@
 import http from 'k6/http';
 import crypto from 'k6/crypto';
 import exec from 'k6/execution';
-import { Rate } from 'k6/metrics';
+import { Rate, Counter, Trend } from 'k6/metrics';
 
 const catalog = JSON.parse(open('./endpoint-qps-catalog.json'));
-const spec = catalog.find(x => x.id === __ENV.QPS_CASE);
-if (!spec) throw new Error('Unknown QPS_CASE: ' + __ENV.QPS_CASE);
+const workloadMode = __ENV.QPS_WORKLOAD === 'quarter-target';
+const workloadConfig = workloadMode ? JSON.parse(open('./target-workload.json')) : null;
+const workloadCases = workloadMode ? Object.entries(workloadConfig.categories).flatMap(([category, ids]) => {
+  const total = Math.floor(workloadConfig.full_target_qps[category] * workloadConfig.scale);
+  const base = Math.floor(total / ids.length);
+  const remainder = total % ids.length;
+  return ids.map((id, index) => ({ id, category, rate: base + (index < remainder ? 1 : 0) }));
+}) : [];
+const workloadByID = Object.fromEntries(workloadCases.map(item => [item.id, item]));
+// Little's Law: VUs ~= arrival rate * iteration duration. Bound total VUs on a shared Runner.
+const workloadVuSeconds = Number(__ENV.QPS_VU_SECONDS || '0.12');
+const workloadVuBudget = Number(__ENV.QPS_VU_BUDGET || '2000');
+function workloadVUCount(qps) {
+  return Math.max(20, Math.ceil(qps * workloadVuSeconds));
+}
+const workloadAllocatedVUs = workloadMode ?
+  workloadCases.reduce((sum, item) => sum + workloadVUCount(item.rate), 0) : 0;
+if (workloadMode && (!Number.isFinite(workloadVuSeconds) ||
+    workloadVuSeconds < 0.05 || workloadVuSeconds > 1 ||
+    !Number.isInteger(workloadVuBudget) || workloadVuBudget < 100 ||
+    workloadAllocatedVUs > workloadVuBudget)) {
+  throw new Error('Unsafe k6 VU allocation: ' + workloadAllocatedVUs +
+    ' requested (budget ' + workloadVuBudget + ', seconds ' + workloadVuSeconds + ')');
+}
+const spec = catalog.find(x => x.id === __ENV.QPS_CASE) || catalog[0];
 const rate = Number(__ENV.QPS_RATE || '10');
-const seconds = Number(__ENV.QPS_SECONDS || '5');
+const seconds = Number(__ENV.QPS_SECONDS || (workloadMode ? workloadConfig.duration_seconds : 5));
 const allocated = Number(__ENV.QPS_VUS || '30');
-if (!Number.isInteger(rate) || rate < 1 || rate > 20000 ||
+if (!workloadMode && !catalog.some(x => x.id === __ENV.QPS_CASE)) {
+  throw new Error('Unknown QPS_CASE: ' + __ENV.QPS_CASE);
+}
+if (!workloadMode && (!Number.isInteger(rate) || rate < 1 || rate > 20000 ||
     !Number.isInteger(seconds) || seconds < 2 || seconds > 30 ||
-    !Number.isInteger(allocated) || allocated < 1 || allocated > 1000) {
+    !Number.isInteger(allocated) || allocated < 1 || allocated > 1000)) {
   throw new Error('QPS rates, seconds or preallocated VUs outside bounded runner limits');
+}
+if (workloadMode) {
+  if (!Number.isInteger(seconds) || seconds < 10 || seconds > 120) {
+    throw new Error('Quarter workload duration must be 10..120 seconds');
+  }
+  for (const item of workloadCases) {
+    const lookup = item.id === 'core-payment-notify' ? 'core-payment-duplicate' : item.id;
+    const entry = catalog.find(x => x.id === lookup);
+    if (!entry || entry.route.includes('/admin/')) throw new Error('Workload contains an admin or unknown route: ' + item.id);
+  }
 }
 const local = 'http://127.0.0.1:8280';
 const access = 'http://127.0.0.1:8081';
@@ -34,10 +70,47 @@ const orderAmount = Number(__ENV.QPS_ORDER_AMOUNT || '100');
 const currentEpoch = __ENV.QPS_EPOCH || '';
 const currentRevision = Number(__ENV.QPS_REVISION || '0');
 const bad = new Rate('endpoint_bad');
+const http401 = new Counter('endpoint_http_401');
+const http409 = new Counter('endpoint_http_409');
+const http429 = new Counter('endpoint_http_429');
+const http503 = new Counter('endpoint_http_503');
+const http5xx = new Counter('endpoint_http_5xx');
+const workloadMetrics = {};
+if (workloadMode) {
+  for (const item of workloadCases) {
+    const suffix = item.id.replace(/-/g, '_');
+    workloadMetrics[item.id] = {
+      requests: new Counter('workload_requests_' + suffix),
+      iterations: new Counter('workload_iterations_' + suffix),
+      bad: new Rate('workload_bad_' + suffix),
+      badCount: new Counter('workload_bad_count_' + suffix),
+      http0: new Counter('workload_http0_' + suffix),
+      latency: new Trend('workload_latency_' + suffix),
+      http401: new Counter('workload_http401_' + suffix),
+      http409: new Counter('workload_http409_' + suffix),
+      http429: new Counter('workload_http429_' + suffix),
+      http503: new Counter('workload_http503_' + suffix),
+      http5xx: new Counter('workload_http5xx_' + suffix),
+    };
+  }
+}
+const workloadScenarios = workloadMode ? Object.fromEntries(workloadCases.map(item => [
+  item.id,
+  {
+    executor: 'constant-arrival-rate',
+    rate: item.rate,
+    timeUnit: '1s',
+    duration: seconds + 's',
+    preAllocatedVUs: workloadVUCount(item.rate),
+    gracefulStop: '5s',
+  },
+])) : null;
 export const options = {
-  scenarios: { endpoint: { executor: 'constant-arrival-rate',
-    rate, timeUnit: '1s', duration: seconds + 's',
-    preAllocatedVUs: allocated, gracefulStop: '5s' } },
+  scenarios: workloadMode ? workloadScenarios : {
+    endpoint: { executor: 'constant-arrival-rate',
+      rate, timeUnit: '1s', duration: seconds + 's',
+      preAllocatedVUs: allocated, gracefulStop: '5s' },
+  },
   thresholds: { endpoint_bad: ['rate<0.01'] },
   summaryTrendStats: ['avg', 'med', 'p(95)', 'p(99)', 'max'],
   noConnectionReuse: false, maxRedirects: 0,
@@ -49,6 +122,8 @@ function randomStamp() {
     nonce: Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('') };
 }
 function signature(kind, method, path, body, extras) {
+  // Unsigned endpoints must not waste generator CPU on random nonces.
+  if (!kind) return body ? { 'Content-Type': 'application/json' } : {};
   const { timestamp, nonce } = randomStamp();
   const pure = path.split('?')[0];
   const query = (path.split('?')[1] || '').split('&').filter(Boolean).sort().join('&');
@@ -71,17 +146,18 @@ function signature(kind, method, path, body, extras) {
       .map(String).sort().join('_'), 'hex');
   } else if (kind === 'payment') {
     headers['x-signature'] = crypto.sha1(
-      [platformOrderNO, gameOrderID, platformSecret, nonce, timestamp].sort().join('_'), 'hex');
+      [(extras && extras.orderNo) || platformOrderNO,
+        (extras && extras.orderID) || gameOrderID, platformSecret, nonce, timestamp].sort().join('_'), 'hex');
   }
   return headers;
 }
-function requestPlan(seq) {
+function requestPlan(caseID, seq) {
   const unique = stage + '-' + seq;
   const group = String(poolStart + seq);
   const base = { origin: local, mode: '', path: '', body: null, extra: null };
-  switch (spec.id) {
+  switch (caseID) {
   case 'health-live': return { ...base, origin: 'http://127.0.0.1:8201', path:'/health/live' };
-  case 'health-ready': return { ...base, origin: 'http://127.0.0.1:8201', path:'/health/ready' };
+  case 'health-ready': return { ...base, origin: 'http://127.0.0.1:8221', path:'/health/ready' };
   case 'config-revision': return { ...base, mode:'sync', path:'/api/config/sync/revision' };
   case 'config-snapshot': return { ...base, mode:'sync', path:'/api/config/sync/snapshot' };
   case 'config-changes': return { ...base, mode:'sync', path:'/api/config/sync/changes?afterRevision=0&limit=20' };
@@ -147,9 +223,17 @@ function requestPlan(seq) {
     body:{type:'lock',role_id:'load-role',duration:0},extra:['lock','load-role','0'] };
   case 'core-order-register': return { ...base, mode:'game', path:'/api/core/orders/test/'+app,
     body:{game_order_id:'qps-order-'+unique,amount:100,attach:'runner-qps'} };
+  case 'core-payment-notify': {
+    const gameID = 'qps-pay-' + unique;
+    const orderNo = 'p-' + gameID;
+    return { ...base, mode:'payment', path:'/api/core/pay/notify/'+app,
+      body:{order_no:orderNo,game_order_id:gameID,amount:100,attach:'runner-qps',
+        paid_at:new Date().toISOString()}, extra:{orderNo,orderID:gameID} };
+  }
   case 'core-payment-duplicate': return { ...base, mode:'payment', path:'/api/core/pay/notify/'+app,
     body:{order_no:platformOrderNO,game_order_id:gameOrderID,
-      amount:orderAmount,attach:'runner-test',paid_at:new Date().toISOString()} };
+      amount:orderAmount,attach:'runner-test',paid_at:new Date().toISOString()},
+    extra:{orderNo:platformOrderNO,orderID:gameOrderID} };
   case 'core-orders': return { ...base, mode:'admin', path:'/api/core/admin/orders?gameId=1&pageSize=20' };
   case 'core-order-stats': return { ...base, mode:'admin', path:'/api/core/admin/orders/stats?gameId=1' };
   case 'core-order-detail': return { ...base, mode:'admin', path:'/api/core/admin/orders/'+order+'?gameId=1' };
@@ -158,35 +242,61 @@ function requestPlan(seq) {
     body:{epoch:currentEpoch,revision:currentRevision} };
   case 'access-revision': return { ...base, origin:access, mode:'access', path:'/api/access/revision' };
   case 'access-nodes': return { ...base, origin:access, mode:'access', path:'/api/access/nodes' };
-  default: throw new Error('No actual call for QPS_CASE ' + spec.id);
+  default: throw new Error('No actual call for QPS_CASE ' + caseID);
   }
 }
 export default function () {
-  const plan = requestPlan(exec.scenario.iterationInTest);
-  const method = spec.route.split(' ')[0];
+  const caseID = workloadMode ? exec.scenario.name : spec.id;
+  const lookupID = caseID === 'core-payment-notify' ? 'core-payment-duplicate' : caseID;
+  const activeSpec = catalog.find(x => x.id === lookupID);
+  if (!activeSpec) throw new Error('Unknown workload endpoint: ' + caseID);
+  const plan = requestPlan(caseID, exec.scenario.iterationInTest);
+  const method = activeSpec.route.split(' ')[0];
   const body = plan.body === null ? '' : JSON.stringify(plan.body);
   const headers = signature(plan.mode, method, plan.path, body, plan.extra);
+  const tags = workloadMode ? {
+    name: activeSpec.route, endpoint_id: caseID, category: workloadByID[caseID].category,
+  } : { name: activeSpec.route, endpoint_id: activeSpec.id };
   const response = http.request(method, plan.origin + plan.path, body || null, {
-    headers, timeout:'5s', responseCallback:http.expectedStatuses(spec.expected),
-    tags:{name:spec.route, endpoint_id:spec.id},
+    headers, timeout:'5s', responseCallback:http.expectedStatuses(activeSpec.expected),
+    tags,
   });
-  let ok = response.status === spec.expected;
+  let ok = response.status === activeSpec.expected;
   if (ok && response.status !== 204 && response.status !== 202 &&
-      spec.id !== 'config-create-subscriber' && !spec.id.startsWith('health-')) {
-    if (spec.id === 'core-payment-duplicate') {
+      activeSpec.id !== 'config-create-subscriber' && !activeSpec.id.startsWith('health-')) {
+    if (caseID === 'core-payment-notify' || activeSpec.id === 'core-payment-duplicate') {
       ok = /^[0-9a-f]{16}$/.test(response.body);
     } else {
       let data = null;
       try { data = response.json(); } catch (_) { ok = false; }
-      if (ok && (spec.id.startsWith('service-') ||
-          spec.id === 'core-config' || spec.id === 'core-order-register' ||
-          spec.id.startsWith('core-order'))) {
-        ok = data && data.code === (spec.expected === 409 ? 409 : 0);
+      if (ok && (activeSpec.id.startsWith('service-') ||
+          activeSpec.id === 'core-config' || activeSpec.id === 'core-order-register' ||
+          activeSpec.id.startsWith('core-order'))) {
+        ok = data && data.code === (activeSpec.expected === 409 ? 409 : 0);
       }
       if (ok && (plan.mode === 'admin' || plan.mode === 'sync' || plan.mode === 'access')) {
         ok = data !== null && data !== undefined;
       }
     }
   }
+  if (response.status === 401) http401.add(1);
+  if (response.status === 409) http409.add(1);
+  if (response.status === 429) http429.add(1);
+  if (response.status === 503) http503.add(1);
+  if (response.status >= 500) http5xx.add(1);
   bad.add(!ok);
+  if (workloadMode) {
+    const metric = workloadMetrics[caseID];
+    metric.iterations.add(1);
+    metric.requests.add(1);
+    metric.bad.add(!ok);
+    if (!ok) metric.badCount.add(1);
+    if (response.status === 0) metric.http0.add(1);
+    metric.latency.add(response.timings.duration);
+    if (response.status === 401) metric.http401.add(1);
+    if (response.status === 409) metric.http409.add(1);
+    if (response.status === 429) metric.http429.add(1);
+    if (response.status === 503) metric.http503.add(1);
+    if (response.status >= 500) metric.http5xx.add(1);
+  }
 }

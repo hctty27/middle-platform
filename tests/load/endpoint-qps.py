@@ -24,6 +24,21 @@ group = os.environ.get("ENDPOINT_GROUP", "quick")
 tiers = os.environ.get("ENDPOINT_TIERS", "basic")
 duration = int(os.environ.get("ENDPOINT_SECONDS", "4"))
 selection = os.environ.get("ENDPOINT_CASE", "").strip()
+rate_override = os.environ.get("ENDPOINT_RATES", "").strip()
+vu_cap = int(os.environ.get("ENDPOINT_VUS_CAP", "500"))
+if vu_cap < 20 or vu_cap > 800:
+    raise SystemExit("ENDPOINT_VUS_CAP must be in 20..800")
+if rate_override:
+    if group != "read" or tiers != "high":
+        raise SystemExit("Custom 5k/10k/20k diagnostic requires read/high mode")
+    try:
+        overrides = [int(value.strip()) for value in rate_override.split(",")]
+    except ValueError:
+        raise SystemExit("ENDPOINT_RATES must be comma-separated positive integers")
+    if overrides != [5000, 10000, 20000]:
+        raise SystemExit("Only 5000,10000,20000 is supported by the scoped benchmark")
+else:
+    overrides = []
 if group not in ("quick", "read", "write", "all") or tiers not in ("basic", "high"):
     raise SystemExit("Invalid QPS group or tiers")
 if duration < 3 or duration > 15:
@@ -36,6 +51,13 @@ elif group == "quick":
     chosen = [by_name["core-config"]]
 else:
     chosen = [c for c in catalog if group == "all" or c["group"] == group]
+business_only = os.environ.get("ENDPOINT_BUSINESS_ONLY", "false") == "true"
+if business_only:
+    # Exclude all admin API routes, including order management. Keep separate
+    # correctness preflight unchanged; this filter only controls high-QPS stages.
+    chosen = [c for c in chosen if "/admin/" not in c["route"].split(" ", 1)[1]]
+    if not chosen:
+        raise SystemExit("Business-only benchmark cannot target admin routes")
 
 def mysql(query, database="config_center"):
     cmd = ["mysql", "-uroot", "-h127.0.0.1", "-N", "-B"]
@@ -97,17 +119,22 @@ def number(x, places=2):
 def reset_auth_nonce_cache(case_id):
     """Keep independent stage results free of accumulated 5-minute HMAC nonces."""
     name = ""
-    if case_id.startswith("config-") and case_id not in (
-        "config-revision", "config-snapshot", "config-changes", "config-node", "config-batch"):
+    if case_id.startswith("config-"):
+        # Admin and subscription sync share the process-level replay cache.
         name = "config-center"
     elif case_id.startswith("core-") and case_id not in (
         "core-config", "core-order-register", "core-payment-duplicate"):
         name = "sdk-core"
+    elif case_id.startswith("access-"):
+        # Isolate the two signed local access routes: one instance shares nonce
+        # state between local reads and webhook callbacks.
+        name = "config-center-access"
     if not name:
         return
-    count = 2 if name == "config-center" else (4 if os.environ["LOAD_TOPOLOGY"] == "cluster" else 1)
-    first = 8201 if name == "config-center" else 8211
-    programs = [f"{name}-{i+1}" for i in range(count)]
+    count = 2 if name == "config-center" else (
+        4 if name == "sdk-core" and os.environ["LOAD_TOPOLOGY"] == "cluster" else 1)
+    first = 8201 if name == "config-center" else (8211 if name == "sdk-core" else 8081)
+    programs = [f"{name}-{i+1}" for i in range(count)] if name != "config-center-access" else [name]
     subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *programs],
                    check=True, timeout=60, stdout=subprocess.DEVNULL)
     for offset in range(count):
@@ -163,10 +190,10 @@ common = {
 rows = []
 baseline_failures = []
 print("## GitHub-hosted endpoint QPS ladder (local-only)\n", flush=True)
-print(f"Selected {len(chosen)} routes, group={group}, tiers={tiers}, seconds={duration}. "
+print(f"Selected {len(chosen)} routes, group={group}, tiers={tiers}, business_only={business_only}, seconds={duration}, rates={rate_override or 'default'}, max_vus={vu_cap}. "
       "One measured target request per iteration; no production traffic.\n", flush=True)
-print("| Endpoint | Mode | Target QPS | Actual HTTP/s | P95 ms | P99 ms | Bad % | Dropped | MySQL locks | Result |")
-print("|---|---|---:|---:|---:|---:|---:|---:|---:|---|", flush=True)
+print("| Endpoint | Mode | Target QPS | VUs | Actual HTTP/s | P95 ms | P99 ms | Bad % | 401 | 409 | 429 | 503 | 5xx | Dropped | MySQL locks | Result |")
+print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|", flush=True)
 
 for pos, case in enumerate(chosen):
     rates = ([50,200,500] if group == "quick" else
@@ -174,11 +201,13 @@ for pos, case in enumerate(chosen):
              [20,50,100,250] if tiers == "high" else
              [50,200,500] if case["group"] == "read" else
              [10,30,60])
+    if overrides:
+        rates = overrides
     if case["mode"] == "delete":
         rates = [r for r in rates if r <= 250]
     for tier, rate in enumerate(rates):
         # A shared Runner has limited memory. Drops may be generator-limited.
-        vus = min(500, max(20, math.ceil(rate * 0.05)))
+        vus = min(vu_cap, max(20, math.ceil(rate * 0.05)))
         planned = rate * duration
         base_id = (1000000 if case["id"] == "config-delete-node" else
                    2000000 if case["id"] == "config-delete-subscriber" else
@@ -213,6 +242,11 @@ for pos, case in enumerate(chosen):
             errors = value(data,"endpoint_bad","rate")
         dropped = value(data,"dropped_iterations","count") or 0
         iterations = value(data,"iterations","count") or 0
+        http_401 = value(data,"endpoint_http_401","count") or 0
+        http_409 = value(data,"endpoint_http_409","count") or 0
+        http_429 = value(data,"endpoint_http_429","count") or 0
+        http_503 = value(data,"endpoint_http_503","count") or 0
+        http_5xx = value(data,"endpoint_http_5xx","count") or 0
         lock_waits = after.get("Innodb_row_lock_waits",0) - before.get("Innodb_row_lock_waits",0)
         eligible = bool(
             run.returncode == 0 and data and errors is not None and errors < 0.01
@@ -222,14 +256,18 @@ for pos, case in enumerate(chosen):
             and dropped <= planned * 0.001)
         status = "PASS" if eligible else "STOP"
         row = {"id":case["id"],"route":case["route"],"group":case["group"],
-               "mode":case["mode"],"target_qps":rate,"actual_http_qps":actual,
+               "mode":case["mode"],"target_qps":rate,"preallocated_vus":vus,
+               "actual_http_qps":actual,
                "p95_ms":p95,"p99_ms":p99,"bad_rate":errors,
                "planned":planned,"iterations":iterations,"dropped":dropped,
-               "sql_lock_waits":lock_waits,"exit":run.returncode,"qualified":eligible}
+               "sql_lock_waits":lock_waits,"exit":run.returncode,"qualified":eligible,
+               "http_401":http_401,"http_409":http_409,"http_429":http_429,
+               "http_503":http_503,"http_5xx":http_5xx}
         rows.append(row)
         print("| " + " | ".join([
-            case["id"],case["mode"],str(rate),number(actual),number(p95),
-            number(p99),number(None if errors is None else errors*100),
+            case["id"],case["mode"],str(rate),str(vus),number(actual),
+            number(p95),number(p99),number(None if errors is None else errors*100),
+            str(http_401),str(http_409),str(http_429),str(http_503),str(http_5xx),
             str(dropped),str(lock_waits),status
         ])+" |", flush=True)
         if not eligible:
@@ -246,7 +284,8 @@ for pos, case in enumerate(chosen):
 
 (results/"endpoint-qps-summary.json").write_text(json.dumps({
     "source":"github-hosted-loopback", "group":group,"tiers":tiers,
-    "seconds":duration,"rows":rows, "baseline_failures":baseline_failures,
+    "seconds":duration,"rates":overrides,"vu_cap":vu_cap,"business_only":business_only,
+    "rows":rows, "baseline_failures":baseline_failures,
     "warnings":["single runner shared CPU: not production capacity",
                 "duplicate-payment and retry-rejection are not success-path capacity",
                 "delete stages use pre-seeded disposable rows",

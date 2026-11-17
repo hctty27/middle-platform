@@ -17,6 +17,33 @@
 
 写接口有明确数据边界：创建操作每请求生成唯一对象；删除操作每档预置独立临时行；更新使用可重复的测试数据；支付回调只测**已支付订单重复回调**；订单重试只测**不可重试订单返回 409**。后两项不代表首次支付或成功补偿的吞吐。Mock 链路和单机 Runner 的数据也不能当作生产环境最大性能。
 
+### SDK Service 1 秒配置缓存复测
+
+专项 PR 的 `endpoint-qps` Job 在复制配置文件到**临时 Runner** 后，通过 `SDK_SERVICE_CACHE_TTL=1s` 仅覆盖 `sdk-service.yaml` 的 `configCache.ttl`。原仓库 `sdk-service/configs/config.yaml` 依旧为 `0s`，`api-coverage`、Compact、Cluster、混合流量和正式部署**不会受到影响**。Runner 产物 `sdk-service-cache-ttl.txt` 记录实际加载的 TTL。
+
+对比上一轮 [Run #44076911792](https://github.com/hctty27/middle-platform/actions/runs/44076911792)（`0s`），重点观察用户核验、角色查询、区服查询 5,000 QPS 档的 P95/P99、实际 HTTP/s、Dropped、HTTP 状态与 MySQL CPU。两次运行在**不同 GitHub-hosted Runner**，只能作为初步对照，不能保证同硬件或严格因果归因。此缓存只存业务路由和鉴权配置（含密钥、开关），不缓存用户核验结论或角色数据；启用后配置撤销可能在 TTL 加在途读取期间延迟生效。生产是否开启须独立评估。
+
+## 19 路四分之一并发负载：受控 VU 复测（PR #160）
+
+专项使用 2/4/6 拓扑、SDK Service 临时缓存 TTL=1s，19 个非管理场景并发 30 秒，目标 11,600 QPS。Run #44087742126 实测约 2,200 QPS，大量迭代无法启动，尚不能归因于服务端吞吐量上限。
+
+- k6 `constant-arrival-rate` 根据 `QPS_VU_SECONDS=0.12` 按每个场景的目标速率预留 VU（原为 0.05s），限制全局 `QPS_VU_BUDGET=2000`。超预算拒绝执行，避免在单台 Runner 上无上限增加 VU。
+- 利用并发估算 `VU≈QPS×迭代耗时`，这是实验参数而非容量承诺。场景响应变慢仍可能产生 Dropped；应结合 k6/服务端 CPU、RSS、延迟、超时等区分瓶颈。
+- 按场景统计 HTTP 0、业务失败计数和比率（Rate 汇总缺失时由 Counter 回填）、P95/P99、实际请求量与 Dropped。
+- 仍是 **k6 与被测集群同机**。GitHub-hosted Job 隔离在不同虚拟机，跨 Job 不能直接访问另一个 Job 的本机 `127.0.0.1`。真正的负载机隔离需要独立授权、可达的测试目标，CI 不会直接向正式域名发起高压。
+
+## 合并后的 Nonce 高压验证（只修改测试）
+
+标题包含 `[NONCE-HIGH-QPS]` 的专项 PR 从最新 `main` 派生，不改业务服务代码。该 PR 在 GitHub 托管 Runner 上自动使用 cluster 2/4/6 拓扑，**只对 13 个非管理查询类路由**执行 5000、10000、20000 QPS × 每档 5 秒，单接口上档失败即停止继续升档。其余 19 个 `/admin/` 查询路由（含订单管理）全部排除，不参加 QPS 测试。
+
+被测范围包括健康检查、配置同步、配置节点查询、SDK 配置查询、用户核验、角色查询、区服查询和配置接入端查询。**充值另行进行写入类专项压测**：通过现有 `scenarios.js` 的 `payment` 场景，每次迭代先用唯一订单号登记，再发送首次平台充值回调，按 20/50/100/250 **TPS**（每次成功交易包含 2 次 HTTP 请求）逐档测试，并核对本地数据库已登记订单数与已支付数。另将同一笔已支付测试订单的重复回调按 50/200/500 **QPS** 测量，单独标注为幂等重复通知性能，不冒充首次充值吞吐。首次充值或重复回调在某档不合格时，停止其后续升压，但保留另一项独立报告。
+
+标准 `api-coverage` 正确性预检仍会单次验证 52 个路由，其中包含管理 API，但不会对它们升压。充值报告保存在 `recharge-qps-summary.json/csv/md`，对应原始 `recharge-first-*.json/log` 与 `recharge-duplicate-*.json/log`。测试只写入 GitHub Runner 的合成订单和本地 Mock，不连接任何真实充值渠道。
+
+所有压测请求目标为本机 `127.0.0.1`。观察实际请求/s、P95/P99、业务错误率、HTTP 401/409/429/503/5xx、丢弃迭代、MySQL 行锁等待及各服务/k6 的 CPU 与 RSS。每档只重启临时 Runner 内需要签名的服务，消除不同接口间的 Nonce 累积干扰；这不能替代 5～10 分钟的长期容量实验。
+
+不使用正式服务器、正式数据库或生产密钥。5,000 QPS 是本专项的最低探测档，如果未达标，任务会失败；即使 20,000 档通过，也仅代表对应 Runner、拓扑和测试时长，不是生产容量承诺。
+
 ## 全接口覆盖（api-coverage）
 
 Actions → Runner Load Test → Run workflow：选择 profile=api-coverage、topology=compact、scenario=all。该任务只在 GitHub 托管 Ubuntu Runner 上运行，所有 HTTP 目标固定为 127.0.0.1。它会启动配置中心、SDK Core、SDK Service、Nginx、MySQL、模拟游戏/平台，以及带独立临时 config_access 数据库的 config-center-access。
