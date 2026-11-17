@@ -13,19 +13,20 @@ import ChannelAppPage from './features/nodes/ChannelAppPage.vue'
 import SDKServicePage from './features/services/SDKServicePage.vue'
 import SDKNodeConfigPage from './features/services/SDKNodeConfigPage.vue'
 import SubscriberPage from './features/subscribers/SubscriberPage.vue'
+import OrderPage from './features/orders/OrderPage.vue'
 import PlatformSimulatorPage from './features/platform/PlatformSimulatorPage.vue'
 
-type Page = 'overview' | 'nodes' | 'channel_apps' | 'sdk_node_config' | 'sdk_services' | 'subscribers' | 'platform_simulator' | 'about'
-const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'sdk_node_config', 'sdk_services', 'subscribers', 'platform_simulator', 'about']
+type Page = 'overview' | 'nodes' | 'channel_apps' | 'sdk_node_config' | 'sdk_services' | 'orders' | 'subscribers' | 'platform_simulator' | 'about'
+const pageSet: Page[] = ['overview', 'nodes', 'channel_apps', 'sdk_node_config', 'sdk_services', 'orders', 'subscribers', 'platform_simulator', 'about']
 const navigation = ref<Page>('overview')
 const sdkFocusNodeId = ref<number | null>(null)
 const sidebarCollapsed = ref(false)
 const titles: Record<Page, string> = {
-  overview: '工作台', nodes: '配置管理', channel_apps: '渠道应用', sdk_node_config: 'SDK 配置', sdk_services: '服务管理',
+  overview: '工作台', nodes: '配置管理', channel_apps: '渠道应用', sdk_node_config: 'SDK 配置', sdk_services: '服务管理', orders: '订单管理',
   subscribers: '接入同步', platform_simulator: '发行平台模拟', about: '系统说明'
 }
 const currentTitle = computed(() => titles[navigation.value])
-const currentSection = computed(() => ['sdk_node_config', 'sdk_services', 'channel_apps', 'platform_simulator'].includes(navigation.value)
+const currentSection = computed(() => ['sdk_node_config', 'sdk_services', 'channel_apps', 'orders', 'platform_simulator'].includes(navigation.value)
   ? 'SDK 管理' : ['nodes', 'subscribers'].includes(navigation.value) ? '配置中心' : '工作空间')
 const activeGame = computed(() => games.value.find(game => game.id === currentGameId.value))
 const updating = ref(false)
@@ -152,6 +153,9 @@ onUnmounted(() => {
       <button title="服务管理" :class="{ active: navigation === 'sdk_services' }" @click="navigate('sdk_services')">
         <span class="nav-symbol">⚙</span><span v-if="!sidebarCollapsed">服务管理</span>
       </button>
+      <button title="订单管理" :class="{ active: navigation === 'orders' }" @click="navigate('orders')">
+        <span class="nav-symbol">▤</span><span v-if="!sidebarCollapsed">订单管理</span>
+      </button>
       <button title="发行平台模拟" :class="{ active: navigation === 'platform_simulator' }" @click="navigate('platform_simulator')">
         <span class="nav-symbol">⇄</span><span v-if="!sidebarCollapsed">发行平台模拟</span>
       </button>
@@ -200,6 +204,7 @@ onUnmounted(() => {
         <SDKNodeConfigPage v-if="navigation === 'sdk_node_config'" :game-id="currentGameId" :focus-node-id="sdkFocusNodeId" />
         <SDKServicePage v-if="navigation === 'sdk_services'" />
         <SubscriberPage v-if="navigation === 'subscribers'" />
+        <OrderPage v-if="navigation === 'orders'" :game-id="currentGameId" />
         <PlatformSimulatorPage v-if="navigation === 'platform_simulator'" :game-id="currentGameId" />
         <main v-if="navigation === 'about'" class="content-panel">
           <h2>系统说明</h2>

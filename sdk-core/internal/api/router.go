@@ -36,6 +36,7 @@ func router(fetcher Fetcher, db Pinger, admin *sql.DB, options RouterOptions, or
 	mux := http.NewServeMux()
 	if admin != nil {
 		registerAdminRoutes(mux, admin)
+		registerAdminOrderRoutes(mux, admin)
 	}
 	registerWithTimeout(mux, "GET /api/core/config/{env}/{appid}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

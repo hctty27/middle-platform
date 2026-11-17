@@ -12,6 +12,10 @@
 | GET/PUT | `/api/core/admin/node-configs/{id}` | SDK 节点配置管理 |
 | GET/POST | `/api/core/admin/channel-apps` | 渠道包查询与新增 |
 | GET/PUT | `/api/core/admin/services[/{id}]` | 服务开关查询与更新 |
+| GET | `/api/core/admin/orders` | 按游戏查询订单（游标分页） |
+| GET | `/api/core/admin/orders/stats` | 今日订单统计及历史发货积压 |
+| GET | `/api/core/admin/orders/{id}` | 订单详情 |
+| POST | `/api/core/admin/orders/{id}/retry` | 提前安排失败订单补偿 |
 
 游戏主动登记订单及中台发货通知均使用 HMAC-SHA-256，绑定方法、编码路径、AppID、时间戳、nonce 和原始请求体。代理不得改写签名路径；时间窗口不等于 nonce 防重放。
 
@@ -52,5 +56,11 @@ go build ./cmd/sdk-core
 
 [架构](../admin/public/docs/guide.html#architecture) · [本地开发](../admin/public/docs/guide.html#development) · [生产运维](../admin/public/docs/guide.html#production)
 
-### SDK 配置热点路径
+## 订单管理
+
+订单管理复用 `game_order`、管理 HMAC 和现有 Worker。列表默认北京时间今日、每页 20 条（最多 100），普通日期区间最长 30 天，精确订单号可跨日期；所有查询必填 `gameId`，环境和 AppID 可筛选。统计仅按游戏、环境、AppID，今日支付基于 `paid_at`，积压含历史订单，进程内缓存 60 秒（最多 256 个键）。四个接口共用独立的每实例 2 个在途额度和 3 秒请求预算，不改变公开接口的并发策略。429 表示订单管理繁忙，503 表示数据库或查询不可用。
+
+手动补偿只能提前调度已支付、通知失败且尚未到期的订单；最近一次领取后 60 秒内禁止提前调度。条件更新与 Worker 领取互斥，不直接发货、不改变金额、支付状态或尝试序号。成功通知是终态；游戏仍须幂等处理。日志记录请求来源及调度结果，共享管理密钥不提供独立人员身份。已有库低峰手工审核执行 `db/incremental/V0021__config_center_order_admin_indexes.sql`，新库使用全量 SQL。
+
+## SDK 配置热点路径
 `log.sdkConfigSampleEvery` / `LOG_SDK_CONFIG_SAMPLE_EVERY` 控制快速成功的公开配置 GET 访问日志；模板为 10（每 10 条保留 1 条），缺省或 0/1 保留全量。错误、慢请求及订单/支付/管理请求不采样；Request ID 仍照常返回。修改已有私有配置后重启才生效。成功公开配置的 JSON 响应与 DTO 使用同一个缓存条目和 TTL，保留 `no-store`、原有字段及换行，不增加配置失效延迟。
