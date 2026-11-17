@@ -16,6 +16,9 @@ const app = 'load-app';
 const failed = new Counter('full_api_failed');
 const covered = new Counter('full_api_covered');
 const errors = [];
+const expectedResponses = Object.fromEntries(
+  [200, 201, 202, 204, 409].map(code => [code, http.expectedStatuses(code)])
+);
 
 export const options = {
   scenarios: { full_api: { executor: 'shared-iterations', vus: 1, iterations: 1, maxDuration: '90s' } },
@@ -63,6 +66,7 @@ function test(route, actual, body = null, kind = '', expected = 200, predicate =
   const hdr = headers(kind, method, actual, json, extra);
   const res = http.request(method, origin + actual, json || null, {
     headers: hdr, timeout: '8s', tags: { name: route },
+    responseCallback: expectedResponses[expected],
   });
   const data = parsed(res);
   const ok = res.status === expected && (predicate ? predicate(data, res) : true);
@@ -72,6 +76,8 @@ function test(route, actual, body = null, kind = '', expected = 200, predicate =
     const problem = route + ' expected=' + expected + ' actual=' + res.status;
     errors.push(problem);
     console.error(problem);
+  } else {
+    console.log('PASS ' + route + ' status=' + res.status);
   }
   return { data, res, ok };
 }
