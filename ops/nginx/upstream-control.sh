@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $# -ne 3 ]]; then
-    printf 'Usage: upstream-control.sh <validate|drain|enable> <config-center|sdk-core|sdk-service> <port>\n' >&2
+    printf 'Usage: upstream-control.sh <validate|drain|enable|recover> <config-center|sdk-core|sdk-service> <port>\n' >&2
     exit 2
 fi
 action=$1
 group=$2
 port=$3
 root=${MIDDLE_PLATFORM_ROOT:-/data/middle-platform}
-case "$action" in validate|drain|enable) ;; *) printf 'Invalid upstream action\n' >&2; exit 2 ;; esac
+case "$action" in validate|drain|enable|recover) ;; *) printf 'Invalid upstream action\n' >&2; exit 2 ;; esac
 case "$group:$port" in
     config-center:8201|config-center:8202)
         expected_count=2; upstream_name=config_center; file="$root/run/nginx/config-center-upstream.conf" ;;
@@ -53,10 +53,6 @@ read -r total active matches target_down <<< "$counts"
 if [[ "$total" -ne "$expected_count" || "$matches" -ne 1 ]]; then
     printf 'Unexpected upstream membership in %s (total=%s matches=%s expected=%s)\n' \
         "$file" "$total" "$matches" "$expected_count" >&2
-    exit 1
-fi
-if [[ "$action" == validate && "$target_down" -eq 1 ]]; then
-    printf 'Upstream instance is already marked down: %s port %s\\n' "$group" "$port" >&2
     exit 1
 fi
 if [[ "$action" == drain && "$target_down" -eq 0 && "$active" -le 1 ]]; then
@@ -176,7 +172,16 @@ wait_for_old_workers() {
     return 1
 }
 validate_nginx_config
-if [[ "$action" == validate ]]; then printf 'Validated %s upstream port %s\n' "$group" "$port"; exit 0; fi
+if [[ "$action" == validate ]]; then
+    if [[ "$target_down" -eq 1 ]]; then
+        # A dedicated status is only returned after all read-only safety checks pass.
+        printf 'UPSTREAM_DOWN %s %s\n' "$group" "$port"
+        printf 'Upstream instance is already marked down: %s port %s\n' "$group" "$port" >&2
+        exit 3
+    fi
+    printf 'Validated %s upstream port %s\n' "$group" "$port"
+    exit 0
+fi
 if [[ "$action" == drain && "$target_down" -eq 1 ]]; then
     # A prior failure may have left the file down without applying the reload.
     snapshot_old_workers || exit 1
@@ -187,7 +192,7 @@ if [[ "$action" == drain && "$target_down" -eq 1 ]]; then
     printf 'Already drained: %s port %s\n' "$group" "$port"
     exit 0
 fi
-if [[ "$action" == enable && "$target_down" -eq 0 ]]; then
+if [[ ( "$action" == enable || "$action" == recover ) && "$target_down" -eq 0 ]]; then
     printf 'Already enabled: %s port %s\n' "$group" "$port"
     exit 0
 fi
@@ -204,7 +209,7 @@ if ! awk -v target="$target" -v action="$action" '
         down = 0
         for (i = 3; i <= NF; i++) if ($i == "down;") down = 1
         if (action == "drain" && !down) sub(/;[[:space:]]*$/, " down;")
-        if (action == "enable" && down) {
+        if ((action == "enable" || action == "recover") && down) {
             $4 = "fail_timeout=10s;"
             $5 = ""
             line = $1 " " $2
@@ -225,7 +230,7 @@ rollback_file() {
     "$sudo_bin" -n "$systemctl_bin" reload nginx >/dev/null 2>&1 || true
 }
 if ! validate_nginx_config; then rollback_file; exit 1; fi
-if [[ "$action" == drain ]] && ! snapshot_old_workers; then
+if [[ ( "$action" == drain || "$action" == recover ) ]] && ! snapshot_old_workers; then
     # No reload has been requested; restore only the on-disk state.
     mv -fT -- "$backup" "$file"
     exit 1
@@ -237,6 +242,11 @@ if ! reload_nginx; then
 fi
 if [[ "$action" == drain ]] && ! wait_for_old_workers; then
     printf 'Instance remains drained; refusing to restart it before Nginx workers exit\n' >&2
+    exit 1
+fi
+if [[ "$action" == recover ]] && ! wait_for_old_workers; then
+    rollback_file
+    printf 'Nginx recovery could not confirm worker rotation; restored down on disk; inspect Nginx runtime before retrying\n' >&2
     exit 1
 fi
 rm -f -- "$backup"
