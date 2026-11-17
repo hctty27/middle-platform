@@ -2,6 +2,20 @@
 
 与 GitHub Runner 方案完全独立。只允许自有、授权、隔离的测试入口。脚本固定 test 环境，不发订单、支付、管理操作。虽然不会写入中台订单，事件仍会向平台发送：执行前必须确认测试渠道的核验和上报 URL 已指向隔离 Mock 或平台授权测试接口、测试用户均可核验、不会污染真实平台数据。仅填写确认变量不能证明目标已经隔离，请人工核实。不要修改生产渠道开关或密钥来获得压测通过。
 
+## GitHub Self-hosted Windows Runner（需要先完成安全设置）
+
+此仓库曾是公开仓库。GitHub 不建议在公开仓库上使用个人电脑 Self-hosted Runner；必须先将仓库改为 Private，再把 Runner #21（DESKTOP-HA11EIT）添加自定义标签 `loadtest-windows`。工作流 `.github/workflows/windows-independent-load.yml` 只有 `workflow_dispatch` 手动入口、只允许 main、通过 GitHub-hosted safety-gate 验证仓库 `private=true` 后才会分配 Windows Runner，任何 PR 或 push 都无法自动运行该工作流。
+
+GitHub 仓库 Settings → Environments 新建 `isolated-load-test`，可用时设置 required reviewers / protected branches；并在 Settings → Secrets and variables → Actions → Variables 设置以下**非密码**变量：
+
+- `ISOLATED_TEST_BASE_URL`：已授权的隔离测试环境 HTTPS 域名（不可填生产）
+- `ISOLATED_TEST_FIXTURE_FILE`：Runner 本机仓库以外的 256 个测试渠道 JSON 绝对路径
+- `ISOLATED_TEST_LOAD_ENABLED`：经环境核验后才设为 `true`
+
+Windows Runner 安装 k6 并添加到 PATH，JSON 只放 Runner 本机且仅允许 Runner 账户读取，不要写入 GitHub variables、日志或仓库。打开 Actions → Independent Windows Load Test (manual) → Run workflow，先用 `mode=verify-runner` 检查连接和 k6（无压测流量）；确认目标域名、测试平台 Mock、数据隔离和配额后，再切换 `mode=load-test` 并在 confirmation 填写 `AUTHORIZED-ISOLATED-TEST`。默认只跑 400 QPS；手动选择最高档为 1000/2000/3000/5000/10000（10000 需要原脚本额外开关，工作流自动严格校验），某档失败立即停止，不自动重试，不自动测试生产。请使用 Windows 上权限受限的专用 Runner 用户，不要用个人管理员会话运行不可信工作流。
+
+工作流只回显 k6 汇总并把指标 JSON 留在 Windows 本地临时目录，不上传密钥或测试报告 Artifact。GitHub 连接若无法直接 dispatch，需用户在 GitHub 界面手动选择 Run workflow，后续可读取 GitHub Actions 日志查看结果。
+
 ## 准备
 
 - Windows 安装 k6（建议与 CI 一致 1.0.0）、PowerShell，确认 k6 version。

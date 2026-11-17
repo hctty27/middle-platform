@@ -1,0 +1,111 @@
+name: Independent Windows Load Test (manual)
+# No push/PR/schedule triggers. Guarded by public/private repository status.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Runner preflight only (default), or authorized isolated load"
+        type: choice
+        options: [verify-runner, load-test]
+        default: verify-runner
+        required: true
+      max_qps:
+        description: "Maximum total QPS; stages increase from 400"
+        type: choice
+        options: ['400', '1000', '2000', '3000', '5000', '10000']
+        default: '400'
+        required: true
+      seconds:
+        description: "Per-stage duration"
+        type: choice
+        options: ['10', '20', '30', '60']
+        default: '20'
+        required: true
+      confirmation:
+        description: "For load-test, type AUTHORIZED-ISOLATED-TEST"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+concurrency:
+  group: isolated-windows-load-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  safety-gate:
+    name: Reject public repo and non-main dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Fail closed before allocating any self-hosted runner
+        shell: bash
+        env:
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+          REPO_NAME: ${{ github.repository }}
+          GIT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$REPO_PRIVATE" != "true" || "$REPO_NAME" != "hctty27/middle-platform" || "$GIT_REF" != "refs/heads/main" ]]; then
+            echo "::error::Only the private hctty27/middle-platform repository, manually dispatched on main, may use the Windows runner."
+            exit 1
+          fi
+
+  isolated-load:
+    name: Dedicated Windows runner / ${{ inputs.mode }}
+    needs: safety-gate
+    # These labels must ALL match; add custom label loadtest-windows to runner #21.
+    runs-on: [self-hosted, Windows, X64, loadtest-windows]
+    environment: isolated-load-test
+    timeout-minutes: 30
+    env:
+      LOAD_TEST_BASE_URL: ${{ vars.ISOLATED_TEST_BASE_URL }}
+      LOAD_TEST_FIXTURE_FILE: ${{ vars.ISOLATED_TEST_FIXTURE_FILE }}
+      LOAD_TEST_ENABLED: ${{ vars.ISOLATED_TEST_LOAD_ENABLED }}
+      REQUESTED_MODE: ${{ inputs.mode }}
+      REQUESTED_QPS: ${{ inputs.max_qps }}
+      REQUESTED_SECONDS: ${{ inputs.seconds }}
+      REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Check out the trusted main commit without persisting credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact runner and local k6 installation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') {
+            throw 'Unexpected runner. Dedicated runner DESKTOP-HA11EIT required.'
+          }
+          $k6 = Get-Command k6 -ErrorAction Stop
+          & $k6.Source version
+          if ($LASTEXITCODE -ne 0) { throw 'k6 preflight failed.' }
+          Write-Host 'Runner and k6 preflight passed; no load traffic has been sent.'
+      - name: Verify only (zero network load)
+        if: inputs.mode == 'verify-runner'
+        shell: pwsh
+        run: Write-Host 'Verify-only completed. Run mode=load-test only after isolated target and fixture are prepared.'
+      - name: Execute authorized isolated load, increasing in stages
+        if: inputs.mode == 'load-test'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:LOAD_TEST_ENABLED -cne 'true') {
+            throw 'Set repository variable ISOLATED_TEST_LOAD_ENABLED=true after target approval.'
+          }
+          if ($env:REQUESTED_CONFIRMATION -cne 'AUTHORIZED-ISOLATED-TEST') {
+            throw 'Explicit authorization confirmation is required.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:LOAD_TEST_BASE_URL) -or
+              [string]::IsNullOrWhiteSpace($env:LOAD_TEST_FIXTURE_FILE)) {
+            throw 'ISOLATED_TEST_BASE_URL and ISOLATED_TEST_FIXTURE_FILE must be configured.'
+          }
+          $maxQPS = [int]$env:REQUESTED_QPS
+          $allow10000 = ($maxQPS -eq 10000)
+          & ./tests/load/run-independent.ps1 -BaseUrl $env:LOAD_TEST_BASE_URL `
+            -FixtureFile $env:LOAD_TEST_FIXTURE_FILE `
+            -Confirm 'AUTHORIZED-ISOLATED-TEST' `
+            -MaxQPS $maxQPS -Seconds ([int]$env:REQUESTED_SECONDS) -Allow10000:$allow10000
+          if (-not $?) { throw 'Isolated load failed.' }

@@ -11,6 +11,8 @@ param(
     [string]$Confirm,
     [ValidateRange(10, 60)]
     [int]$Seconds = 20,
+    [ValidateRange(400, 10000)]
+    [int]$MaxQPS = 5000,
     [string]$OutputDirectory = '',
     [switch]$Allow10000
 )
@@ -62,10 +64,15 @@ if ($reports -eq $repoRoot -or $reports.StartsWith($repoPrefix, [System.StringCo
 }
 New-Item -ItemType Directory -Force -Path $reports | Out-Null
 $runId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
-$rates = @(400, 1000, 2000, 3000, 5000)
-if ($Allow10000) {
-    $rates += 10000
+if ($MaxQPS -notin @(400, 1000, 2000, 3000, 5000, 10000)) {
+    throw 'MaxQPS must be one of 400, 1000, 2000, 3000, 5000 or 10000.'
 }
+if ($MaxQPS -eq 10000 -and -not $Allow10000) {
+    throw 'The 10000 QPS stage requires the explicit -Allow10000 switch.'
+}
+$rates = @(400, 1000, 2000, 3000, 5000)
+if ($Allow10000) { $rates += 10000 }
+$rates = @($rates | Where-Object { $_ -le $MaxQPS })
 $names = @('LOAD_CONFIRM', 'LOAD_BASE_URL', 'LOAD_FIXTURES', 'LOAD_TOTAL_QPS', 'LOAD_SECONDS')
 $oldEnvironment = @{}
 foreach ($name in $names) {
