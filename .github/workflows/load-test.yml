@@ -1,5 +1,7 @@
 name: Runner Load Test
 on:
+  push:
+    branches: ['test/traffic-multi-fbb2039']
   workflow_dispatch:
     inputs:
       profile:
@@ -44,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"}]' || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"label":"multi-compact","topology":"compact","profile":"traffic-multi"}]' || github.event_name == 'pull_request' && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"}]' || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
 
     env:
       GOWORK: 'off'
