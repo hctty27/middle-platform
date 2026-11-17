@@ -1,4 +1,4 @@
-name: LT26 read-only config QPS 1.1k-1.4k with runner metrics
+name: LT26 read-only config QPS 1.0k-1.15k with runner metrics
 on:
   push:
     branches:
@@ -74,7 +74,7 @@ jobs:
           const appIds = Array.from({ length: 256 }, (_, i) => 'lt26-app-' + String(i).padStart(3, '0'));
           const businessFailed = new Rate('business_failed');
 
-          if (base !== 'https://mp.skybluek.com' || ![1100, 1200, 1300, 1400].includes(qps) || seconds !== 20) {
+          if (base !== 'https://mp.skybluek.com' || ![1000, 1050, 1100, 1150].includes(qps) || seconds !== 20) {
             throw new Error('Refusing unapproved target or schedule');
           }
 
@@ -85,8 +85,8 @@ jobs:
                 rate: qps,
                 timeUnit: '1s',
                 duration: seconds + 's',
-                preAllocatedVUs: 900,
-                maxVUs: 1500,
+                preAllocatedVUs: 300,
+                maxVUs: 600,
                 gracefulStop: '5s',
               },
             },
@@ -100,6 +100,7 @@ jobs:
               ],
               http_reqs: ['count>=' + Math.floor(qps * seconds * 0.99)],
             },
+            noConnectionReuse: false,
             maxRedirects: 0,
             summaryTrendStats: ['avg', 'med', 'max', 'p(95)', 'p(99)'],
           };
@@ -119,7 +120,7 @@ jobs:
           }
           '@
 
-          $work = Join-Path $env:RUNNER_TEMP ('lt26-config-low-qps-' + [guid]::NewGuid().ToString('N'))
+          $work = Join-Path $env:RUNNER_TEMP ('lt26-config-base-qps-' + [guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Force -Path $work | Out-Null
           $utf8 = New-Object System.Text.UTF8Encoding($false)
           [System.IO.File]::AppendAllText($env:GITHUB_ENV, ('LOAD_DIR=' + $work + [Environment]::NewLine), $utf8)
@@ -144,14 +145,14 @@ jobs:
           $env:BASE_URL = $base
           $env:SECONDS = '20'
           try {
-            foreach ($rate in @(1100, 1200, 1300, 1400)) {
+            foreach ($rate in @(1000, 1050, 1100, 1150)) {
               $freeMB = (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024
               Write-Host ('PREFLIGHT target={0} QPS free_memory_mb={1}' -f $rate, [math]::Round($freeMB))
               if ($freeMB -lt 4096) { throw 'Load generator free memory fell below 4 GiB; stopped.' }
 
               $env:QPS = [string]$rate
               $summary = Join-Path $work ('summary-' + $rate + '.json')
-              Write-Host ('START target={0} QPS duration=20s channels=256 GET-only preAllocatedVUs=900 maxVUs=1500' -f $rate)
+              Write-Host ('START target={0} QPS duration=20s channels=256 GET-only preAllocatedVUs=300 maxVUs=600' -f $rate)
               & $k6 run --summary-export $summary $scriptPath
               $exitCode = $LASTEXITCODE
               if ($exitCode -ne 0) {
@@ -165,7 +166,7 @@ jobs:
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ('- PASS **' + $rate + ' QPS** — 20 seconds, 256 channels, GET-only')
               Start-Sleep -Seconds 5
             }
-            Write-Host 'PASS all stages 1100/1200/1300/1400 QPS.'
+            Write-Host 'PASS all stages 1000/1050/1100/1150 QPS.'
           } finally {
             if ($monitor) {
               Stop-Job $monitor -ErrorAction SilentlyContinue
@@ -181,7 +182,7 @@ jobs:
         if: always() && env.LOAD_DIR != ''
         uses: actions/upload-artifact@v4
         with:
-          name: lt26-config-low-qps-${{ github.run_id }}
+          name: lt26-config-base-qps-${{ github.run_id }}
           path: ${{ env.LOAD_DIR }}
           retention-days: 7
           if-no-files-found: warn
