@@ -93,7 +93,7 @@ jobs:
           bash -n tests/load/setup.sh
           bash -n tests/load/setup-access.sh
           bash -n tests/load/run.sh
-          python3 -m py_compile tests/load/endpoint-qps.py tests/load/test_endpoint_qps.py tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py tests/load/multi_seed.py
+          python3 -m py_compile tests/load/endpoint-qps.py tests/load/recharge-qps.py tests/load/test_endpoint_qps.py tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py tests/load/multi_seed.py
           python3 -m unittest discover -s tests/load -p 'test_*.py'
           if [[ "$LOAD_PROFILE" == capacity || "$LOAD_PROFILE" == traffic-multi ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
           test -z "$(gofmt -l tests/load/mock.go tests/load/mock_test.go)"
@@ -117,12 +117,20 @@ jobs:
       - name: Validate every registered HTTP API route
         if: matrix.profile == 'api-coverage'
         run: k6 run --summary-export "$LOAD_DIR/results/api-coverage.json" tests/load/api-coverage.js
-      - name: Run per-endpoint QPS ladders
+      - name: Run per-endpoint QPS ladders and isolated recharge benchmarks
         if: matrix.profile == 'endpoint-qps'
         shell: bash
         run: |
           set -o pipefail
-          python3 -u tests/load/endpoint-qps.py "$LOAD_DIR" | tee "$LOAD_DIR/results/endpoint-qps-summary.md" | tee -a "$GITHUB_STEP_SUMMARY"
+          read_exit=0
+          python3 -u tests/load/endpoint-qps.py "$LOAD_DIR" | tee "$LOAD_DIR/results/endpoint-qps-summary.md" | tee -a "$GITHUB_STEP_SUMMARY" || read_exit=$?
+          payment_exit=0
+          if [[ "$ENDPOINT_BUSINESS_ONLY" == true ]]; then
+            # Always report first-time payment and duplicate callback separately,
+            # even if one of the 13 non-admin read endpoints misses its QPS target.
+            python3 -u tests/load/recharge-qps.py "$LOAD_DIR" | tee "$LOAD_DIR/results/recharge-qps-summary.md" | tee -a "$GITHUB_STEP_SUMMARY" || payment_exit=$?
+          fi
+          if (( read_exit != 0 || payment_exit != 0 )); then exit 1; fi
       - name: Run load scenarios
         if: matrix.profile != 'endpoint-qps' && matrix.profile != 'capacity' && matrix.profile != 'traffic' && matrix.profile != 'traffic-quick' && matrix.profile != 'traffic-multi' && matrix.profile != 'api-coverage'
         run: bash tests/load/run.sh
