@@ -4,7 +4,7 @@ import crypto from 'k6/crypto';
 import exec from 'k6/execution';
 import { Rate } from 'k6/metrics';
 
-const catalog = JSON.parse(open('tests/load/endpoint-qps-catalog.json'));
+const catalog = JSON.parse(open('./endpoint-qps-catalog.json'));
 const spec = catalog.find(x => x.id === __ENV.QPS_CASE);
 if (!spec) throw new Error('Unknown QPS_CASE: ' + __ENV.QPS_CASE);
 const rate = Number(__ENV.QPS_RATE || '10');
