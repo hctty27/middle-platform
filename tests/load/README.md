@@ -4,7 +4,7 @@
 
 ## 逐接口固定 QPS 阶梯（Endpoint QPS Ladder）
 
-独立 GitHub Actions：**Runner Endpoint QPS Ladder**，只用 GitHub 托管 Ubuntu Runner，启动临时 MySQL、Nginx、Supervisor、配置中心、SDK Core、SDK Service、配置接入端和本地签名 Mock；不访问任何外部业务域名。PR 修改本测试套件时自动跑全部接口基础档；手动工作流提供这些输入：
+在原有 **Runner Load Test** 工作流中选择 profile=endpoint-qps，只用 GitHub 托管 Ubuntu Runner，启动临时 MySQL、Nginx、Supervisor、配置中心、SDK Core、SDK Service、配置接入端和本地签名 Mock；不访问任何外部业务域名。标题包含 QPS 的 PR 会额外跑全部接口基础档，其他 PR 保留原有快速回归；手动工作流提供这些输入：
 
 - group：quick（单接口快速验证）/ read（32 个只读或查询类场景）/ write（20 个写入、上报、回调场景）/ all（52 类路由）。
 - tiers：basic 读 50/200/500 QPS、写 10/30/60 QPS；high 读 100/500/1000/3000/5000/10000/20000 QPS、写 20/50/100/250 QPS。每个接口前一档失败就停止升级、保留失败指标；quick 固定 50/200/500 QPS。高档仅为探索目标。
