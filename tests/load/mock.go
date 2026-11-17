@@ -6,16 +6,77 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 func main() {
 	mux := http.NewServeMux()
+	var eventDelay atomic.Int64
+	var eventFailure atomic.Bool
+	var eventReceived atomic.Uint64
+	var eventAccepted atomic.Uint64
+	var userReceived atomic.Uint64
+	// Local fixture controls, never exposed through Nginx.
+	mux.HandleFunc("POST /load/event-mode", func(w http.ResponseWriter, r *http.Request) {
+		delay, err := strconv.Atoi(r.URL.Query().Get("delay_ms"))
+		mode := r.URL.Query().Get("mode")
+		if err != nil || delay < 0 || delay > 100 || (mode != "ok" && mode != "fail") {
+			http.Error(w, "invalid fixture mode", http.StatusBadRequest)
+			return
+		}
+		eventDelay.Store(int64(delay))
+		eventFailure.Store(mode == "fail")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /load/stats", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]uint64{
+			"event_received": eventReceived.Load(),
+			"event_accepted": eventAccepted.Load(),
+			"user_received":  userReceived.Load(),
+		})
+	})
+	mux.HandleFunc("POST /report/event", func(w http.ResponseWriter, r *http.Request) {
+		values := []string{"runner-load-platform-only", "load-app", r.Header.Get("x-timestamp"), r.Header.Get("x-nonce")}
+		sort.Strings(values)
+		sum := sha1.Sum([]byte(strings.Join(values, "_")))
+		if r.Header.Get("x-app-id") != "load-app" || !hmac.Equal([]byte(r.Header.Get("x-signature")), []byte(hex.EncodeToString(sum[:]))) {
+			http.Error(w, "bad platform signature", http.StatusUnauthorized)
+			return
+		}
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+		var payload struct {
+			Event string         `json:"event"`
+			Ext   map[string]any `json:"ext"`
+		}
+		if err != nil || json.Unmarshal(raw, &payload) != nil || payload.Event != "login" || payload.Ext == nil {
+			http.Error(w, "bad fixture event", http.StatusBadRequest)
+			return
+		}
+		eventReceived.Add(1)
+		timer := time.NewTimer(time.Duration(eventDelay.Load()) * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-timer.C:
+		}
+		if eventFailure.Load() {
+			http.Error(w, "injected event failure", http.StatusServiceUnavailable)
+			return
+		}
+		eventAccepted.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, "{\"code\":0,\"data\":true}")
+	})
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "UP")
 	})
@@ -28,6 +89,7 @@ func main() {
 			return
 		}
 		_, _ = io.Copy(io.Discard, http.MaxBytesReader(w, r.Body, 65536))
+		userReceived.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, "{\"code\":0,\"data\":true}")
 	})

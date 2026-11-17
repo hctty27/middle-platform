@@ -25,7 +25,7 @@ let loggedFailure = false;
 const runID = __ENV.LOAD_RUN_ID || 'local';
 const businessFailed = new Rate('business_failed');
 const cases = ['config-sync', 'sdk-config', 'user-check', 'order', 'duplicate', 'payment'];
-if (scenario !== 'mixed' && !cases.includes(scenario)) throw new Error('unknown scenario');
+if (scenario !== 'mixed' && scenario !== 'event-report' && !cases.includes(scenario)) throw new Error('unknown scenario');
 if (!['nginx', 'direct'].includes(target) || (target === 'direct' && (!capacity || scenario !== 'sdk-config'))) throw new Error('invalid local target');
 if (!Number.isInteger(rate) || rate < 1 || rate > (scenario === 'sdk-config' ? (capacity ? 10000 : 5000) : 1000)) throw new Error('invalid local rate');
 
@@ -100,8 +100,12 @@ function pay(id) {
   record(res, 'payment', res.status === 200 && res.body === nonce);
 }
 export default function () {
+  const selected = scenario === 'mixed' ? cases[exec.scenario.iterationInTest % cases.length] : scenario;
+  runEndpoint(selected);
+}
+
+export function runEndpoint(selected) {
   const index = exec.scenario.iterationInTest;
-  const selected = scenario === 'mixed' ? cases[index % cases.length] : scenario;
   const id = runID + '-' + index;
   let path, body, res;
   switch (selected) {
@@ -118,6 +122,12 @@ export default function () {
     case 'user-check':
       path = '/api/service/user/check/test';
       body = JSON.stringify({ open_id: 'load-user-' + index });
+      res = http.post(base + path, body, { headers: gameHeaders(path, body), tags: { name: selected }, timeout: '5s' });
+      record(res, selected, jsonOK(res, j => j.code === 0 && j.data === true));
+      break;
+    case 'event-report':
+      path = '/api/service/events/test';
+      body = JSON.stringify({ event: 'login', ext: { roleId: 'load-role-' + index, open_id: 'load-user-' + index, server_id: 'load-group' } });
       res = http.post(base + path, body, { headers: gameHeaders(path, body), tags: { name: selected }, timeout: '5s' });
       record(res, selected, jsonOK(res, j => j.code === 0 && j.data === true));
       break;
