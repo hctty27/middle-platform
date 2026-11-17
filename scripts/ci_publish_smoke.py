@@ -153,6 +153,19 @@ exec bash "$@"
         self.assertFalse(self.stage.exists())
         self.assertIn("SQL was NOT executed", result.stdout)
 
+    def test_identical_file_is_not_replaced(self):
+        self.make_package(frontend=False, only="sdk-core")
+        target = self.seed("bin/sdk-core", "#!/bin/sh\nexit 0\n")
+        # Git Bash on Windows cannot reliably represent Unix mode bits.
+        target.chmod(0o755)
+        before = target.stat().st_mtime_ns
+        result = self.run_publish(service="sdk-core")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        if os.name != "nt":
+            self.assertIn("Unchanged bin/sdk-core", result.stdout)
+            self.assertEqual(target.stat().st_mtime_ns, before)
+        self.assertIn("Remote publish duration:", result.stdout)
+
     def test_backend_only_does_not_touch_frontend(self):
         self.make_package(frontend=False)
         index = self.seed("admin/index.html", "old-index")

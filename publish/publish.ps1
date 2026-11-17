@@ -25,6 +25,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$publishTimer = [System.Diagnostics.Stopwatch]::StartNew()
 if ($Service -eq 'admin' -and $SkipFrontend) { throw '发布 admin 时不能跳过前端构建。' }
 if ($SkipBuild -and [string]::IsNullOrWhiteSpace($Version)) { throw '-SkipBuild 必须同时指定 -Version，以准确选择已存在的归档。' }
 
@@ -358,6 +359,7 @@ try {
         }
     }
 
+    $uploadTimer = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Host "Uploading to ${destination}:$RemoteDirectory (SSH port $Port)."
     if ($Password -eq '') {
         Write-Host 'SSH may request a password more than once. Existing host-key verification is retained.'
@@ -385,8 +387,11 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Upload failed (exit $LASTEXITCODE). No application files were updated. Temporary directory: $remoteStage"
     }
+    Write-Host ("上传阶段耗时: {0:N1}s" -f $uploadTimer.Elapsed.TotalSeconds)
+    $remoteTimer = [System.Diagnostics.Stopwatch]::StartNew()
     $restartFlag = if ($SkipRestart -or $Service -eq 'admin') { '0' } else { '1' }
     Invoke-Remote "bash '$remoteStage/publish-remote.sh' '$RemoteDirectory' '$remoteStage/$archiveName' '$sha256' '$restartFlag' '$Service' '$restartPlan'"
+    Write-Host ("远程发布耗时: {0:N1}s" -f $remoteTimer.Elapsed.TotalSeconds)
 } finally {
     if ($publishAuthTouched) {
         Restore-EnvValue 'PUBLISH_SSH_PASSWORD' $null
@@ -413,3 +418,5 @@ if ($SkipRestart -or $Service -eq 'admin') {
 } else {
     Write-Host '已执行 Supervisor 重启与健康检查；失败会中止发布并报错，不提供自动回滚。'
 }
+
+Write-Host ("发布总耗时: {0:N1}s" -f $publishTimer.Elapsed.TotalSeconds)

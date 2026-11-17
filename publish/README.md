@@ -81,4 +81,6 @@ python -I scripts/ci_publish_smoke.py
 bash ops/nginx/test-upstream-control.sh
 ```
 
-正式发布建议省略 `-Fast`，使用锁文件执行 `npm ci`。
+正式发布建议省略 `-Fast`。前端源码（含本地文件）、构建工具链、相关环境及 dist 内容的 SHA-256 指纹一致时，直接复用已成功构建的 dist；任一项变化或缓存缺失时重新构建，默认仍使用锁文件执行 `npm ci`。指定 `-Fast` 时，仅在依赖指纹匹配时复用 node_modules。需要强制重新构建时，可删除 admin/node_modules/.middle-platform-build.sha256；若还需重新安装依赖，则省略 -Fast。
+
+服务器跳过字节和权限完全一致的普通文件。仅在 Supervisor 当前运行的 PID 对应 /proc/PID/exe 与本次包中的二进制 SHA-256 相同，且 Ready 检查通过时，才跳过该实例重启；不以磁盘文件是否已更新作为运行版本依据。未能读取或确认运行产物时仍执行安全滚动重启。发布日志记录打包、上传、远程预检、文件更新和滚动发布耗时。

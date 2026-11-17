@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+publish_started=$SECONDS
 
 if [[ $# -ne 3 && $# -ne 5 && $# -ne 6 ]]; then
     printf 'Usage: publish-remote.sh <target-directory> <archive> <sha256> [restart-flag service name:port,...]\n' >&2
@@ -26,7 +27,7 @@ if [[ "$(dirname -- "$stage")" != "$root" || ! "$(basename -- "$stage")" =~ ^\.p
     printf 'Invalid upload arguments\n' >&2
     exit 2
 fi
-for command in sha256sum tar find mktemp cp mv chmod mkdir uname flock; do
+for command in sha256sum tar find mktemp cp mv chmod mkdir uname flock cmp stat; do
     command -v "$command" >/dev/null || { printf 'Required command not found: %s\n' "$command" >&2; exit 1; }
 done
 if [[ ! -d "$root" || -L "$root" ]]; then
@@ -291,6 +292,8 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
     fi
 fi
 
+printf 'Preflight duration: %ss\n' "$((SECONDS - publish_started))"
+install_started=$SECONDS
 temporary=''
 trap 'if [[ -n "$temporary" ]]; then rm -f -- "$temporary"; fi' EXIT
 while IFS= read -r -d '' source; do
@@ -300,6 +303,13 @@ while IFS= read -r -d '' source; do
         printf 'Preserved admin/config.js\n'
         continue
     fi
+    # 同内容、同权限的普通文件无需覆盖；禁止跟随目标符号链接。
+    if [[ -f "$target" && ! -L "$target" ]] &&
+       cmp -s -- "$source" "$target" &&
+       [[ "$(stat -c %a -- "$source")" == "$(stat -c %a -- "$target")" ]]; then
+        printf 'Unchanged %s\n' "$relative"
+        continue
+    fi
     temporary=$(mktemp "$(dirname -- "$target")/.publish-file-XXXXXXXX")
     cp -p -- "$source" "$temporary"
     # 使用同目录原子重命名，避免直接覆盖运行中的可执行文件。
@@ -307,6 +317,25 @@ while IFS= read -r -d '' source; do
     temporary=''
     printf 'Updated %s\n' "$relative"
 done < "$stage/files"
+printf 'File update duration: %ss\n' "$((SECONDS - install_started))"
+rollout_started=$SECONDS
+
+# 不根据磁盘上的 bin 或上次发布记录猜测运行版本：必须核对 Supervisor
+# 当前进程的 /proc/PID/exe。任何无法验证的情况都保守地执行滚动重启。
+running_matches_package() {
+    local process=$1 binary=$2 status pid expected_hash running_hash
+    [[ -r "$stage/unpacked/bin/$binary" ]] || return 1
+    status=$(supervisorctl status "$process") || return 1
+    [[ "$status" =~ ^"$process"[[:space:]]+RUNNING[[:space:]]+pid[[:space:]]+([1-9][0-9]*)(,|[[:space:]]|$) ]] || return 1
+    pid=${BASH_REMATCH[1]}
+    [[ -r "/proc/$pid/exe" ]] || return 1
+    expected_hash=$(sha256sum -- "$stage/unpacked/bin/$binary") || return 1
+    running_hash=$(sha256sum -- "/proc/$pid/exe" 2>/dev/null) || return 1
+    [[ "${expected_hash%% *}" == "${running_hash%% *}" ]] || return 1
+    status=$(supervisorctl status "$process") || return 1
+    [[ "$status" =~ ^"$process"[[:space:]]+RUNNING[[:space:]]+pid[[:space:]]+([1-9][0-9]*)(,|[[:space:]]|$) ]] || return 1
+    [[ "${BASH_REMATCH[1]}" == "$pid" ]]
+}
 if [[ "${#programs[@]}" -gt 0 ]]; then
     for index in "${!programs[@]}"; do
         program="${programs[$index]}"
@@ -314,6 +343,13 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         group="${groups[$index]}"
         supervisor_process="$program"
         if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
+        binary=$group
+        if [[ "$group" == none ]]; then binary=$program; fi
+        if running_matches_package "$supervisor_process" "$binary" &&
+           curl -fsS -o /dev/null --connect-timeout 2 --max-time 3 "http://127.0.0.1:$port/health/ready"; then
+            printf 'Unchanged running instance: %s (port %s); no restart needed\n' "$program" "$port"
+            continue
+        fi
         if [[ "$group" != none ]]; then
             printf 'Draining %s from Nginx...\n' "$program"
             run_nginx_control drain "$group" "$port"
@@ -349,11 +385,13 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         fi
     done
 fi
+printf 'Rollout duration: %ss\n' "$((SECONDS - rollout_started))"
 mv -fT -- "$archive" "$root/packages/$name"
 rm -rf -- "$stage"
 printf 'Upload and extraction complete. SQL was NOT executed.\n'
 if [[ "$restart" == 0 || "$service" == admin ]]; then
     printf 'No services were restarted.\n'
 else
-    printf 'Selected Supervisor programs were restarted and health-checked.\n'
+    printf 'Selected Supervisor programs were checked; changed or unverifiable instances were restarted.\n'
 fi
+printf 'Remote publish duration: %ss\n' "$((SECONDS - publish_started))"
