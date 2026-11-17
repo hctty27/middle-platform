@@ -217,7 +217,8 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
                 printf 'Missing or unsafe Nginx upstream control helper: %s; no application files were changed\n' "$nginx_control" >&2
                 exit 1
             fi
-            if grep -q $'\r$' "$nginx_control"; then
+            # GNU grep on Windows otherwise strips CR in text mode.
+            if grep -aUq -- $'\r$' "$nginx_control"; then
                 printf 'Nginx upstream helper has CRLF line endings: %s; convert to LF; no application files were changed\n' "$nginx_control" >&2
                 exit 1
             fi
