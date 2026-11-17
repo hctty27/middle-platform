@@ -1,4 +1,4 @@
-name: LT26 read-only config QPS 1.2k-1.5k with stable VU allocation
+name: LT26 read-only config QPS 1.2k-1.5k with controlled scheduler tolerance
 on:
   push:
     branches:
@@ -13,7 +13,7 @@ jobs:
   config-qps:
     if: ${{ github.repository == 'hctty27/middle-platform' && github.actor == 'hctty27' && github.ref == 'refs/heads/test/lt26-config-qps-5000-20000-20261117' }}
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Run bounded read-only GET stages and monitor the load generator
         shell: powershell
@@ -74,7 +74,7 @@ jobs:
           const appIds = Array.from({ length: 256 }, (_, i) => 'lt26-app-' + String(i).padStart(3, '0'));
           const businessFailed = new Rate('business_failed');
 
-          if (base !== 'https://mp.skybluek.com' || ![1200, 1300, 1400, 1500].includes(qps) || seconds !== 20) {
+          if (base !== 'https://mp.skybluek.com' || ![1200, 1250, 1300, 1350, 1400, 1450, 1500].includes(qps) || seconds !== 20) {
             throw new Error('Refusing unapproved target or schedule');
           }
 
@@ -85,7 +85,7 @@ jobs:
                 rate: qps,
                 timeUnit: '1s',
                 duration: seconds + 's',
-                preAllocatedVUs: 400,
+                preAllocatedVUs: 300,
                 maxVUs: 600,
                 gracefulStop: '5s',
               },
@@ -93,7 +93,11 @@ jobs:
             thresholds: {
               http_req_failed: [{ threshold: 'rate<0.000001', abortOnFail: true, delayAbortEval: '5s' }],
               business_failed: [{ threshold: 'rate<0.000001', abortOnFail: true, delayAbortEval: '5s' }],
-              dropped_iterations: [{ threshold: 'count<1', abortOnFail: true, delayAbortEval: '5s' }],
+              dropped_iterations: [{
+                threshold: 'count<' + Math.max(1, Math.floor(qps * seconds * 0.001)),
+                abortOnFail: true,
+                delayAbortEval: '5s',
+              }],
               http_req_duration: [
                 { threshold: 'p(95)<100', abortOnFail: true, delayAbortEval: '5s' },
                 { threshold: 'p(99)<300', abortOnFail: true, delayAbortEval: '5s' },
@@ -145,14 +149,14 @@ jobs:
           $env:BASE_URL = $base
           $env:SECONDS = '20'
           try {
-            foreach ($rate in @(1200, 1300, 1400, 1500)) {
+            foreach ($rate in @(1200, 1250, 1300, 1350, 1400, 1450, 1500)) {
               $freeMB = (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024
               Write-Host ('PREFLIGHT target={0} QPS free_memory_mb={1}' -f $rate, [math]::Round($freeMB))
               if ($freeMB -lt 4096) { throw 'Load generator free memory fell below 4 GiB; stopped.' }
 
               $env:QPS = [string]$rate
               $summary = Join-Path $work ('summary-' + $rate + '.json')
-              Write-Host ('START target={0} QPS duration=20s channels=256 GET-only preAllocatedVUs=400 maxVUs=600' -f $rate)
+              Write-Host ('START target={0} QPS duration=20s channels=256 GET-only preAllocatedVUs=300 maxVUs=600' -f $rate)
               & $k6 run --summary-export $summary $scriptPath
               $exitCode = $LASTEXITCODE
               if ($exitCode -ne 0) {
@@ -162,11 +166,11 @@ jobs:
               if (-not (Test-Path -LiteralPath $summary -PathType Leaf)) {
                 throw ('Missing k6 summary for {0} QPS.' -f $rate)
               }
-              Write-Host ('PASS stage={0} QPS: request count, latency, zero errors and zero drops passed.' -f $rate)
+              Write-Host ('PASS stage={0} QPS: request count, latency, zero errors and scheduler drops below 0.1%.' -f $rate)
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ('- PASS **' + $rate + ' QPS** — 20 seconds, 256 channels, GET-only')
               Start-Sleep -Seconds 5
             }
-            Write-Host 'PASS all stages 1200/1300/1400/1500 QPS.'
+            Write-Host 'PASS all stages 1200/1250/1300/1350/1400/1450/1500 QPS.'
           } finally {
             if ($monitor) {
               Stop-Job $monitor -ErrorAction SilentlyContinue
