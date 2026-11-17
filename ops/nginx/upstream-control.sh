@@ -76,7 +76,7 @@ if ! "$systemctl_bin" is-active --quiet nginx; then
     printf 'Nginx is not active under systemd\n' >&2; exit 1
 fi
 validate_nginx_config() {
-    "$sudo_bin" -n "$nginx_bin" -t
+    "$sudo_bin" -n "$nginx_bin" -t || return 1
     local dump
     dump=$("$sudo_bin" -n "$nginx_bin" -T 2>&1) || {
         printf 'nginx -T failed; inspect the Nginx configuration as root\n' >&2
@@ -96,28 +96,94 @@ validate_nginx_config() {
     fi
 }
 reload_nginx() { "$sudo_bin" -n "$systemctl_bin" reload nginx; }
+# Track the systemd-managed master and snapshot real worker PIDs before HUP.
+# Capture ps output before awk starts; exact fields and PPID exclude helper commands.
+nginx_master_pid() {
+    local value
+    if ! value=$("$systemctl_bin" show -p MainPID nginx); then
+        printf 'Could not query Nginx MainPID\n' >&2; return 1
+    fi
+    if [[ ! "$value" =~ ^MainPID=([1-9][0-9]*)$ ]]; then
+        printf 'Invalid Nginx MainPID: %s\n' "$value" >&2; return 1
+    fi
+    printf '%s\n' "${BASH_REMATCH[1]}"
+}
+read_nginx_workers() {
+    local master=$1 listing
+    if ! listing=$("$ps_bin" -ww -eo pid=,ppid=,args=); then
+        printf 'Could not query Nginx worker processes\n' >&2; return 1
+    fi
+    "$awk_bin" -v master="$master" '
+        $2 == master && $3 == "nginx:" && $4 == "worker" && $5 == "process" {
+            if ($1 !~ /^[1-9][0-9]*$/) { invalid=1; next }
+            if (NF == 5 || (NF == 6 && $6 == "(nginx)")) {
+                print $1, "active"
+            } else if ($6 == "is" && $7 == "shutting" && $8 == "down" &&
+                       (NF == 8 || (NF == 9 && $9 == "(nginx)"))) {
+                print $1, "shutting"
+            } else { invalid=1 }
+        }
+        END { if (invalid) exit 2 }
+    ' <<< "$listing" || { printf 'Could not parse Nginx worker processes\n' >&2; return 1; }
+}
+snapshot_old_workers() {
+    local workers pid state
+    master_pid=$(nginx_master_pid) || return 1
+    workers=$(read_nginx_workers "$master_pid") || return 1
+    old_workers=' '
+    local active_count=0
+    while read -r pid state; do
+        [[ -n "$pid" ]] || continue
+        old_workers+="$pid "
+        if [[ "$state" == active ]]; then active_count=$((active_count + 1)); fi
+    done <<< "$workers"
+    if [[ "$active_count" -eq 0 ]]; then
+        printf 'No active Nginx workers found under master PID %s; refusing to drain\n' "$master_pid" >&2
+        return 1
+    fi
+}
 wait_for_old_workers() {
     local timeout=${NGINX_DRAIN_TIMEOUT_SECONDS:-90}
     if [[ ! "$timeout" =~ ^[1-9][0-9]*$ ]]; then
         printf 'Invalid NGINX_DRAIN_TIMEOUT_SECONDS value\n' >&2
         return 1
     fi
-    local elapsed=0
+    local elapsed=0 current_master workers pid state pending new_active
     while (( elapsed < timeout )); do
-        if ! "$ps_bin" -eo args= | "$awk_bin" '
-            /nginx: worker process is shutting down/ { found = 1 }
-            END { exit found ? 0 : 1 }
-        '; then return 0; fi
-        "$sleep_bin" 1
+        current_master=$(nginx_master_pid) || return 1
+        if [[ "$current_master" != "$master_pid" ]]; then
+            printf 'Nginx master PID changed from %s to %s while draining\n' "$master_pid" "$current_master" >&2
+            return 1
+        fi
+        workers=$(read_nginx_workers "$master_pid") || return 1
+        pending=''
+        new_active=0
+        while read -r pid state; do
+            [[ -n "$pid" ]] || continue
+            if [[ "$old_workers" == *" $pid "* || "$state" == shutting ]]; then
+                pending+="$pid "
+            elif [[ "$state" == active ]]; then
+                new_active=$((new_active + 1))
+            fi
+        done <<< "$workers"
+        # HUP is asynchronous: require both old PIDs gone and a new active generation.
+        if [[ -z "$pending" && "$new_active" -gt 0 ]]; then return 0; fi
+        "$sleep_bin" 1 || return 1
         elapsed=$((elapsed + 1))
     done
-    printf 'Timed out waiting for old Nginx workers to drain (%s seconds)\n' "$timeout" >&2
+    printf 'Timed out waiting for old Nginx workers to drain (%s seconds); master PID=%s; pending worker PIDs=%s; new active workers=%s\n' \
+        "$timeout" "$master_pid" "${pending:-none}" "$new_active" >&2
     return 1
 }
 validate_nginx_config
 if [[ "$action" == validate ]]; then printf 'Validated %s upstream port %s\n' "$group" "$port"; exit 0; fi
 if [[ "$action" == drain && "$target_down" -eq 1 ]]; then
-    wait_for_old_workers
+    # A prior failure may have left the file down without applying the reload.
+    snapshot_old_workers || exit 1
+    if ! reload_nginx || ! wait_for_old_workers; then
+        printf 'Instance remains marked down; refusing to restart it before Nginx workers exit\n' >&2
+        exit 1
+    fi
     printf 'Already drained: %s port %s\n' "$group" "$port"
     exit 0
 fi
@@ -159,6 +225,11 @@ rollback_file() {
     "$sudo_bin" -n "$systemctl_bin" reload nginx >/dev/null 2>&1 || true
 }
 if ! validate_nginx_config; then rollback_file; exit 1; fi
+if [[ "$action" == drain ]] && ! snapshot_old_workers; then
+    # No reload has been requested; restore only the on-disk state.
+    mv -fT -- "$backup" "$file"
+    exit 1
+fi
 if ! reload_nginx; then
     rollback_file
     printf 'Nginx reload failed; upstream state was rolled back\n' >&2
