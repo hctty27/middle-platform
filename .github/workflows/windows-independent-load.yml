@@ -1,5 +1,5 @@
 name: Independent Windows Load Test (manual)
-# No push/PR/schedule triggers. Guarded by public/private repository status.
+# Manual owner-only dispatch from trusted main; never runs on push/PR.
 on:
   workflow_dispatch:
     inputs:
@@ -34,28 +34,29 @@ concurrency:
 
 jobs:
   safety-gate:
-    name: Reject public repo and non-main dispatch
+    name: Require owner and main branch
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Fail closed before allocating any self-hosted runner
+      - name: Deny every caller except repo owner on main
         shell: bash
         env:
-          REPO_PRIVATE: ${{ github.event.repository.private }}
+          OWNER: ${{ github.actor }}
+          EVENT_NAME: ${{ github.event_name }}
           REPO_NAME: ${{ github.repository }}
           GIT_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          if [[ "$REPO_PRIVATE" != "true" || "$REPO_NAME" != "hctty27/middle-platform" || "$GIT_REF" != "refs/heads/main" ]]; then
-            echo "::error::Only the private hctty27/middle-platform repository, manually dispatched on main, may use the Windows runner."
+          if [[ "$OWNER" != "hctty27" || "$EVENT_NAME" != "workflow_dispatch" || "$REPO_NAME" != "hctty27/middle-platform" || "$GIT_REF" != "refs/heads/main" ]]; then
+            echo "::error::Only the owner of hctty27/middle-platform may manually dispatch on main."
             exit 1
           fi
 
   isolated-load:
     name: Dedicated Windows runner / ${{ inputs.mode }}
     needs: safety-gate
-    # These labels must ALL match; add custom label loadtest-windows to runner #21.
-    runs-on: [self-hosted, Windows, X64, loadtest-windows]
+    # Exact device name is verified before any checkout or k6 invocation.
+    runs-on: [self-hosted, Windows, X64]
     environment: isolated-load-test
     timeout-minutes: 30
     env:
@@ -67,29 +68,60 @@ jobs:
       REQUESTED_SECONDS: ${{ inputs.seconds }}
       REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
-      - name: Check out the trusted main commit without persisting credentials
+      - name: Verify exact Windows runner and discover k6
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') { throw 'Wrong runner; refusing execution.' }
+          $paths = New-Object System.Collections.Generic.List[string]
+          $cmd = Get-Command k6 -ErrorAction SilentlyContinue
+          if ($cmd -and $cmd.CommandType -eq 'Application') { $paths.Add($cmd.Source) }
+          foreach ($folder in @(
+            "$env:ProgramFiles/k6", "$env:ProgramFiles/Grafana Labs/k6",
+            "$env:LOCALAPPDATA/Microsoft/WinGet/Links", "$env:LOCALAPPDATA/Microsoft/WinGet/Packages"
+          )) {
+            if (Test-Path -LiteralPath $folder -PathType Container) {
+              Get-ChildItem -LiteralPath $folder -Recurse -File -Filter k6.exe -ErrorAction SilentlyContinue |
+                ForEach-Object { $paths.Add($_.FullName) }
+            }
+          }
+          foreach ($profile in @(Get-ChildItem -LiteralPath "$env:SystemDrive/Users" -Directory -ErrorAction SilentlyContinue)) {
+            foreach ($suffix in @('AppData/Local/Microsoft/WinGet/Links','AppData/Local/Microsoft/WinGet/Packages')) {
+              $folder = Join-Path $profile.FullName $suffix
+              if (Test-Path -LiteralPath $folder -PathType Container) {
+                Get-ChildItem -LiteralPath $folder -Recurse -File -Filter k6.exe -ErrorAction SilentlyContinue |
+                  ForEach-Object { $paths.Add($_.FullName) }
+              }
+            }
+          }
+          $found = $false
+          foreach ($exe in @($paths | Select-Object -Unique)) {
+            if (Test-Path -LiteralPath $exe -PathType Leaf) {
+              & $exe version
+              if ($LASTEXITCODE -eq 0) {
+                $utf8 = New-Object System.Text.UTF8Encoding($false)
+                $line = (Split-Path -Parent $exe) + [Environment]::NewLine
+                [System.IO.File]::AppendAllText($env:GITHUB_PATH, $line, $utf8)
+                $found = $true
+                break
+              }
+            }
+          }
+          if (-not $found) { throw 'k6.exe not available to this runner.' }
+          Write-Host 'Runner and k6 verified. No requests have been sent.'
+      - name: Check out trusted main only for confirmed load-test mode
+        if: inputs.mode == 'load-test'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Verify exact runner and local k6 installation
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') {
-            throw 'Unexpected runner. Dedicated runner DESKTOP-HA11EIT required.'
-          }
-          $k6 = Get-Command k6 -ErrorAction Stop
-          & $k6.Source version
-          if ($LASTEXITCODE -ne 0) { throw 'k6 preflight failed.' }
-          Write-Host 'Runner and k6 preflight passed; no load traffic has been sent.'
       - name: Verify only (zero network load)
         if: inputs.mode == 'verify-runner'
-        shell: pwsh
+        shell: powershell
         run: Write-Host 'Verify-only completed. Run mode=load-test only after isolated target and fixture are prepared.'
       - name: Execute authorized isolated load, increasing in stages
         if: inputs.mode == 'load-test'
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:LOAD_TEST_ENABLED -cne 'true') {
