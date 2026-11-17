@@ -8,6 +8,7 @@ import sys
 import time
 import urllib.request
 from process_monitor import print_process_report
+from config_patch import core_settings
 
 root = Path(sys.argv[1])
 results = root / "results"
@@ -137,14 +138,8 @@ def stage(label, scenario, target, rate, duration, required=False, profile=None)
 
 # Change only the disposable SDK Core YAML; restart all configured SDK Core instances.
 def core_config(sample, max_open=20, max_idle=10):
-    import re
     config = root / "config" / "sdk-core.yaml"
-    text = config.read_text()
-    for key, value in (("sdkConfigSampleEvery", sample), ("maxOpenConns", max_open), ("maxIdleConns", max_idle)):
-        text, count = re.subn(r"(?m)^(  " + key + r":) *\d+ *$", r"\g<1> " + str(value), text)
-        if count != 1:
-            raise RuntimeError(f"Missing or duplicate {key}")
-    config.write_text(text)
+    config.write_text(core_settings(config.read_text(), sample, max_open, max_idle))
     names = [name for name in servers if name.startswith("sdk-core-")]
     subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *names], check=True)
     for name in names:

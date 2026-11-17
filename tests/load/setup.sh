@@ -16,6 +16,9 @@ go build -trimpath -o "$LOAD_DIR/bin/mock" tests/load/mock.go
 mysql -uroot -h127.0.0.1 -e "CREATE DATABASE config_center CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
 mysql -uroot -h127.0.0.1 config_center < db/full/config_center.sql
 mysql -uroot -h127.0.0.1 config_center < tests/load/seed.sql
+# Fail during setup if either required service is not explicitly enabled.
+enabled=$(mysql -uroot -h127.0.0.1 -N config_center -e "SELECT COUNT(*) FROM sdk_service s JOIN sdk_service_channel ch ON ch.service_id=s.id JOIN sdk_channel_app a ON a.id=ch.channel_app_id WHERE a.code='load-app' AND a.status=1 AND s.code IN ('user_check','event_report') AND s.enabled=1 AND ch.enabled=1 AND ch.env='test';")
+[[ "$enabled" == 2 ]] || { echo "::error::Missing enabled test service bindings"; exit 1; }
 export CONFIG_DB_DSN='root:runner-load-only@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC'
 export SDK_CORE_DB_DSN="$CONFIG_DB_DSN" SDK_SERVICE_DB_DSN="$CONFIG_DB_DSN"
 export ADMIN_AUTH_SECRET='runner-load-admin-only-0123456789abcdef'

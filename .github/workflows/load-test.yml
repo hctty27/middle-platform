@@ -61,6 +61,7 @@ jobs:
           bash -n tests/load/setup.sh
           bash -n tests/load/run.sh
           python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py
+          python3 -m unittest discover -s tests/load -p 'test_*.py'
           if [[ "$LOAD_PROFILE" == capacity ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
           test -z "$(gofmt -l tests/load/mock.go)"
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
