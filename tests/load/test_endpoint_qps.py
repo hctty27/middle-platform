@@ -53,7 +53,7 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertIn("'5000,10000,20000'", workflow)
         self.assertIn("ENDPOINT_VUS_CAP", workflow)
         self.assertIn("ENDPOINT_BUSINESS_ONLY", workflow)
-        self.assertIn('"/admin/" not in c["route"]', endpoint_py)
+        self.assertIn('"/admin/" not in c["route"]', py)
         catalog=json.loads(CATALOG.read_text())
         read=[entry for entry in catalog if entry["group"] == "read"]
         non_admin=[entry for entry in read if "/admin/" not in entry["route"].split(" ", 1)[1]]
