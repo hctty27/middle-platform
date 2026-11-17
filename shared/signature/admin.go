@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-		"encoding/hex"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-		"time"
+	"time"
+
 )
 
 const (
@@ -146,7 +148,7 @@ func restoreSignedBody(r *http.Request, body []byte) {
 
 // RequestHMACMiddleware 对指定路径前缀执行固定密钥 HMAC-SHA256 验签和进程内 nonce 去重。
 func RequestHMACMiddleware(next http.Handler, prefixes []string, secret string) http.Handler {
-	return RequestHMACMiddlewareWithNonceStore(next, prefixes, secret, NewNonceGuard(DefaultNonceCapacity))
+	return RequestHMACMiddlewareWithNonceStore(next, prefixes, secret, DefaultNonceStore())
 }
 
 // RequestHMACMiddlewareWithNonceStore allows multiple signed endpoints to share
@@ -194,7 +196,7 @@ func RequestHMACMiddlewareWithNonceStore(next http.Handler, prefixes []string, s
 
 // RequestSubscriberHMACMiddleware 按 X-Subscriber-Code 查询独立密钥并验签。
 func RequestSubscriberHMACMiddleware(next http.Handler, prefixes []string, lookup SubscriberSecretLookup) http.Handler {
-	return RequestSubscriberHMACMiddlewareWithNonceStore(next, prefixes, lookup, NewNonceGuard(adminNonceLimit))
+	return RequestSubscriberHMACMiddlewareWithNonceStore(next, prefixes, lookup, DefaultNonceStore())
 }
 
 // RequestSubscriberHMACMiddlewareWithNonceLimit configures a bounded per-process
@@ -266,7 +268,6 @@ func AdminMiddleware(next http.Handler, prefix, secret string) http.Handler {
 func AdminMiddlewareWithNonceStore(next http.Handler, prefix, secret string, nonces NonceStore) http.Handler {
 	return RequestHMACMiddlewareWithNonceStore(next, []string{prefix}, secret, nonces)
 }
-
 
 func rejectAdminSignature(w http.ResponseWriter) {
 	http.Error(w, "HMAC-SHA256 签名验证失败", http.StatusUnauthorized)
