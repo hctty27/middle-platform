@@ -160,6 +160,10 @@ Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败�
 
 ## 滚动发布行为
 
+发布前持有共享 `.publish.lock`，检查所有选中实例的 Supervisor RUNNING、Ready 与 upstream 格式。`validate` 只有在安全检查通过且实例明确标记为 `down` 时才返回专用状态（退出码 3 与 `UPSTREAM_DOWN` 标记）；其它校验失败直接停止。对于这些 down 实例，逐个确认 Supervisor RUNNING 且 `/health/ready` 连续三次返回 HTTP 200（间隔 2 秒），再通过 `recover` 移除 down、reload 并确认 worker 换代。恢复成功后再次校验；其后才替换应用文件。恢复失败时不替换应用文件；已经成功恢复的其它健康实例不重新摘除。未选中实例不自动恢复。新版发布脚本需与服务器新版 `upstream-control.sh` 配套使用。
+
+注意：选中范围内人为维护性摘除但仍健康的实例也会被恢复；维护期间不要发布该服务，也不要并行手动修改 upstream。
+
 对每个选中的 Supervisor 实例，按配置顺序逐个执行：
 
 1. 验证 Nginx 正在运行、加载了对应 upstream 和 location，且该组至少还有一个可用实例。
@@ -170,7 +174,7 @@ Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败�
 6. 要求 Supervisor 状态为 RUNNING，并且本机 `/health/ready` 连续 3 次返回 HTTP 200。
 7. 移除 `down`，再次校验并 reload Nginx，将实例恢复到流量中。
 
-如果重启、Ready 或 Nginx reload 失败，发布立即停止，故障实例保持摘除，后续实例不再重启。修复问题并确认 Ready 后，再手动恢复实例。
+如果重启、Ready 或 Nginx reload 失败，发布立即停止，后续实例不再重启；已经摘除的实例保持 down（如 reload / worker 换代未确认，还需检查实际运行状态）。修复问题后可手动恢复；下次发布也会按上述预检规则自动恢复选中且健康的 down 实例。
 
 完整发布逐个处理 10 个实例，不会停止整个 upstream 组。它提供滚动可用性，不承诺严格零错误；应用错误、共享 MySQL 故障、Nginx reload 失败或所有实例同时故障仍可能影响业务。发布不提供自动二进制回滚。
 
