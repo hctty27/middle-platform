@@ -6,8 +6,10 @@ set -Eeuo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]
 mkdir -p "$LOAD_DIR"/{bin,config,logs,results}
 export GOWORK=off
+build_flags=()
+if [[ "$LOAD_PROFILE" == capacity ]]; then build_flags=(-tags loadtest); fi
 for svc in config-center sdk-core sdk-service; do
-  (cd "$svc" && go build -trimpath -o "$LOAD_DIR/bin/$svc" "./cmd/$svc")
+  (cd "$svc" && go build "${build_flags[@]}" -trimpath -o "$LOAD_DIR/bin/$svc" "./cmd/$svc")
   cp "$svc/configs/config.yaml" "$LOAD_DIR/config/$svc.yaml"
 done
 go build -trimpath -o "$LOAD_DIR/bin/mock" tests/load/mock.go

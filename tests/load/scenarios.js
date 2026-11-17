@@ -4,7 +4,8 @@ import exec from 'k6/execution';
 import { check } from 'k6';
 import { Rate, Counter } from 'k6/metrics';
 
-const base = 'http://127.0.0.1:8280';
+const target = __ENV.LOAD_TARGET || 'nginx';
+const base = target === 'direct' ? 'http://127.0.0.1:8211' : 'http://127.0.0.1:8280';
 const app = 'load-app';
 const gameSecret = 'runner-load-game-only';
 const platformSecret = 'runner-load-platform-only';
@@ -13,6 +14,7 @@ const subscriberSecret = 'runner-load-subscriber-only-0123456789';
 const scenario = __ENV.LOAD_SCENARIO || 'mixed';
 const rate = Number(__ENV.LOAD_RATE || 5);
 const duration = __ENV.LOAD_DURATION || '10s';
+const capacity = __ENV.LOAD_PROFILE === 'capacity';
 const soak = ['soak', 'soak2h'].includes(__ENV.LOAD_PROFILE);
 const dropBudget = soak ? Math.floor(rate * (duration === '2h' ? 7200 : 1800) * 0.001) : 0;
 const failed409 = new Counter('failed_http_409');
@@ -24,14 +26,15 @@ const runID = __ENV.LOAD_RUN_ID || 'local';
 const businessFailed = new Rate('business_failed');
 const cases = ['config-sync', 'sdk-config', 'user-check', 'order', 'duplicate', 'payment'];
 if (scenario !== 'mixed' && !cases.includes(scenario)) throw new Error('unknown scenario');
-if (!Number.isInteger(rate) || rate < 1 || rate > (scenario === 'sdk-config' ? 5000 : 1000)) throw new Error('invalid local rate');
+if (!['nginx', 'direct'].includes(target) || (target === 'direct' && (!capacity || scenario !== 'sdk-config'))) throw new Error('invalid local target');
+if (!Number.isInteger(rate) || rate < 1 || rate > (scenario === 'sdk-config' ? (capacity ? 10000 : 5000) : 1000)) throw new Error('invalid local rate');
 
 export const options = {
   scenarios: {
     load: {
       executor: 'constant-arrival-rate', rate, timeUnit: '1s', duration,
-      preAllocatedVUs: soak ? 50 : Math.min(250, Math.max(5, Math.ceil(rate / 5))),
-      maxVUs: soak ? 100 : Math.min(500, Math.max(20, Math.ceil(rate / 2))),
+      preAllocatedVUs: capacity ? Math.min(500, Math.max(100, Math.ceil(rate / 20))) : soak ? 50 : Math.min(250, Math.max(5, Math.ceil(rate / 5))),
+      maxVUs: capacity ? Math.min(750, Math.max(200, Math.ceil(rate / 10))) : soak ? 100 : Math.min(500, Math.max(20, Math.ceil(rate / 2))),
       gracefulStop: '10s',
     },
   },

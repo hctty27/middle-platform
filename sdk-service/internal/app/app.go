@@ -52,6 +52,11 @@ func Run(configPath string) error {
 		return err
 	}
 	defer db.Close()
+	stopDiagnostics, err := bootstrap.StartLoadDiagnostics(db)
+	if err != nil {
+		return err
+	}
+	defer stopDiagnostics()
 
 	initCtx, cancel := context.WithTimeout(stopCtx, 10*time.Second)
 	defer cancel()

@@ -54,6 +54,11 @@ func Run(configPath string) error {
 		return err
 	}
 	defer db.Close()
+	stopDiagnostics, err := bootstrap.StartLoadDiagnostics(db)
+	if err != nil {
+		return err
+	}
+	defer stopDiagnostics()
 	db.SetMaxOpenConns(20)
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(10 * time.Minute)
