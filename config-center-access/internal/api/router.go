@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 
 	"hitall.com/middle-platform/config-center-access/internal/store"
@@ -21,7 +20,6 @@ type SyncTrigger interface{ Request() }
 // Router 同时提供本地只读查询和仅限可信网络的内部 Webhook。
 func Router(local *store.Replica, trigger SyncTrigger, subscriberCode, subscriberSecret string) http.Handler {
 	mux := http.NewServeMux()
-	nonces := &nonceCache{used: make(map[string]time.Time)}
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "UP"})
 	})
@@ -70,51 +68,19 @@ func Router(local *store.Replica, trigger SyncTrigger, subscriberCode, subscribe
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "同步回调版本参数不合法"})
 			return
 		}
-		if r.Header.Get("X-Subscriber-Code") != subscriberCode || !signature.VerifySubscriberHMACRequest(r, subscriberSecret, body, time.Now()) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "同步回调 HMAC-SHA256 签名验证失败"})
-			return
-		}
-		nonce := r.Header.Get("X-Nonce")
-		if !nonces.accept(nonce, time.Now()) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "同步回调 nonce 已使用或请求过于频繁"})
-			return
-		}
 		trigger.Request()
 		w.WriteHeader(http.StatusAccepted)
 	})
-	return signature.RequestSubscriberHMACMiddleware(mux, []string{"/api/access/nodes", "/api/access/revision"}, func(_ context.Context, code string) (string, bool, error) {
-		if code != subscriberCode {
-			return "", false, nil
-		}
-		return subscriberSecret, true, nil
-	})
-}
-
-// nonceCache 仅对当前进程中的签名请求进行去重。
-// epoch/revision 仍由同步逻辑幂等处理；多实例全局去重需共享存储。
-type nonceCache struct {
-	mu   sync.Mutex
-	used map[string]time.Time
-}
-
-func (c *nonceCache) accept(nonce string, now time.Time) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if until, ok := c.used[nonce]; ok && until.After(now) {
-		return false
+	lookup := func(_ context.Context, code string) (string, bool, error) {
+		return subscriberSecret, code == subscriberCode, nil
 	}
-	if len(c.used) >= 10000 {
-		for key, until := range c.used {
-			if !until.After(now) {
-				delete(c.used, key)
-			}
-		}
-	}
-	if len(c.used) >= 10000 {
-		return false
-	}
-	c.used[nonce] = now.Add(10 * time.Minute)
-	return true
+	// 只读接口与内部回调共用同一套 HMAC 验签及 nonce 防重放存储。
+	return signature.RequestSubscriberHMACMiddlewareWithNonceStore(
+		mux,
+		[]string{"/api/access/nodes", "/api/access/revision", "/internal/config/callback"},
+		lookup,
+		signature.DefaultNonceStore(),
+	)
 }
 
 // writeJSON 统一接入侧的 JSON 返回格式。
