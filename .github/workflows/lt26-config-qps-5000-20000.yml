@@ -70,8 +70,8 @@ jobs:
             scenarios: {
               config_read: {
                 executor:'constant-arrival-rate',rate:qps,timeUnit:'1s',duration:'10s',
-                preAllocatedVUs: Math.min(700,Math.max(250,Math.ceil(qps*.04))),
-                maxVUs: Math.min(1400,Math.max(600,Math.ceil(qps*.08))),
+                preAllocatedVUs: Math.min(1000,Math.max(600,Math.ceil(qps*.05))),
+                maxVUs: Math.min(1000,Math.max(600,Math.ceil(qps*.05))),
                 gracefulStop:'3s',
               },
             },
