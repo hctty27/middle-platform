@@ -12,6 +12,14 @@
       {"appId":"test-channel-1","gameSecret":"REPLACE_WITH_TEST_GAME_SECRET","zoneKey":"test-group-1"}
     ]
 
+## 逐档 Windows PowerShell 入口
+
+已准备隔离 HTTPS 服务、Mock 和 256 个测试渠道之后，在 Windows 电脑仓库根目录执行：
+
+    .\tests\load\run-independent.ps1 -BaseUrl 'https://YOUR-ISOLATED-TEST-HOST' -FixtureFile 'C:\load-private\fixtures.json' -Confirm 'AUTHORIZED-ISOLATED-TEST'
+
+脚本依次执行总 400 / 1000 / 2000 / 3000 / 5000 QPS，每档 20 秒，每档都运行独立的三路 1:1:2 k6 场景。k6 阈值未通过、压测机无法发送足量请求、业务错误或摘要丢失时立即停止后续升压；报告写到 Windows 临时目录下 middle-platform-load 文件夹，不输出测试密钥。报告及 JSON 密钥必须保存在仓库外。只有显式添加 -Allow10000 才会追加 10000 QPS；建议完成独立压测机资源评估后再开启，不应直接压生产。此入口需要刚好 256 个有效测试渠道。
+
 ## 执行
 
 在仓库根目录的 PowerShell 终端中手动输入：
