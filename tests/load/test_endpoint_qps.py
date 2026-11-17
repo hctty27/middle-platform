@@ -56,7 +56,7 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertIn("diag_http_409",diagnostic_js)
         endpoint_js=SCRIPT.read_text()
         endpoint_py=PYTHON.read_text()
-        self.assertLess(endpoint_js.index("if (!kind)"), endpoint_js.index("randomStamp()"))
+        self.assertLess(endpoint_js.index("if (!kind)"), endpoint_js.index("const { timestamp, nonce } = randomStamp();"))
         self.assertIn("endpoint_http_429",endpoint_js)
         self.assertIn("| 401 | 409 | 429 | 503 | 5xx |",endpoint_py)
         self.assertIn('"application_rate_limit_429"',endpoint_py)
