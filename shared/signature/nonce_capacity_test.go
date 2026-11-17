@@ -29,7 +29,11 @@ func TestNonceGuardCapacityAndExpiry(t *testing.T) {
 	if use("a", now, now) || use("c", now, now) {
 		t.Fatal("replay or overflow accepted")
 	}
-	later := now.Add(5*time.Minute + time.Second)
+	atBoundary := now.Add(5 * time.Minute)
+	if use("c", atBoundary, atBoundary) {
+		t.Fatal("nonce was evicted at the inclusive timestamp boundary")
+	}
+	later := atBoundary.Add(time.Second)
 	if !use("c", later, later) {
 		t.Fatal("expired slot not reclaimed")
 	}
