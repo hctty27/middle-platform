@@ -2,6 +2,22 @@
 
 本配置适用于 `/data/middle-platform` 单机部署。站点配置统一维护在 `middle-platform.conf`，包含三组 upstream、HTTP/HTTPS、SSL、API 路由、代理公共参数和 Vue 管理后台。
 
+## 监听队列与突发建连
+
+站点配置的 80/443 监听使用 `backlog=8192`。Nginx 实际生效的 accept 队列取该值与内核 `net.core.somaxconn` 的较小者；内核默认 128 时，突发连接在新连接被 accept 之前就可能被丢弃，表现为入口 5xx 或连接失败而应用 CPU 并不高。
+
+仓库提供内核参数文件 `ops/sysctl.d/99-listen-backlog.conf`（`net.core.somaxconn = 8192`）。首次部署或在其他机器部署时需要手动安装，并同步检查内核参数：
+
+```bash
+sudo install -D -m 0644 /data/middle-platform/ops/sysctl.d/99-listen-backlog.conf /etc/sysctl.d/99-listen-backlog.conf
+sudo sysctl --system
+sysctl -n net.core.somaxconn
+```
+
+该文件与 `10-timezone.conf` 一样手动安装，不随发布包交付，也不会覆盖服务器已有配置。如服务器已通过其他 sysctl 文件设置 `net.core.somaxconn`，请合并而不是并列写入，避免后加载的文件静默覆盖。
+
+`listen` 的 backlog 只在 Nginx 进程启动时传给内核，`systemctl reload nginx` 不会重建监听套接字。修改 `middle-platform.conf` 的 `listen` 行或上述内核参数后，都必须在维护窗口 `systemctl restart nginx`，可能造成短暂入口中断；安排与 `10-timezone.conf` 的安装一起执行。`99-listen-backlog.conf` 的编号确保它晚于多数发行版默认参数加载。
+
 ## 实例拓扑
 
 | Upstream | Supervisor programs | Local ports |
@@ -207,3 +223,5 @@ sudo systemctl restart nginx
 ```
 
 重启 Nginx 才会让新进程取得 `TZ=Asia/Shanghai`；安排在维护窗口执行，可能造成短暂入口中断。若 unit 名称不同，按实际名称调整 drop-in 目录和重启命令。此设置只改变 Nginx 进程的日志时区，不修改操作系统时区，也不影响 Go 服务的显式日志时区。
+
+该重启与[监听队列与突发建连](#监听队列与突发建连)中的 `restart nginx` 是同一操作，建议在同一次维护窗口中一并完成 sysctl、时区 drop-in 和站点配置的更新。

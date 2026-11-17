@@ -81,6 +81,8 @@ Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform
 
 项目不提供 Nginx 或 Supervisor 的安装脚本，也不会自动覆盖系统配置。管理员手动将站点配置复制到 `/etc/nginx/conf.d/middle-platform.conf`，按 Nginx 运维说明创建三个动态 upstream 状态文件，并在 `/etc/nginx/nginx.conf` 的 main context 设置 `worker_shutdown_timeout 75s`。Supervisor 继续使用本目录的单文件模板 `supervisor/middle-platform.conf`，由管理员按服务器现有 Supervisor 配置方式加载。
 
+站点配置的 80/443 监听使用 `backlog=8192`，其有效值受内核 `net.core.somaxconn` 约束。仓库提供 [`sysctl.d/99-listen-backlog.conf`](sysctl.d/99-listen-backlog.conf)，需手动安装到 `/etc/sysctl.d/` 并执行 `sysctl --system`；修改后必须重启 Nginx 而非仅 reload。安装和校验步骤见 [Nginx 运维说明](nginx/README.md#监听队列与突发建连)。
+
 当前采用 Nginx Open Source 被动健康检查（`max_fails=1 fail_timeout=10s`），观察真实请求的连接/超时失败；它不会主动轮询 `/health/ready`。故障实例暂时避开，超过失败窗口后通过后续真实请求重新尝试。滚动发布时则由发布脚本将单个实例标记为 `down`、reload Nginx、等待旧 worker 排空，再重启该实例并验证 3 次连续 Ready，最后重新加入 upstream。
 
 首次部署须从仓库手动复制 `ops/nginx/upstream-control.sh` 到服务器 `/data/middle-platform/ops/nginx/upstream-control.sh` 并设置 0755 执行权限。使用 Monit 时也须手动复制 `ops/monit/check-http-live.sh`、`ops/monit/restart-supervisor-program.sh` 到服务器对应目录，并设置 0755 权限。日常发布不会更新这些脚本；如有变更，须由管理员在非发布期间手动同步。
