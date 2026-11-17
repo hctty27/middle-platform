@@ -72,6 +72,7 @@ jobs:
       ENDPOINT_VUS_CAP: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && '800' || '500' }}
       ENDPOINT_BUSINESS_ONLY: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && 'true' || 'false' }}
       SDK_SERVICE_CACHE_TTL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && matrix.profile == 'endpoint-qps' && '1s' || '0s' }}
+      QUARTER_WORKLOAD: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[QUARTER-LOAD]') && matrix.profile == 'endpoint-qps' && 'true' || 'false' }}
       ENDPOINT_CASE: ${{ inputs.endpoint_id || '' }}
       GOWORK: 'off'
       LOAD_PROFILE: ${{ matrix.profile }}
@@ -94,7 +95,7 @@ jobs:
           bash -n tests/load/setup.sh
           bash -n tests/load/setup-access.sh
           bash -n tests/load/run.sh
-          python3 -m py_compile tests/load/endpoint-qps.py tests/load/recharge-qps.py tests/load/test_endpoint_qps.py tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py tests/load/multi_seed.py
+          python3 -m py_compile tests/load/endpoint-qps.py tests/load/recharge-qps.py tests/load/target-workload-qps.py tests/load/test_endpoint_qps.py tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py tests/load/multi_seed.py
           python3 -m unittest discover -s tests/load -p 'test_*.py'
           if [[ "$LOAD_PROFILE" == capacity || "$LOAD_PROFILE" == traffic-multi ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
           test -z "$(gofmt -l tests/load/mock.go tests/load/mock_test.go)"
@@ -104,6 +105,7 @@ jobs:
           LOAD_SCENARIO=mixed k6 inspect tests/load/traffic.js
           k6 inspect tests/load/api-coverage.js
           QPS_CASE=core-config k6 inspect --include-system-env-vars tests/load/endpoint-qps.js > /dev/null
+          if [[ "$QUARTER_WORKLOAD" == true ]]; then QPS_WORKLOAD=quarter-target k6 inspect --include-system-env-vars tests/load/endpoint-qps.js > /dev/null; fi
       - name: Install local services
         run: |
           sudo apt-get update -q
@@ -123,6 +125,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          if [[ "$QUARTER_WORKLOAD" == true ]]; then
+            # One concurrent quarter-target workload; avoid also executing old
+            # sequential 5k/10k/20k ladders on this already CPU-constrained runner.
+            python3 -u tests/load/target-workload-qps.py "$LOAD_DIR" | tee "$LOAD_DIR/results/quarter-workload-console.md" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           read_exit=0
           python3 -u tests/load/endpoint-qps.py "$LOAD_DIR" | tee "$LOAD_DIR/results/endpoint-qps-summary.md" | tee -a "$GITHUB_STEP_SUMMARY" || read_exit=$?
           payment_exit=0
