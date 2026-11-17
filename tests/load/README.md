@@ -2,6 +2,21 @@
 
 全部业务程序、MySQL、Nginx、Supervisor、模拟发行平台/游戏和 k6 均运行在同一 GitHub 托管 Ubuntu Runner，不使用生产地址、密钥、数据，也不参与正式发布。脚本拒绝在非 GitHub 托管 Runner 执行。业务 API 和数据库结构不修改。
 
+## 逐接口固定 QPS 阶梯（Endpoint QPS Ladder）
+
+独立 GitHub Actions：**Runner Endpoint QPS Ladder**，只用 GitHub 托管 Ubuntu Runner，启动临时 MySQL、Nginx、Supervisor、配置中心、SDK Core、SDK Service、配置接入端和本地签名 Mock；不访问任何外部业务域名。PR 修改本测试套件时自动跑全部接口基础档；手动工作流提供这些输入：
+
+- group：quick（单接口快速验证）/ read（32 个只读或查询类场景）/ write（20 个写入、上报、回调场景）/ all（52 类路由）。
+- tiers：basic 读 50/200/500 QPS、写 10/30/60 QPS；high 读 100/500/1000/3000/5000/10000/20000 QPS、写 20/50/100/250 QPS。每个接口前一档失败就停止升级、保留失败指标；quick 固定 50/200/500 QPS。高档仅为探索目标。
+- topology：compact（2/1/1）或 cluster（2/4/4），每实例 GOMEMLIMIT=128MiB。
+- seconds：每档 3–15 秒。endpoint：可填 tests/load/endpoint-qps-catalog.json 中某个接口 ID 单独测试。
+
+执行前先跑一次 api-coverage.js，要求 52/52 合约成功；之后单接口逐档固定 arrival-rate，**每次迭代只发一次被测 API 请求**。记录目标 QPS、实际 HTTP/s、P95、P99、业务失败率、未启动迭代、MySQL 行锁等待增量和进程 CPU/RSS；导出 endpoint-qps-summary.csv/json 与各档原始日志。
+
+合格门槛：错误率小于 1%，P95 小于 500ms，P99 小于 1500ms，完成请求达到计划的 99%，丢弃率不超过 0.1%。最低档失败使任务失败；高档失败记录容量边界并停止加压。最高通过档仅代表此 Runner、此测试时长下通过的**已测试目标**，不是准确容量上限。
+
+写接口有明确数据边界：创建操作每请求生成唯一对象；删除操作每档预置独立临时行；更新使用可重复的测试数据；支付回调只测**已支付订单重复回调**；订单重试只测**不可重试订单返回 409**。后两项不代表首次支付或成功补偿的吞吐。Mock 链路和单机 Runner 的数据也不能当作生产环境最大性能。
+
 ## 全接口覆盖（api-coverage）
 
 Actions → Runner Load Test → Run workflow：选择 profile=api-coverage、topology=compact、scenario=all。该任务只在 GitHub 托管 Ubuntu Runner 上运行，所有 HTTP 目标固定为 127.0.0.1。它会启动配置中心、SDK Core、SDK Service、Nginx、MySQL、模拟游戏/平台，以及带独立临时 config_access 数据库的 config-center-access。
