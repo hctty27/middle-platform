@@ -29,6 +29,12 @@ def metric(data, name, key):
 def count(data, name):
     return int(metric(data, name, "count") or 0)
 
+def failure_rate(data, name):
+    observed = metric(data, name, "value")
+    if observed is None:
+        observed = metric(data, name, "rate")
+    return observed
+
 def query(sql):
     return subprocess.check_output(
         ["mysql", "-uroot", "-h127.0.0.1", "-N", "-B", "config_center", "-e", sql],
@@ -36,10 +42,17 @@ def query(sql):
 
 def run_k6(label, script, env):
     prefix = results / label
-    with (Path(str(prefix) + ".log")).open("w") as log:
-        proc = subprocess.run(
-            ["k6", "run", "--summary-export", str(prefix) + ".json", script],
-            env=env, stdout=log, stderr=subprocess.STDOUT, timeout=seconds + 65)
+    sampler = subprocess.Popen(
+        [sys.executable, "tests/load/process_monitor.py",
+         str(prefix) + ".process.tsv"])
+    try:
+        with (Path(str(prefix) + ".log")).open("w") as log:
+            proc = subprocess.run(
+                ["k6", "run", "--summary-export", str(prefix) + ".json", script],
+                env=env, stdout=log, stderr=subprocess.STDOUT, timeout=seconds + 65)
+    finally:
+        sampler.terminate()
+        sampler.wait(timeout=10)
     summary_path = Path(str(prefix) + ".json")
     if not summary_path.exists():
         print("\n".join(Path(str(prefix) + ".log").read_text().splitlines()[-30:]), flush=True)
@@ -50,9 +63,9 @@ def qualifier(data, exit_code, target):
     planned = target * seconds
     iterations = count(data, "iterations")
     dropped = count(data, "dropped_iterations")
-    failed = metric(data, "business_failed", "value")
+    failed = failure_rate(data, "business_failed")
     if failed is None:
-        failed = metric(data, "endpoint_bad", "value")
+        failed = failure_rate(data, "endpoint_bad")
     p95 = metric(data, "http_req_duration", "p(95)")
     p99 = metric(data, "http_req_duration", "p(99)")
     return (exit_code == 0 and failed is not None and failed < .01
@@ -81,7 +94,7 @@ for rate in rates:
     total = int(rows_total)
     qualified = bool(qualifier(data, rc, rate) and paid >= .99 * rate * seconds
                      and paid == iterations and total == iterations)
-    failed = metric(data, "business_failed", "value")
+    failed = failure_rate(data, "business_failed")
     row = dict(scenario="first_recharge",rate_per_second=rate,
                iterations=iterations,actual_http_per_second=metric(data,"http_reqs","rate"),
                business_bad_rate=failed,p95_ms=metric(data,"http_req_duration","p(95)"),
@@ -122,7 +135,7 @@ for rate in (50, 200, 500):
     row = dict(scenario="duplicate_payment_callback",rate_per_second=rate,
                iterations=count(data,"iterations"),
                actual_http_per_second=metric(data,"http_reqs","rate"),
-               business_bad_rate=metric(data,"endpoint_bad","value"),
+               business_bad_rate=failure_rate(data,"endpoint_bad"),
                p95_ms=metric(data,"http_req_duration","p(95)"),
                p99_ms=metric(data,"http_req_duration","p(99)"),
                dropped=count(data,"dropped_iterations"),registered_rows=None,
