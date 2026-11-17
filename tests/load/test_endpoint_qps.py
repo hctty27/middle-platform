@@ -20,7 +20,15 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertEqual(len({x["id"] for x in entries}),len(entries))
         js=SCRIPT.read_text()
         implemented=set(re.findall(r"case '([^']+)':",js))
-        self.assertEqual(implemented,{x["id"] for x in entries})
+        self.assertEqual(implemented - {"core-payment-notify"}, {x["id"] for x in entries})
+        # First-time payment is a distinct workload case sharing the same HTTP route
+        # as the existing catalogued duplicate-callback contract, not a new API.
+        self.assertIn("core-payment-notify", implemented)
+        workload=json.loads((ROOT/"tests/load/target-workload.json").read_text())
+        self.assertEqual(workload["scale"], 0.25)
+        self.assertEqual(workload["full_target_qps"]["payment"], 2000)
+        self.assertEqual(workload["categories"]["payment"], ["core-payment-notify"])
+        self.assertIn("core-payment-notify", SCRIPT.read_text())
         for item in entries:
             self.assertIn(item["group"],("read","write"))
             self.assertIn(item["mode"],("steady","delete","duplicate","reject"))
