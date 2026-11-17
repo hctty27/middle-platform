@@ -89,6 +89,20 @@ SSH 发布用户必须拥有动态 upstream 状态目录和共享发布锁的写
 
 发布前在本地 `publish/publish.config.json` 配置 SSH 连接信息，`remoteDirectory` 使用 `/data/middle-platform`。固定的 2/4/4 实例清单由发布脚本定义，无需重复配置；可选的 `config-center-access` 可通过 `services` 配置。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。发布前可自动恢复选中范围内已标记 down 且 Supervisor RUNNING、连续 3 次 Ready 返回 HTTP 200 的实例，并确认 Nginx worker 换代；健康、配置或恢复检查失败则在替换应用文件前停止。维护期间不要发布仍需人为摘除的服务。若实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。请手动同步新版 `ops/nginx/upstream-control.sh` 以启用恢复功能。
 
+## 日志时间规范
+
+四个 Go 服务（Config Center、可选 Config Center Access、SDK Core、SDK Service）共用 `shared/logging`：日志记录自身的时间统一输出为北京时间（`Asia/Shanghai`，`+08:00`），精确到毫秒。Supervisor 收集的应用 stdout 日志保留该时间文本。Nginx access log 使用 `$time_iso8601`，并通过 `ops/systemd/nginx.service.d/10-timezone.conf` 将 `TZ=Asia/Shanghai` 仅设置给 Nginx 进程；安装步骤见 [Nginx 运维说明](nginx/README.md)。这不会修改服务器全局时区。
+
+systemd journal 的时间显示遵循主机本地时区；如果主机时区不是北京时间，可在查看时临时指定，不必修改系统设置：
+
+```bash
+TZ=Asia/Shanghai journalctl -u nginx -n 100 --no-pager
+TZ=Asia/Shanghai journalctl -u supervisord -n 100 --no-pager
+TZ=Asia/Shanghai journalctl -u monit -n 100 --no-pager
+```
+
+数据库存储、MySQL 会话和内部 API 仍保持 UTC。日志展示时区转换不改变时间瞬间，不执行数据库数据迁移或业务时间加减 8 小时。
+
 ## 健康检查与数据库边界
 
 四个 Go 服务都提供 `/health/live` 和 `/health/ready`。当前 2/4/4 对外流量由 Nginx 路由：
