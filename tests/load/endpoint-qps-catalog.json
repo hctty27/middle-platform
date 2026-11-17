@@ -1,0 +1,366 @@
+[
+  {
+    "id": "health-live",
+    "route": "GET /health/live",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "health-ready",
+    "route": "GET /health/ready",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-revision",
+    "route": "GET /api/config/sync/revision",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-snapshot",
+    "route": "GET /api/config/sync/snapshot",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-changes",
+    "route": "GET /api/config/sync/changes",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-node",
+    "route": "GET /api/config/nodes/{id}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-batch",
+    "route": "POST /api/config/nodes/batch-get",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-schema",
+    "route": "GET /api/config/admin/config-schema/{nodeType}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-list",
+    "route": "GET /api/config/admin/nodes",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-admin-node",
+    "route": "GET /api/config/admin/nodes/{id}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-tree",
+    "route": "GET /api/config/admin/nodes/tree",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-children",
+    "route": "GET /api/config/admin/nodes/children",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-children-by-id",
+    "route": "GET /api/config/admin/nodes/{id}/children",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-search",
+    "route": "GET /api/config/admin/nodes/search",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-path",
+    "route": "GET /api/config/admin/nodes/{id}/path",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-subscribers",
+    "route": "GET /api/config/admin/subscribers",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-create-node",
+    "route": "POST /api/config/admin/nodes",
+    "group": "write",
+    "mode": "steady",
+    "expected": 201
+  },
+  {
+    "id": "config-update-node",
+    "route": "PUT /api/config/admin/nodes/{id}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "config-delete-node",
+    "route": "DELETE /api/config/admin/nodes/{id}",
+    "group": "write",
+    "mode": "delete",
+    "expected": 204
+  },
+  {
+    "id": "config-create-subscriber",
+    "route": "POST /api/config/admin/subscribers",
+    "group": "write",
+    "mode": "steady",
+    "expected": 201
+  },
+  {
+    "id": "config-update-subscriber",
+    "route": "PUT /api/config/admin/subscribers/{id}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 204
+  },
+  {
+    "id": "config-switch-subscriber",
+    "route": "PATCH /api/config/admin/subscribers/{id}/enabled",
+    "group": "write",
+    "mode": "steady",
+    "expected": 204
+  },
+  {
+    "id": "config-delete-subscriber",
+    "route": "DELETE /api/config/admin/subscribers/{id}",
+    "group": "write",
+    "mode": "delete",
+    "expected": 204
+  },
+  {
+    "id": "core-schema",
+    "route": "GET /api/core/admin/config-schema/{nodeType}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-node-config",
+    "route": "GET /api/core/admin/node-configs/{id}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-node-config-update",
+    "route": "PUT /api/core/admin/node-configs/{id}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-channels",
+    "route": "GET /api/core/admin/channel-apps",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-server-groups",
+    "route": "GET /api/core/admin/channel-apps/server-groups",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-server-bound",
+    "route": "GET /api/core/admin/server-groups/{id}/channel-apps",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-create-channel",
+    "route": "POST /api/core/admin/channel-apps",
+    "group": "write",
+    "mode": "steady",
+    "expected": 201
+  },
+  {
+    "id": "core-update-channel",
+    "route": "PUT /api/core/admin/channel-apps/{id}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-delete-channel",
+    "route": "DELETE /api/core/admin/channel-apps/{id}",
+    "group": "write",
+    "mode": "delete",
+    "expected": 204
+  },
+  {
+    "id": "core-services",
+    "route": "GET /api/core/admin/services",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-switch-service",
+    "route": "PUT /api/core/admin/services/{id}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 204
+  },
+  {
+    "id": "core-channel-services",
+    "route": "GET /api/core/admin/channel-apps/{id}/services",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-switch-channel-service",
+    "route": "PUT /api/core/admin/channel-apps/{id}/services/{serviceId}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 204
+  },
+  {
+    "id": "core-config",
+    "route": "GET /api/core/config/{env}/{appid}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "service-user-check",
+    "route": "POST /api/service/user/check/{env}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "service-event",
+    "route": "POST /api/service/events/{env}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "service-subscribe",
+    "route": "POST /api/service/subscribe/{env}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "service-role-query",
+    "route": "POST /api/service/role/query/{env}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "service-server-query",
+    "route": "POST /api/service/server/query/{env}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "service-role-control",
+    "route": "POST /api/service/role/control/{env}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-order-register",
+    "route": "POST /api/core/orders/{env}/{appid}",
+    "group": "write",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-payment-duplicate",
+    "route": "POST /api/core/pay/notify/{appid}",
+    "group": "write",
+    "mode": "duplicate",
+    "expected": 200
+  },
+  {
+    "id": "core-orders",
+    "route": "GET /api/core/admin/orders",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-order-stats",
+    "route": "GET /api/core/admin/orders/stats",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-order-detail",
+    "route": "GET /api/core/admin/orders/{id}",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "core-order-retry-reject",
+    "route": "POST /api/core/admin/orders/{id}/retry",
+    "group": "write",
+    "mode": "reject",
+    "expected": 409
+  },
+  {
+    "id": "access-webhook",
+    "route": "POST /internal/config/callback",
+    "group": "write",
+    "mode": "steady",
+    "expected": 202
+  },
+  {
+    "id": "access-revision",
+    "route": "GET /api/access/revision",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  },
+  {
+    "id": "access-nodes",
+    "route": "GET /api/access/nodes",
+    "group": "read",
+    "mode": "steady",
+    "expected": 200
+  }
+]

@@ -165,10 +165,14 @@ func main() {
 	mux.HandleFunc("POST /config/webhook", func(w http.ResponseWriter, r *http.Request) {
 		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
 		code, ts, nonce := r.Header.Get("X-Subscriber-Code"), r.Header.Get("X-Timestamp"), r.Header.Get("X-Nonce")
-		mac := hmac.New(sha256.New, []byte("runner-load-subscriber-only-0123456789"))
+		secret := "runner-load-subscriber-only-0123456789"
+		if strings.HasPrefix(code, "qps-sub-") {
+			secret = "runner-qps-secret-" + strings.TrimPrefix(code, "qps-sub-") + "-abcdef0123456789"
+		}
+		mac := hmac.New(sha256.New, []byte(secret))
 		_, _ = io.WriteString(mac, "HITALK-HMAC-SHA256\nSUBSCRIBER\n"+code+"\nPOST\n/config/webhook\n\n"+ts+"\n"+nonce+"\n")
 		_, _ = mac.Write(raw)
-		if err != nil || code != "load-subscriber" || len(nonce) != 16 ||
+		if err != nil || (code != "load-subscriber" && !strings.HasPrefix(code, "qps-sub-")) || len(nonce) != 16 ||
 			!hmac.Equal([]byte(r.Header.Get("X-Signature")), []byte(hex.EncodeToString(mac.Sum(nil)))) {
 			http.Error(w, "invalid webhook signature", http.StatusUnauthorized)
 			return

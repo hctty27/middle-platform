@@ -5,7 +5,7 @@ on:
       profile:
         description: Load profile (all traffic stays on this runner)
         type: choice
-        options: [smoke, api-coverage, traffic-quick, baseline, stress, capacity, traffic, traffic-multi, soak, soak2h]
+        options: [smoke, api-coverage, endpoint-qps, traffic-quick, baseline, stress, capacity, traffic, traffic-multi, soak, soak2h]
         default: smoke
       topology:
         description: Instance topology
@@ -17,6 +17,24 @@ on:
         type: choice
         options: [all, config-sync, sdk-config, user-check, event-report, order, duplicate, payment, mixed]
         default: all
+      endpoint_group:
+        description: Endpoint QPS targets
+        type: choice
+        options: [quick, read, write, all]
+        default: all
+      endpoint_tiers:
+        description: QPS ladder for endpoints
+        type: choice
+        options: [basic, high]
+        default: basic
+      endpoint_seconds:
+        description: Seconds per QPS tier
+        type: number
+        default: 5
+      endpoint_id:
+        description: Optional exact ID from endpoint-qps-catalog.json
+        type: string
+        default: ''
   pull_request:
     branches: [main]
     paths:
@@ -44,9 +62,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"},{"label":"api-coverage","topology":"compact","profile":"api-coverage"}]' || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' && (contains(github.event.pull_request.title, 'QPS') && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"},{"label":"api-coverage","topology":"compact","profile":"api-coverage"},{"label":"endpoint-qps","topology":"compact","profile":"endpoint-qps"}]' || '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"},{"label":"api-coverage","topology":"compact","profile":"api-coverage"}]') || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
 
     env:
+      ENDPOINT_GROUP: ${{ github.event_name == 'pull_request' && 'all' || inputs.endpoint_group }}
+      ENDPOINT_TIERS: ${{ github.event_name == 'pull_request' && 'basic' || inputs.endpoint_tiers }}
+      ENDPOINT_SECONDS: ${{ github.event_name == 'pull_request' && '3' || inputs.endpoint_seconds }}
+      ENDPOINT_CASE: ${{ inputs.endpoint_id || '' }}
       GOWORK: 'off'
       LOAD_PROFILE: ${{ matrix.profile }}
       LOAD_TOPOLOGY: ${{ matrix.topology }}
@@ -68,7 +90,7 @@ jobs:
           bash -n tests/load/setup.sh
           bash -n tests/load/setup-access.sh
           bash -n tests/load/run.sh
-          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py tests/load/multi_seed.py
+          python3 -m py_compile tests/load/endpoint-qps.py tests/load/test_endpoint_qps.py tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py tests/load/multi_seed.py
           python3 -m unittest discover -s tests/load -p 'test_*.py'
           if [[ "$LOAD_PROFILE" == capacity || "$LOAD_PROFILE" == traffic-multi ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
           test -z "$(gofmt -l tests/load/mock.go tests/load/mock_test.go)"
@@ -77,6 +99,7 @@ jobs:
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
           LOAD_SCENARIO=mixed k6 inspect tests/load/traffic.js
           k6 inspect tests/load/api-coverage.js
+          QPS_CASE=core-config k6 inspect --include-system-env-vars tests/load/endpoint-qps.js > /dev/null
       - name: Install local services
         run: |
           sudo apt-get update -q
@@ -86,13 +109,19 @@ jobs:
       - name: Start isolated application stack
         run: bash tests/load/setup.sh
       - name: Start optional config-center-access replica
-        if: matrix.profile == 'api-coverage'
+        if: matrix.profile == 'api-coverage' || matrix.profile == 'endpoint-qps'
         run: bash tests/load/setup-access.sh
       - name: Validate every registered HTTP API route
         if: matrix.profile == 'api-coverage'
         run: k6 run --summary-export "$LOAD_DIR/results/api-coverage.json" tests/load/api-coverage.js
+      - name: Run per-endpoint QPS ladders
+        if: matrix.profile == 'endpoint-qps'
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 -u tests/load/endpoint-qps.py "$LOAD_DIR" | tee "$LOAD_DIR/results/endpoint-qps-summary.md" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Run load scenarios
-        if: matrix.profile != 'capacity' && matrix.profile != 'traffic' && matrix.profile != 'traffic-quick' && matrix.profile != 'traffic-multi' && matrix.profile != 'api-coverage'
+        if: matrix.profile != 'endpoint-qps' && matrix.profile != 'capacity' && matrix.profile != 'traffic' && matrix.profile != 'traffic-quick' && matrix.profile != 'traffic-multi' && matrix.profile != 'api-coverage'
         run: bash tests/load/run.sh
       - name: Explore 10000 QPS and profile services
         if: matrix.profile == 'capacity'
@@ -107,7 +136,7 @@ jobs:
         run: |
           mkdir -p "$LOAD_DIR/results"
           mysql -uroot -h127.0.0.1 -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Max_used_connections','Slow_queries','Questions','Innodb_buffer_pool_reads','Innodb_row_lock_waits');" > "$LOAD_DIR/results/mysql-status.txt" 2>&1 || true
-          if [[ "$LOAD_PROFILE" != capacity && "$LOAD_PROFILE" != traffic && "$LOAD_PROFILE" != traffic-quick && "$LOAD_PROFILE" != traffic-multi && "$LOAD_PROFILE" != api-coverage ]]; then python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+          if [[ "$LOAD_PROFILE" != capacity && "$LOAD_PROFILE" != traffic && "$LOAD_PROFILE" != traffic-quick && "$LOAD_PROFILE" != traffic-multi && "$LOAD_PROFILE" != api-coverage && "$LOAD_PROFILE" != endpoint-qps ]]; then python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"; fi
       - name: Stop local services
         if: always()
         run: |

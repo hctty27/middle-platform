@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 : "$LOAD_DIR"
 [[ "$GITHUB_ACTIONS" == true && "$RUNNER_ENVIRONMENT" == github-hosted ]]
-[[ "$LOAD_PROFILE" == api-coverage ]] || { echo "api-coverage profile required"; exit 2; }
+[[ "$LOAD_PROFILE" == api-coverage || "$LOAD_PROFILE" == endpoint-qps ]] || { echo "api-coverage or endpoint-qps profile required"; exit 2; }
 
 # The optional config-center-access replica has its own disposable database.
 (cd config-center-access && GOWORK=off go build -trimpath -o "$LOAD_DIR/bin/config-center-access" ./cmd/config-center-access)
