@@ -416,7 +416,7 @@ Write-Host '发布包已更新到服务器，未执行数据库 SQL。'
 if ($SkipRestart -or $Service -eq 'admin') {
     Write-Host '已跳过 Supervisor 重启，现有进程仍需人工重启才能加载新二进制。'
 } else {
-    Write-Host '已执行 Supervisor 重启与健康检查；失败会中止发布并报错，不提供自动回滚。'
+    Write-Host '已检查 Supervisor 实例，变更或无法确认运行版本的实例执行滚动重启；失败会中止发布并报错，不提供自动回滚。'
 }
 
 Write-Host ("发布总耗时: {0:N1}s" -f $publishTimer.Elapsed.TotalSeconds)

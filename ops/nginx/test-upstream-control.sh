@@ -216,4 +216,37 @@ printf 'include /etc/passwd;\n' >> "$file"
 status=0
 output=$("$control" validate config-center 8201) || status=$?
 [[ "$status" -ne 0 && "$status" -ne 3 && -z "$output" ]]
+# Batch changes are atomic at the reload boundary: one peer per distinct group.
+reset_upstream
+[[ $("$control" capabilities) == batch-v1 ]]
+read -r before < "$TEST_GENERATION"
+"$control" batch validate config-center:8201 config-center:8202 sdk-core:8211 sdk-service:8221
+"$control" batch drain config-center:8201 sdk-core:8211 sdk-service:8221
+read -r after < "$TEST_GENERATION"
+[[ "$after" -eq $((before + 1)) ]]
+for pair in config-center:8201 sdk-core:8211 sdk-service:8221; do
+    grep -Fq "127.0.0.1:${pair#*:} max_fails=1 fail_timeout=10s down;" "$root/run/nginx/${pair%%:*}-upstream.conf"
+done
+status=0
+output=$("$control" batch validate config-center:8201 sdk-core:8212) || status=$?
+[[ "$status" -eq 3 ]]
+grep -Fxq 'UPSTREAM_DOWN config-center 8201' <<< "$output"
+grep -Fxq 'Validated sdk-core upstream port 8212' <<< "$output"
+if "$control" batch drain config-center:8202 sdk-core:8212; then
+    printf 'Batch drained last config-center peer\n' >&2; exit 1
+fi
+grep -Fxq 'server 127.0.0.1:8212 max_fails=1 fail_timeout=10s;' "$root/run/nginx/sdk-core-upstream.conf"
+if "$control" batch drain sdk-core:8212 sdk-core:8213; then
+    printf 'Batch accepted two peers of same upstream\n' >&2; exit 1
+fi
+"$control" batch enable config-center:8201 sdk-core:8211 sdk-service:8221
+read -r after < "$TEST_GENERATION"
+[[ "$after" -eq $((before + 2)) ]]
+"$control" batch validate config-center:8201 sdk-core:8211 sdk-service:8221
+reset_upstream
+if TEST_PS_MODE=sticky "$control" batch drain config-center:8201 sdk-core:8211; then
+    printf 'Batch drain succeeded without worker rotation\n' >&2; exit 1
+fi
+grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;' "$file"
+grep -Fxq 'server 127.0.0.1:8211 max_fails=1 fail_timeout=10s down;' "$root/run/nginx/sdk-core-upstream.conf"
 printf 'Nginx upstream control tests passed\n'

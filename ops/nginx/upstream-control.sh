@@ -1,64 +1,96 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ $# -ne 3 ]]; then
-    printf 'Usage: upstream-control.sh <validate|drain|enable|recover> <config-center|sdk-core|sdk-service> <port>\n' >&2
+if [[ $# -eq 1 && "$1" == capabilities ]]; then
+    printf 'batch-v1\n'
+    exit 0
+fi
+if [[ $# -ge 3 && "$1" == batch ]]; then
+    action=$2
+    shift 2
+    peers=("$@")
+    case "$action" in validate|drain|enable) ;; *) exit 2 ;; esac
+elif [[ $# -eq 3 ]]; then
+    action=$1
+    peers=("$2:$3")
+else
+    printf 'Usage: upstream-control.sh <validate|drain|enable|recover> <group> <port> | batch <validate|drain|enable> <group:port> ...\n' >&2
     exit 2
 fi
-action=$1
-group=$2
-port=$3
 root=${MIDDLE_PLATFORM_ROOT:-/data/middle-platform}
 case "$action" in validate|drain|enable|recover) ;; *) printf 'Invalid upstream action\n' >&2; exit 2 ;; esac
-case "$group:$port" in
-    config-center:8201|config-center:8202)
-        expected_count=2; upstream_name=config_center; file="$root/run/nginx/config-center-upstream.conf" ;;
-    sdk-core:8211|sdk-core:8212|sdk-core:8213|sdk-core:8214)
-        expected_count=4; upstream_name=sdk_core; file="$root/run/nginx/sdk-core-upstream.conf" ;;
-    sdk-service:8221|sdk-service:8222|sdk-service:8223|sdk-service:8224)
-        expected_count=4; upstream_name=sdk_service; file="$root/run/nginx/sdk-service-upstream.conf" ;;
-    *) printf 'Unsupported upstream group or port: %s:%s\n' "$group" "$port" >&2; exit 2 ;;
-esac
-for directory in "$root" "$root/run" "$root/run/nginx"; do
-    if [[ -L "$directory" ]]; then printf 'Refusing symlinked directory: %s\n' "$directory" >&2; exit 1; fi
-done
-if [[ ! -f "$file" || -L "$file" ]]; then
-    printf 'Missing or unsafe Nginx runtime upstream file: %s\n' "$file" >&2; exit 1
-fi
-target="127.0.0.1:$port"
-if ! counts=$(awk -v target="$target" '
-    { sub(/\r$/, "", $0) }
-    NF == 0 { next }
-    {
-        if ($1 != "server" || $2 !~ /^127[.]0[.]0[.]1:[0-9]+$/ ||
-            $3 != "max_fails=1" ||
-            !((NF == 4 && $4 == "fail_timeout=10s;") ||
-              (NF == 5 && $4 == "fail_timeout=10s" && $5 == "down;"))) {
-            invalid = 1
-            next
+[[ ${#peers[@]} -le 10 ]] || exit 2
+declare -A selected_peers=() selected_groups=()
+groups=() ports=() files=() upstream_names=() targets=() downs=()
+for peer in "${peers[@]}"; do
+    if [[ ! "$peer" =~ ^(config-center|sdk-core|sdk-service):([0-9]+)$ ]]; then
+        printf 'Unsupported upstream group or port: %s\n' "$peer" >&2
+        exit 2
+    fi
+    group=${BASH_REMATCH[1]}
+    port=${BASH_REMATCH[2]}
+    if [[ -n "${selected_peers[$peer]:-}" || ( "$action" != validate && -n "${selected_groups[$group]:-}" ) ]]; then
+        printf 'Duplicate peer or multiple mutations of the same upstream: %s\n' "$peer" >&2
+        exit 2
+    fi
+    selected_peers[$peer]=1
+    selected_groups[$group]=1
+    case "$group:$port" in
+        config-center:8201|config-center:8202)
+            expected_count=2; upstream_name=config_center; file="$root/run/nginx/config-center-upstream.conf" ;;
+        sdk-core:8211|sdk-core:8212|sdk-core:8213|sdk-core:8214)
+            expected_count=4; upstream_name=sdk_core; file="$root/run/nginx/sdk-core-upstream.conf" ;;
+        sdk-service:8221|sdk-service:8222|sdk-service:8223|sdk-service:8224)
+            expected_count=4; upstream_name=sdk_service; file="$root/run/nginx/sdk-service-upstream.conf" ;;
+        *) printf 'Unsupported upstream group or port: %s:%s\n' "$group" "$port" >&2; exit 2 ;;
+    esac
+    for directory in "$root" "$root/run" "$root/run/nginx"; do
+        if [[ -L "$directory" ]]; then printf 'Refusing symlinked directory: %s\n' "$directory" >&2; exit 1; fi
+    done
+    if [[ ! -f "$file" || -L "$file" ]]; then
+        printf 'Missing or unsafe Nginx runtime upstream file: %s\n' "$file" >&2; exit 1
+    fi
+    target="127.0.0.1:$port"
+    if ! counts=$(awk -v target="$target" '
+        { sub(/\r$/, "", $0) }
+        NF == 0 { next }
+        {
+            if ($1 != "server" || $2 !~ /^127[.]0[.]0[.]1:[0-9]+$/ ||
+                $3 != "max_fails=1" ||
+                !((NF == 4 && $4 == "fail_timeout=10s;") ||
+                  (NF == 5 && $4 == "fail_timeout=10s" && $5 == "down;"))) {
+                invalid = 1
+                next
+            }
+            total++
+            down = (NF == 5)
+            if (!down) active++
+            if ($2 == target) { matches++; if (down) target_down = 1 }
         }
-        total++
-        down = (NF == 5)
-        if (!down) active++
-        if ($2 == target) { matches++; if (down) target_down = 1 }
-    }
-    END {
-        if (invalid) exit 2
-        printf "%d %d %d %d\n", total, active, matches, target_down
-    }
-' "$file"); then
-    printf 'Unsafe or malformed Nginx upstream file: %s\n' "$file" >&2
-    exit 1
-fi
-read -r total active matches target_down <<< "$counts"
-if [[ "$total" -ne "$expected_count" || "$matches" -ne 1 ]]; then
-    printf 'Unexpected upstream membership in %s (total=%s matches=%s expected=%s)\n' \
-        "$file" "$total" "$matches" "$expected_count" >&2
-    exit 1
-fi
-if [[ "$action" == drain && "$target_down" -eq 0 && "$active" -le 1 ]]; then
-    printf 'Refusing to drain the last active %s instance\n' "$group" >&2
-    exit 1
-fi
+        END {
+            if (invalid) exit 2
+            printf "%d %d %d %d\n", total, active, matches, target_down
+        }
+    ' "$file"); then
+        printf 'Unsafe or malformed Nginx upstream file: %s\n' "$file" >&2
+        exit 1
+    fi
+    read -r total active matches target_down <<< "$counts"
+    if [[ "$total" -ne "$expected_count" || "$matches" -ne 1 ]]; then
+        printf 'Unexpected upstream membership in %s (total=%s matches=%s expected=%s)\n' \
+            "$file" "$total" "$matches" "$expected_count" >&2
+        exit 1
+    fi
+    if [[ "$action" == drain && "$target_down" -eq 0 && "$active" -le 1 ]]; then
+        printf 'Refusing to drain the last active %s instance\n' "$group" >&2
+        exit 1
+    fi
+    groups+=("$group")
+    ports+=("$port")
+    files+=("$file")
+    upstream_names+=("$upstream_name")
+    targets+=("$target")
+    downs+=("$target_down")
+done
 nginx_bin=${NGINX_BIN:-$(command -v nginx || true)}
 systemctl_bin=${SYSTEMCTL_BIN:-$(command -v systemctl || true)}
 sudo_bin=${SUDO_BIN:-$(command -v sudo || true)}
@@ -78,7 +110,11 @@ validate_nginx_config() {
         printf 'nginx -T failed; inspect the Nginx configuration as root\n' >&2
         return 1
     }
-    if ! grep -Fq "# configuration file $file:" <<< "$dump"; then
+    local index file upstream_name
+    for index in "${!files[@]}"; do
+        file=${files[$index]}
+        upstream_name=${upstream_names[$index]}
+        if ! grep -Fq "# configuration file $file:" <<< "$dump"; then
         printf 'Nginx does not load runtime include: %s\n' "$file" >&2; return 1
     fi
     if ! grep -Eq "^[[:space:]]*upstream[[:space:]]+$upstream_name[[:space:]]*\\{" <<< "$dump"; then
@@ -87,6 +123,7 @@ validate_nginx_config() {
     if ! grep -Eq "^[[:space:]]*proxy_pass[[:space:]]+http://$upstream_name;" <<< "$dump"; then
         printf 'Nginx proxy location is missing for upstream: %s\n' "$upstream_name" >&2; return 1
     fi
+    done
     if ! grep -Eq "^[[:space:]]*worker_shutdown_timeout[[:space:]]+75s;" <<< "$dump"; then
         printf 'Nginx main context must set worker_shutdown_timeout 75s\n' >&2; return 1
     fi
@@ -173,70 +210,108 @@ wait_for_old_workers() {
 }
 validate_nginx_config
 if [[ "$action" == validate ]]; then
-    if [[ "$target_down" -eq 1 ]]; then
-        # A dedicated status is only returned after all read-only safety checks pass.
-        printf 'UPSTREAM_DOWN %s %s\n' "$group" "$port"
-        printf 'Upstream instance is already marked down: %s port %s\n' "$group" "$port" >&2
-        exit 3
-    fi
-    printf 'Validated %s upstream port %s\n' "$group" "$port"
-    exit 0
+    result=0
+    for index in "${!groups[@]}"; do
+        group=${groups[$index]}
+        port=${ports[$index]}
+        if [[ "${downs[$index]}" -eq 1 ]]; then
+            printf 'UPSTREAM_DOWN %s %s\n' "$group" "$port"
+            printf 'Upstream instance is already marked down: %s port %s\n' "$group" "$port" >&2
+            result=3
+        else
+            printf 'Validated %s upstream port %s\n' "$group" "$port"
+        fi
+    done
+    exit "$result"
 fi
-if [[ "$action" == drain && "$target_down" -eq 1 ]]; then
-    # A prior failure may have left the file down without applying the reload.
-    snapshot_old_workers || exit 1
-    if ! reload_nginx || ! wait_for_old_workers; then
-        printf 'Instance remains marked down; refusing to restart it before Nginx workers exit\n' >&2
-        exit 1
-    fi
-    printf 'Already drained: %s port %s\n' "$group" "$port"
-    exit 0
-fi
-if [[ ( "$action" == enable || "$action" == recover ) && "$target_down" -eq 0 ]]; then
-    printf 'Already enabled: %s port %s\n' "$group" "$port"
-    exit 0
-fi
-directory=$(dirname -- "$file")
-backup=$(mktemp "$directory/.upstream-backup-XXXXXXXX")
-temporary=$(mktemp "$directory/.upstream-update-XXXXXXXX")
-cleanup() { rm -f -- "$temporary" "$backup"; }
-trap cleanup EXIT
-cp -p -- "$file" "$backup"
-if ! awk -v target="$target" -v action="$action" '
-    { sub(/\r$/, "", $0) }
-    $1 == "server" && $2 == target {
-        matched++
-        down = 0
-        for (i = 3; i <= NF; i++) if ($i == "down;") down = 1
-        if (action == "drain" && !down) sub(/;[[:space:]]*$/, " down;")
-        if ((action == "enable" || action == "recover") && down) {
-            $4 = "fail_timeout=10s;"
-            $5 = ""
-            line = $1 " " $2
-            for (i = 3; i <= NF; i++) if ($i != "") line = line " " $i
-            $0 = line
-        }
-    }
-    { print }
-    END { if (matched != 1) exit 2 }
-' "$file" > "$temporary"; then
-    printf 'Could not update Nginx upstream state\n' >&2; exit 1
-fi
-chmod --reference="$file" "$temporary"
-mv -fT -- "$temporary" "$file"
-rollback_file() {
-    mv -fT -- "$backup" "$file"
-    "$sudo_bin" -n "$nginx_bin" -t >/dev/null 2>&1 || true
-    "$sudo_bin" -n "$systemctl_bin" reload nginx >/dev/null 2>&1 || true
+
+# Prepare every peer file before replacing any of them. Only one mutation per
+# upstream is accepted. The publish/Monit lock is held by the caller.
+backups=() temporaries=() changes=() applied=()
+cleanup() {
+    local index
+    for index in "${!files[@]}"; do
+        if [[ -n "${temporaries[$index]:-}" ]]; then rm -f -- "${temporaries[$index]}"; fi
+        if [[ -n "${backups[$index]:-}" ]]; then rm -f -- "${backups[$index]}"; fi
+    done
 }
-if ! validate_nginx_config; then rollback_file; exit 1; fi
-if [[ ( "$action" == drain || "$action" == recover ) ]] && ! snapshot_old_workers; then
-    # No reload has been requested; restore only the on-disk state.
-    mv -fT -- "$backup" "$file"
+trap cleanup EXIT
+for index in "${!files[@]}"; do
+    file=${files[$index]}
+    target=${targets[$index]}
+    if [[ ( "$action" == drain && "${downs[$index]}" -eq 1 ) ||
+          ( "$action" != drain && "${downs[$index]}" -eq 0 ) ]]; then
+        continue
+    fi
+    directory=$(dirname -- "$file")
+    backup=$(mktemp "$directory/.upstream-backup-XXXXXXXX")
+    backups[$index]=$backup
+    temporary=$(mktemp "$directory/.upstream-update-XXXXXXXX")
+    temporaries[$index]=$temporary
+    cp -p -- "$file" "$backup"
+    if ! awk -v target="$target" -v action="$action" '
+        { sub(/\r$/, "", $0) }
+        $1 == "server" && $2 == target {
+            matched++
+            down = 0
+            for (i = 3; i <= NF; i++) if ($i == "down;") down = 1
+            if (action == "drain" && !down) sub(/;[[:space:]]*$/, " down;")
+            if ((action == "enable" || action == "recover") && down) {
+                $4 = "fail_timeout=10s;"
+                $5 = ""
+                line = $1 " " $2
+                for (i = 3; i <= NF; i++) if ($i != "") line = line " " $i
+                $0 = line
+            }
+        }
+        { print }
+        END { if (matched != 1) exit 2 }
+    ' "$file" > "$temporary"; then
+        printf 'Could not update Nginx upstream state\n' >&2; exit 1
+    fi
+    chmod --reference="$file" "$temporary"
+    changes+=("$index")
+done
+
+restore_files() {
+    local index
+    if [[ -n "${applied[0]:-}" ]]; then
+        for index in "${applied[@]}"; do
+            if ! mv -fT -- "${backups[$index]}" "${files[$index]}"; then
+                printf 'Could not restore upstream file: %s\n' "${files[$index]}" >&2
+                # Preserve its backup for manual recovery.
+                unset 'backups[$index]'
+            fi
+        done
+    fi
+}
+rollback_reload() {
+    restore_files
+    "$sudo_bin" -n "$nginx_bin" -t >/dev/null 2>&1 || true
+    reload_nginx >/dev/null 2>&1 || true
+}
+
+if [[ -n "${changes[0]:-}" ]]; then
+    for index in "${changes[@]}"; do
+        if ! mv -fT -- "${temporaries[$index]}" "${files[$index]}"; then
+            restore_files
+            exit 1
+        fi
+        applied+=("$index")
+    done
+    if ! validate_nginx_config; then restore_files; exit 1; fi
+elif [[ "$action" != drain ]]; then
+    printf 'Requested peers are already enabled\n'
+    exit 0
+fi
+# A previously down peer may not yet have been applied to running workers.
+# Always rotate workers before returning a successful drain.
+if [[ "$action" == drain || "$action" == recover ]] && ! snapshot_old_workers; then
+    restore_files
     exit 1
 fi
 if ! reload_nginx; then
-    rollback_file
+    rollback_reload
     printf 'Nginx reload failed; upstream state was rolled back\n' >&2
     exit 1
 fi
@@ -245,10 +320,10 @@ if [[ "$action" == drain ]] && ! wait_for_old_workers; then
     exit 1
 fi
 if [[ "$action" == recover ]] && ! wait_for_old_workers; then
-    rollback_file
+    rollback_reload
     printf 'Nginx recovery could not confirm worker rotation; restored down on disk; inspect Nginx runtime before retrying\n' >&2
     exit 1
 fi
-rm -f -- "$backup"
-trap - EXIT
-printf '%s %s upstream port %s\n' "$action" "$group" "$port"
+for index in "${!groups[@]}"; do
+    printf '%s %s upstream port %s\n' "$action" "${groups[$index]}" "${ports[$index]}"
+done
