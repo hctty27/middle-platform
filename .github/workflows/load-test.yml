@@ -72,6 +72,7 @@ jobs:
           if [[ "$LOAD_PROFILE" == capacity || "$LOAD_PROFILE" == traffic-multi ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
           test -z "$(gofmt -l tests/load/mock.go tests/load/mock_test.go)"
           go test tests/load/mock.go tests/load/mock_test.go
+          pwsh -NoProfile -Command '$tokens = $null; $errors = $null; [System.Management.Automation.Language.Parser]::ParseFile("tests/load/run-independent.ps1", [ref]$tokens, [ref]$errors) | Out-Null; if ($errors.Count -ne 0) { throw ($errors | Out-String) }'
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
           LOAD_SCENARIO=mixed k6 inspect tests/load/traffic.js
       - name: Install local services

@@ -1,0 +1,143 @@
+name: Independent Windows Load Test (manual)
+# Manual owner-only dispatch from trusted main; never runs on push/PR.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Runner preflight only (default), or authorized isolated load"
+        type: choice
+        options: [verify-runner, load-test]
+        default: verify-runner
+        required: true
+      max_qps:
+        description: "Maximum total QPS; stages increase from 400"
+        type: choice
+        options: ['400', '1000', '2000', '3000', '5000', '10000']
+        default: '400'
+        required: true
+      seconds:
+        description: "Per-stage duration"
+        type: choice
+        options: ['10', '20', '30', '60']
+        default: '20'
+        required: true
+      confirmation:
+        description: "For load-test, type AUTHORIZED-ISOLATED-TEST"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+concurrency:
+  group: isolated-windows-load-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  safety-gate:
+    name: Require owner and main branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Deny every caller except repo owner on main
+        shell: bash
+        env:
+          OWNER: ${{ github.actor }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO_NAME: ${{ github.repository }}
+          GIT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$OWNER" != "hctty27" || "$EVENT_NAME" != "workflow_dispatch" || "$REPO_NAME" != "hctty27/middle-platform" || "$GIT_REF" != "refs/heads/main" ]]; then
+            echo "::error::Only the owner of hctty27/middle-platform may manually dispatch on main."
+            exit 1
+          fi
+
+  isolated-load:
+    name: Dedicated Windows runner / ${{ inputs.mode }}
+    needs: safety-gate
+    # Exact device name is verified before any checkout or k6 invocation.
+    runs-on: [self-hosted, Windows, X64]
+    environment: isolated-load-test
+    timeout-minutes: 30
+    env:
+      LOAD_TEST_BASE_URL: ${{ vars.ISOLATED_TEST_BASE_URL }}
+      LOAD_TEST_FIXTURE_FILE: ${{ vars.ISOLATED_TEST_FIXTURE_FILE }}
+      LOAD_TEST_ENABLED: ${{ vars.ISOLATED_TEST_LOAD_ENABLED }}
+      REQUESTED_MODE: ${{ inputs.mode }}
+      REQUESTED_QPS: ${{ inputs.max_qps }}
+      REQUESTED_SECONDS: ${{ inputs.seconds }}
+      REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Verify exact Windows runner and discover k6
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') { throw 'Wrong runner; refusing execution.' }
+          $paths = New-Object System.Collections.Generic.List[string]
+          $cmd = Get-Command k6 -ErrorAction SilentlyContinue
+          if ($cmd -and $cmd.CommandType -eq 'Application') { $paths.Add($cmd.Source) }
+          foreach ($folder in @(
+            "$env:ProgramFiles/k6", "$env:ProgramFiles/Grafana Labs/k6",
+            "$env:LOCALAPPDATA/Microsoft/WinGet/Links", "$env:LOCALAPPDATA/Microsoft/WinGet/Packages"
+          )) {
+            if (Test-Path -LiteralPath $folder -PathType Container) {
+              Get-ChildItem -LiteralPath $folder -Recurse -File -Filter k6.exe -ErrorAction SilentlyContinue |
+                ForEach-Object { $paths.Add($_.FullName) }
+            }
+          }
+          foreach ($profile in @(Get-ChildItem -LiteralPath "$env:SystemDrive/Users" -Directory -ErrorAction SilentlyContinue)) {
+            foreach ($suffix in @('AppData/Local/Microsoft/WinGet/Links','AppData/Local/Microsoft/WinGet/Packages')) {
+              $folder = Join-Path $profile.FullName $suffix
+              if (Test-Path -LiteralPath $folder -PathType Container) {
+                Get-ChildItem -LiteralPath $folder -Recurse -File -Filter k6.exe -ErrorAction SilentlyContinue |
+                  ForEach-Object { $paths.Add($_.FullName) }
+              }
+            }
+          }
+          $found = $false
+          foreach ($exe in @($paths | Select-Object -Unique)) {
+            if (Test-Path -LiteralPath $exe -PathType Leaf) {
+              & $exe version
+              if ($LASTEXITCODE -eq 0) {
+                $utf8 = New-Object System.Text.UTF8Encoding($false)
+                $line = (Split-Path -Parent $exe) + [Environment]::NewLine
+                [System.IO.File]::AppendAllText($env:GITHUB_PATH, $line, $utf8)
+                $found = $true
+                break
+              }
+            }
+          }
+          if (-not $found) { throw 'k6.exe not available to this runner.' }
+          Write-Host 'Runner and k6 verified. No requests have been sent.'
+      - name: Check out trusted main only for confirmed load-test mode
+        if: inputs.mode == 'load-test'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify only (zero network load)
+        if: inputs.mode == 'verify-runner'
+        shell: powershell
+        run: Write-Host 'Verify-only completed. Run mode=load-test only after isolated target and fixture are prepared.'
+      - name: Execute authorized isolated load, increasing in stages
+        if: inputs.mode == 'load-test'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:LOAD_TEST_ENABLED -cne 'true') {
+            throw 'Set repository variable ISOLATED_TEST_LOAD_ENABLED=true after target approval.'
+          }
+          if ($env:REQUESTED_CONFIRMATION -cne 'AUTHORIZED-ISOLATED-TEST') {
+            throw 'Explicit authorization confirmation is required.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:LOAD_TEST_BASE_URL) -or
+              [string]::IsNullOrWhiteSpace($env:LOAD_TEST_FIXTURE_FILE)) {
+            throw 'ISOLATED_TEST_BASE_URL and ISOLATED_TEST_FIXTURE_FILE must be configured.'
+          }
+          $maxQPS = [int]$env:REQUESTED_QPS
+          $allow10000 = ($maxQPS -eq 10000)
+          & ./tests/load/run-independent.ps1 -BaseUrl $env:LOAD_TEST_BASE_URL `
+            -FixtureFile $env:LOAD_TEST_FIXTURE_FILE `
+            -Confirm 'AUTHORIZED-ISOLATED-TEST' `
+            -MaxQPS $maxQPS -Seconds ([int]$env:REQUESTED_SECONDS) -Allow10000:$allow10000
+          if (-not $?) { throw 'Isolated load failed.' }
