@@ -70,6 +70,18 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertIn("config-center-access", monitor)
         self.assertIn("if (!kind)", script)
         self.assertNotIn("mp.skybluek.com", workflow+script+py)
+        recharge=(ROOT/"tests/load/recharge-qps.py").read_text()
+        self.assertIn('LOAD_SCENARIO="payment"', recharge)
+        self.assertIn('"first_recharge"', recharge)
+        self.assertIn('"duplicate_payment_callback"', recharge)
+        self.assertIn("payment_status=1", recharge)
+        self.assertIn("20, 50, 100, 250", recharge)
+        self.assertIn("50, 200, 500", recharge)
+        self.assertIn("recharge-qps.py", workflow)
+        self.assertIn("payment_exit", workflow)
+        self.assertIn("RUNNER_ENVIRONMENT", recharge)
+        self.assertNotIn("mp.skybluek.com", recharge)
+        self.assertNotIn("https://", recharge)
 
 
 if __name__=="__main__":
