@@ -24,7 +24,7 @@ nginx = [
     "events { worker_connections 2048; }",
     "http {",
     *[f"{kind}_temp_path {root}/{kind}_temp;" for kind in ("client_body", "proxy", "fastcgi", "uwsgi", "scgi")],
-    f"access_log {root}/logs/nginx-access.log buffer=64k flush=1s;",
+    f"access_log {root}/logs/nginx-access.log combined buffer=64k flush=1s;",
 ]
 ports = []
 diagnostics = []
