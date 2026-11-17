@@ -169,8 +169,8 @@ baseline_failures = []
 print("## GitHub-hosted endpoint QPS ladder (local-only)\n", flush=True)
 print(f"Selected {len(chosen)} routes, group={group}, tiers={tiers}, seconds={duration}. "
       "One measured target request per iteration; no production traffic.\n", flush=True)
-print("| Endpoint | Mode | Target QPS | Actual HTTP/s | P95 ms | P99 ms | Bad % | 409 | 5xx | Dropped | MySQL locks | Result |")
-print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|", flush=True)
+print("| Endpoint | Mode | Target QPS | VUs | Actual HTTP/s | P95 ms | P99 ms | Bad % | 401 | 409 | 429 | 503 | 5xx | Dropped | MySQL locks | Result |", flush=True)
+print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|", flush=True)
 
 for pos, case in enumerate(chosen):
     rates = ([50,200,500] if group == "quick" else
@@ -231,23 +231,25 @@ for pos, case in enumerate(chosen):
             and dropped <= planned * 0.001)
         status = "PASS" if eligible else "STOP"
         row = {"id":case["id"],"route":case["route"],"group":case["group"],
-               "mode":case["mode"],"target_qps":rate,"actual_http_qps":actual,
-               "p95_ms":p95,"p99_ms":p99,"bad_rate":errors,
+               "mode":case["mode"],"target_qps":rate,"preallocated_vus":vus,
+               "actual_http_qps":actual,"p95_ms":p95,"p99_ms":p99,"bad_rate":errors,
                "planned":planned,"iterations":iterations,"dropped":dropped,
                "sql_lock_waits":lock_waits,"exit":run.returncode,"qualified":eligible,
-               "http_409":auth_conflicts,"http_429":throttles,
-               "http_401":unauthenticated,"http_503":service_unavailable,
-               "http_5xx":http_5xx,
-               "diagnostic_hint":("nonce_capacity_or_http_conflict" if auth_conflicts else
+               "http_401":unauthenticated,"http_409":auth_conflicts,"http_429":throttles,
+               "http_503":service_unavailable,"http_5xx":http_5xx,
+               "diagnostic_hint":("signature_auth_401" if unauthenticated else
+                                  "nonce_capacity_or_http_conflict_409" if auth_conflicts else
+                                  "application_rate_limit_429" if throttles else
+                                  "dependency_unavailable_503" if service_unavailable else
                                   "upstream_or_server_5xx" if http_5xx else
                                   "load_generator_or_sut_latency_drops" if dropped else
                                   "business_or_validation" if not eligible else "pass")}
         rows.append(row)
         print("| " + " | ".join([
-            case["id"],case["mode"],str(rate),number(actual),number(p95),
+            case["id"],case["mode"],str(rate),str(vus),number(actual),number(p95),
             number(p99),number(None if errors is None else errors*100),
-            str(auth_conflicts),str(http_5xx),
-            str(dropped),str(lock_waits),status
+            str(unauthenticated),str(auth_conflicts),str(throttles),
+            str(service_unavailable),str(http_5xx),str(dropped),str(lock_waits),status
         ])+" |", flush=True)
         if not eligible:
             if tier == 0:
