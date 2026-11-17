@@ -65,13 +65,15 @@ jobs:
         include: ${{ fromJSON(github.event_name == 'pull_request' && (contains(github.event.pull_request.title, 'QPS') && '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"},{"label":"api-coverage","topology":"compact","profile":"api-coverage"},{"label":"endpoint-qps","topology":"compact","profile":"endpoint-qps"}]' || '[{"label":"compact","topology":"compact","profile":"smoke"},{"label":"cluster","topology":"cluster","profile":"smoke"},{"label":"traffic-quick-compact","topology":"compact","profile":"traffic-quick"},{"label":"api-coverage","topology":"compact","profile":"api-coverage"}]') || (inputs.topology == 'both' && format('[{{"label":"compact","topology":"compact","profile":"{0}"}},{{"label":"cluster","topology":"cluster","profile":"{0}"}}]', inputs.profile) || format('[{{"label":"{0}","topology":"{0}","profile":"{1}"}}]', inputs.topology || 'compact', inputs.profile || 'smoke'))) }}
 
     env:
-      ENDPOINT_GROUP: ${{ github.event_name == 'pull_request' && 'all' || inputs.endpoint_group }}
-      ENDPOINT_TIERS: ${{ github.event_name == 'pull_request' && 'basic' || inputs.endpoint_tiers }}
-      ENDPOINT_SECONDS: ${{ github.event_name == 'pull_request' && '3' || inputs.endpoint_seconds }}
+      ENDPOINT_GROUP: ${{ github.event_name == 'pull_request' && (contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && 'read' || 'all') || inputs.endpoint_group }}
+      ENDPOINT_TIERS: ${{ github.event_name == 'pull_request' && (contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && 'high' || 'basic') || inputs.endpoint_tiers }}
+      ENDPOINT_SECONDS: ${{ github.event_name == 'pull_request' && (contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && '5' || '3') || inputs.endpoint_seconds }}
+      ENDPOINT_RATES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && '5000,10000,20000' || '' }}
+      ENDPOINT_VUS_CAP: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && '800' || '500' }}
       ENDPOINT_CASE: ${{ inputs.endpoint_id || '' }}
       GOWORK: 'off'
       LOAD_PROFILE: ${{ matrix.profile }}
-      LOAD_TOPOLOGY: ${{ matrix.topology }}
+      LOAD_TOPOLOGY: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && matrix.profile == 'endpoint-qps' && 'cluster' || matrix.topology }}
       LOAD_SCENARIO: ${{ inputs.scenario || 'all' }}
       MYSQL_PWD: runner-load-only
     steps:
