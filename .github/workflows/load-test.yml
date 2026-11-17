@@ -77,7 +77,8 @@ jobs:
         run: bash tests/load/run.sh
       - name: Explore 10000 QPS and profile services
         if: matrix.profile == 'capacity'
-        run: python3 tests/load/capacity.py "$LOAD_DIR" | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: python3 -u tests/load/capacity.py "$LOAD_DIR" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Explore all scenario saturation (PR only)
         if: github.event_name == 'pull_request' && matrix.profile == 'smoke'
         continue-on-error: true
