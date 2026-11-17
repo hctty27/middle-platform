@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from statistics import mean
 
-ROLES = {"config-center", "sdk-core", "sdk-service", "mysqld", "nginx", "k6", "mock", "supervisord"}
+ROLES = {"config-center", "config-center-a", "sdk-core", "sdk-service", "mysqld", "nginx", "k6", "mock", "supervisord"}
 HZ = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
 
@@ -24,6 +24,8 @@ def snapshot():
             if role not in ROLES:
                 continue
             fields = raw[end + 2:].split()
+            if role == "config-center-a":
+                role = "config-center-access"  # Linux comm truncates after 15 bytes
             key = (role, int(path.name), fields[19])  # start ticks distinguish reused PIDs
             result[key] = (int(fields[11]) + int(fields[12]), max(0, int(fields[21])) * PAGE / 1048576)
         except (OSError, ValueError, IndexError):
