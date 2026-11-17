@@ -55,13 +55,15 @@ jobs:
           $script = @'
           import http from 'k6/http';
           import exec from 'k6/execution';
-          import { Rate } from 'k6/metrics';
+          import { Rate, Counter, Trend } from 'k6/metrics';
 
           const base = __ENV.BASE_URL;
           const qps = Number(__ENV.QPS);
           const seconds = Number(__ENV.SECONDS);
           const ids = Array.from({length:256},(_,i) => 'lt26-app-'+String(i).padStart(3,'0'));
           const failedBusiness = new Rate('business_failed');
+          const steadyRequests = new Counter('steady_requests');
+          const steadyDuration = new Trend('steady_duration_ms');
 
           if (base !== 'https://mp.skybluek.com' || ![5000,10000,15000,20000].includes(qps) || seconds !== 10) {
             throw new Error('Refusing unapproved load target or schedule');
@@ -69,7 +71,8 @@ jobs:
           export const options = {
             scenarios: {
               config_read: {
-                executor:'constant-arrival-rate',rate:qps,timeUnit:'1s',duration:'10s',
+                executor:'ramping-arrival-rate',startRate:1000,timeUnit:'1s',
+                stages:[{duration:'4s',target:qps},{duration:'10s',target:qps}],
                 preAllocatedVUs: Math.min(1000,Math.max(600,Math.ceil(qps*.05))),
                 maxVUs: Math.min(1000,Math.max(600,Math.ceil(qps*.05))),
                 gracefulStop:'3s',
@@ -83,7 +86,9 @@ jobs:
                 {threshold:'p(95)<100',abortOnFail:true,delayAbortEval:'3s'},
                 {threshold:'p(99)<300',abortOnFail:true,delayAbortEval:'3s'},
               ],
-              http_reqs:['count>='+Math.floor(qps*seconds*.999)],
+              http_reqs:['count>='+Math.floor((4*(1000+qps)/2+qps*10)*.99)],
+              steady_requests:['count>='+Math.floor(qps*10*.99)],
+              steady_duration_ms:['p(95)<100','p(99)<300'],
             },
             maxRedirects:0,
             summaryTrendStats:['avg','med','max','p(95)','p(99)'],
@@ -91,6 +96,7 @@ jobs:
 
           export default function () {
             const app=ids[exec.scenario.iterationInTest%ids.length];
+            const steady=exec.scenario.progress >= 4/14;
             const res=http.get(base+'/api/core/config/test/'+app, {timeout:'3s',tags:{name:'sdk-config'}});
             let ok=false;
             try {
@@ -98,6 +104,10 @@ jobs:
               ok=res.status===200&&j.code===0&&j.data&&j.data.snKey===app;
             } catch (_) {}
             failedBusiness.add(!ok);
+            if (steady) {
+              steadyRequests.add(1);
+              steadyDuration.add(res.timings.duration);
+            }
           }
           '@
 
@@ -114,7 +124,7 @@ jobs:
               if ($freeMB -lt 2048) { throw 'Insufficient load-generator free memory; stopped.' }
               $env:QPS=[string]$rate
               $summary=Join-Path $work ('summary-'+$rate+'.json')
-              Write-Host ('START target={0} QPS duration=10s GET-only channels=256' -f $rate)
+              Write-Host ('START target={0} QPS warmup=4s hold=10s GET-only channels=256' -f $rate)
               & $k6 run --summary-export $summary $scriptPath
               $exitCode=$LASTEXITCODE
               if ($exitCode -ne 0) {
@@ -124,7 +134,7 @@ jobs:
               if (-not (Test-Path -LiteralPath $summary -PathType Leaf)) {
                 throw ('Missing k6 summary for {0} QPS.' -f $rate)
               }
-              Write-Host ('PASS stage={0} QPS: zero errors, zero drops and thresholds met.' -f $rate)
+              Write-Host ('PASS stage={0} QPS: steady-state request count, latency, zero errors and zero drops all met.' -f $rate)
               Start-Sleep -Seconds 10
             }
             Write-Host 'PASS all stages 5000/10000/15000/20000 target QPS; this is not long-duration capacity certification.'
