@@ -16,9 +16,13 @@ const app = 'load-app';
 const failed = new Counter('full_api_failed');
 const covered = new Counter('full_api_covered');
 const errors = [];
-const expectedResponses = Object.fromEntries(
-  [200, 201, 202, 204, 409].map(code => [code, http.expectedStatuses(code)])
-);
+const expectedResponses = {
+  200: http.expectedStatuses(200),
+  201: http.expectedStatuses(201),
+  202: http.expectedStatuses(202),
+  204: http.expectedStatuses(204),
+  409: http.expectedStatuses(409),
+};
 
 export const options = {
   scenarios: { full_api: { executor: 'shared-iterations', vus: 1, iterations: 1, maxDuration: '90s' } },
