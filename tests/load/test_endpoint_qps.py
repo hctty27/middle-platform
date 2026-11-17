@@ -29,6 +29,23 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertEqual(workload["full_target_qps"]["payment"], 2000)
         self.assertEqual(workload["categories"]["payment"], ["core-payment-notify"])
         self.assertIn("core-payment-notify", SCRIPT.read_text())
+        self.assertIn("QUARTER_WORKLOAD", WORKFLOW.read_text())
+        self.assertIn("target-workload-qps.py", WORKFLOW.read_text())
+        topo=(ROOT/"tests/load/topology.py").read_text()
+        self.assertIn('"cluster": (2, 4, 6)', topo)
+        target_rates={key:int(value*workload["scale"]) for key,value in workload["full_target_qps"].items()}
+        self.assertEqual(target_rates, {
+            "config":2500,"verify":2500,"report":5000,
+            "order":500,"payment":500,"subscribe":200,
+            "role_query":100,"server_query":100,
+            "role_control":100,"other":100,
+        })
+        self.assertEqual(sum(target_rates.values()),11600)
+        self.assertEqual(sum(map(len,workload["categories"].values())),19)
+        self.assertEqual(set(workload["categories"].keys()),set(workload["full_target_qps"].keys()))
+        self.assertTrue(all("/admin/" not in route["route"] for route in entries
+                            if route["id"] in {name for names in workload["categories"].values()
+                                              for name in names} - {"core-payment-notify"}))
         for item in entries:
             self.assertIn(item["group"],("read","write"))
             self.assertIn(item["mode"],("steady","delete","duplicate","reject"))
