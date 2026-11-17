@@ -68,7 +68,7 @@ def seed_delete(case_id, start, n):
                 "INSERT INTO sdk_channel_app(id,game_id,code,name,status,config,"
                 "test_server_group_id,created_at,updated_at) VALUES "
                 f"({identifier},1,'qps-delete-{identifier}','Disposable QPS channel',1,"
-                "JSON_OBJECT(),3,UTC_TIMESTAMP(),UTC_TIMESTAMP());")
+                "JSON_OBJECT(),NULL,UTC_TIMESTAMP(),UTC_TIMESTAMP());")
         else:
             raise RuntimeError("Unsupported DELETE benchmark")
     seed_sql(statements)
