@@ -26,9 +26,48 @@ jobs:
           Write-Host 'Runner identity: DESKTOP-HA11EIT'
           Write-Host ('Operating system: ' + $env:RUNNER_OS)
           Write-Host ('Architecture: ' + $env:RUNNER_ARCH)
-          $command = Get-Command k6 -ErrorAction Stop
-          if ($command.CommandType -ne 'Application') { throw 'k6 must be an installed executable.' }
-          Write-Host ('k6 executable: ' + $command.Source)
-          & $command.Source version
-          if ($LASTEXITCODE -ne 0) { throw 'k6 version failed.' }
-          Write-Host 'PASS: k6 is accessible by the GitHub runner. No traffic sent.'
+          # Probe trusted installation directories without dumping the runner's PATH,
+          # user names, private files or any environment secrets into public logs.
+          $command = Get-Command k6 -ErrorAction SilentlyContinue
+          $candidates = New-Object System.Collections.Generic.List[string]
+          if ($command -and $command.CommandType -eq 'Application') { $candidates.Add($command.Source) }
+          foreach ($directory in @(
+            "$env:ProgramFiles\k6",
+            "$env:ProgramFiles\Grafana Labs\k6",
+            "$env:ProgramFiles\Grafana\k6",
+            "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
+            "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
+          )) {
+            if (Test-Path -LiteralPath $directory -PathType Container) {
+              Get-ChildItem -LiteralPath $directory -Filter 'k6.exe' -File -Recurse -ErrorAction SilentlyContinue |
+                ForEach-Object { $candidates.Add($_.FullName) }
+            }
+          }
+          $usersRoot = Join-Path $env:SystemDrive 'Users'
+          if (Test-Path -LiteralPath $usersRoot -PathType Container) {
+            foreach ($profile in @(Get-ChildItem -LiteralPath $usersRoot -Directory -ErrorAction SilentlyContinue)) {
+              foreach ($directory in @(
+                (Join-Path $profile.FullName 'AppData\Local\Microsoft\WinGet\Links'),
+                (Join-Path $profile.FullName 'AppData\Local\Microsoft\WinGet\Packages')
+              )) {
+                if (Test-Path -LiteralPath $directory -PathType Container) {
+                  Get-ChildItem -LiteralPath $directory -Filter 'k6.exe' -File -Recurse -ErrorAction SilentlyContinue |
+                    ForEach-Object { $candidates.Add($_.FullName) }
+                }
+              }
+            }
+          }
+          $passed = $false
+          foreach ($exe in @($candidates | Select-Object -Unique)) {
+            if (Test-Path -LiteralPath $exe -PathType Leaf) {
+              & $exe version
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host 'PASS: installed k6 was found and works on the runner. No load traffic sent.'
+                $passed = $true
+                break
+              }
+            }
+          }
+          if (-not $passed) {
+            throw 'k6 not found in runner PATH or common trusted WinGet/MSI locations. Restart the runner after installation or install k6 system-wide.'
+          }
