@@ -17,6 +17,12 @@
 
 写接口有明确数据边界：创建操作每请求生成唯一对象；删除操作每档预置独立临时行；更新使用可重复的测试数据；支付回调只测**已支付订单重复回调**；订单重试只测**不可重试订单返回 409**。后两项不代表首次支付或成功补偿的吞吐。Mock 链路和单机 Runner 的数据也不能当作生产环境最大性能。
 
+## 合并后的 Nonce 高压验证（只修改测试）
+
+标题包含 `[NONCE-HIGH-QPS]` 的专项 PR 从最新 `main` 派生，不改业务服务代码。该 PR 在 GitHub 托管 Runner 上自动使用 cluster 2/4/4 拓扑，对 32 个查询类路由执行 5000、10000、20000 QPS × 每档 5 秒，单接口上档失败即停止继续升档。调用目标只允许本机 127.0.0.1。可观察指标包括实际请求/s、P95/P99、业务错误率、HTTP 401/409/429/503/5xx、丢弃迭代、MySQL 行锁等待、各服务/k6 的 CPU 与进程 RSS。为防止不同路由之间的已用 Nonce 互相污染，各签名接口在每个独立阶段前只重启 Runner 内对应的服务；这种方式不会测试 5–10 分钟的持续写满容量，也不代表 Redis 或集群级防重放。
+
+此工作流不触发任何正式服务器、正式数据库或生产密钥访问。报告只代表 GitHub Runner 与本地 Mock，不是线上容量证明。5,000 QPS 是本专项的最低探测档，如果未达标，工作流会失败；即使最后 20,000 档成功，也只是通过对应时长和拓扑的目标，不能解释为长期容量保证。注意 HTTP 503 同时计入 5xx。
+
 ## 全接口覆盖（api-coverage）
 
 Actions → Runner Load Test → Run workflow：选择 profile=api-coverage、topology=compact、scenario=all。该任务只在 GitHub 托管 Ubuntu Runner 上运行，所有 HTTP 目标固定为 127.0.0.1。它会启动配置中心、SDK Core、SDK Service、Nginx、MySQL、模拟游戏/平台，以及带独立临时 config_access 数据库的 config-center-access。
