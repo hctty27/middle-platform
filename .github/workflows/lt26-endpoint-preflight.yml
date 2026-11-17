@@ -1,0 +1,61 @@
+name: LT26 production endpoint connectivity preflight
+on:
+  push:
+    branches:
+      - test/lt26-config-qps-5000-20000-20261117
+
+permissions: {}
+concurrency:
+  group: lt26-endpoint-preflight-20261117
+  cancel-in-progress: false
+
+jobs:
+  endpoint-preflight:
+    if: ${{ github.repository == 'hctty27/middle-platform' && github.actor == 'hctty27' && github.ref == 'refs/heads/test/lt26-config-qps-5000-20000-20261117' }}
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Diagnose DNS, TCP 443, root and one read-only config GET
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') { throw 'Unexpected runner; refusing diagnostic.' }
+
+          $hostName = 'mp.skybluek.com'
+          Write-Host ('RUNNER name={0} os={1} arch={2}' -f $env:RUNNER_NAME, $env:RUNNER_OS, $env:RUNNER_ARCH)
+
+          $dns = Resolve-DnsName -Name $hostName -Type A -ErrorAction Stop
+          $addresses = @($dns | Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress })
+          Write-Host ('DNS_A=' + ($addresses -join ','))
+          if ($addresses.Count -eq 0) { throw 'No IPv4 address returned by DNS.' }
+
+          $tcp = Test-NetConnection -ComputerName $hostName -Port 443 -InformationLevel Detailed -WarningAction SilentlyContinue
+          Write-Host ('TCP_443=' + $tcp.TcpTestSucceeded)
+          if (-not $tcp.TcpTestSucceeded) { throw 'TCP 443 connection failed; no HTTP request sent.' }
+
+          $rootWatch = [System.Diagnostics.Stopwatch]::StartNew()
+          try {
+            $root = Invoke-WebRequest -Uri ('https://' + $hostName + '/') -Method Get -UseBasicParsing -TimeoutSec 15
+            $rootWatch.Stop()
+            Write-Host ('ROOT_HTTP status={0} elapsed_ms={1}' -f [int]$root.StatusCode, $rootWatch.ElapsedMilliseconds)
+          } catch {
+            $rootWatch.Stop()
+            Write-Host ('ROOT_HTTP_FAIL elapsed_ms={0} message={1}' -f $rootWatch.ElapsedMilliseconds, $_.Exception.Message)
+          }
+
+          $apiWatch = [System.Diagnostics.Stopwatch]::StartNew()
+          try {
+            $api = Invoke-WebRequest -Uri ('https://' + $hostName + '/api/core/config/test/lt26-app-000') -Method Get -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 20
+            $apiWatch.Stop()
+            $body = $api.Content | ConvertFrom-Json
+            Write-Host ('API_HTTP status={0} elapsed_ms={1} code={2} snKey={3}' -f [int]$api.StatusCode, $apiWatch.ElapsedMilliseconds, $body.code, $body.data.snKey)
+            if ($api.StatusCode -ne 200 -or $body.code -ne 0 -or $body.data.snKey -cne 'lt26-app-000') {
+              throw 'API responded, but the read-only config payload did not match the expected channel.'
+            }
+          } catch {
+            $apiWatch.Stop()
+            Write-Host ('API_HTTP_FAIL elapsed_ms={0} message={1}' -f $apiWatch.ElapsedMilliseconds, $_.Exception.Message)
+            throw
+          }
+
+          Write-Host 'PREFLIGHT_PASS: one read-only API GET succeeded; no k6 load was generated.'
