@@ -195,4 +195,25 @@ if TEST_PS_MODE=fail_after "$control" drain config-center 8201; then
     echo 'Failed ps after reload was treated as successful drain' >&2; exit 1
 fi
 grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;' "$file"
+# A valid down state is distinguishable from malformed files or Nginx failures.
+reset_upstream
+sed -i 's/8201 max_fails=1 fail_timeout=10s;/8201 max_fails=1 fail_timeout=10s down;/' "$file"
+status=0
+output=$("$control" validate config-center 8201) || status=$?
+[[ "$status" -eq 3 && "$output" == 'UPSTREAM_DOWN config-center 8201' ]]
+TEST_PS_MODE=delayed "$control" recover config-center 8201
+[[ $(wc -l < "$TEST_SLEEP_LOG") -eq 2 ]]
+"$control" validate config-center 8201
+
+reset_upstream
+sed -i 's/8201 max_fails=1 fail_timeout=10s;/8201 max_fails=1 fail_timeout=10s down;/' "$file"
+if TEST_PS_MODE=sticky "$control" recover config-center 8201 >"$tmp/recovery.log" 2>&1; then
+    echo 'Recovery succeeded without worker rotation' >&2; exit 1
+fi
+grep -Fq 'restored down on disk' "$tmp/recovery.log"
+grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;' "$file"
+printf 'include /etc/passwd;\n' >> "$file"
+status=0
+output=$("$control" validate config-center 8201) || status=$?
+[[ "$status" -ne 0 && "$status" -ne 3 && -z "$output" ]]
 printf 'Nginx upstream control tests passed\n'
