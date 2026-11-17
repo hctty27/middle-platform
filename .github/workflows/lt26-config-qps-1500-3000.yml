@@ -1,4 +1,4 @@
-name: LT26 read-only config QPS 1.2k-1.5k with runner metrics
+name: LT26 read-only config QPS 1.2k-1.5k with stable VU allocation
 on:
   push:
     branches:
@@ -85,7 +85,7 @@ jobs:
                 rate: qps,
                 timeUnit: '1s',
                 duration: seconds + 's',
-                preAllocatedVUs: 300,
+                preAllocatedVUs: 400,
                 maxVUs: 600,
                 gracefulStop: '5s',
               },
@@ -152,7 +152,7 @@ jobs:
 
               $env:QPS = [string]$rate
               $summary = Join-Path $work ('summary-' + $rate + '.json')
-              Write-Host ('START target={0} QPS duration=20s channels=256 GET-only preAllocatedVUs=300 maxVUs=600' -f $rate)
+              Write-Host ('START target={0} QPS duration=20s channels=256 GET-only preAllocatedVUs=400 maxVUs=600' -f $rate)
               & $k6 run --summary-export $summary $scriptPath
               $exitCode = $LASTEXITCODE
               if ($exitCode -ne 0) {
