@@ -53,6 +53,9 @@ class RemotePublishTests(unittest.TestCase):
         self.nginx_control.parent.mkdir(parents=True, exist_ok=True)
         self.nginx_control.write_bytes((
             b"#!/usr/bin/env bash\n"
+            # A legacy helper does not advertise batch support. The read-only
+            # capability probe must not create the operation log.
+            b"if [[ \"$1\" == capabilities ]]; then exit 2; fi\n"
             b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
         ))
         self.nginx_control.chmod(0o755)
@@ -342,6 +345,9 @@ exec bash "$@"
     def simulate_drained_core(self, recover_fail=False):
         self.nginx_control.write_bytes((
             b"#!/usr/bin/env bash\n"
+            # A legacy helper does not advertise batch support. The read-only
+            # capability probe must not create the operation log.
+            b"if [[ \"$1\" == capabilities ]]; then exit 2; fi\n"
             b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
             b"if [[ \"$3\" == 8211 && \"$1\" == validate ]] && "
             b"! grep -Fxq 'recover sdk-core 8211' \"$TEST_EVENTS\"; then\n"
