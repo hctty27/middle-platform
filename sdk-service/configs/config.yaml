@@ -37,4 +37,4 @@ log:
   accessEnabled: true
   slowThreshold: 500ms
   # 1 保留全部访问和平台成功日志；仅快速成功事件可选采样。
-  sdkEventSampleEvery: 1
+  sdkEventSampleEvery: 100
