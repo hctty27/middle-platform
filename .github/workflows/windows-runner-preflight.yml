@@ -1,0 +1,34 @@
+name: Windows self-hosted runner preflight (one-shot)
+# Temporary, trusted-branch-only check. Never runs on PRs or on a schedule.
+on:
+  push:
+    branches: [test/windows-runner-preflight-20261117]
+
+permissions: {}
+concurrency:
+  group: windows-preflight-20261117
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Verify trusted Windows runner and installed k6
+    if: github.repository == 'hctty27/middle-platform' && github.ref == 'refs/heads/test/windows-runner-preflight-20261117' && github.actor == 'hctty27'
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Verify runner identity and k6 without checking out repository code
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -cne 'DESKTOP-HA11EIT') {
+            throw "Unexpected runner name. Refusing to execute."
+          }
+          Write-Host 'Runner identity: DESKTOP-HA11EIT'
+          Write-Host ('Operating system: ' + $env:RUNNER_OS)
+          Write-Host ('Architecture: ' + $env:RUNNER_ARCH)
+          $command = Get-Command k6 -ErrorAction Stop
+          if ($command.CommandType -ne 'Application') { throw 'k6 must be an installed executable.' }
+          Write-Host ('k6 executable: ' + $command.Source)
+          & $command.Source version
+          if ($LASTEXITCODE -ne 0) { throw 'k6 version failed.' }
+          Write-Host 'PASS: k6 is accessible by the GitHub runner. No traffic sent.'
