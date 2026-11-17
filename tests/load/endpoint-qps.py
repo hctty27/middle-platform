@@ -208,7 +208,9 @@ for pos, case in enumerate(chosen):
         p95 = value(data,"http_req_duration","p(95)")
         p99 = value(data,"http_req_duration","p(99)")
         actual = value(data,"http_reqs","rate")
-        errors = value(data,"endpoint_bad","rate")
+        errors = value(data,"endpoint_bad","value")
+        if errors is None:
+            errors = value(data,"endpoint_bad","rate")
         dropped = value(data,"dropped_iterations","count") or 0
         iterations = value(data,"iterations","count") or 0
         lock_waits = after.get("Innodb_row_lock_waits",0) - before.get("Innodb_row_lock_waits",0)
