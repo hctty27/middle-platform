@@ -1,4 +1,4 @@
-name: LT26 read-only config QPS 1.0k-1.15k with runner metrics
+name: LT26 read-only config QPS 1.2k-1.5k with runner metrics
 on:
   push:
     branches:
@@ -74,7 +74,7 @@ jobs:
           const appIds = Array.from({ length: 256 }, (_, i) => 'lt26-app-' + String(i).padStart(3, '0'));
           const businessFailed = new Rate('business_failed');
 
-          if (base !== 'https://mp.skybluek.com' || ![1000, 1050, 1100, 1150].includes(qps) || seconds !== 20) {
+          if (base !== 'https://mp.skybluek.com' || ![1200, 1300, 1400, 1500].includes(qps) || seconds !== 20) {
             throw new Error('Refusing unapproved target or schedule');
           }
 
@@ -120,7 +120,7 @@ jobs:
           }
           '@
 
-          $work = Join-Path $env:RUNNER_TEMP ('lt26-config-base-qps-' + [guid]::NewGuid().ToString('N'))
+          $work = Join-Path $env:RUNNER_TEMP ('lt26-config-mid-qps-' + [guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Force -Path $work | Out-Null
           $utf8 = New-Object System.Text.UTF8Encoding($false)
           [System.IO.File]::AppendAllText($env:GITHUB_ENV, ('LOAD_DIR=' + $work + [Environment]::NewLine), $utf8)
@@ -145,7 +145,7 @@ jobs:
           $env:BASE_URL = $base
           $env:SECONDS = '20'
           try {
-            foreach ($rate in @(1000, 1050, 1100, 1150)) {
+            foreach ($rate in @(1200, 1300, 1400, 1500)) {
               $freeMB = (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024
               Write-Host ('PREFLIGHT target={0} QPS free_memory_mb={1}' -f $rate, [math]::Round($freeMB))
               if ($freeMB -lt 4096) { throw 'Load generator free memory fell below 4 GiB; stopped.' }
@@ -166,7 +166,7 @@ jobs:
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ('- PASS **' + $rate + ' QPS** — 20 seconds, 256 channels, GET-only')
               Start-Sleep -Seconds 5
             }
-            Write-Host 'PASS all stages 1000/1050/1100/1150 QPS.'
+            Write-Host 'PASS all stages 1200/1300/1400/1500 QPS.'
           } finally {
             if ($monitor) {
               Stop-Job $monitor -ErrorAction SilentlyContinue
@@ -182,7 +182,7 @@ jobs:
         if: always() && env.LOAD_DIR != ''
         uses: actions/upload-artifact@v4
         with:
-          name: lt26-config-base-qps-${{ github.run_id }}
+          name: lt26-config-mid-qps-${{ github.run_id }}
           path: ${{ env.LOAD_DIR }}
           retention-days: 7
           if-no-files-found: warn
