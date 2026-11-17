@@ -24,7 +24,7 @@ nginx = [
     "events { worker_connections 2048; }",
     "http {",
     *[f"{kind}_temp_path {root}/{kind}_temp;" for kind in ("client_body", "proxy", "fastcgi", "uwsgi", "scgi")],
-    f"access_log {root}/logs/nginx-access.log;",
+    f"access_log {root}/logs/nginx-access.log buffer=64k flush=1s;",
 ]
 ports = []
 diagnostics = []
@@ -49,7 +49,7 @@ for (name, variable, first, prefix), count in zip(services, counts):
             f"stdout_logfile_backups=1\nenvironment={variable}=\"127.0.0.1:{port}\",GOMEMLIMIT=\"128MiB\"{diagnostic_env}"
         )
         nginx.append(f"server 127.0.0.1:{port} max_fails=1 fail_timeout=10s;")
-    nginx += ["keepalive 8;", "}"]
+    nginx += [f"keepalive {64 if name == 'sdk-core' else 16};", "}"]
 supervisor.append(
     f"[program:mock]\ncommand={root}/bin/mock\nautostart=true\nautorestart=unexpected\n"
     f"startsecs=1\nredirect_stderr=true\nstdout_logfile={root}/logs/mock.log"

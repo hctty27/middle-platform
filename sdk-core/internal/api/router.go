@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -40,7 +41,20 @@ func router(fetcher Fetcher, db Pinger, admin *sql.DB, options RouterOptions, or
 		w.Header().Set("Cache-Control", "no-store")
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		data, err := fetcher.Get(ctx, r.PathValue("env"), r.PathValue("appid"))
+		var body string
+		var err error
+		env, appID := r.PathValue("env"), r.PathValue("appid")
+		if jsonFetcher, ok := fetcher.(interface {
+			GetJSON(context.Context, string, string) (string, error)
+		}); ok {
+			body, err = jsonFetcher.GetJSON(ctx, env, appID)
+		} else {
+			var data model.ConfigResponse
+			data, err = fetcher.Get(ctx, env, appID)
+			if err == nil {
+				body, err = model.EncodePublicConfig(data)
+			}
+		}
 		if err != nil {
 			switch {
 			case errors.Is(err, model.ErrInvalidRequest):
@@ -58,7 +72,9 @@ func router(fetcher Fetcher, db Pinger, admin *sql.DB, options RouterOptions, or
 			}
 			return
 		}
-		writeJSON(w, http.StatusOK, response{Code: 0, Message: "success", Data: data})
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, body)
 	})
 	if len(orders) > 0 && orders[0] != nil {
 		registerOrderRoutes(mux, orders[0], options)

@@ -25,3 +25,6 @@ soak 30 分钟和手动 soak2h 2 小时均为 50 次业务迭代/s，默认 mixe
 
 ## 容量探索 capacity（向 10 万 QPS 目标推进）
 PR 增加独立 compact Runner；手动选择 capacity 也可运行。固定 SDK 热点接口对比 Nginx 与单实例直连，1000/3000/5000/7500 次/s 各 20 秒，10000 次/s 冲击 15 秒并回落至 1000 次/s。高档位失败记录但不阻塞后续；1000 档、恢复及独立 profiling 阶段必须通过。capacity 固定执行这套测试，忽略 scenario 参数；cluster 的直连只请求首个 SDK Core，不能与完整集群视为等价。仅 capacity 使用 `-tags loadtest`，独立回环监听 pprof 和 DB.Stats；正常构建为 no-op，不增加业务路由。CPU、Heap、Mutex、Block 在单独的 profiling 流量阶段采集，文本 Top 及连接池和 SQL 事件差值写入日志/摘要，原始文件尽力上传。Mutex/Block 采样为 capacity 进程全程启用，有额外开销；样本量不足可能出现空 profile。Runner 内 k6 和被测服务竞争 CPU，本轮目标不是实际 10000 QPS 保证，更不能作为 100000 并发的证明。
+
+## 第六轮对照实验
+单 Runner 先比较快速成功 SDK 配置访问日志全量/10:1 采样（各 Nginx、直连 3000 迭代/s），再运行原 1000–10000 阶梯。Nginx SDK Core upstream 空闲 keepalive 64，其他 16，访问日志 64 KiB 缓冲、1 秒刷新；连接上限和业务重试规则不变。订单登记 500 迭代/s 对比 20/10 与 32/16 数据库最大/空闲连接池，独立测试用配置并重启，不修改线上池默认值。对照档位为探索，原必测基线和恢复阈值不放宽。采样及连接池差异以同 Runner 测量为准，仍可能有时间顺序与噪声影响。

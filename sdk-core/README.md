@@ -51,3 +51,6 @@ go build ./cmd/sdk-core
 ```
 
 [架构](../admin/public/docs/guide.html#architecture) · [本地开发](../admin/public/docs/guide.html#development) · [生产运维](../admin/public/docs/guide.html#production)
+
+### SDK 配置热点路径
+`log.sdkConfigSampleEvery` / `LOG_SDK_CONFIG_SAMPLE_EVERY` 控制快速成功的公开配置 GET 访问日志；模板为 10（每 10 条保留 1 条），缺省或 0/1 保留全量。错误、慢请求及订单/支付/管理请求不采样；Request ID 仍照常返回。修改已有私有配置后重启才生效。成功公开配置的 JSON 响应与 DTO 使用同一个缓存条目和 TTL，保留 `no-store`、原有字段及换行，不增加配置失效延迟。

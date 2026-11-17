@@ -40,4 +40,6 @@ log:
   format: json
   output: stdout
   accessEnabled: true
+  # 仅快速且成功的公开 SDK 配置 GET，每 10 次记录 1 条；1 恢复全量。
+  sdkConfigSampleEvery: 10
   slowThreshold: 500ms

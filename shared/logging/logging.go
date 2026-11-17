@@ -26,13 +26,14 @@ type Config struct {
 	Output        string `yaml:"output"`
 	AccessEnabled bool   `yaml:"accessEnabled"`
 	SlowThreshold string `yaml:"slowThreshold"`
+	SDKConfigSampleEvery int `yaml:"sdkConfigSampleEvery"`
 }
 
 // Default 返回统一日志的安全默认值。
 func Default() Config {
 	return Config{
 		Level: "info", Format: "json", Output: "stdout",
-		AccessEnabled: true, SlowThreshold: "500ms",
+		AccessEnabled: true, SlowThreshold: "500ms", SDKConfigSampleEvery: 1,
 	}
 }
 
@@ -58,6 +59,13 @@ func (c *Config) ApplyEnv() error {
 		}
 		c.AccessEnabled = parsed
 	}
+	if value, ok := os.LookupEnv("LOG_SDK_CONFIG_SAMPLE_EVERY"); ok {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("LOG_SDK_CONFIG_SAMPLE_EVERY 配置不合法: %w", err)
+		}
+		c.SDKConfigSampleEvery = parsed
+	}
 	return c.Validate()
 }
 
@@ -77,6 +85,9 @@ func (c Config) Validate() error {
 	case "stdout", "stderr":
 	default:
 		return fmt.Errorf("log.output 配置不合法: %q", c.Output)
+	}
+	if c.SDKConfigSampleEvery < 0 || c.SDKConfigSampleEvery > 10000 {
+		return fmt.Errorf("log.sdkConfigSampleEvery 必须在 0 到 10000 之间")
 	}
 	threshold, err := time.ParseDuration(c.SlowThreshold)
 	if err != nil || threshold <= 0 {
@@ -188,21 +199,39 @@ func (w *statusWriter) Write(body []byte) (int, error) {
 // Unwrap 让 http.ResponseController 可以访问底层 ResponseWriter 的可选能力。
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
+// publicSDKConfigRead limits sampling to the successful public SDK GET route.
+// Only requests with exactly the two expected path segments are eligible.
+func publicSDKConfigRead(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	path, ok := strings.CutPrefix(r.URL.Path, "/api/core/config/")
+	if !ok {
+		return false
+	}
+	env, app, ok := strings.Cut(path, "/")
+	return ok && (env == "test" || env == "review" || env == "prod") && app != "" && !strings.Contains(app, "/")
+}
+
 // HTTP 统一生成或校验 Request ID，记录状态码和耗时，捕获 panic；不会记录 URL 查询串、请求体或密钥。
 func HTTP(c Config, next http.Handler) http.Handler {
 	threshold, _ := time.ParseDuration(c.SlowThreshold)
+	var successfulConfigReads atomic.Uint64
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(RequestIDHeader)
 		if !validRequestID(id) {
 			id = newRequestID()
 		}
 		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+		r = r.WithContext(ctx)
 		w.Header().Set(RequestIDHeader, id)
 		writer := &statusWriter{ResponseWriter: w}
 		start := time.Now()
 
 		defer func() {
+			panicked := false
 			if recovered := recover(); recovered != nil {
+				panicked = true
 				if writer.status == 0 {
 					http.Error(writer, "服务器内部错误", http.StatusInternalServerError)
 				}
@@ -219,8 +248,14 @@ func HTTP(c Config, next http.Handler) http.Handler {
 			if (r.URL.Path == "/health/live" || r.URL.Path == "/health/ready") && writer.status < 400 && !slow {
 				return
 			}
+			// Keep every error, slow request, panic, order and management access.
+			if !panicked && !slow && writer.status >= 200 && writer.status < 300 &&
+				c.SDKConfigSampleEvery > 1 && publicSDKConfigRead(r) &&
+				successfulConfigReads.Add(1)%uint64(c.SDKConfigSampleEvery) != 0 {
+				return
+			}
 			level := slog.LevelInfo
-			if writer.status >= 500 {
+			if panicked || writer.status >= 500 {
 				level = slog.LevelError
 			} else if writer.status >= 400 || slow {
 				level = slog.LevelWarn
@@ -233,6 +268,6 @@ func HTTP(c Config, next http.Handler) http.Handler {
 				"request_id", id, "method", r.Method, "path", path,
 				"status", writer.status, "duration_ms", elapsed.Milliseconds())
 		}()
-		next.ServeHTTP(writer, r.WithContext(ctx))
+		next.ServeHTTP(writer, r)
 	})
 }

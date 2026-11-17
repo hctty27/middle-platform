@@ -26,11 +26,30 @@ func NewConfigService(reader Reader) *ConfigService {
 
 // Get 按指定环境和渠道 AppID 查询配置，不使用响应字段映射。
 func (s *ConfigService) Get(ctx context.Context, env, appID string) (model.ConfigResponse, error) {
-	if env != "test" && env != "review" && env != "prod" {
-		return model.ConfigResponse{}, model.ErrInvalidRequest
-	}
-	if strings.TrimSpace(appID) == "" || utf8.RuneCountInString(appID) > 128 {
+	if !validPublicConfigRequest(env, appID) {
 		return model.ConfigResponse{}, model.ErrInvalidRequest
 	}
 	return s.reader.LookupPublicConfig(ctx, appID, env)
+}
+
+func validPublicConfigRequest(env, appID string) bool {
+	return (env == "test" || env == "review" || env == "prod") &&
+		strings.TrimSpace(appID) != "" && utf8.RuneCountInString(appID) <= 128
+}
+
+// GetJSON retains the same validation and cache policy as Get.
+func (s *ConfigService) GetJSON(ctx context.Context, env, appID string) (string, error) {
+	if !validPublicConfigRequest(env, appID) {
+		return "", model.ErrInvalidRequest
+	}
+	if reader, ok := s.reader.(interface {
+		LookupPublicConfigJSON(context.Context, string, string) (string, error)
+	}); ok {
+		return reader.LookupPublicConfigJSON(ctx, appID, env)
+	}
+	value, err := s.reader.LookupPublicConfig(ctx, appID, env)
+	if err != nil {
+		return "", err
+	}
+	return model.EncodePublicConfig(value)
 }

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,7 +37,7 @@ func TestPublicCacheHTTPIntegration(t *testing.T) {
 			for range 2 {
 				rr := httptest.NewRecorder()
 				h.ServeHTTP(rr, httptest.NewRequest("GET", "/api/core/config/prod/app", nil))
-				if rr.Code != 200 || rr.Header().Get("Cache-Control") != "no-store" || !strings.Contains(rr.Body.String(), `"snKey":"sn"`) {
+				if rr.Code != 200 || rr.Header().Get("Cache-Control") != "no-store" || rr.Body.String() != `{"code":0,"message":"success","data":{"snKey":"sn","zoneKey":"zone"}}`+"\n" {
 					t.Fatalf("unexpected response: %d %s", rr.Code, rr.Body.String())
 				}
 			}
