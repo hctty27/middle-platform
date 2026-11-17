@@ -36,6 +36,17 @@ func StartLoadDiagnostics(db *sql.DB) (func(), error) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(db.Stats())
 	})
+	mux.HandleFunc("GET /debug/runtime", func(w http.ResponseWriter, _ *http.Request) {
+		var stats runtime.MemStats
+		runtime.ReadMemStats(&stats)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]uint64{
+			"heap_alloc":     stats.HeapAlloc,
+			"num_gc":         uint64(stats.NumGC),
+			"pause_total_ns": stats.PauseTotalNs,
+			"goroutines":     uint64(runtime.NumGoroutine()),
+		})
+	})
 	runtime.SetBlockProfileRate(1000000)
 	runtime.SetMutexProfileFraction(20)
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 40 * time.Second}

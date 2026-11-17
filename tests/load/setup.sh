@@ -7,7 +7,7 @@ set -Eeuo pipefail
 mkdir -p "$LOAD_DIR"/{bin,config,logs,results}
 export GOWORK=off
 build_flags=()
-if [[ "$LOAD_PROFILE" == capacity ]]; then build_flags=(-tags loadtest); fi
+if [[ "$LOAD_PROFILE" == capacity || "$LOAD_PROFILE" == traffic-multi ]]; then build_flags=(-tags loadtest); fi
 for svc in config-center sdk-core sdk-service; do
   (cd "$svc" && go build "${build_flags[@]}" -trimpath -o "$LOAD_DIR/bin/$svc" "./cmd/$svc")
   cp "$svc/configs/config.yaml" "$LOAD_DIR/config/$svc.yaml"
@@ -19,6 +19,11 @@ mysql -uroot -h127.0.0.1 config_center < tests/load/seed.sql
 # Fail during setup if either required service is not explicitly enabled.
 enabled=$(mysql -uroot -h127.0.0.1 -N config_center -e "SELECT COUNT(*) FROM sdk_service s JOIN sdk_service_channel ch ON ch.service_id=s.id JOIN sdk_channel_app a ON a.id=ch.channel_app_id WHERE a.code='load-app' AND a.status=1 AND s.code IN ('user_check','event_report') AND s.enabled=1 AND ch.enabled=1 AND ch.env='test';")
 [[ "$enabled" == 2 ]] || { echo "::error::Missing enabled test service bindings"; exit 1; }
+if [[ "$LOAD_PROFILE" == traffic-multi || "$LOAD_PROFILE" == traffic-quick ]]; then
+  python3 tests/load/multi_seed.py | mysql -uroot -h127.0.0.1 config_center
+  count=$(mysql -uroot -h127.0.0.1 -N config_center -e "SELECT COUNT(*) FROM sdk_service_channel ch JOIN sdk_service s ON s.id=ch.service_id JOIN sdk_channel_app a ON a.id=ch.channel_app_id WHERE a.id BETWEEN 1000 AND 1255 AND a.status=1 AND ch.enabled=1 AND ch.env='test' AND s.enabled=1 AND s.code IN ('user_check','event_report');")
+  [[ "$count" == 512 ]] || { echo "::error::Missing multi-channel fixtures"; exit 1; }
+fi
 export CONFIG_DB_DSN='root:runner-load-only@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC'
 export SDK_CORE_DB_DSN="$CONFIG_DB_DSN" SDK_SERVICE_DB_DSN="$CONFIG_DB_DSN"
 export ADMIN_AUTH_SECRET='runner-load-admin-only-0123456789abcdef'

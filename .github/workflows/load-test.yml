@@ -5,7 +5,7 @@ on:
       profile:
         description: Load profile (all traffic stays on this runner)
         type: choice
-        options: [smoke, traffic-quick, baseline, stress, capacity, traffic, soak, soak2h]
+        options: [smoke, traffic-quick, baseline, stress, capacity, traffic, traffic-multi, soak, soak2h]
         default: smoke
       topology:
         description: Instance topology
@@ -67,10 +67,11 @@ jobs:
         run: |
           bash -n tests/load/setup.sh
           bash -n tests/load/run.sh
-          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py
+          python3 -m py_compile tests/load/topology.py tests/load/report.py tests/load/db_report.py tests/load/process_monitor.py tests/load/capacity.py tests/load/traffic.py tests/load/multi_seed.py
           python3 -m unittest discover -s tests/load -p 'test_*.py'
-          if [[ "$LOAD_PROFILE" == capacity ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
-          test -z "$(gofmt -l tests/load/mock.go)"
+          if [[ "$LOAD_PROFILE" == capacity || "$LOAD_PROFILE" == traffic-multi ]]; then (cd shared && go test -tags loadtest ./bootstrap); fi
+          test -z "$(gofmt -l tests/load/mock.go tests/load/mock_test.go)"
+          go test tests/load/mock.go tests/load/mock_test.go
           LOAD_SCENARIO=mixed k6 inspect tests/load/scenarios.js
           LOAD_SCENARIO=mixed k6 inspect tests/load/traffic.js
       - name: Install local services
@@ -82,14 +83,14 @@ jobs:
       - name: Start isolated application stack
         run: bash tests/load/setup.sh
       - name: Run load scenarios
-        if: matrix.profile != 'capacity' && matrix.profile != 'traffic' && matrix.profile != 'traffic-quick'
+        if: matrix.profile != 'capacity' && matrix.profile != 'traffic' && matrix.profile != 'traffic-quick' && matrix.profile != 'traffic-multi'
         run: bash tests/load/run.sh
       - name: Explore 10000 QPS and profile services
         if: matrix.profile == 'capacity'
         shell: bash
         run: python3 -u tests/load/capacity.py "$LOAD_DIR" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Critical endpoint isolation and weighted traffic
-        if: matrix.profile == 'traffic' || matrix.profile == 'traffic-quick'
+        if: matrix.profile == 'traffic' || matrix.profile == 'traffic-quick' || matrix.profile == 'traffic-multi'
         shell: bash
         run: python3 -u tests/load/traffic.py "$LOAD_DIR" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Collect diagnostics and report
@@ -97,7 +98,7 @@ jobs:
         run: |
           mkdir -p "$LOAD_DIR/results"
           mysql -uroot -h127.0.0.1 -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Max_used_connections','Slow_queries','Questions','Innodb_buffer_pool_reads','Innodb_row_lock_waits');" > "$LOAD_DIR/results/mysql-status.txt" 2>&1 || true
-          if [[ "$LOAD_PROFILE" != capacity && "$LOAD_PROFILE" != traffic && "$LOAD_PROFILE" != traffic-quick ]]; then python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+          if [[ "$LOAD_PROFILE" != capacity && "$LOAD_PROFILE" != traffic && "$LOAD_PROFILE" != traffic-quick && "$LOAD_PROFILE" != traffic-multi ]]; then python3 tests/load/report.py "$LOAD_DIR/results" | tee -a "$GITHUB_STEP_SUMMARY"; fi
       - name: Stop local services
         if: always()
         run: |

@@ -28,7 +28,7 @@ nginx = [
 ]
 ports = []
 diagnostics = []
-profile_enabled = os.environ.get('LOAD_PROFILE') == 'capacity'
+profile_enabled = os.environ.get('LOAD_PROFILE') in ('capacity', 'traffic-multi')
 for (name, variable, first, prefix), count in zip(services, counts):
     upstream = name.replace("-", "_")
     nginx += [f"upstream {upstream} {{", "least_conn;"]

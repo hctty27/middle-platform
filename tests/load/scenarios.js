@@ -8,6 +8,15 @@ const target = __ENV.LOAD_TARGET || 'nginx';
 const base = target === 'direct' ? 'http://127.0.0.1:8211' : 'http://127.0.0.1:8280';
 const app = 'load-app';
 const gameSecret = 'runner-load-game-only';
+// Multi-channel mode is restricted to high-frequency endpoints and synthetic fixtures.
+const fixtureCount = Number(__ENV.TRAFFIC_APPS || 0);
+if (![0, 16, 256].includes(fixtureCount)) throw new Error('invalid fixture app count');
+function fixture(index) {
+  if (!fixtureCount) return { app, gameSecret, zone: 'load-group' };
+  const n = index % fixtureCount;
+  const game = n % 16;
+  return { app: 'load-app-' + n, gameSecret: 'runner-load-game-only-' + game, zone: 'load-group-' + game };
+}
 const platformSecret = 'runner-load-platform-only';
 const subscriber = 'load-subscriber';
 const subscriberSecret = 'runner-load-subscriber-only-0123456789';
@@ -51,12 +60,12 @@ export const options = {
 function stamp() {
   return { ts: String(Math.floor(Date.now() / 1000)), nonce: Array.from(new Uint8Array(crypto.randomBytes(8)), b => b.toString(16).padStart(2, '0')).join('') };
 }
-function gameHeaders(path, body) {
+function gameHeaders(path, body, selectedApp = app, selectedSecret = gameSecret) {
   const { ts, nonce } = stamp();
   return {
-    'Content-Type': 'application/json', 'x-app-id': app, 'x-timestamp': ts, 'x-nonce': nonce,
-    'x-signature': crypto.hmac('sha256', gameSecret,
-      ['HITALK-HMAC-SHA256', 'POST', path, app, ts, nonce, ''].join('\n') + body, 'hex'),
+    'Content-Type': 'application/json', 'x-app-id': selectedApp, 'x-timestamp': ts, 'x-nonce': nonce,
+    'x-signature': crypto.hmac('sha256', selectedSecret,
+      ['HITALK-HMAC-SHA256', 'POST', path, selectedApp, ts, nonce, ''].join('\n') + body, 'hex'),
   };
 }
 function syncHeaders(path) {
@@ -107,6 +116,7 @@ export default function () {
 export function runEndpoint(selected) {
   const index = exec.scenario.iterationInTest;
   const id = runID + '-' + index;
+  const selectedFixture = fixture(index);
   let path, body, res;
   switch (selected) {
     case 'config-sync':
@@ -115,20 +125,20 @@ export function runEndpoint(selected) {
       record(res, selected, jsonOK(res, j => typeof j.revision === 'number' && !!j.epoch));
       break;
     case 'sdk-config':
-      path = '/api/core/config/test/' + app;
+      path = '/api/core/config/test/' + selectedFixture.app;
       res = http.get(base + path, { tags: { name: selected }, timeout: '5s' });
-      record(res, selected, jsonOK(res, j => j.code === 0 && j.data.snKey === app && j.data.zoneKey === 'load-group'));
+      record(res, selected, jsonOK(res, j => j.code === 0 && j.data.snKey === selectedFixture.app && j.data.zoneKey === selectedFixture.zone));
       break;
     case 'user-check':
       path = '/api/service/user/check/test';
       body = JSON.stringify({ open_id: 'load-user-' + index });
-      res = http.post(base + path, body, { headers: gameHeaders(path, body), tags: { name: selected }, timeout: '5s' });
+      res = http.post(base + path, body, { headers: gameHeaders(path, body, selectedFixture.app, selectedFixture.gameSecret), tags: { name: selected }, timeout: '5s' });
       record(res, selected, jsonOK(res, j => j.code === 0 && j.data === true));
       break;
     case 'event-report':
       path = '/api/service/events/test';
-      body = JSON.stringify({ event: 'login', ext: { roleId: 'load-role-' + index, open_id: 'load-user-' + index, server_id: 'load-group' } });
-      res = http.post(base + path, body, { headers: gameHeaders(path, body), tags: { name: selected }, timeout: '5s' });
+      body = JSON.stringify({ event: 'login', ext: { roleId: 'load-role-' + index, open_id: 'load-user-' + index, server_id: selectedFixture.zone } });
+      res = http.post(base + path, body, { headers: gameHeaders(path, body, selectedFixture.app, selectedFixture.gameSecret), tags: { name: selected }, timeout: '5s' });
       record(res, selected, jsonOK(res, j => j.code === 0 && j.data === true));
       break;
     case 'order':
