@@ -21,8 +21,12 @@ func capture(t *testing.T) *bytes.Buffer {
 	return buffer
 }
 
-func TestHandlerRecordTimeUTC(t *testing.T) {
-	stamp := time.Date(2026, 11, 16, 2, 5, 6, 123456789, time.FixedZone("east", 8*3600))
+func TestHandlerRecordTimeBeijing(t *testing.T) {
+	stamp := time.Date(2026, 11, 16, 2, 5, 6, 123456789, time.UTC)
+	const want = "2026-11-16T10:05:06.123+08:00"
+	if got := formatRecordTime(stamp); got != want {
+		t.Fatalf("Beijing timestamp = %q, want %q", got, want)
+	}
 	for _, format := range []string{"json", "text"} {
 		t.Run(format, func(t *testing.T) {
 			var out bytes.Buffer
@@ -34,7 +38,6 @@ func TestHandlerRecordTimeUTC(t *testing.T) {
 			if err := handler.Handle(context.Background(), record); err != nil {
 				t.Fatal(err)
 			}
-			want := stamp.UTC().Format(time.RFC3339)
 			if format == "json" {
 				var event struct {
 					Time     string `json:"time"`
@@ -49,7 +52,8 @@ func TestHandlerRecordTimeUTC(t *testing.T) {
 				if event.Time != want || event.Payload.Time != stamp.Format(time.RFC3339Nano) || event.TimeText != "unchanged" {
 					t.Fatalf("unexpected log: %s", out.String())
 				}
-			} else if !strings.HasPrefix(out.String(), "time="+want+" ") || !strings.Contains(out.String(), "payload.time="+stamp.Truncate(time.Millisecond).Format(time.RFC3339Nano)) {
+			} else if !strings.HasPrefix(out.String(), "time="+want+" ") ||
+				!strings.Contains(out.String(), "payload.time="+stamp.Truncate(time.Millisecond).Format(time.RFC3339Nano)) {
 				t.Fatalf("unexpected log: %s", out.String())
 			}
 		})

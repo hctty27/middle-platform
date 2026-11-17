@@ -192,3 +192,18 @@ Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败�
 重复 `drain` 已标记 down 的实例时会重新 reload 并确认 worker 换代，而不是仅根据磁盘标记判断已排空。恢复实例之前应确认 Supervisor RUNNING 和 `/health/ready` 正常。
 
 执行手动操作时使用实际发布用户；操作后检查 `/data/middle-platform/run/nginx/*.conf` 并运行 `nginx -t`。
+
+## 日志时区
+
+站点配置使用 Nginx 的 `$time_iso8601` 输出 ISO 8601 时间和显式时区偏移。该变量按 Nginx 进程的本地时区生成；为避免修改服务器全局时区，仓库提供仅作用于 Nginx 服务的 systemd drop-in：`ops/systemd/nginx.service.d/10-timezone.conf`。
+
+首次配置或更新时，管理员手动将该文件安装到 Nginx 实际 systemd unit 的 drop-in 目录（常见 unit 为 `nginx.service`）：
+
+```bash
+sudo install -D -m 0644 /data/middle-platform/ops/systemd/nginx.service.d/10-timezone.conf /etc/systemd/system/nginx.service.d/10-timezone.conf
+sudo systemctl daemon-reload
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+重启 Nginx 才会让新进程取得 `TZ=Asia/Shanghai`；安排在维护窗口执行，可能造成短暂入口中断。若 unit 名称不同，按实际名称调整 drop-in 目录和重启命令。此设置只改变 Nginx 进程的日志时区，不修改操作系统时区，也不影响 Go 服务的显式日志时区。

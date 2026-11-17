@@ -492,7 +492,7 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 <li>发布后还需人工抽查充值订单、配置同步和事件上报等关键业务，确认未发生接口或配置不兼容。</li>
 </ol>
 <h2 id="production-7">7. 日志、停服与排障</h2>
-<p>四个 Go 进程共用 <code>shared/logging</code>（<code>log/slog</code>），日志内置记录时间统一为 UTC；仅规范日志记录自身的时间，不改写其他业务字段。YAML 示例：</p>
+<p>四个 Go 进程共用 <code>shared/logging</code>（<code>log/slog</code>），日志记录自身的时间统一为北京时间（IANA 时区 <code>Asia/Shanghai</code>，UTC+08:00），采用 ISO 8601 格式并精确到毫秒；仅转换日志记录自身的时间，不改写其他业务字段。数据库存储、MySQL 会话和内部 API 仍使用 UTC，日志转换不改变时间瞬间，也不执行业务时间加减 8 小时。Nginx 访问与错误日志另按 Nginx 进程的 <code>Asia/Shanghai</code> 时区输出，且不修改服务器全局时区。</p>
 <div class="code-card"><div class="code-header"><span>yaml</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-yaml">log:
   level: info
   format: json
