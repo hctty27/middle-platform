@@ -113,7 +113,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li>对外协议及签名细节以 <a href="index.html#g-start">游戏 HTML</a> 和 <a href="index.html#p-start">平台 HTML</a> 为准，避免维护多份相同字段表。</li>
 </ul>
 <h3>共享签名模块与业务边界</h3>
-<p><code>shared/signature</code> 提供两类协议：<code>SignValues</code>/<code>SignAllValues</code> 保留历史平台 SHA-1 排序签名（支付回调 V1 不过滤空值）；<code>SignHMACRequest</code>/<code>VerifyHMACRequest</code> 处理管理接口 HMAC；<code>SignSubscriberHMACRequest</code>/<code>VerifySubscriberHMACRequest</code> 处理按接入端身份隔离的配置同步与 Webhook HMAC，绑定接入端编码、方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。业务模块仍负责密钥归属、AppID、权限和幂等性；进程内 nonce 缓存不等于多实例全局防重放。</p>
+<p><code>shared/signature</code> 提供两类协议：<code>SignValues</code>/<code>SignAllValues</code> 保留历史平台 SHA-1 排序签名（支付回调 V1 不过滤空值）；<code>SignHMACRequest</code>/<code>VerifyHMACRequest</code> 处理管理接口 HMAC；<code>SignSubscriberHMACRequest</code>/<code>VerifySubscriberHMACRequest</code> 处理按接入端身份隔离的配置同步与 Webhook HMAC，绑定接入端编码、方法、转义路径、规范化 Query、时间戳、nonce 和原始 Body。配置中心的管理与同步接口共用每进程最多 320,000 条的 nonce 存储；接入端本地只读接口与 Webhook 回调也共用进程级存储。缓存满时 fail closed，进程重启后清空，多实例之间不共享；集群级防重放仍需 Redis 等共享存储。业务模块仍负责密钥归属、AppID、权限和幂等性。</p>
 <p>各接口具体签名字段、测试向量和 Java / Go / Node.js 示例统一见 <a href="index.html#sig-overview">签名接入规范</a>；新增业务应复用共享计算函数，但明确指定各自参与签名的字段。</p>
 <h2 id="architecture-6">SDK Core 与 SDK Service 职责</h2>
 <ul>
