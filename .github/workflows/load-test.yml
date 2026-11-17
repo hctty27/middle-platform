@@ -71,6 +71,7 @@ jobs:
       ENDPOINT_RATES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && '5000,10000,20000' || '' }}
       ENDPOINT_VUS_CAP: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && '800' || '500' }}
       ENDPOINT_BUSINESS_ONLY: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && 'true' || 'false' }}
+      SDK_SERVICE_CACHE_TTL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[NONCE-HIGH-QPS]') && matrix.profile == 'endpoint-qps' && '1s' || '0s' }}
       ENDPOINT_CASE: ${{ inputs.endpoint_id || '' }}
       GOWORK: 'off'
       LOAD_PROFILE: ${{ matrix.profile }}
