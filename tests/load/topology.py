@@ -5,7 +5,7 @@ import sys
 
 root = pathlib.Path(sys.argv[1]).resolve()
 mode = sys.argv[2]
-counts = {"compact": (2, 1, 1), "cluster": (2, 4, 4)}[mode]
+counts = {"compact": (2, 1, 1), "cluster": (2, 4, 6)}[mode]
 services = (
     ("config-center", "CONFIG_GO_ADDR", 8201, "config"),
     ("sdk-core", "SDK_CORE_ADDR", 8211, "core"),
