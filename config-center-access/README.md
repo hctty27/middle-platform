@@ -24,7 +24,7 @@ go run ./cmd/config-center-access -config configs/config-dev.yaml
 - 节点和游标在同一事务内写入；周期性 revision 校对补偿丢失通知。
 - 停用订阅者会拒绝该接入端向配置中心发起的同步读取请求，并停止新的 Webhook 投递；接入端本地只读接口仍按本地配置密钥验签。
 - 轮换密钥时，必须同步更新配置中心订阅记录和本接入端 `subscriber.secret`，再重启接入端，不能只改其中一侧。
-- 旧版全局 `configSync.secret`、独立 `webhook.secret` 及未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。多实例场景应通过共享存储实现全局 nonce 去重。
+- 旧版全局 `configSync.secret`、独立 `webhook.secret` 及未绑定接入端身份的签名协议不再兼容；配置中心和接入端必须同步升级。接入端的本地只读接口与配置回调共用同一个进程内 nonce 存储，容量上限 320,000，缓存满时拒绝新请求（HTTP 409）；进程重启后缓存清空，多实例之间不共享 nonce。若接入端部署多实例并要求集群级防重放，仍需接入 Redis 等共享存储。
 
 ## 内部 UTC 时间
 
