@@ -2,7 +2,7 @@
 import http from 'k6/http';
 import crypto from 'k6/crypto';
 import exec from 'k6/execution';
-import { Rate } from 'k6/metrics';
+import { Rate, Counter } from 'k6/metrics';
 
 const catalog = JSON.parse(open('./endpoint-qps-catalog.json'));
 const spec = catalog.find(x => x.id === __ENV.QPS_CASE);
@@ -34,6 +34,11 @@ const orderAmount = Number(__ENV.QPS_ORDER_AMOUNT || '100');
 const currentEpoch = __ENV.QPS_EPOCH || '';
 const currentRevision = Number(__ENV.QPS_REVISION || '0');
 const bad = new Rate('endpoint_bad');
+const unauthorized = new Counter('endpoint_http_401');
+const conflicts = new Counter('endpoint_http_409');
+const throttled = new Counter('endpoint_http_429');
+const unavailable = new Counter('endpoint_http_503');
+const serverErrors = new Counter('endpoint_http_5xx');
 export const options = {
   scenarios: { endpoint: { executor: 'constant-arrival-rate',
     rate, timeUnit: '1s', duration: seconds + 's',
@@ -188,5 +193,10 @@ export default function () {
       }
     }
   }
+  if (response.status === 401) unauthorized.add(1);
+  if (response.status === 409) conflicts.add(1);
+  if (response.status === 429) throttled.add(1);
+  if (response.status === 503) unavailable.add(1);
+  if (response.status >= 500) serverErrors.add(1);
   bad.add(!ok);
 }
