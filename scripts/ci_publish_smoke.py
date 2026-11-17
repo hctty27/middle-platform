@@ -73,7 +73,8 @@ class RemotePublishTests(unittest.TestCase):
                 archive.addfile(extra)
 
     def run_publish(self, digest=None, machine="x86_64", service=None,
-                    restart=False, restart_fail=False, plan=None):
+                    restart=False, restart_fail=False, plan=None,
+                    recovery_http="200", recovery_fail_on=0, stopped_program=""):
         digest = digest or hashlib.sha256(self.archive.read_bytes()).hexdigest()
         if plan is None:
             plan = ",".join(f"sdk-core-{i}:{8210 + i}" for i in range(1, 5)) if restart else "-"
@@ -85,14 +86,32 @@ export -f uname flock
 if [[ "$TEST_RESTART" == 1 ]]; then
     supervisorctl() {
         case "$1" in
-            status) printf '%s RUNNING pid 100\\n' "$2" ;;
+            status)
+                if [[ "$2" == "$TEST_STOPPED_PROGRAM" ]]; then
+                    printf '%s STOPPED\\n' "$2"
+                else
+                    printf '%s RUNNING pid 100\\n' "$2"
+                fi
+                ;;
             restart)
                 printf 'restart %s\\n' "$2" >> "$TEST_EVENTS"
                 [[ "$TEST_RESTART_FAIL" == 0 ]]
                 ;;
         esac
     }
-    curl() { printf 'ready\\n' >> "$TEST_EVENTS"; return 0; }
+    curl() {
+        printf 'ready\\n' >> "$TEST_EVENTS"
+        if [[ " $* " == *" -w "* ]]; then
+            printf 'recovery probe\\n' >> "$TEST_EVENTS"
+            count=$(grep -c '^recovery probe$' "$TEST_EVENTS")
+            if [[ "$count" -eq "$TEST_RECOVERY_FAIL_ON" ]]; then
+                printf '%s' "$TEST_RECOVERY_HTTP"
+            else
+                printf '200'
+            fi
+        fi
+        return 0
+    }
     export -f supervisorctl curl
 fi
 exec bash "$@"
@@ -103,7 +122,10 @@ exec bash "$@"
             env={**os.environ, "TEST_MACHINE": machine,
                  "TEST_RESTART": "1" if restart else "0",
                  "TEST_RESTART_FAIL": "1" if restart_fail else "0",
-                 "TEST_EVENTS": bash_path(self.events)},
+                 "TEST_EVENTS": bash_path(self.events),
+                 "TEST_RECOVERY_HTTP": recovery_http,
+                 "TEST_RECOVERY_FAIL_ON": str(recovery_fail_on),
+                 "TEST_STOPPED_PROGRAM": stopped_program},
             capture_output=True, text=True,
         )
 
@@ -258,6 +280,67 @@ exec bash "$@"
         result = self.assert_rejected(service="sdk-core", restart=True)
         self.assertEqual(result.returncode, 127)
         self.assertIn("Nginx upstream validation failed: sdk-core port 8211 (exit 127)", result.stderr)
+
+    def simulate_drained_core(self, recover_fail=False):
+        self.nginx_control.write_bytes((
+            b"#!/usr/bin/env bash\n"
+            b"printf '%s %s %s\n' \"$1\" \"$2\" \"$3\" >> \"$TEST_EVENTS\"\n"
+            b"if [[ \"$3\" == 8211 && \"$1\" == validate ]] && "
+            b"! grep -Fxq 'recover sdk-core 8211' \"$TEST_EVENTS\"; then\n"
+            b"    printf 'UPSTREAM_DOWN sdk-core 8211\n'; exit 3\n"
+            b"fi\n"
+            + (b"if [[ \"$1\" == recover ]]; then exit 1; fi\n" if recover_fail else b"")
+            + b"exit 0\n"
+        ))
+
+    def test_healthy_drained_peer_recovers_before_application_replacement(self):
+        self.simulate_drained_core()
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.run_publish(service="sdk-core", restart=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Recovered sdk-core-1 to Nginx traffic before rollout", result.stdout)
+        self.assertLess(result.stdout.index("Recovered sdk-core-1"),
+                        result.stdout.index("Updated bin/sdk-core"))
+        events = self.events.read_text(encoding="utf-8").splitlines()
+        recovery = events.index("recover sdk-core 8211")
+        self.assertEqual(events[:recovery].count("recovery probe"), 3)
+        self.assertLess(recovery, events.index("drain sdk-core 8211"))
+        self.assertEqual(sum(e.startswith("recover ") for e in events), 1)
+
+    def test_drained_peer_third_health_check_failure_blocks_publish(self):
+        self.simulate_drained_core()
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.assert_rejected(service="sdk-core", restart=True,
+                                      recovery_http="302", recovery_fail_on=3)
+        self.assertIn("health check 3/3 failed", result.stderr)
+        events = self.events.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(events.count("recovery probe"), 3)
+        self.assertNotIn("recover sdk-core 8211", events)
+        self.assertFalse(any(e.startswith("restart ") for e in events))
+
+    def test_stopped_peer_is_not_recovered_even_if_http_is_ready(self):
+        self.simulate_drained_core()
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.assert_rejected(service="sdk-core", restart=True,
+                                      stopped_program="sdk-core:sdk-core-1")
+        self.assertIn("not RUNNING", result.stderr)
+        self.assertFalse(self.events.exists())
+
+    def test_recovery_reload_failure_blocks_publish(self):
+        self.simulate_drained_core(recover_fail=True)
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.assert_rejected(service="sdk-core", restart=True)
+        self.assertIn("Nginx upstream recovery failed", result.stderr)
+        self.assertNotIn("Recovered sdk-core-1", result.stdout)
+        events = self.events.read_text(encoding="utf-8").splitlines()
+        self.assertNotIn("drain sdk-core 8211", events)
+
+    def test_unclassified_validation_error_is_never_recovered(self):
+        self.nginx_control.write_bytes(b"#!/usr/bin/env bash\nexit 3\n")
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.assert_rejected(service="sdk-core", restart=True)
+        self.assertIn("Nginx upstream validation failed", result.stderr)
+        self.assertNotIn("Recovered", result.stdout)
 
     def test_skip_restart_does_not_require_nginx_helper(self):
         self.nginx_control.unlink()
