@@ -92,6 +92,11 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, "{\"code\":0,\"data\":true}")
 	})
+	// Minimal loopback HTTP responder to calibrate generator + transport overhead
+	// without application routing, HMAC, Nginx, or MySQL.
+	mux.HandleFunc("GET /load/bench/ping", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "UP")
 	})

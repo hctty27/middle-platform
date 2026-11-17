@@ -103,11 +103,15 @@ def reset_auth_nonce_cache(case_id):
     elif case_id.startswith("core-") and case_id not in (
         "core-config", "core-order-register", "core-payment-duplicate"):
         name = "sdk-core"
+    elif case_id.startswith("access-"):
+        # Both access GET routes share one 10k HMAC nonce cache. Restart only
+        # the isolated replica between stages so the second route gets a fair run.
+        name = "config-center-access"
     if not name:
         return
-    count = 2 if name == "config-center" else (4 if os.environ["LOAD_TOPOLOGY"] == "cluster" else 1)
-    first = 8201 if name == "config-center" else 8211
-    programs = [f"{name}-{i+1}" for i in range(count)]
+    count = 2 if name == "config-center" else (4 if name == "sdk-core" and os.environ["LOAD_TOPOLOGY"] == "cluster" else 1)
+    first = 8201 if name == "config-center" else (8211 if name == "sdk-core" else 8081)
+    programs = [f"{name}-{i+1}" for i in range(count)] if name != "config-center-access" else [name]
     subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *programs],
                    check=True, timeout=60, stdout=subprocess.DEVNULL)
     for offset in range(count):
@@ -165,8 +169,8 @@ baseline_failures = []
 print("## GitHub-hosted endpoint QPS ladder (local-only)\n", flush=True)
 print(f"Selected {len(chosen)} routes, group={group}, tiers={tiers}, seconds={duration}. "
       "One measured target request per iteration; no production traffic.\n", flush=True)
-print("| Endpoint | Mode | Target QPS | Actual HTTP/s | P95 ms | P99 ms | Bad % | Dropped | MySQL locks | Result |")
-print("|---|---|---:|---:|---:|---:|---:|---:|---:|---|", flush=True)
+print("| Endpoint | Mode | Target QPS | VUs | Actual HTTP/s | P95 ms | P99 ms | Bad % | 401 | 409 | 429 | 503 | 5xx | Dropped | MySQL locks | Result |", flush=True)
+print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|", flush=True)
 
 for pos, case in enumerate(chosen):
     rates = ([50,200,500] if group == "quick" else
@@ -213,6 +217,11 @@ for pos, case in enumerate(chosen):
             errors = value(data,"endpoint_bad","rate")
         dropped = value(data,"dropped_iterations","count") or 0
         iterations = value(data,"iterations","count") or 0
+        auth_conflicts = value(data,"endpoint_http_409","count") or 0
+        throttles = value(data,"endpoint_http_429","count") or 0
+        unauthenticated = value(data,"endpoint_http_401","count") or 0
+        service_unavailable = value(data,"endpoint_http_503","count") or 0
+        http_5xx = value(data,"endpoint_http_5xx","count") or 0
         lock_waits = after.get("Innodb_row_lock_waits",0) - before.get("Innodb_row_lock_waits",0)
         eligible = bool(
             run.returncode == 0 and data and errors is not None and errors < 0.01
@@ -222,15 +231,25 @@ for pos, case in enumerate(chosen):
             and dropped <= planned * 0.001)
         status = "PASS" if eligible else "STOP"
         row = {"id":case["id"],"route":case["route"],"group":case["group"],
-               "mode":case["mode"],"target_qps":rate,"actual_http_qps":actual,
-               "p95_ms":p95,"p99_ms":p99,"bad_rate":errors,
+               "mode":case["mode"],"target_qps":rate,"preallocated_vus":vus,
+               "actual_http_qps":actual,"p95_ms":p95,"p99_ms":p99,"bad_rate":errors,
                "planned":planned,"iterations":iterations,"dropped":dropped,
-               "sql_lock_waits":lock_waits,"exit":run.returncode,"qualified":eligible}
+               "sql_lock_waits":lock_waits,"exit":run.returncode,"qualified":eligible,
+               "http_401":unauthenticated,"http_409":auth_conflicts,"http_429":throttles,
+               "http_503":service_unavailable,"http_5xx":http_5xx,
+               "diagnostic_hint":("signature_auth_401" if unauthenticated else
+                                  "nonce_capacity_or_http_conflict_409" if auth_conflicts else
+                                  "application_rate_limit_429" if throttles else
+                                  "dependency_unavailable_503" if service_unavailable else
+                                  "upstream_or_server_5xx" if http_5xx else
+                                  "load_generator_or_sut_latency_drops" if dropped else
+                                  "business_or_validation" if not eligible else "pass")}
         rows.append(row)
         print("| " + " | ".join([
-            case["id"],case["mode"],str(rate),number(actual),number(p95),
+            case["id"],case["mode"],str(rate),str(vus),number(actual),number(p95),
             number(p99),number(None if errors is None else errors*100),
-            str(dropped),str(lock_waits),status
+            str(unauthenticated),str(auth_conflicts),str(throttles),
+            str(service_unavailable),str(http_5xx),str(dropped),str(lock_waits),status
         ])+" |", flush=True)
         if not eligible:
             if tier == 0:
