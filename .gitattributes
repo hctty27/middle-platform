@@ -1,0 +1,4 @@
+# Linux deployment scripts and configuration files must retain LF.
+*.sh text eol=lf
+*.conf text eol=lf
+*.conf.example text eol=lf

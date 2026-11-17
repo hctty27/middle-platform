@@ -246,6 +246,19 @@ exec bash "$@"
         result = self.assert_rejected(service="sdk-core", restart=True)
         self.assertIn("Missing or unsafe Nginx upstream control helper", result.stderr)
 
+    def test_crlf_nginx_helper_rejects_rolling_publish(self):
+        self.nginx_control.write_bytes(self.nginx_control.read_bytes().replace(b"\n", b"\r\n"))
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.assert_rejected(service="sdk-core", restart=True)
+        self.assertIn("Nginx upstream helper has CRLF line endings", result.stderr)
+
+    def test_nginx_helper_exit_reports_validation_stage(self):
+        self.nginx_control.write_bytes(b"#!/usr/bin/env bash\nexit 127\n")
+        self.make_package(frontend=False, only="sdk-core")
+        result = self.assert_rejected(service="sdk-core", restart=True)
+        self.assertEqual(result.returncode, 127)
+        self.assertIn("Nginx upstream validation failed: sdk-core port 8211 (exit 127)", result.stderr)
+
     def test_skip_restart_does_not_require_nginx_helper(self):
         self.nginx_control.unlink()
         self.make_package(frontend=False, only="sdk-core")

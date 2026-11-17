@@ -91,10 +91,11 @@ func writeContents(writer *tar.Writer, source string) error {
 				return err
 			}
 			name := filepath.ToSlash(relative)
+			// 使用固定的非零时间戳，保持可复现并避免旧版 GNU tar 的时间戳警告。
 			header := &tar.Header{
 				Name:    name,
 				Mode:    0o644,
-				ModTime: time.Unix(0, 0).UTC(),
+				ModTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
 			}
 			if entry.IsDir() {
 				header.Name += "/"

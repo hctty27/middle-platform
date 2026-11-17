@@ -196,11 +196,34 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
     done
 
     nginx_control="$root/ops/nginx/upstream-control.sh"
+    run_nginx_control() {
+        local action=$1 group=$2 port=$3 status
+        if MIDDLE_PLATFORM_ROOT="$root" bash "$nginx_control" "$action" "$group" "$port"; then
+            return 0
+        else
+            status=$?
+            if [[ "$action" == validate ]]; then
+                printf 'Nginx upstream validation failed: %s port %s (exit %s); no application files were changed\n' "$group" "$port" "$status" >&2
+            else
+                printf 'Nginx upstream %s failed: %s port %s (exit %s); rollout stopped; inspect runtime upstream state\n' "$action" "$group" "$port" "$status" >&2
+            fi
+            exit "$status"
+        fi
+    }
     # 运维脚本独立维护，仅在有 Nginx upstream 的实例需要重启时检查。
     for group in "${groups[@]}"; do
         if [[ "$group" != none ]]; then
             if [[ ! -f "$nginx_control" || ! -x "$nginx_control" || -L "$nginx_control" ]]; then
                 printf 'Missing or unsafe Nginx upstream control helper: %s; no application files were changed\n' "$nginx_control" >&2
+                exit 1
+            fi
+            # GNU grep on Windows otherwise strips CR in text mode.
+            if grep -aUq -- $'\r$' "$nginx_control"; then
+                printf 'Nginx upstream helper has CRLF line endings: %s; convert to LF; no application files were changed\n' "$nginx_control" >&2
+                exit 1
+            fi
+            if ! bash -n "$nginx_control"; then
+                printf 'Invalid Bash syntax in Nginx upstream helper: %s; no application files were changed\n' "$nginx_control" >&2
                 exit 1
             fi
             break
@@ -221,7 +244,7 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
             exit 1
         fi
         if [[ "$group" != none ]]; then
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" validate "$group" "$port"
+            run_nginx_control validate "$group" "$port"
         fi
     done
 fi
@@ -251,7 +274,7 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         if [[ "$group" != none ]]; then supervisor_process="$group:$program"; fi
         if [[ "$group" != none ]]; then
             printf 'Draining %s from Nginx...\n' "$program"
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" drain "$group" "$port"
+            run_nginx_control drain "$group" "$port"
         fi
         printf 'Restarting %s...\n' "$program"
         if ! supervisorctl restart "$supervisor_process"; then
@@ -279,7 +302,7 @@ if [[ "${#programs[@]}" -gt 0 ]]; then
         fi
         printf 'Healthy: %s (port %s)\n' "$program" "$port"
         if [[ "$group" != none ]]; then
-            MIDDLE_PLATFORM_ROOT="$root" "$nginx_control" enable "$group" "$port"
+            run_nginx_control enable "$group" "$port"
             printf 'Restored %s to Nginx traffic\n' "$program"
         fi
     done

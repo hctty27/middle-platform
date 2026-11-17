@@ -68,6 +68,8 @@ sudo chmod 0755 /data/middle-platform/ops/nginx/upstream-control.sh
 sudo cp /data/middle-platform/ops/nginx/middle-platform.conf /etc/nginx/conf.d/middle-platform.conf
 ```
 
+从 Windows 上传时确保 `.sh` 使用 LF 换行符（仓库 `.gitattributes` 已约束）。已有 CRLF 脚本可在服务器执行 `sed -i 's/\r$//' /data/middle-platform/ops/nginx/upstream-control.sh` 后再设置执行权限。发布会在替换应用文件前检查控制脚本的 CRLF 与 Bash 语法。
+
 3. 首次手动创建三个动态 upstream 实例列表。可以手动复制仓库根目录的 `run/nginx/*.conf` 至服务器对应目录（仅复制缺失文件），也可以按以下命令创建。将 `deploy` 替换为实际 SSH 发布用户。以下命令只创建缺失文件，不覆盖已有运行状态：
 
 ```bash
@@ -116,6 +118,8 @@ sudo touch /data/middle-platform/.publish.lock
 sudo chown "$deploy_user:$deploy_group" /data/middle-platform/.publish.lock
 sudo chmod 0660 /data/middle-platform/.publish.lock
 ```
+
+控制脚本校验兼容 LF 和 CRLF 的实例列表；实际摘除或恢复实例时会将对应文件写为 LF，保留其他实例的 `down` 状态。
 
 这三个文件只在首次部署时手动创建或复制。仓库初始配置不打包、不自动上传、不自动初始化或覆盖服务器文件；滚动发布期间仍由 `upstream-control.sh` 修改服务器对应实例的 `down` 状态。
 
