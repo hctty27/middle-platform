@@ -112,15 +112,11 @@ fi
 file="$root/run/nginx/config-center-upstream.conf"
 printf 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s;\r\nserver 127.0.0.1:8202 max_fails=1 fail_timeout=10s;\r\n' > "$file"
 "$control" validate config-center 8201
-grep -q 
-\r
- "$file"
+grep -q $'\r$' "$file"
 "$control" drain config-center 8201
 grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s down;' "$file"
 grep -Fxq 'server 127.0.0.1:8202 max_fails=1 fail_timeout=10s;' "$file"
-if grep -q 
-\r
- "$file"; then echo 'CRLF was not normalized on write' >&2; exit 1; fi
+if grep -q $'\r$' "$file"; then echo 'CRLF was not normalized on write' >&2; exit 1; fi
 if "$control" drain config-center 8202; then echo 'Drained last active instance' >&2; exit 1; fi
 "$control" enable config-center 8201
 grep -Fxq 'server 127.0.0.1:8201 max_fails=1 fail_timeout=10s;' "$file"
