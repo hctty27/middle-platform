@@ -86,7 +86,14 @@ func TestConfigWebhookHMACSignatureFixture(t *testing.T) {
 func TestCallbackRejectsMalformedJSON(t *testing.T) {
 	trigger := &fakeTrigger{}
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/internal/config/callback", bytes.NewBufferString("{bad"))
+	body := []byte("{bad")
+	timestamp := fmt.Sprint(time.Now().Unix())
+	nonce := "abcdef0123456789"
+	req := httptest.NewRequest(http.MethodPost, "/internal/config/callback", bytes.NewReader(body))
+	req.Header.Set("X-Subscriber-Code", testAccessSubscriberCode)
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Nonce", nonce)
+	req.Header.Set("X-Signature", signedCallback(testAccessSubscriberCode, testAccessSyncSecret, timestamp, nonce, body))
 	Router(nil, trigger, testAccessSubscriberCode, testAccessSyncSecret).ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || trigger.count.Load() != 0 {
 		t.Fatal(w.Code)
