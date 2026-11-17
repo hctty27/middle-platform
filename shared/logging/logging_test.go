@@ -23,7 +23,10 @@ func capture(t *testing.T) *bytes.Buffer {
 
 func TestHandlerRecordTimeBeijing(t *testing.T) {
 	stamp := time.Date(2026, 11, 16, 2, 5, 6, 123456789, time.UTC)
-	want := stamp.In(logTimezone).Truncate(time.Millisecond).Format(logTimestampLayout)
+	const want = "2026-11-16T10:05:06.123+08:00"
+	if got := formatRecordTime(stamp); got != want {
+		t.Fatalf("Beijing timestamp = %q, want %q", got, want)
+	}
 	for _, format := range []string{"json", "text"} {
 		t.Run(format, func(t *testing.T) {
 			var out bytes.Buffer
