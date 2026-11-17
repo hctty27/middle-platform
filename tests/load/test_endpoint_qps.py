@@ -42,6 +42,23 @@ class TestEndpointQPS(unittest.TestCase):
         self.assertNotIn("https://",js)
         self.assertIn("seed_delete",py)
         self.assertIn("api-coverage.js",py)
+    def test_high_qps_diagnostics_are_loopback_only_and_do_not_skip_hmac(self):
+        diagnostic_js=(ROOT/"tests/load/qps-diagnostics.js").read_text()
+        diagnostic_py=(ROOT/"tests/load/qps-diagnostics.py").read_text()
+        workflow=WORKFLOW.read_text()
+        mock=(ROOT/"tests/load/mock.go").read_text()
+        self.assertIn("http://127.0.0.1:8290",diagnostic_js)
+        self.assertIn("http://127.0.0.1:8211",diagnostic_js)
+        self.assertIn("http://127.0.0.1:8201",diagnostic_js)
+        self.assertIn("http://127.0.0.1:8081",diagnostic_js)
+        self.assertNotIn("https://",diagnostic_js)
+        self.assertIn("crypto.hmac('sha256'",diagnostic_js)
+        self.assertIn("diag_http_409",diagnostic_js)
+        self.assertIn("RUNNER_ENVIRONMENT",diagnostic_py)
+        self.assertIn("qps-diagnostics.py",workflow)
+        self.assertIn("[HIGH-READ-QPS]",workflow)
+        self.assertIn("GET /load/bench/ping",mock)
+
 
 if __name__=="__main__":
     unittest.main()
