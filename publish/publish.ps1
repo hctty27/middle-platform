@@ -188,22 +188,51 @@ public class PublishAskPass {
     return $exePath
 }
 
+# Capture the helper's raw UTF-8 bytes in memory. Start-Process with redirected
+# files can leave its output handle open briefly even after -Wait; it also
+# writes the password to disk during the self-check.
+function Invoke-PublishAskPassCheck {
+    param([string]$Exe, [string]$Prompt)
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = $Exe
+    $info.Arguments = $Prompt
+    $info.WorkingDirectory = Split-Path -Parent $Exe
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $process = New-Object System.Diagnostics.Process
+    $buffer = New-Object System.IO.MemoryStream
+    try {
+        $process.StartInfo = $info
+        if (-not $process.Start()) { throw 'Could not start SSH password helper self-check.' }
+        # Drain both streams concurrently, and wait for EOF before comparing.
+        $copy = $process.StandardOutput.BaseStream.CopyToAsync($buffer)
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(10000)) {
+            $process.Kill()
+            $process.WaitForExit()
+            throw 'SSH password helper self-check timed out.'
+        }
+        $copy.GetAwaiter().GetResult()
+        $null = $stderr.GetAwaiter().GetResult()
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Bytes = $buffer.ToArray() }
+    } finally {
+        $buffer.Dispose()
+        $process.Dispose()
+    }
+}
+
 function Assert-PublishAskPass {
     param([string]$Exe, [string]$Password)
     $utf8 = New-Object System.Text.UTF8Encoding($false)
-    $directory = Split-Path -Parent $Exe
-    $accepted = Join-Path $directory 'askpass-ok.bin'
-    $rejected = Join-Path $directory 'askpass-no.bin'
-    $acceptedError = Join-Path $directory 'askpass-ok.err'
-    $rejectedError = Join-Path $directory 'askpass-no.err'
-    $ok = Start-Process -FilePath $Exe -ArgumentList 'password:' -WorkingDirectory $directory -RedirectStandardOutput $accepted -RedirectStandardError $acceptedError -NoNewWindow -Wait -PassThru
-    $actual = [System.IO.File]::ReadAllBytes($accepted)
+    $ok = Invoke-PublishAskPassCheck $Exe 'password:'
     $expected = $utf8.GetBytes($Password + "`n")
-    if ($ok.ExitCode -ne 0 -or -not (Test-ByteMatch $actual $expected)) {
+    if ($ok.ExitCode -ne 0 -or -not (Test-ByteMatch $ok.Bytes $expected)) {
         throw 'SSH password helper failed its self-check.'
     }
-    $no = Start-Process -FilePath $Exe -ArgumentList 'continue?' -WorkingDirectory $directory -RedirectStandardOutput $rejected -RedirectStandardError $rejectedError -NoNewWindow -Wait -PassThru
-    if ($no.ExitCode -eq 0) {
+    $no = Invoke-PublishAskPassCheck $Exe 'continue?'
+    if ($no.ExitCode -eq 0 -or $no.Bytes.Length -ne 0) {
         throw 'SSH password helper answered a non-password prompt.'
     }
 }
