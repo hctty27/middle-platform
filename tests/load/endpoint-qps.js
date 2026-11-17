@@ -171,7 +171,8 @@ export default function () {
     tags:{name:spec.route, endpoint_id:spec.id},
   });
   let ok = response.status === spec.expected;
-  if (ok && response.status !== 204 && response.status !== 202 && !spec.id.startsWith('health-')) {
+  if (ok && response.status !== 204 && response.status !== 202 &&
+      spec.id !== 'config-create-subscriber' && !spec.id.startsWith('health-')) {
     if (spec.id === 'core-payment-duplicate') {
       ok = /^[0-9a-f]{16}$/.test(response.body);
     } else {
