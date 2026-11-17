@@ -17,6 +17,14 @@
 
 写接口有明确数据边界：创建操作每请求生成唯一对象；删除操作每档预置独立临时行；更新使用可重复的测试数据；支付回调只测**已支付订单重复回调**；订单重试只测**不可重试订单返回 409**。后两项不代表首次支付或成功补偿的吞吐。Mock 链路和单机 Runner 的数据也不能当作生产环境最大性能。
 
+## 5,000–20,000 QPS HMAC / 压测机瓶颈专项实验
+
+PR 标题包含 `[HIGH-READ-QPS]` 时，GitHub Runner Load Test 将在**隔离 Runner** 上以 cluster（config-center 2、sdk-core 4、sdk-service 4）对 32 个查询类路由重新执行 100/500/1000/3000/5000/10000/20000 QPS 逐档测试。与 compact 初轮结果不可直接作同硬件容量对比；这只是改变服务实例数与 Nonce 缓存分摊的 A/B 探索。工作流的固定本地测试服务和安全阈值不变。
+
+同时运行 `tests/load/qps-diagnostics.py` 与 `qps-diagnostics.js`：先测同台 Runner 上无签名 Mock 的本机 `GET /load/bench/ping` 和应用 `GET /health/live` 在 10000/20000 QPS 的生成与响应情况，再将配置中心、SDK Core、配置接入端的**单个实例**重启以清空进程内 replay-cache，使用合法签名及随机唯一 Nonce 按 3000 QPS × 5 秒运行，记录 2xx/409/其他状态码以及丢弃迭代。配置同步也执行单实例签名对照。绝不绕过 HMAC、修改业务代码、放宽鉴权，或将 409 当作成功。
+
+`endpoint-qps.py` 在每档额外记录 401/409/429/503/5xx 的具体计数。由于配置接入端两个查询路由共享 10000 项进程内签名缓存，每档开始前重启该隔离实例，防止前一个接口消耗的缓存污染后一个接口。探针原始数据写入 `qps-diagnostics-summary.json/csv`，并保留 k6 日志与 CPU/RSS 样本。**即使出现大量 409，也只能先归类为可能的 nonce 容量/业务冲突，需结合合法 nonce、成功请求数与返回码确认**；`dropped_iterations` 也无法仅凭自身证明瓶颈属于 k6 还是被测程序。同机对照无法消除资源竞争，不代表生产容量上限。
+
 ## 全接口覆盖（api-coverage）
 
 Actions → Runner Load Test → Run workflow：选择 profile=api-coverage、topology=compact、scenario=all。该任务只在 GitHub 托管 Ubuntu Runner 上运行，所有 HTTP 目标固定为 127.0.0.1。它会启动配置中心、SDK Core、SDK Service、Nginx、MySQL、模拟游戏/平台，以及带独立临时 config_access 数据库的 config-center-access。
