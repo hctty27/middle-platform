@@ -87,7 +87,17 @@ func TestConcurrentNotifyClaims(t *testing.T) {
 					return
 				default:
 				}
-				item, claimErr := s.ClaimDue(ctx)
+				var item *model.Order
+				var claimErr error
+				if worker%2 == 0 {
+					var candidates []model.NotifyCandidate
+					candidates, claimErr = s.ListDue(ctx, nil, total)
+					if claimErr == nil && len(candidates) > 0 {
+						item, claimErr = s.ClaimCandidate(ctx, candidates[worker%len(candidates)])
+					}
+				} else {
+					item, claimErr = s.ClaimDue(ctx)
+				}
 				if claimErr != nil {
 					select {
 					case errs <- claimErr:

@@ -10,7 +10,7 @@ database:
   maxIdleConns: 10
   connMaxLifetime: "30m"
 
-# 异步发货：有到期订单时连续领取；仅队列为空或数据库失败时等待。
+# 异步发货：只读分页预览候选，取得目标额度后才领取；发送完成会唤醒调度。
 orderNotify:
   workers: 4
   idleInterval: 500ms
@@ -22,7 +22,8 @@ orderNotify:
   maxConnsPerHost: 4
   idleConnTimeout: 30s
 
-# 仅缓存公开配置；停用/配置变化存在 TTL 加在途读取的可见延迟。0s 关闭。
+# 公开配置和订单配置分别使用独立缓存（订单缓存含验签/发货密钥）。
+# 停用/解绑/密钥轮换存在 TTL 加在途读取的可见延迟，要求即时生效时设为 0s。
 configCache:
   ttl: 1s
   maxEntries: 4096

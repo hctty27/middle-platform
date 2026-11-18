@@ -129,7 +129,7 @@ func (s *OrderService) Register(ctx context.Context, env, appid string, req mode
 	})
 }
 
-// Receive 根据已登记订单定位 AppID，验签后仅确认支付并唤醒持久化通知队列。
+// Receive 根据已登记订单定位 AppID，验签后仅确认支付并安排持久化通知任务。
 // env 仅标识登记订单所属环境，不参与平台验签密钥选择。
 // 平台负责核对实际收款；SDK Core 按既有 v1 协议验签并核对登记金额，不发起二次查单。
 // 注意：v1 签名不覆盖 amount/attach/paid_at，金额比较无法证明这些回调字段的完整性。
@@ -171,15 +171,20 @@ func (s *OrderService) Receive(ctx context.Context, appid string, h http.Header,
 
 // deliver 使用游戏主密钥按平台风格签名通知，并持久化通知结果。
 func (s *OrderService) deliver(ctx context.Context, o model.Order) error {
-	// 额度满时不读密钥、不发送、不等待；网络阶段结束后即释放，保存不占额度。
-	err := func() error {
-		if s.HostGate != nil {
-			release, ok := s.HostGate.TryAcquire(o.GameNotifyURL)
-			if !ok {
-				return model.ErrNotifyDeferred
-			}
-			defer release()
+	release := func() {}
+	if s.HostGate != nil {
+		var ok bool
+		release, ok = s.HostGate.TryAcquire(o.GameNotifyURL)
+		if !ok {
+			return s.completeNotify(o, model.ErrNotifyDeferred)
 		}
+	}
+	return s.deliverReserved(ctx, o, release)
+}
+
+func (s *OrderService) deliverReserved(ctx context.Context, o model.Order, release func()) error {
+	err := func() error {
+		defer release()
 		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		raw, err := s.GameSecretReader.LookupGameConfig(sendCtx, o.GameID)
@@ -195,17 +200,25 @@ func (s *OrderService) deliver(ctx context.Context, o model.Order) error {
 		}
 		return err
 	}()
+	return s.completeNotify(o, err)
+}
+
+func (s *OrderService) completeNotify(o model.Order, notifyErr error) error {
 	commitCtx, commitCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer commitCancel()
-	if saveErr := s.Orders.CompleteNotify(commitCtx, o.ID, o.NotifyAttempts, err); saveErr != nil {
+	if saveErr := s.Orders.CompleteNotify(commitCtx, o.ID, o.NotifyAttempts, notifyErr); saveErr != nil {
 		return fmt.Errorf("保存发货通知结果失败: %w", saveErr)
 	}
-	return err
+	return notifyErr
 }
 
 // RunWorker 使用可配置数量的消费者处理到期通知。
 // 通过 MySQL SKIP LOCKED 协调多进程；60 秒租约长于 5 秒通知超时。
 func (s *OrderService) RunWorker(ctx context.Context, workers int, idleInterval time.Duration) {
+	if queue, ok := s.Orders.(notifyCandidateQueue); ok {
+		s.runNotifyDispatcher(ctx, queue, workers, idleInterval)
+		return
+	}
 	var wg sync.WaitGroup
 	wg.Add(workers)
 	for i := 0; i < workers; i++ {

@@ -38,6 +38,15 @@ type Order struct {
 	NextNotifyAt    time.Time
 }
 
+// NotifyCandidate 仅用于调度预览，不表示已取得订单租约。
+type NotifyCandidate struct {
+	ID            int64
+	GameNotifyURL string
+	NextNotifyAt  time.Time
+	// DueBefore 固定本轮扫描的数据库时间，持续新订单不能阻止游标回到忙目标。
+	DueBefore time.Time
+}
+
 // PaymentCallback 表示平台发来的 v1 支付回调。发给游戏的通知不使用此结构。
 type PaymentCallback struct {
 	OrderNo     string `json:"order_no"`

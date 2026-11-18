@@ -85,6 +85,11 @@ func Run(configPath string) error {
 		return err
 	}
 	defer publicReader.Close()
+	orderReader, err := service.NewCachedOrderReader(repository, cfg.ConfigCache.Options())
+	if err != nil {
+		return err
+	}
+	defer orderReader.Close()
 	idleConnTimeout, _ := time.ParseDuration(cfg.OrderNotify.IdleConnTimeout)
 	notifier := notify.NewClientWithOptions(notify.Options{
 		DisableKeepAlives:   cfg.OrderNotify.DisableKeepAlives,
@@ -95,10 +100,10 @@ func Run(configPath string) error {
 	})
 	defer notifier.CloseIdleConnections()
 	orders := &service.OrderService{
-		ConfigReader:         repository,
+		ConfigReader:         orderReader,
 		Orders:               store.NewOrderStore(db),
-		PlatformSecretReader: repository,
-		GameSecretReader:     repository,
+		PlatformSecretReader: orderReader,
+		GameSecretReader:     orderReader,
 		Notifier:             notifier,
 		HostGate:             notify.NewHostGate(cfg.OrderNotify.HostConcurrency),
 	}

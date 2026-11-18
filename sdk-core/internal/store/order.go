@@ -18,8 +18,11 @@ type OrderStore struct{ db *sql.DB }
 // NewOrderStore 使用 SDK Core 已有的 sql.DB 连接池。
 func NewOrderStore(db *sql.DB) *OrderStore { return &OrderStore{db: db} }
 
-const orderColumns = `id, appid, game_id, env, game_order_id, amount, attach, game_notify_url,
-    COALESCE(platform_order_no,''), paid_at, payment_status, notify_status, notify_attempts, next_notify_at`
+const orderStateColumns = `id, appid, game_id, env, game_order_id, amount, attach, game_notify_url,
+    COALESCE(platform_order_no,''), paid_at, payment_status, notify_status, notify_attempts`
+
+const orderColumns = orderStateColumns + `, next_notify_at`
+const claimColumns = orderStateColumns + `, DATE_ADD(UTC_TIMESTAMP(),INTERVAL 60 SECOND)`
 
 func scanOrder(row interface{ Scan(...any) error }) (model.Order, error) {
 	var o model.Order
@@ -158,8 +161,12 @@ func (s *OrderStore) CompleteNotify(ctx context.Context, id int64, attempt int, 
 // ClaimDue 使用 READ COMMITTED + SKIP LOCKED 领取到期任务，减少高并发扫描的间隙锁冲突。
 // InnoDB 仍可能返回 1213 死锁或 1205 锁等待超时；短暂重试，不允许重复提交任务。
 func (s *OrderStore) ClaimDue(ctx context.Context) (*model.Order, error) {
+	return retryClaim(ctx, func() (*model.Order, error) { return s.claimDueOnce(ctx) })
+}
+
+func retryClaim(ctx context.Context, claim func() (*model.Order, error)) (*model.Order, error) {
 	for retry := 0; retry < 3; retry++ {
-		order, err := s.claimDueOnce(ctx)
+		order, err := claim()
 		if err == nil || ctx.Err() != nil {
 			return order, err
 		}
@@ -173,23 +180,25 @@ func (s *OrderStore) ClaimDue(ctx context.Context) (*model.Order, error) {
 		case <-time.After(time.Duration(retry+1) * 10 * time.Millisecond):
 		}
 	}
-	return s.claimDueOnce(ctx)
+	return claim()
 }
 
-// claimDueOnce 在事务内写入 60 秒租约，并取得稳定的尝试序号。
-// 只在提交事务后将订单交给网络通知，不在事务中调用游戏服务器。
 func (s *OrderStore) claimDueOnce(ctx context.Context) (*model.Order, error) {
+	return s.claimOne(ctx, `SELECT `+claimColumns+` FROM game_order
+        WHERE payment_status=1 AND notify_status<>1
+          AND next_notify_at<=UTC_TIMESTAMP()
+        ORDER BY next_notify_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`)
+}
+
+// claimOne 在行锁内读取快照并递增 fencing token，不在事务中调用外部服务。
+// 租约截止时间取自数据库时钟，返回快照和持久化值必须一致。
+func (s *OrderStore) claimOne(ctx context.Context, query string, args ...any) (*model.Order, error) {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	var id int64
-	err = tx.QueryRowContext(ctx, `
-        SELECT id FROM game_order
-        WHERE payment_status=1 AND notify_status<>1
-          AND next_notify_at<=UTC_TIMESTAMP()
-        ORDER BY next_notify_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&id)
+	o, err := scanOrder(tx.QueryRowContext(ctx, query, args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -198,20 +207,15 @@ func (s *OrderStore) claimDueOnce(ctx context.Context) (*model.Order, error) {
 	}
 	_, err = tx.ExecContext(ctx, `
         UPDATE game_order SET notify_attempts=notify_attempts+1,
-        last_notify_at=UTC_TIMESTAMP(),
-        next_notify_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 60 SECOND)
-        WHERE id=?`, id)
-	if err != nil {
-		return nil, err
-	}
-	// 在释放行锁前读取订单和尝试序号；防止租约过期后读取到其他 Worker 的新序号。
-	o, err := scanOrder(tx.QueryRowContext(ctx, "SELECT "+orderColumns+" FROM game_order WHERE id=?", id))
+        last_notify_at=UTC_TIMESTAMP(),next_notify_at=?
+        WHERE id=?`, o.NextNotifyAt, o.ID)
 	if err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	o.NotifyAttempts++
 	return &o, nil
 }
 
