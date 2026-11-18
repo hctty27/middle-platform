@@ -740,6 +740,8 @@ class DeploymentTopologyTests(unittest.TestCase):
         self.assertEqual(config["remoteDirectory"], "/data/middle-platform")
         self.assertEqual(supervisor.count("user=root"), 12)
         self.assertEqual(supervisor.count('GOMEMLIMIT="128MiB"'), 12)
+        for directive in ("startsecs=3", "startretries=5", "stopwaitsecs=40"):
+            self.assertEqual(supervisor.splitlines().count(directive), len(expected))
         for group in ("config-center", "sdk-core", "sdk-service"):
             self.assertIn(f"[group:{group}]", supervisor)
         check_script = (root / "ops/monit/check-http-live.sh").read_text(encoding="utf-8")

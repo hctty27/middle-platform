@@ -48,7 +48,9 @@ sudo supervisorctl status
 
 Supervisor 自身由 systemd 管理并设置开机启动。Debian/Ubuntu 常见 unit 名称为 `supervisor`，RHEL/CentOS 常见为 `supervisord`；先用 `systemctl list-unit-files | grep -E 'supervisor|supervisord'` 确认实际名称，再执行 `sudo systemctl enable --now <unit>`。
 
-模板采用 `autorestart=unexpected`、`startsecs=30`、`startretries=20`、`stopsignal=TERM`、`stopwaitsecs=60` 和 `stopasgroup=true`。正常 SIGTERM 退出不会被当成异常退出重新拉起。
+模板采用 `autorestart=unexpected`、`startsecs=3`、`startretries=5`、`stopsignal=TERM`、`stopwaitsecs=40` 和 `stopasgroup=true`。正常 SIGTERM 退出不会被当成异常退出重新拉起。`startsecs=3` 仅缩短 Supervisor 的进程存活确认时间，不代表业务已就绪；发布脚本仍会要求 `/health/ready` 连续 3 次成功。Go HTTP 优雅关闭超时为 30 秒，Supervisor 最多等待 40 秒后才会强制终止。
+
+**应用此配置前请注意：** `ops/` 不随发布包上传，提交到仓库不会自动更改服务器的 Supervisor 配置。需人工将模板更新到服务器实际加载的配置文件，并在维护窗口执行 `supervisorctl reread`、`supervisorctl update`；`update` 会重启受影响的进程组。本次三个服务组的全部 12 个实例均调整了参数，不能当作逐实例无损滚动更新。应用后用 `supervisorctl status` 和各实例 `/health/ready` 验证状态。
 
 ## Monit
 
