@@ -121,12 +121,11 @@ async function loadList(cursor = '') {
 async function loadStats() {
   statController?.abort()
   const seq = ++statSeq
-  stats.value = null
-  if (!props.gameId) { statsLoading.value = false; return }
+  const { gameId, env, appid } = active.value
+  if (!gameId) { statsLoading.value = false; return }
   const controller = new AbortController()
   statController = controller
   statsLoading.value = true
-  const { gameId, env, appid } = active.value
   try {
     const { data } = await sdkApi.get('/admin/orders/stats', { params: { gameId, env, appid }, signal: controller.signal })
     if (seq === statSeq) stats.value = data.data
@@ -140,8 +139,11 @@ function search() {
   active.value = filters()
   cursors.value = ['']
   void loadList()
-  void loadStats()
 }
+watch([() => active.value.gameId, () => active.value.env, () => active.value.appid], () => {
+  stats.value = null
+  void loadStats()
+})
 function reset() {
   env.value = 'prod'
   appid.value = ''
@@ -214,6 +216,7 @@ onBeforeUnmount(() => { ++listSeq; ++statSeq; ++detailSeq; listController?.abort
   <main class="content-panel order-page">
     <h2>订单管理</h2>
     <p class="order-hint">当前游戏的充值订单与发货通知状态。时间统一显示北京时间，统计按渠道、环境及今日支付时间计算。</p>
+    <el-button size="small" native-type="button" :loading="statsLoading" :disabled="!active.gameId" @click="loadStats">刷新统计</el-button>
     <div class="order-stats" v-loading="statsLoading">
       <div v-for="card in cards" :key="card.label" class="order-stat"><span>{{ card.label }}</span><strong>{{ card.value }}</strong></div>
     </div>
@@ -250,7 +253,7 @@ onBeforeUnmount(() => { ++listSeq; ++statSeq; ++detailSeq; listController?.abort
         <el-button @click="reset">重置</el-button>
       </el-form-item>
     </el-form>
-    <p class="order-hint">日期未选时查询全部历史订单；选择日期后按所选范围查询，不限制跨度。统计不受订单号、状态及创建日期筛选影响，最多缓存 60 秒。</p>
+    <p class="order-hint">日期未选时查询全部历史订单；选择日期后按所选范围查询，不限制跨度。统计按已查询的游戏、环境和 AppID 显示，不受订单号、状态及创建日期影响；刷新时可能读到 60 秒内的缓存。</p>
     <el-table :data="items" v-loading="loading" row-key="id" stripe>
       <el-table-column prop="gameOrderId" label="游戏订单号" min-width="175" show-overflow-tooltip />
       <el-table-column prop="platformOrderNo" label="平台订单号" min-width="175" show-overflow-tooltip />
