@@ -20,11 +20,8 @@ type Store struct{ db *sql.DB }
 // New 使用外部提供的数据库连接池创建只读路由存储。
 func New(db *sql.DB) *Store { return &Store{db: db} }
 
-// 单次查询通过 AppID 与环境定位游戏、配置和渠道服务开关。
-// 对不正确的环境绑定直接返回无记录，不能通过跨环境回退查询配置。
-const routeQuery = `
-SELECT a.config, g.code, COALESCE(gs.config, JSON_OBJECT()), COALESCE(rs.config, JSON_OBJECT()),
-    COALESCE(sv.enabled, 0), COALESCE(ch.enabled, 0)
+// 出站和通用路由共用环境绑定和服务开关条件，不能跨环境回退。
+const routeBinding = `
 FROM sdk_channel_app a
 JOIN config_node g ON g.id=a.game_id
     AND g.node_type='game' AND g.status=1
@@ -37,12 +34,22 @@ JOIN config_node sg ON sg.id=CASE ?
     AND sg.node_type='server_group' AND sg.game_id=a.game_id AND sg.status=1
 JOIN config_node r ON r.id=sg.region_id
     AND r.node_type='region' AND r.game_id=a.game_id
-    AND r.status=1 AND r.env_type=?
-LEFT JOIN sdk_node_config rs ON rs.node_id=r.id
+    AND r.status=1 AND r.env_type=?`
+
+const routeSwitches = `
 LEFT JOIN sdk_service sv ON sv.code=?
 LEFT JOIN sdk_service_channel ch ON ch.service_id=sv.id
     AND ch.channel_app_id=a.id AND ch.env=?
 WHERE a.code=? AND a.status=1`
+
+const routeQuery = `
+SELECT a.config, g.code, COALESCE(gs.config, JSON_OBJECT()), COALESCE(rs.config, JSON_OBJECT()),
+    COALESCE(sv.enabled, 0), COALESCE(ch.enabled, 0)` + routeBinding + `
+LEFT JOIN sdk_node_config rs ON rs.node_id=r.id` + routeSwitches
+
+const outboundRouteQuery = `
+SELECT a.config, COALESCE(gs.config, JSON_OBJECT()),
+    COALESCE(sv.enabled, 0), COALESCE(ch.enabled, 0)` + routeBinding + routeSwitches
 
 // VerifySchema 检查服务所需的表结构和服务目录是否已初始化。
 // 缺少必要服务时明确报错，不在启动阶段自动执行数据库迁移。
@@ -134,6 +141,9 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
 	if env != "prod" && env != "test" && env != "review" {
 		return model.Target{}, model.ErrNotFound
 	}
+	if serviceCode == "event_report" || serviceCode == "subscribe_message" {
+		return s.lookupOutboundRoute(ctx, appID, env, serviceCode)
+	}
 	var appJSON, gameJSON, regionJSON []byte
 	var gameCode string
 	var globalEnabled, channelEnabled int
@@ -174,10 +184,6 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
 		AppID: appID, Env: env, GameCode: gameCode,
 		AdapterName: adapterName, AppSecret: app.AppSecret, GameSecret: game.GameSecret,
 	}
-	// 游戏向平台发起的业务无需配置 region 游戏回调地址。
-	if serviceCode == "event_report" || serviceCode == "subscribe_message" {
-		return result, nil
-	}
 	var targetURL string
 	switch serviceCode {
 	case "role_query":
@@ -201,4 +207,33 @@ func (s *Store) LookupService(ctx context.Context, appID, env, serviceCode strin
 		result.RoleControlURL = targetURL
 	}
 	return result, nil
+}
+
+func (s *Store) lookupOutboundRoute(ctx context.Context, appID, env, serviceCode string) (model.Target, error) {
+	var appJSON, gameJSON []byte
+	var globalEnabled, channelEnabled int
+	err := s.db.QueryRowContext(ctx, outboundRouteQuery, env, env, serviceCode, env, appID).Scan(
+		&appJSON, &gameJSON, &globalEnabled, &channelEnabled,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Target{}, model.ErrNotFound
+	}
+	if err != nil {
+		return model.Target{}, fmt.Errorf("查询 SDK 服务路由失败: %w", err)
+	}
+	if globalEnabled != 1 || channelEnabled != 1 {
+		return model.Target{}, model.ErrDisabled
+	}
+
+	var app struct {
+		AppSecret string `json:"appSecret"`
+	}
+	var game struct {
+		GameSecret string `json:"gameSecret"`
+	}
+	if json.Unmarshal(appJSON, &app) != nil || json.Unmarshal(gameJSON, &game) != nil ||
+		strings.TrimSpace(app.AppSecret) == "" || strings.TrimSpace(game.GameSecret) == "" {
+		return model.Target{}, model.ErrInvalidConfig
+	}
+	return model.Target{AppID: appID, Env: env, AppSecret: app.AppSecret, GameSecret: game.GameSecret}, nil
 }

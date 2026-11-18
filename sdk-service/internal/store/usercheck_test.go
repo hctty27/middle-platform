@@ -13,9 +13,10 @@ import (
 )
 
 type checkConnector struct {
-	query string
-	args  []driver.NamedValue
-	rows  [][]driver.Value
+	query   string
+	args    []driver.NamedValue
+	rows    [][]driver.Value
+	columns []string
 }
 
 func (c *checkConnector) Connect(context.Context) (driver.Conn, error) { return &checkConn{c}, nil }
@@ -32,15 +33,16 @@ func (c *checkConn) Close() error                        { return nil }
 func (c *checkConn) Begin() (driver.Tx, error)           { return nil, errors.New("not used") }
 func (c *checkConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	c.c.query, c.c.args = query, args
-	return &checkRows{rows: c.c.rows}, nil
+	return &checkRows{rows: c.c.rows, columns: c.c.columns}, nil
 }
 
-type checkRows struct{ rows [][]driver.Value }
-
-func (r *checkRows) Columns() []string {
-	return []string{"config", "code", "game_config", "global_enabled", "channel_enabled"}
+type checkRows struct {
+	rows    [][]driver.Value
+	columns []string
 }
-func (r *checkRows) Close() error { return nil }
+
+func (r *checkRows) Columns() []string { return r.columns }
+func (r *checkRows) Close() error      { return nil }
 func (r *checkRows) Next(dest []driver.Value) error {
 	if len(r.rows) == 0 {
 		return io.EOF
@@ -51,7 +53,10 @@ func (r *checkRows) Next(dest []driver.Value) error {
 }
 
 func TestLookupUserCheck(t *testing.T) {
-	connector := &checkConnector{rows: [][]driver.Value{{[]byte(`{"appSecret":"app-secret"}`), "game1", []byte(`{"gameSecret":"game-secret"}`), int64(1), int64(1)}}}
+	connector := &checkConnector{
+		columns: []string{"config", "code", "game_config", "global_enabled", "channel_enabled"},
+		rows:    [][]driver.Value{{[]byte(`{"appSecret":"app-secret"}`), "game1", []byte(`{"gameSecret":"game-secret"}`), int64(1), int64(1)}},
+	}
 	db := sql.OpenDB(connector)
 	defer db.Close()
 	target, err := New(db).Lookup(context.Background(), "app1", "test")

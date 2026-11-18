@@ -67,6 +67,17 @@ func TestCachedReaderNamespacesAndValueIsolation(t *testing.T) {
 	if f.calls != 6 {
 		t.Fatal(f.calls)
 	}
+	for range 2 {
+		for _, code := range []string{"event_report", "subscribe_message"} {
+			got, err := r.LookupService(ctx, "a", "prod", code)
+			if err != nil || got.GameCode != code {
+				t.Fatalf("unexpected cached route for %q: %v", code, err)
+			}
+		}
+	}
+	if f.calls != 8 || r.Stats().Entries != 8 {
+		t.Fatalf("calls %d stats %+v", f.calls, r.Stats())
+	}
 }
 
 func TestCachedReaderSharedCapacity(t *testing.T) {
