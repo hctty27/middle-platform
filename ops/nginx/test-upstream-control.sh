@@ -23,6 +23,10 @@ server 127.0.0.1:8223 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8224 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8225 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8226 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8227 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8228 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8229 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8230 max_fails=1 fail_timeout=10s;
 EOF
 cat > "$bin/sudo" <<'EOF'
 #!/usr/bin/env bash
@@ -130,9 +134,9 @@ if "$control" validate sdk-core 8215 >/dev/null 2>&1; then
     printf 'Removed fifth SDK Core port unexpectedly validated\n' >&2
     exit 1
 fi
-"$control" validate sdk-service 8226
-if "$control" validate sdk-service 8227 >/dev/null 2>&1; then
-    printf 'Unsupported seventh SDK Service port unexpectedly validated\n' >&2
+"$control" validate sdk-service 8230
+if "$control" validate sdk-service 8231 >/dev/null 2>&1; then
+    printf 'Unsupported eleventh SDK Service port unexpectedly validated\n' >&2
     exit 1
 fi
 if "$control" validate config-center 8291 >/dev/null 2>&1; then
@@ -223,7 +227,7 @@ output=$("$control" validate config-center 8201) || status=$?
 reset_upstream
 [[ $("$control" capabilities) == batch-v1 ]]
 read -r before < "$TEST_GENERATION"
-"$control" batch validate config-center:8201 config-center:8202 sdk-core:8211 sdk-core:8212 sdk-core:8213 sdk-core:8214 sdk-service:8221 sdk-service:8222 sdk-service:8223 sdk-service:8224 sdk-service:8225 sdk-service:8226
+"$control" batch validate config-center:8201 config-center:8202 sdk-core:8211 sdk-core:8212 sdk-core:8213 sdk-core:8214 sdk-service:8221 sdk-service:8222 sdk-service:8223 sdk-service:8224 sdk-service:8225 sdk-service:8226 sdk-service:8227 sdk-service:8228 sdk-service:8229 sdk-service:8230
 "$control" batch validate config-center:8201 config-center:8202 sdk-core:8211 sdk-service:8221
 "$control" batch drain config-center:8201 sdk-core:8211 sdk-service:8221
 read -r after < "$TEST_GENERATION"

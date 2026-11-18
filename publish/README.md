@@ -4,9 +4,9 @@
 
 ## 生产实例拓扑
 
-固定的 2/4/6 实例及健康检查端口由发布脚本定义，无需在 `publish.config.json` 中重复配置。实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。
+固定的 2/4/10 实例及健康检查端口由发布脚本定义，无需在 `publish.config.json` 中重复配置。实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。
 
-如果还需要自动重启不属于 2/4/6 Nginx upstream 的 `config-center-access`，可额外加入：
+如果还需要自动重启不属于 2/4/10 Nginx upstream 的 `config-center-access`，可额外加入：
 
 ```json
 "services": { "config-center-access": 8291 }
@@ -20,7 +20,7 @@
 2. 按 [ops/nginx/README.md](../ops/nginx/README.md) 将唯一站点配置 `ops/nginx/middle-platform.conf` 复制到 `/etc/nginx/conf.d/middle-platform.conf`，并按文档中的命令手动创建三个动态 upstream 状态文件到 `/data/middle-platform/run/nginx/`；再在 `/etc/nginx/nginx.conf` 的 main context 配置 `worker_shutdown_timeout 75s`。仓库根目录 [`run/nginx/`](../run/nginx/) 提供三个初始配置，可按需手动复制缺失文件。它们不随发布包交付，发布不会自动初始化或覆盖服务器上的运行时文件。
 3. 确认 Nginx 已由 systemd 管理且处于 active 状态，站点配置通过 `nginx -t`。
 4. 为 SSH 部署用户配置受限免密 sudo：仅允许实际路径下的 `nginx -t`、`nginx -T`、`systemctl reload nginx`。发布脚本使用 `sudo -n`，不会交互式提权。
-5. 确认 12 个 Supervisor program 均存在，Supervisor 以 root 运行并加载三个 `[group:...]` 分组；进程名需使用 `group:program` 形式。每个实例设置 `GOMEMLIMIT=128MiB`（Go Runtime 软限制，不是 RSS 硬上限）。SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
+5. 确认 16 个 Supervisor program 均存在，Supervisor 以 root 运行并加载三个 `[group:...]` 分组；进程名需使用 `group:program` 形式。每个实例设置 `GOMEMLIMIT=128MiB`（Go Runtime 软限制，不是 RSS 硬上限）。SSH 发布用户可以通过 Supervisor control socket 执行 `supervisorctl status/restart`，配置文件、DSN、密钥和日志目录已就绪。
 
 项目提供 Nginx、Supervisor 和 Monit 的配置模板及滚动发布控制逻辑，不提供系统服务安装脚本。整个 `ops/` 与 `run/` 均不进入发布包，管理员手动复制、独立维护。首次滚动发布前必须手动部署 `/data/middle-platform/ops/nginx/upstream-control.sh` 并赋予 0755 执行权限；不存在、不可执行或为符号链接时，涉及 Nginx 的滚动发布在替换应用文件前失败。只更新文件（`-SkipRestart`）、只发布管理端或单独重启不经过 Nginx 的 config-center-access 不要求该脚本。
 
@@ -43,7 +43,7 @@
 # 只滚动更新配置中心的 2 个实例
 .\publish\publish.ps1 -Service config-center -Version v1.0.2
 
-# 只滚动更新 SDK Service 的 6 个实例
+# 只滚动更新 SDK Service 的 10 个实例
 .\publish\publish.ps1 -Service sdk-service -Version v1.0.3
 
 # 只更新文件，不重启、不执行 Nginx 摘除
@@ -54,7 +54,7 @@
 
 ## 滚动发布流程
 
-完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/6 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的方式滚动更新（仅更新实际运行二进制不一致或无法验证的实例）：
+完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/4/10 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的方式滚动更新（仅更新实际运行二进制不一致或无法验证的实例）：
 
 1. 将当前实例在对应 Nginx upstream 标记为 `down`。
 2. 执行 `nginx -t` 并 graceful reload。
@@ -64,7 +64,7 @@
 6. 移除 `down`，再次校验并 reload Nginx，将实例重新加入流量。
 7. 完成当前实例后才处理下一个实例。
 
-发布前会验证所有 Supervisor program 和 Nginx upstream 配置。若服务器手动安装了新版 upstream-control.sh（支持 batch-v1），全量发布按 config-center / sdk-core / sdk-service 每组每轮至多一个实例并行更新：批量摘除、一次 reload 并等待旧 worker 退出，随后并行重启与连续 Ready 检查，再批量恢复健康实例。2/4/6 拓扑最多六轮。单服务仍逐实例更新；旧版 helper 自动回退到原串行模式。每组拒绝摘除最后一个可用实例；全量并行要求新旧服务版本兼容，且剩余实例能够承担流量。需要避免跨组并行时，分别使用 -Service 发布。若本轮任一实例重启或 Ready 失败，等待本轮任务结束并恢复健康实例，失败实例保持摘除，不启动下一轮。Nginx 操作失败则立即停止。修复原因并确认 Ready 后，管理员再手动恢复该实例。
+发布前会验证所有 Supervisor program 和 Nginx upstream 配置。若服务器手动安装了新版 upstream-control.sh（支持 batch-v1），全量发布按 config-center / sdk-core / sdk-service 每组每轮至多一个实例并行更新：批量摘除、一次 reload 并等待旧 worker 退出，随后并行重启与连续 Ready 检查，再批量恢复健康实例。2/4/10 拓扑最多十轮。单服务仍逐实例更新；旧版 helper 自动回退到原串行模式。每组拒绝摘除最后一个可用实例；全量并行要求新旧服务版本兼容，且剩余实例能够承担流量。需要避免跨组并行时，分别使用 -Service 发布。若本轮任一实例重启或 Ready 失败，等待本轮任务结束并恢复健康实例，失败实例保持摘除，不启动下一轮。Nginx 操作失败则立即停止。修复原因并确认 Ready 后，管理员再手动恢复该实例。
 
 这是单机多实例滚动更新，不承诺严格零错误：共享 MySQL 故障、应用逻辑错误、全部实例故障、Nginx reload 失败仍会影响业务。远端发布期间持有 `/data/middle-platform/.publish.lock`；Monit 健康检查和重启共用该锁，发布期间 Monit 跳过本轮检查，Monit 正在重启时发布会在改文件前退出。本流程不提供自动二进制回滚；发布失败时旧进程可能仍在运行，但新二进制文件已原子替换，需人工排查。
 

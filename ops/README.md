@@ -10,19 +10,19 @@
 |---|---|---:|---|
 | 配置中心 | `config-center:config-center-1..2` | 2 | 8201–8202 |
 | SDK Core | `sdk-core:sdk-core-1..4` | 4 | 8211–8214 |
-| SDK Service | `sdk-service:sdk-service-1..6` | 6 | 8221–8226 |
+| SDK Service | `sdk-service:sdk-service-1..10` | 10 | 8221–8230 |
 
 三个服务组均只监听 `127.0.0.1`，由本机 Nginx 接收外部流量。多个 Config Center 和 SDK Core 实例通过共享 MySQL 协调：Webhook 投递使用数据库租约，SDK Core 订单发货使用行锁、`SKIP LOCKED` 和租约。SDK Core 的 `orderNotify.workers` 是每进程配置，4 个实例会把总 Worker 数放大为单实例值的 4 倍，请按 MySQL 与游戏回调承载能力配置。
 
-`config-center-access` 不属于当前 2/4/6 拓扑，保持可选且默认不启用。
+`config-center-access` 不属于当前 2/4/10 拓扑，保持可选且默认不启用。
 
 ### MySQL 连接池容量
 
-当前代码的每实例连接池上限为 Config Center 20、SDK Core 20、SDK Service 10。按 2/4/6 计算，理论最大连接数为：
+当前代码的每实例连接池上限为 Config Center 20、SDK Core 20、SDK Service 10。按 2/4/10 计算，理论最大连接数为：
 
-`2 × 20 + 4 × 20 + 6 × 10 = 180`
+`2 × 20 + 4 × 20 + 10 × 10 = 220`
 
-这是连接池上限之和，不代表启动后立即建立 180 条连接。MySQL `max_connections` 还要为管理连接、迁移工具、监控和其他应用预留余量。上线前请按实际 DSN、并发和 MySQL 规格核对；不要只按单实例配置估算。
+这是连接池上限之和，不代表启动后立即建立 220 条连接。MySQL `max_connections` 还要为管理连接、迁移工具、监控和其他应用预留余量。上线前请按实际 DSN、并发和 MySQL 规格核对；不要只按单实例配置估算。
 
 SDK Core 的 `orderNotify.workers: 4` 是每进程配置，4 个实例最多同时运行 16 个发货 Worker；Config Center 每实例 Webhook 并发为 4，2 个实例合计最多 8 个投递并发。
 
@@ -32,7 +32,7 @@ SDK Core 的 `orderNotify.workers: 4` 是每进程配置，4 个实例最多同�
 
 本部署按要求让 Go 实例以 `root` 运行：Supervisor 的 systemd unit 必须由 root 启动，模板中的每个 program 显式设置 `user=root`。SSH 发布账号仍建议使用独立的 `deploy` 用户，不要为了运行 Go 程序而开放 root SSH 登录。root 运行会扩大应用漏洞的影响范围，请确保二进制、YAML、日志目录和发布权限只允许可信管理员修改。
 
-12 个 Go 实例的 Supervisor 环境变量都设置 `GOMEMLIMIT=128MiB`，软限制预算合计 1536 MiB。它不是 RSS/cgroup 硬上限；Go Runtime 管理的内存会更积极触发 GC，但二进制映射、内核代管内存和部分外部内存不在该限制内。若要硬性隔离，后续仍需单独配置 cgroup v2。
+16 个 Go 实例的 Supervisor 环境变量都设置 `GOMEMLIMIT=128MiB`，软限制预算合计 2048 MiB。它不是 RSS/cgroup 硬上限；Go Runtime 管理的内存会更积极触发 GC，但二进制映射、内核代管内存和部分外部内存不在该限制内。若要硬性隔离，后续仍需单独配置 cgroup v2。
 
 Supervisor 使用三个异构分组：`config-center`、`sdk-core`、`sdk-service`。组内进程名在 Supervisor 中带组前缀，例如 `config-center:config-center-1`。可以使用 `supervisorctl status config-center:*`、`supervisorctl restart sdk-core:*` 等命令按组管理。
 
@@ -91,7 +91,7 @@ Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform
 
 SSH 发布用户必须拥有动态 upstream 状态目录和共享发布锁的写权限，并拥有受限的免密 sudo 权限，只允许执行实际路径下的 `nginx -t`、`nginx -T` 和 `systemctl reload nginx`。不要授予部署用户不受限制的 sudo。
 
-发布前在本地 `publish/publish.config.json` 配置 SSH 连接信息，`remoteDirectory` 使用 `/data/middle-platform`。固定的 2/4/6 实例清单由发布脚本定义，无需重复配置；可选的 `config-center-access` 可通过 `services` 配置。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。发布前可自动恢复选中范围内已标记 down 且 Supervisor RUNNING、连续 3 次 Ready 返回 HTTP 200 的实例，并确认 Nginx worker 换代；健康、配置或恢复检查失败则在替换应用文件前停止。维护期间不要发布仍需人为摘除的服务。若实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。请手动同步新版 `ops/nginx/upstream-control.sh` 以启用恢复功能。
+发布前在本地 `publish/publish.config.json` 配置 SSH 连接信息，`remoteDirectory` 使用 `/data/middle-platform`。固定的 2/4/10 实例清单由发布脚本定义，无需重复配置；可选的 `config-center-access` 可通过 `services` 配置。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。发布前可自动恢复选中范围内已标记 down 且 Supervisor RUNNING、连续 3 次 Ready 返回 HTTP 200 的实例，并确认 Nginx worker 换代；健康、配置或恢复检查失败则在替换应用文件前停止。维护期间不要发布仍需人为摘除的服务。若实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。请手动同步新版 `ops/nginx/upstream-control.sh` 以启用恢复功能。
 
 ## 日志时间规范
 
@@ -107,7 +107,7 @@ TZ=Asia/Shanghai journalctl -u nginx -u supervisor -u supervisord -u monit -n 10
 
 ## 健康检查与数据库边界
 
-四个 Go 服务都提供 `/health/live` 和 `/health/ready`。当前 2/4/6 对外流量由 Nginx 路由：
+四个 Go 服务都提供 `/health/live` 和 `/health/ready`。当前 2/4/10 对外流量由 Nginx 路由：
 
 - `/api/config/` → Config Center
 - `/api/core/` → SDK Core

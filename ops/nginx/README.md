@@ -24,9 +24,9 @@ sysctl -n net.core.somaxconn
 |---|---|---|
 | `config_center` | `config-center-1..2` | 8201–8202 |
 | `sdk_core` | `sdk-core-1..4` | 8211–8214 |
-| `sdk_service` | `sdk-service-1..6` | 8221–8226 |
+| `sdk_service` | `sdk-service-1..10` | 8221–8230 |
 
-Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分组；进程名带组前缀，例如 `sdk-core:sdk-core-1`。所有 Go 实例只监听 loopback，Nginx 是唯一公网入口。当前 2/4/6 拓扑不包含可选的 `config-center-access`。
+Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分组；进程名带组前缀，例如 `sdk-core:sdk-core-1`。所有 Go 实例只监听 loopback，Nginx 是唯一公网入口。当前 2/4/10 拓扑不包含可选的 `config-center-access`。
 
 ## 配置文件结构
 
@@ -119,6 +119,10 @@ server 127.0.0.1:8223 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8224 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8225 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8226 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8227 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8228 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8229 max_fails=1 fail_timeout=10s;
+server 127.0.0.1:8230 max_fails=1 fail_timeout=10s;
 EOF
 fi
 
@@ -194,7 +198,7 @@ Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败�
 
 如果重启、Ready 或 Nginx reload 失败，发布立即停止，后续实例不再重启；已经摘除的实例保持 down（如 reload / worker 换代未确认，还需检查实际运行状态）。修复问题后可手动恢复；下次发布也会按上述预检规则自动恢复选中且健康的 down 实例。
 
-完整发布逐个处理 12 个实例，不会停止整个 upstream 组。它提供滚动可用性，不承诺严格零错误；应用错误、共享 MySQL 故障、Nginx reload 失败或所有实例同时故障仍可能影响业务。发布不提供自动二进制回滚。
+完整发布逐个处理 16 个实例，不会停止整个 upstream 组。它提供滚动可用性，不承诺严格零错误；应用错误、共享 MySQL 故障、Nginx reload 失败或所有实例同时故障仍可能影响业务。发布不提供自动二进制回滚。
 
 ## 手动操作
 
