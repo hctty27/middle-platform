@@ -103,9 +103,9 @@ func (s *OrderService) runNotifyDispatcher(ctx context.Context, queue notifyCand
 				go func(o model.Order, release func()) {
 					defer wg.Done()
 					defer func() { finished <- struct{}{} }()
-					if err := s.deliverReserved(ctx, o, release); err != nil && ctx.Err() == nil {
-						slog.Warn("游戏发货通知失败", "order_id", o.ID, "attempt", o.NotifyAttempts, "error", err)
-					}
+					// completeNotify already logs the persisted delivery outcome
+					// (including failures). Do not duplicate its business log.
+					_ = s.deliverReserved(ctx, o, release)
 				}(*order, release)
 			}
 		}
