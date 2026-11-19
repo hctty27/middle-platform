@@ -125,37 +125,53 @@ func (s *OrderStore) ConfirmPayment(ctx context.Context, id int64, platformOrder
 
 // CompleteNotify 使用领取时的尝试序号作为 fencing token，过期任务不得覆盖新结果。
 // 成功为终态；失败只为当前持有租约的尝试安排下一次补偿。
+// checkNotifyUpdateResult verifies that a fencing UPDATE actually modified one row.
+// A superseded lease or terminal order can make SQL succeed while updating 0 rows.
+func checkNotifyUpdateResult(result sql.Result, execErr error) error {
+	if execErr != nil {
+		return execErr
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("读取发货通知更新行数失败: %w", err)
+	}
+	if rows != 1 {
+		return model.ErrNotifyResultNotApplied
+	}
+	return nil
+}
+
 func (s *OrderStore) CompleteNotify(ctx context.Context, id int64, attempt int, notifyErr error) error {
 	if notifyErr == nil {
-		_, err := s.db.ExecContext(ctx, `
+		result, err := s.db.ExecContext(ctx, `
             UPDATE game_order SET notify_status=1,
                 notify_success_at=COALESCE(notify_success_at,UTC_TIMESTAMP()),
                 last_notify_error='',next_notify_at=NULL
             WHERE id=? AND payment_status=1 AND notify_status<>1
               AND notify_attempts=?`, id, attempt)
-		return err
+		return checkNotifyUpdateResult(result, err)
 	}
 	if errors.Is(notifyErr, model.ErrNotifyDeferred) {
 		// 本地延期不修改状态或单调领取序号，也不按游戏失败进行指数退避。
 		// 延期仍计入领取次数，后续真实失败可能因此使用较长的原有退避。
-		_, err := s.db.ExecContext(ctx, `
+		result, err := s.db.ExecContext(ctx, `
 		    UPDATE game_order SET last_notify_error=?,
 		        next_notify_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 5 SECOND)
 		    WHERE id=? AND payment_status=1 AND notify_status<>1
 		      AND notify_attempts=?`, model.ErrNotifyDeferred.Error(), id, attempt)
-		return err
+		return checkNotifyUpdateResult(result, err)
 	}
 	summary := strings.ReplaceAll(notifyErr.Error(), "\n", " ")
 	if len(summary) > 256 {
 		summary = summary[:256]
 	}
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
         UPDATE game_order SET notify_status=2,last_notify_error=?,
         next_notify_at=DATE_ADD(UTC_TIMESTAMP(),
             INTERVAL LEAST(3600,30*POW(2,LEAST(7,notify_attempts))) SECOND)
         WHERE id=? AND payment_status=1 AND notify_status<>1
           AND notify_attempts=?`, summary, id, attempt)
-	return err
+	return checkNotifyUpdateResult(result, err)
 }
 
 // ClaimDue 使用 READ COMMITTED + SKIP LOCKED 领取到期任务，减少高并发扫描的间隙锁冲突。
