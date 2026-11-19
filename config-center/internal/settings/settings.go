@@ -11,6 +11,7 @@ import (
 // Settings 保存配置中心运行参数。
 type Settings struct {
 	DSN              string
+	MaxOpenConns     int
 	Address          string
 	Log              logging.Config
 	AdminSecret      string
@@ -21,7 +22,8 @@ type configFile struct {
 		Address string `yaml:"address"`
 	} `yaml:"server"`
 	Database struct {
-		DSN string `yaml:"dsn"`
+		DSN          string `yaml:"dsn"`
+		MaxOpenConns int    `yaml:"maxOpenConns"`
 	} `yaml:"database"`
 	Log       logging.Config `yaml:"log"`
 	AdminAuth struct {
@@ -35,6 +37,7 @@ func Load() (Settings, error) { return LoadFile("") }
 // LoadFile 只读取指定 YAML（空路径使用 configs/config.yaml），再应用环境变量覆盖。
 func LoadFile(path string) (Settings, error) {
 	data := configFile{Log: logging.Default()}
+	data.Database.MaxOpenConns = 20
 	if path == "" {
 		path = "configs/config.yaml"
 	}
@@ -42,7 +45,7 @@ func LoadFile(path string) (Settings, error) {
 		return Settings{}, err
 	}
 
-	cfg := Settings{Address: "127.0.0.1:8080", DSN: data.Database.DSN, Log: data.Log, AdminSecret: data.AdminAuth.Secret}
+	cfg := Settings{Address: "127.0.0.1:8080", DSN: data.Database.DSN, MaxOpenConns: data.Database.MaxOpenConns, Log: data.Log, AdminSecret: data.AdminAuth.Secret}
 	if data.Server.Address != "" {
 		cfg.Address = data.Server.Address
 	}
@@ -55,6 +58,9 @@ func LoadFile(path string) (Settings, error) {
 	}
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return Settings{}, errors.New("必须配置 database.dsn 或 CONFIG_DB_DSN")
+	}
+	if cfg.MaxOpenConns < 1 {
+		return Settings{}, errors.New("database.maxOpenConns 必须大于 0")
 	}
 	return cfg, nil
 }

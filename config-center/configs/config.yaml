@@ -1,6 +1,7 @@
 # 配置中心：复制为独立的 config-prod.yaml；监听端口由 CONFIG_GO_ADDR 覆盖。
 database:
   dsn: ""
+  maxOpenConns: 20
 
 # 管理 HMAC 密钥至少 32 字节；也可通过 ADMIN_AUTH_SECRET 提供。
 adminAuth:

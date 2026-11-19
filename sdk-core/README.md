@@ -44,7 +44,7 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml
 - `orderNotify.hostConcurrency` 默认 `1`，按规范化主机名与端口隔离。目标饱和的候选直接跳过，不领取、不增加尝试号、不写延期、不读密钥、不发网络请求；分页会继续查看其他目标。取得额度后领取失败或候选已被其他实例处理时立即释放，发送结束后在结果保存前释放。`0` 关闭，多 Worker 时非零值须小于在途任务上限。这是进程内保护，不是跨实例全局限流，也不保证严格 FIFO。
 - `notify_attempts` 仍是单调领取序号和 fencing token，不是精确的 HTTP 请求次数；正常调度不会因本地限流虚增。历史延期已增加的序号不回退，真实失败仍按该序号指数退避。领取在一个行锁事务内读取完整快照并更新租约，只执行一条 SELECT 和一条 UPDATE；另有按页摊销的只读候选查询。60 秒租约、旧结果隔离、支付幂等和至少一次发货语义不变，ACK 丢失仍可能重发，游戏必须幂等。没有数据库结构变更。
 
-可调整参数见 [示例配置](configs/config.yaml)：`database.maxOpenConns`、`orderNotify.workers`、`orderNotify.hostConcurrency`、`configCache.ttl` 和日志级别/访问日志开关。连接池、回源超时及慢请求阈值等改为固定代码默认值，不再接受对应 YAML 字段和 `LOG_FORMAT` / `LOG_OUTPUT` / `LOG_SLOW_THRESHOLD` 环境变量。修改后重启生效，不自动更改私有配置或线上部署。部署新版本前须按 [配置迁移说明](../ops/CONFIGURATION-MIGRATION.md) 清理线上旧字段。灰度时结合成功吞吐、P99、DB 连接等待、缓存回源等待、通知积压年龄和下游超时逐步调整资源，不能视为百万级容量承诺。
+可调整参数见 [示例配置](configs/config.yaml)：`database.maxOpenConns`（默认 30）、`orderNotify.workers`、`orderNotify.hostConcurrency`、`configCache.ttl` 和日志级别/访问日志开关。连接池、回源超时及慢请求阈值等改为固定代码默认值，不再接受对应 YAML 字段和 `LOG_FORMAT` / `LOG_OUTPUT` / `LOG_SLOW_THRESHOLD` 环境变量。修改后重启生效，不自动更改私有配置或线上部署。部署新版本前须按 [配置迁移说明](../ops/CONFIGURATION-MIGRATION.md) 清理线上旧字段。灰度时结合成功吞吐、P99、DB 连接等待、缓存回源等待、通知积压年龄和下游超时逐步调整资源，不能视为百万级容量承诺。
 
 数据库集成测试可能 DROP/CREATE 表，仅能在确认可销毁的隔离库运行，不能使用开发或生产库的测试 DSN。普通回归应跳过此类测试；`-race` 需要可用的 CGO/C 编译器。
 

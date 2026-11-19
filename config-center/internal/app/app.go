@@ -59,9 +59,9 @@ func Run(configPath string) error {
 		return err
 	}
 	defer stopDiagnostics()
-	db.SetMaxOpenConns(20)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(10 * time.Minute)
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(min(10, cfg.MaxOpenConns))
+	db.SetConnMaxLifetime(30 * time.Minute)
 
 	ctx, cancel := context.WithTimeout(stopCtx, 5*time.Second)
 	defer cancel()

@@ -48,7 +48,7 @@ type Config struct {
 }
 
 func defaultDB() Database {
-	return Database{MaxOpenConns: 20, MaxIdleConns: 10, ConnMaxLifetime: "30m"}
+	return Database{MaxOpenConns: 30, MaxIdleConns: 10, ConnMaxLifetime: "30m"}
 }
 func validateDB(d Database) error {
 	if d.MaxOpenConns < 1 || d.MaxIdleConns < 0 || d.MaxIdleConns > d.MaxOpenConns {

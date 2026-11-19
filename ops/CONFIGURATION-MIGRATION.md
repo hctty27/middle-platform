@@ -38,7 +38,7 @@
 
 ## 仍可调节的关键字段
 
-- 数据库：`database.dsn`、`database.maxOpenConns`（Core / Service）；最大空闲连接数使用固定默认值与最大开放连接数的较小者
+- 数据库：`database.dsn`、`database.maxOpenConns`（Center / Core / Service）；默认最大开放连接数分别为 20 / 30 / 10。最大空闲连接数使用固定默认值与最大开放连接数的较小者，Center 固定生命周期也由 10m 统一为 30m
 - Core：`adminAuth.secret`、`orderNotify.workers`、`orderNotify.hostConcurrency`、`configCache.ttl`
 - Service：`game.timeout`、`configCache.ttl`、`platform.eventReportURL`、`platform.subscribeMessageURL`、`platform.userCheckURL`
 - 日志：`log.level`、`log.accessEnabled`
@@ -47,3 +47,10 @@
 ### 示例 YAML
 
 参考各服务 `configs/config.yaml`。由于 YAML 解析启用了 `KnownFields(true)`，被删除的字段只要残留就会报错，**即使写的是旧默认值也不例外**。
+
+## 数据库连接池默认值调整（后续版本）
+
+- Config Center 现在支持 `database.maxOpenConns`，默认 20。省略时沿用 20，不需要为旧版 YAML 增加字段；如果要调节，需更新服务器上的独立配置文件。
+- SDK Core 默认 `database.maxOpenConns` 从 20 调整为 30，但**服务器 YAML 中若显式写着 20，依然会使用 20**。要采用 30，需将生产 `sdk-core.yaml` 对应字段改为 30 或删除该字段使用新版默认值。
+- SDK Service 默认仍为 10；三个模块固定的连接最大生命周期均为 30 分钟。
+- 上述为连接数上限，不代表启动时会主动建立对应数量的 MySQL 连接。部署后按数据库 `max_connections`、连接等待、慢查询和实例数量核验整体预算。

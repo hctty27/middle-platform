@@ -1,7 +1,7 @@
 # SDK Core：实例地址由 SDK_CORE_ADDR 覆盖，连接池其余参数使用固定默认值。
 database:
   dsn: ""
-  maxOpenConns: 20
+  maxOpenConns: 30
 
 adminAuth:
   secret: ""
