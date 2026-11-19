@@ -9,6 +9,8 @@ var (
 	ErrOrderNotFound = errors.New("订单不存在")
 	ErrOrderConflict = errors.New("订单冲突")
 	ErrOrderNotPaid  = errors.New("订单尚未支付")
+	// ErrNotifyResultNotApplied 表示通知结果未写入：租约已被接管或订单已进入终态。
+	ErrNotifyResultNotApplied = errors.New("发货通知结果未写入，租约可能失效或订单已完成")
 	// ErrNotifyDeferred 表示本地目标配额饱和，不是游戏服发货失败。
 	ErrNotifyDeferred = errors.New("发货通知目标繁忙，本地延期")
 )
