@@ -25,7 +25,7 @@ func TestPerformanceDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.ConfigCache.TTL != "0s" || c.Server.RequestTimeout != "8s" {
+	if c.ConfigCache.TTL != "5s" || c.Server.RequestTimeout != "8s" {
 		t.Fatalf("defaults: %+v", c)
 	}
 	c, err = loadPerformanceConfig(t, "game:\n  timeout: 10s\nconfigCache:\n  ttl: 1s\n")
@@ -56,7 +56,7 @@ func TestExamplePerformanceConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.ConfigCache.TTL != "0s" || c.Server.RequestTimeout != "8s" {
+	if c.ConfigCache.TTL != "5s" || c.Server.RequestTimeout != "8s" {
 		t.Fatalf("example drift: %+v", c)
 	}
 }
@@ -75,12 +75,8 @@ func TestPerformanceInvalidConfigurations(t *testing.T) {
 
 func TestSlimConfigurationRejectsRetiredKeys(t *testing.T) {
 	for _, key := range []string{
-		"database:\n  maxIdleConns: 5\n",
 		"database:\n  connMaxLifetime: 30m\n",
 		"platform:\n  isolateConnections: true\n",
-		"platform:\n  maxIdlePerHost: 32\n",
-		"platform:\n  eventMaxConns: 0\n",
-		"configCache:\n  maxInflight: 8\n",
 		"log:\n  output: stdout\n",
 	} {
 		t.Run(key, func(t *testing.T) {
@@ -100,5 +96,32 @@ func TestDatabaseOpenLimitIsTunable(t *testing.T) {
 	c, err := loadPerformanceConfig(t, "database:\n  maxOpenConns: 16\n")
 	if err != nil || c.Database.MaxOpenConns != 16 || c.Database.MaxIdleConns != 5 {
 		t.Fatalf("database pool: %+v %v", c.Database, err)
+	}
+}
+
+// Restored YAML options are read with the existing validation bounds.
+func TestRestoredPoolCacheAndPlatformOptions(t *testing.T) {
+	c, err := loadPerformanceConfig(t, "database:\n  maxOpenConns: 20\n  maxIdleConns: 12\n")
+	if err != nil || c.Database.MaxOpenConns != 20 || c.Database.MaxIdleConns != 12 {
+		t.Fatalf("database options: %+v %v", c.Database, err)
+	}
+	c, err = loadPerformanceConfig(t, "configCache:\n  ttl: 5s\n  maxEntries: 8192\n  maxInflight: 16\nplatform:\n  maxIdlePerHost: 64\n  eventMaxConns: 128\n")
+	if err != nil || c.ConfigCache.TTL != "5s" || c.ConfigCache.MaxEntries != 8192 ||
+		c.ConfigCache.MaxInflight != 16 || c.Platform.MaxIdlePerHost != 64 || c.Platform.EventMaxConns != 128 ||
+		!c.Platform.IsolateConnections {
+		t.Fatalf("cache/platform options: %+v %v", c, err)
+	}
+	for _, extra := range []string{
+		"database:\n  maxIdleConns: -1\n",
+		"configCache:\n  maxInflight: 0\n",
+		"configCache:\n  maxEntries: 65537\n",
+		"platform:\n  maxIdlePerHost: 0\n",
+		"platform:\n  maxIdlePerHost: 257\n",
+		"platform:\n  eventMaxConns: -1\n",
+		"platform:\n  eventMaxConns: 4097\n",
+	} {
+		if _, err := loadPerformanceConfig(t, extra); err == nil {
+			t.Fatalf("invalid restored parameter accepted: %s", extra)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,12 +148,10 @@ func TestOrderNotifyConfiguration(t *testing.T) {
 // Strict YAML parsing must reject retired knobs so old production files are migrated before rollout.
 func TestSlimConfigurationRejectsRetiredKeys(t *testing.T) {
 	for _, key := range []string{
-		"database:\n  maxIdleConns: 10\n",
 		"database:\n  connMaxLifetime: 30m\n",
 		"orderNotify:\n  idleInterval: 500ms\n",
 		"orderNotify:\n  disableKeepAlives: false\n",
 		"orderNotify:\n  maxIdleConns: 32\n",
-		"configCache:\n  maxInflight: 8\n",
 		"server:\n  requestTimeout: 5s\n",
 		"log:\n  format: json\n",
 		"log:\n  slowThreshold: 500ms\n",
@@ -182,5 +181,22 @@ func TestMaxOpenConnsRemainsConfigurable(t *testing.T) {
 	cfg, err := Load(path)
 	if err != nil || cfg.Database.MaxOpenConns != 24 || cfg.Database.MaxIdleConns != 10 {
 		t.Fatalf("database defaults and maxOpenConns: %+v %v", cfg.Database, err)
+	}
+}
+
+// Configured idle connections are still capped to the pool's maximum size.
+func TestRestoredDatabaseIdlePool(t *testing.T) {
+	for _, tc := range []struct{ open, idle, want int }{
+		{30, 15, 15}, {7, 4, 4}, {7, 10, 7},
+	} {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		data := fmt.Sprintf("database:\n  dsn: test-dsn\n  maxOpenConns: %d\n  maxIdleConns: %d\n", tc.open, tc.idle)
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if err != nil || cfg.Database.MaxIdleConns != tc.want {
+			t.Fatalf("maxOpen=%d maxIdle=%d => %+v (%v)", tc.open, tc.idle, cfg.Database, err)
+		}
 	}
 }

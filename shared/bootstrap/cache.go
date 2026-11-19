@@ -10,8 +10,8 @@ import (
 // CacheConfig uses TTL=0 to retain uncached reads.
 type CacheConfig struct {
 	TTL         string `yaml:"ttl"`
-	MaxEntries  int    `yaml:"-"`
-	MaxInflight int    `yaml:"-"`
+	MaxEntries  int    `yaml:"maxEntries"`
+	MaxInflight int    `yaml:"maxInflight"`
 	LoadTimeout string `yaml:"-"`
 }
 

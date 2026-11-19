@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -10,7 +11,11 @@ func loadPerformanceConfig(t *testing.T, extra string) (Config, error) {
 	t.Helper()
 	t.Setenv("SDK_CORE_DB_DSN", "test-dsn")
 	p := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(p, []byte("database:\n  dsn: test-dsn\n"+extra), 0600); err != nil {
+	data := "database:\n  dsn: test-dsn\n" + extra
+	if strings.HasPrefix(extra, "database:\n") {
+		data = "database:\n  dsn: test-dsn\n" + strings.TrimPrefix(extra, "database:\n")
+	}
+	if err := os.WriteFile(p, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return Load(p)
@@ -20,7 +25,7 @@ func TestPerformanceDefaultsAndRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.ConfigCache.TTL != "1s" || c.ConfigCache.MaxEntries != 4096 || c.ConfigCache.MaxInflight != 8 || c.Server.RequestTimeout != "5s" || c.OrderNotify.HostConcurrency != 1 || c.OrderNotify.DisableKeepAlives {
+	if c.ConfigCache.TTL != "5s" || c.ConfigCache.MaxEntries != 4096 || c.ConfigCache.MaxInflight != 8 || c.Server.RequestTimeout != "5s" || c.OrderNotify.HostConcurrency != 1 || c.OrderNotify.DisableKeepAlives {
 		t.Fatalf("defaults: %+v", c)
 	}
 	c, err = loadPerformanceConfig(t, "configCache:\n  ttl: 0s\norderNotify:\n  workers: 1\n  hostConcurrency: 0\n")
@@ -37,7 +42,7 @@ func TestExamplePerformanceConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.ConfigCache.TTL != "1s" || c.OrderNotify.HostConcurrency != 1 || c.Server.RequestTimeout != "5s" {
+	if c.ConfigCache.TTL != "5s" || c.OrderNotify.HostConcurrency != 1 || c.Server.RequestTimeout != "5s" {
 		t.Fatalf("example drift: %+v", c)
 	}
 }
@@ -53,5 +58,24 @@ func TestPerformanceInvalidConfigurations(t *testing.T) {
 				t.Fatal("accepted invalid settings")
 			}
 		})
+	}
+}
+
+// Restored YAML knobs control the runtime DB idle pool and cache without changing defaults.
+func TestRestoredPerformanceOptions(t *testing.T) {
+	c, err := loadPerformanceConfig(t, "database:\n  maxIdleConns: 16\nconfigCache:\n  ttl: 5s\n  maxEntries: 8192\n  maxInflight: 24\n")
+	if err != nil || c.Database.MaxIdleConns != 16 || c.ConfigCache.TTL != "5s" ||
+		c.ConfigCache.MaxEntries != 8192 || c.ConfigCache.MaxInflight != 24 {
+		t.Fatalf("restored settings: %+v %v", c, err)
+	}
+	for _, extra := range []string{
+		"configCache:\n  maxEntries: 0\n",
+		"configCache:\n  maxEntries: 65537\n",
+		"configCache:\n  maxInflight: 257\n",
+		"database:\n  maxIdleConns: -1\n",
+	} {
+		if _, err := loadPerformanceConfig(t, extra); err == nil {
+			t.Fatalf("invalid restored parameter accepted: %s", extra)
+		}
 	}
 }

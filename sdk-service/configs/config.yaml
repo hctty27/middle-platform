@@ -2,19 +2,25 @@
 database:
   dsn: ""
   maxOpenConns: 10
+  maxIdleConns: 5
 
 game:
   timeout: 5s
 
-# 默认为实时查库；非零 TTL 会延迟配置/密钥撤销生效。
+# 默认缓存 5s；服务停用、验签密钥撤销和用户核验开关变更可能延迟生效。
+# 如需实时读取，可设 ttl: 0s（此时绕过缓存合并与 maxInflight 限制）。
 configCache:
-  ttl: 0s
+  ttl: 5s
+  maxEntries: 4096
+  maxInflight: 8
 
 # 未启用的平台业务可省略对应 URL。
 platform:
   eventReportURL: ""
   subscribeMessageURL: ""
   userCheckURL: ""
+  maxIdlePerHost: 32
+  eventMaxConns: 0
 
 log:
   level: info

@@ -54,16 +54,16 @@ soak 30 分钟和手动 soak2h 2 小时均为 50 次业务迭代/s，默认 mixe
 手动选择 capacity 运行，默认 compact，不再每个 PR 自动执行。固定 SDK 热点接口对比 Nginx 与单实例直连，1000/3000/5000/7500 次/s 各 20 秒，10000 次/s 冲击 15 秒并回落至 1000 次/s。高档位失败记录但不阻塞后续；1000 档、恢复及独立 profiling 阶段必须通过。capacity 固定执行这套测试，忽略 scenario 参数；cluster 的直连只请求首个 SDK Core，不能与完整集群视为等价。仅 capacity 使用 `-tags loadtest`，独立回环监听 pprof 和 DB.Stats；正常构建为 no-op，不增加业务路由。CPU、Heap、Mutex、Block 在单独的 profiling 流量阶段采集，文本 Top 及连接池和 SQL 事件差值写入日志/摘要，原始文件尽力上传。Mutex/Block 采样为 capacity 进程全程启用，有额外开销；样本量不足可能出现空 profile。Runner 内 k6 和被测服务竞争 CPU，本轮目标不是实际 10000 QPS 保证，更不能作为 100000 并发的证明。
 
 ## 第六轮对照实验
-单 Runner 先比较 SDK Core HTTP 成功访问日志开启/关闭（各 Nginx、直连 3000 迭代/s），再运行原 1000–10000 阶梯。Nginx SDK Core upstream 空闲 keepalive 64，其他 16，访问日志 64 KiB 缓冲、1 秒刷新；连接上限和业务重试规则不变。订单登记 500 迭代/s 对比数据库最大连接数 30 与 40（空闲连接数固定为 10），独立测试用配置并重启，不修改线上池默认值。对照档位为探索，原必测基线和恢复阈值不放宽。访问日志开关及连接池差异以同 Runner 测量为准，仍可能有时间顺序与噪声影响。
+单 Runner 先比较 SDK Core HTTP 成功访问日志开启/关闭（各 Nginx、直连 3000 迭代/s），再运行原 1000–10000 阶梯。Nginx SDK Core upstream 空闲 keepalive 64，其他 16，访问日志 64 KiB 缓冲、1 秒刷新；连接上限和业务重试规则不变。订单登记 500 迭代/s 对比数据库最大连接数 30 与 40（空闲连接数默认 10（可在 YAML 调整）），独立测试用配置并重启，不修改线上池默认值。对照档位为探索，原必测基线和恢复阈值不放宽。访问日志开关及连接池差异以同 Runner 测量为准，仍可能有时间顺序与噪声影响。
 
 ## 第七轮：真实高频流量与抗干扰（traffic）
 新增 event-report 单接口（`POST /api/service/events/test`），使用真实游戏 HMAC、平台 Header 签名及本地 Mock `/report/event`。原 mixed 保持历史 6 场景配比，方便跨轮对比；新增 traffic 使用三个独立 constant-arrival-rate 场景，配置查询:用户核验:事件上报=1:1:2，从 100/100/200 到 5000/5000/10000（单 Runner 探索，失败停止升档）。独立配置 P95/P99 20/50ms、核验 100/250ms、上报 500/1500ms；错误率 <1%、丢弃预算 0.1%、完成数至少计划 99.9%。Mock 注入仅事件 1/10/50/100ms 和 HTTP 503，验证核心接口独立阈值及恢复，并校验实际平台签名到达计数，避免跳过上游造成虚假成功。低档基线、事件冒烟、1/10ms、故障及恢复为必测；高档和 50/100ms 为探索。生产代码、缓存、签名与部署不变。100ms 延迟和更高吞吐可能受同机器 k6/VU 容量限制。
 
-压测数据显式启用 `load-app/test` 的 `event_report` 与 `user_check`，启动前校验两个绑定；仅本地一次性数据库。容量脚本按 `database` / `log` 两个顶层配置段只修改 `maxOpenConns` 与 `accessEnabled`，并通过真实 YAML 模板回归测试，不再写入已固定的空闲连接池参数。
+压测数据显式启用 `load-app/test` 的 `event_report` 与 `user_check`，启动前校验两个绑定；仅本地一次性数据库。容量脚本按 `database` / `log` 两个顶层配置段只修改 `maxOpenConns` 与 `accessEnabled`，并通过真实 YAML 模板回归测试，该压测场景不修改空闲连接池参数。
 
 ## SDK Service A/B 对照
 
-traffic 比较正常平台请求日志开/关与路由 TTL 0s/1s，连接池隔离、每目标空闲 32 和事件连接数上限 0 统一使用代码固定默认值。每次仅修改隔离 Runner 的 YAML 并重启 SDK Service，保留业务验签、真实 Mock 到达计数和各接口阈值；A/B 为探索，之后恢复默认 TTL=0s、关闭正常请求日志并执行原必测场景。不假定 CPU/DB 已隔离，不将 HTTP/2 连接上限视为请求并发限制。
+traffic 比较正常平台请求日志开/关与路由 TTL 0s/1s，连接池隔离保持固定开启，每目标空闲 32 和事件连接数上限 0 使用 YAML 默认值。每次仅修改隔离 Runner 的 YAML 并重启 SDK Service，保留业务验签、真实 Mock 到达计数和各接口阈值；A/B 为探索，之后恢复该测试场景的 TTL=0s、关闭正常请求日志并执行原必测场景（生产模板默认 TTL=5s）。不假定 CPU/DB 已隔离，不将 HTTP/2 连接上限视为请求并发限制。
 
 ## 第九轮：多游戏多渠道与容量对照
 `traffic-multi` 手动档模拟 16 个游戏、256 个渠道包（各游戏独立 GameSecret，每渠道独立 AppSecret），按均匀轮转选择渠道，固定 1:1:2，比较 TTL=0s/1s，均关闭正常请求日志、独立连接池32、不限制事件连接；再探索总 2000/3000/5000 QPS，失败停止升档，低档和恢复必须通过。原单热点、订单和支付场景不变。日常 `traffic-quick` 仅额外执行 10 秒 16 渠道回归，不开启长测。所有游戏、密钥和 SQL 均为临时 Runner 合成数据，不使用生产。该档使用 loadtest 构建与独立回环诊断端口，报告每阶段 DB 连接等待差值、GC 次数/暂停、堆内存和 goroutine 数，并保留 CPU/RSS、MySQL 计数；pprof 采样有开销，不能视为正式配置容量。正式构建无诊断接口。

@@ -10,7 +10,7 @@ class ConfigPatchTests(unittest.TestCase):
         text = path.read_text()
         changed = core_settings(text, True, 32)
         self.assertIn("  maxOpenConns: 32\n", changed)
-        self.assertNotIn("maxIdleConns:", changed)
+        self.assertIn("  maxIdleConns: 10\n", changed)
         self.assertIn("  accessEnabled: true\n", changed)
         self.assertEqual(text.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0],
                          changed.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0])

@@ -14,10 +14,7 @@
 
 | 模块 | 不再允许配置的字段 | 固定默认值 |
 | --- | --- | --- |
-| SDK Core、SDK Service | `database.maxIdleConns` | Core 10 / Service 5，上限随 `maxOpenConns` 向下收缩 |
 | SDK Core、SDK Service | `database.connMaxLifetime` | 30m |
-| SDK Core、SDK Service | `configCache.maxEntries` | 4096 |
-| SDK Core、SDK Service | `configCache.maxInflight` | 8 |
 | SDK Core、SDK Service | `configCache.loadTimeout` | 5s |
 | SDK Core | `server.requestTimeout` | 5s |
 | SDK Core | `orderNotify.idleInterval` | 500ms |
@@ -28,8 +25,6 @@
 | SDK Core | `orderNotify.idleConnTimeout` | 30s |
 | SDK Service | `server.requestTimeout` | 自动计算 `max(game.timeout, 5s) + 3s` |
 | SDK Service | `platform.isolateConnections` | true |
-| SDK Service | `platform.maxIdlePerHost` | 32 |
-| SDK Service | `platform.eventMaxConns` | 0 |
 | 所有模块 | `log.format`、`log.output`、`log.slowThreshold` | json、stdout、500ms |
 
 ## 清理的日志环境变量
@@ -38,9 +33,9 @@
 
 ## 仍可调节的关键字段
 
-- 数据库：`database.dsn`、`database.maxOpenConns`（Center / Core / Service）；默认最大开放连接数分别为 20 / 30 / 10。最大空闲连接数使用固定默认值与最大开放连接数的较小者，Center 固定生命周期也由 10m 统一为 30m
-- Core：`adminAuth.secret`、`orderNotify.workers`、`orderNotify.hostConcurrency`、`configCache.ttl`
-- Service：`game.timeout`、`configCache.ttl`、`platform.eventReportURL`、`platform.subscribeMessageURL`、`platform.userCheckURL`
+- 数据库：`database.dsn`、`database.maxOpenConns`（Center / Core / Service）；默认最大开放连接数分别为 20 / 30 / 10。Core / Service 可调 `database.maxIdleConns`（默认 10 / 5），大于最大开放数时自动收缩；Center 空闲连接数固定为 min(10, maxOpenConns)。连接生命周期统一 30m
+- Core：`adminAuth.secret`、`orderNotify.workers`、`orderNotify.hostConcurrency`、`configCache.ttl`、`configCache.maxEntries`、`configCache.maxInflight`
+- Service：`game.timeout`、`configCache.ttl`、`configCache.maxEntries`、`configCache.maxInflight`、`platform.eventReportURL`、`platform.subscribeMessageURL`、`platform.userCheckURL`、`platform.maxIdlePerHost`、`platform.eventMaxConns`
 - 日志：`log.level`、`log.accessEnabled`
 - 保留原有 `server.address` / 监听环境变量及配置中心、接入端的业务必需字段。Config Center Access 的 `sync.*` 仍然支持自定义，但示例省略默认值。
 
@@ -54,3 +49,10 @@
 - SDK Core 默认 `database.maxOpenConns` 从 20 调整为 30，但**服务器 YAML 中若显式写着 20，依然会使用 20**。要采用 30，需将生产 `sdk-core.yaml` 对应字段改为 30 或删除该字段使用新版默认值。
 - SDK Service 默认仍为 10；三个模块固定的连接最大生命周期均为 30 分钟。
 - 上述为连接数上限，不代表启动时会主动建立对应数量的 MySQL 连接。部署后按数据库 `max_connections`、连接等待、慢查询和实例数量核验整体预算。
+
+## 恢复可调性能参数和默认缓存 TTL 为 5s
+
+- SDK Core、SDK Service 重新允许从 YAML 配置 `database.maxIdleConns`、`configCache.maxEntries`、`configCache.maxInflight`，SDK Service 另恢复 `platform.maxIdlePerHost`、`platform.eventMaxConns`。默认分别与原代码固定值一致（Core 空闲池 10 / Service 5、缓存容量 4096、并发回源 8、平台空闲 32、事件连接不限），升级这些项本身不要求数据库迁移。
+- **两个 SDK 服务在 YAML 未显式填写 `configCache.ttl` 时，默认均为 5s。** 原来 Core 默认为 1s，Service 默认为 0s；这是有意识的行为变化。生产独立 YAML 若仍显式设置 `ttl: 1s` / `ttl: 0s`，会继续覆盖新版默认值。请在每台服务器上调整为 `ttl: 5s` 或删除该字段才能使用新的默认值。
+- **缓存安全告警：** SDK Service 的路由、验签密钥、服务停用和用户核验开关会缓存成功结果；修改后至少考虑 TTL 和在途请求的延迟生效。需要立即停用/撤销的业务可显式将 `ttl` 改为 `0s` 并重启相关服务实例，或补充主动失效机制，不能认为 5s 是严格的最大撤销时限。
+- 旧版本若尚不识别恢复的 YAML 字段，请先部署支持这些字段的新二进制，再向独立 YAML 增加可调参数；保留旧字段的恢复版本同样必须遵守严格 YAML 字段校验。

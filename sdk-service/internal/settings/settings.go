@@ -15,7 +15,7 @@ import (
 type Database struct {
 	DSN             string `yaml:"dsn"`
 	MaxOpenConns    int    `yaml:"maxOpenConns"`
-	MaxIdleConns    int    `yaml:"-"`
+	MaxIdleConns    int    `yaml:"maxIdleConns"`
 	ConnMaxLifetime string `yaml:"-"`
 }
 
@@ -35,8 +35,8 @@ type Config struct {
 		SubscribeMessageURL string `yaml:"subscribeMessageURL"`
 		UserCheckURL        string `yaml:"userCheckURL"`
 		IsolateConnections bool   `yaml:"-"`
-		MaxIdlePerHost     int    `yaml:"-"`
-		EventMaxConns      int    `yaml:"-"`
+		MaxIdlePerHost     int    `yaml:"maxIdlePerHost"`
+		EventMaxConns      int    `yaml:"eventMaxConns"`
 	} `yaml:"platform"`
 	Log logging.Config `yaml:"log"`
 }
@@ -47,7 +47,7 @@ func Load(path string) (Config, error) {
 	cfg.Server.Address = ":8221"
 	cfg.Database = Database{MaxOpenConns: 10, MaxIdleConns: 5, ConnMaxLifetime: "30m"}
 	cfg.Game.Timeout = "5s"
-	cfg.ConfigCache = bootstrap.DefaultCacheConfig("0s")
+	cfg.ConfigCache = bootstrap.DefaultCacheConfig("5s")
 	cfg.Server.RequestTimeout = "auto"
 	cfg.Platform.IsolateConnections = true
 	cfg.Platform.MaxIdlePerHost = 32
