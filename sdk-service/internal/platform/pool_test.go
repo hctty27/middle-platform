@@ -54,7 +54,7 @@ func TestPublisherRejectsInvalidPoolSettings(t *testing.T) {
 	for _, options := range []PublisherOptions{
 		{MaxIdlePerHost: 0, SlowThreshold: time.Second},
 		{MaxIdlePerHost: 32, EventMaxConns: 1, SlowThreshold: time.Second},
-		{MaxIdlePerHost: 32, PlatformSuccessSampleEvery: -1, SlowThreshold: time.Second},
+		{MaxIdlePerHost: 32, EventMaxConns: -1, SlowThreshold: time.Second},
 	} {
 		if _, err := NewPublisherWithOptions("", "", "", options); err == nil {
 			t.Fatal("invalid options accepted")
