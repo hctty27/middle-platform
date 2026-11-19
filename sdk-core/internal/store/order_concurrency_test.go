@@ -176,10 +176,10 @@ func TestConcurrentNotifyClaims(t *testing.T) {
 		t.Fatalf("takeover lease: %+v err=%v", current, err)
 	}
 	// 新租约出现后，旧租约无论返回成功或失败均不能抢占状态。
-	if err = stores[0].CompleteNotify(ctx, item.ID, stale.NotifyAttempts, nil); err != nil {
+	if err = stores[0].CompleteNotify(ctx, item.ID, stale.NotifyAttempts, nil); !errors.Is(err, model.ErrNotifyResultNotApplied) {
 		t.Fatal(err)
 	}
-	if err = stores[0].CompleteNotify(ctx, item.ID, stale.NotifyAttempts, errors.New("stale failure")); err != nil {
+	if err = stores[0].CompleteNotify(ctx, item.ID, stale.NotifyAttempts, errors.New("stale failure")); !errors.Is(err, model.ErrNotifyResultNotApplied) {
 		t.Fatal(err)
 	}
 	var status, attempts int
@@ -192,7 +192,7 @@ func TestConcurrentNotifyClaims(t *testing.T) {
 	if err = stores[1].CompleteNotify(ctx, item.ID, current.NotifyAttempts, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err = stores[0].CompleteNotify(ctx, item.ID, stale.NotifyAttempts, errors.New("late failure")); err != nil {
+	if err = stores[0].CompleteNotify(ctx, item.ID, stale.NotifyAttempts, errors.New("late failure")); !errors.Is(err, model.ErrNotifyResultNotApplied) {
 		t.Fatal(err)
 	}
 	last, err := stores[0].ByID(ctx, item.ID)
