@@ -60,6 +60,7 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 		if state.Revision == head.Revision {
 			return nil
 		}
+		batchStarted := time.Now()
 		events, err := s.remote.Changes(ctx, state.Revision)
 		if err != nil {
 			return err
@@ -121,6 +122,7 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 		if !applied {
 			continue
 		}
+		logSyncApplied("incremental", state.Revision, events[len(events)-1].Revision, len(events), time.Since(batchStarted))
 		// 可能还有多页变更；继续直到追平 head。
 		retries = -1
 	}
@@ -129,6 +131,7 @@ func (s *Synchronizer) Sync(ctx context.Context) error {
 
 // snapshot 只从权威端的一致性接口构建完整副本。
 func (s *Synchronizer) snapshot(ctx context.Context, expected store.State) (bool, error) {
+	started := time.Now()
 	data, err := s.remote.Full(ctx)
 	if err != nil {
 		return false, err
@@ -143,9 +146,25 @@ func (s *Synchronizer) snapshot(ctx context.Context, expected store.State) (bool
 		}
 		seen[node.ID] = struct{}{}
 	}
-	return s.local.Apply(ctx, expected, store.State{
+	applied, err := s.local.Apply(ctx, expected, store.State{
 		Epoch: data.Epoch, Revision: data.Revision,
 	}, data.Nodes, nil, true)
+	if err == nil && applied {
+		logSyncApplied("snapshot", expected.Revision, data.Revision, len(data.Nodes), time.Since(started))
+	}
+	return applied, err
+}
+
+// logSyncApplied records only persisted revision changes, never configuration data.
+func logSyncApplied(mode string, oldRevision, newRevision int64, itemCount int, elapsed time.Duration) {
+	message := "配置增量同步完成"
+	countKey := "event_count"
+	if mode == "snapshot" {
+		message = "配置全量同步完成"
+		countKey = "node_count"
+	}
+	slog.Info(message, "mode", mode, "old_revision", oldRevision,
+		"new_revision", newRevision, countKey, itemCount, "duration_ms", elapsed.Milliseconds())
 }
 
 // contiguous 验证事件版本连续，缺失事件时必须重新拉取完整快照。
