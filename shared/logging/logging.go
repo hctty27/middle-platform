@@ -33,7 +33,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Level: "info", Format: "json", Output: "stdout",
-		AccessEnabled: true, SlowThreshold: "500ms"
+		AccessEnabled: true, SlowThreshold: "500ms",
 	}
 }
 
