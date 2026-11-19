@@ -103,7 +103,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <li>SDK Core 公开配置接口使用固定响应结构和按需 SQL 查询；新增公开字段需同步修改查询、响应结构和接口文档，不再依赖映射文件。</li>
 <li>管理接口默认使用 <code>adminAuth</code> 签名，仍须通过可信内网或受保护的 HTTPS 网关访问；同步接口和回调地址也需限制访问。生产环境不能将管理 API 与公开 SDK API 无差别暴露。</li>
 </ul>
-<p>部署方案见 <a href="#production">生产运维</a>。</p>
+<p>部署方案见 <a href="#production">生产运维</a>；已有性能测试结果及验收边界见 <a href="load-test.html">SDK 中台压测阶段报告</a>。</p>
 <h2 id="architecture-5">SDK 业务与密钥边界</h2>
 <ul>
 <li><code>sdk_service</code> 管理已实现功能的全局开关，<code>sdk_service_channel</code> 按服务、渠道包、环境唯一绑定；当前功能包括 <code>event_report</code>、<code>subscribe_message</code>、<code>role_query</code>、<code>server_query</code> 和 <code>role_control</code>。</li>
