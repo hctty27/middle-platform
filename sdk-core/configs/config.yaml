@@ -1,7 +1,8 @@
-# SDK Core：实例地址由 SDK_CORE_ADDR 覆盖，连接池其余参数使用固定默认值。
+# SDK Core：实例地址由 SDK_CORE_ADDR 覆盖，其余数据库连接池参数仍使用代码默认值。
 database:
   dsn: ""
   maxOpenConns: 30
+  maxIdleConns: 10
 
 adminAuth:
   secret: ""
@@ -11,9 +12,11 @@ orderNotify:
   workers: 4
   hostConcurrency: 1
 
-# 设为 0s 可禁用缓存以缩短配置变更可见延迟。
+# 5s 缓存会延迟配置、停用及密钥变更的可见性；如需实时读取可改为 0s。
 configCache:
-  ttl: 1s
+  ttl: 5s
+  maxEntries: 4096
+  maxInflight: 8
 
 log:
   level: info

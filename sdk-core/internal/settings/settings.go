@@ -16,7 +16,7 @@ import (
 type Database struct {
 	DSN             string `yaml:"dsn"`
 	MaxOpenConns    int    `yaml:"maxOpenConns"`
-	MaxIdleConns    int    `yaml:"-"`
+	MaxIdleConns    int    `yaml:"maxIdleConns"`
 	ConnMaxLifetime string `yaml:"-"`
 }
 
@@ -79,7 +79,7 @@ func Load(path string) (Config, error) {
 	cfg.Database = defaultDB()
 	cfg.OrderNotify = OrderNotify{Workers: 4, IdleInterval: "500ms", HostConcurrency: 1,
 		MaxIdleConns: 32, MaxIdleConnsPerHost: 4, MaxConnsPerHost: 4, IdleConnTimeout: "30s"}
-	cfg.ConfigCache = bootstrap.DefaultCacheConfig("1s")
+	cfg.ConfigCache = bootstrap.DefaultCacheConfig("5s")
 	cfg.Server.RequestTimeout = "5s"
 	if path == "" {
 		path = "configs/config.yaml"
