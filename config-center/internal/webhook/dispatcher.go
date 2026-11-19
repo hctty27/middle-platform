@@ -164,9 +164,26 @@ func (d *Dispatcher) send(ctx context.Context, job Delivery) error {
 	return nil
 }
 
+// checkWebhookUpdateResult ensures the lease-fenced update actually applied.
+var errWebhookLeaseNotApplied = errors.New("Webhook 投递租约失效，状态未更新")
+
+func checkWebhookUpdateResult(result sql.Result, execErr error) error {
+	if execErr != nil {
+		return execErr
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("检查 Webhook 状态更新行数失败: %w", err)
+	}
+	if rows != 1 {
+		return errWebhookLeaseNotApplied
+	}
+	return nil
+}
+
 // delivered 在租约有效时更新已确认的同步版本。
 func (d *Dispatcher) delivered(ctx context.Context, job Delivery) error {
-	_, err := d.DB.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
+	result, err := d.DB.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
 		SET acknowledged_revision=CASE WHEN acknowledged_epoch=?
 			THEN GREATEST(acknowledged_revision,?) ELSE ? END,
 			acknowledged_epoch=?,
@@ -174,7 +191,7 @@ func (d *Dispatcher) delivered(ctx context.Context, job Delivery) error {
 			next_attempt_at=UTC_TIMESTAMP(3),updated_at=UTC_TIMESTAMP(3)
 		WHERE subscriber_id=? AND lease_owner=?`,
 		job.Epoch, job.Revision, job.Revision, job.Epoch, job.SubscriberID, job.LeaseID)
-	return err
+	return checkWebhookUpdateResult(result, err)
 }
 
 // failed 记录失败信息并按指数退避安排重试。
@@ -184,15 +201,15 @@ func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) err
 		message = message[:500]
 	}
 	// 指数退避上限为五分钟，防止故障订阅者持续消耗回调资源。
-	_, err := d.DB.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
+	result, err := d.DB.ExecContext(ctx, `UPDATE config_subscriber_delivery_state
 		SET lease_owner=NULL,lease_until=NULL,failure_count=failure_count+1,
 			next_attempt_at=DATE_ADD(UTC_TIMESTAMP(3),
 				INTERVAL LEAST(300,POW(2,LEAST(failure_count+1,8))) SECOND),
 			last_error=?,updated_at=UTC_TIMESTAMP(3)
 		WHERE subscriber_id=? AND lease_owner=?`,
 		string(message), job.SubscriberID, job.LeaseID)
-	return err
-}
+	return checkWebhookUpdateResult(result, err)
+
 
 // dispatch 控制单轮任务数量及并发上限。
 // dispatch 并发领取和投递一批到期任务，避免单个回调阻塞其他订阅者。
@@ -230,20 +247,29 @@ func (d *Dispatcher) dispatch(ctx context.Context) error {
 		go func(job Delivery) {
 			defer wg.Done()
 			defer func() { <-limit }()
-			err := d.send(ctx, job)
+			started := time.Now()
+			sendErr := d.send(ctx, job)
 			// 优雅停机时使用独立的有界上下文，确保仍能持久化投递结果。
 			outcomeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err == nil {
-				err = d.delivered(outcomeCtx, job)
-			} else {
-				if dbErr := d.failed(outcomeCtx, job, err); dbErr != nil {
-					slog.Error("更新 Webhook 失败状态失败", "subscriber", job.SubscriberID, "error", dbErr)
+			if sendErr == nil {
+				if err := d.delivered(outcomeCtx, job); err != nil {
+					slog.Error("Webhook 确认状态保存失败",
+						"subscriber", job.SubscriberID, "revision", job.Revision, "error", err)
+					return
 				}
+				slog.Info("Webhook 投递完成", "subscriber", job.SubscriberID,
+					"revision", job.Revision, "duration_ms", time.Since(started).Milliseconds())
+				return
 			}
-			if err != nil {
-				slog.Warn("Webhook 投递失败", "subscriber", job.SubscriberID, "error", err)
+			retryErr := d.failed(outcomeCtx, job, sendErr)
+			if retryErr != nil {
+				slog.Error("更新 Webhook 失败状态失败",
+					"subscriber", job.SubscriberID, "revision", job.Revision, "error", retryErr)
 			}
+			slog.Warn("Webhook 投递失败", "subscriber", job.SubscriberID,
+				"revision", job.Revision, "duration_ms", time.Since(started).Milliseconds(),
+				"retry_scheduled", retryErr == nil, "error", sendErr)
 		}(job)
 	}
 	wg.Wait()
