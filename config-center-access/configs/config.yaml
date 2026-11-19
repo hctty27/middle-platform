@@ -11,3 +11,8 @@ subscriber:
   secret: ""
 
 # 同步超时和全量校对周期使用代码默认值：2s、15s、5m。
+
+# 日志固定 JSON/stdout、慢请求阈值 500ms；可调整日志级别和正常请求日志开关。
+log:
+  level: info
+  accessEnabled: true

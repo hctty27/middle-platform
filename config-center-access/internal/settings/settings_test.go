@@ -67,3 +67,24 @@ func TestLoadRejectsShortSubscriberSecret(t *testing.T) {
 		t.Fatalf("缺少或过短的接入端密钥必须拒绝启动: %v", err)
 	}
 }
+
+func TestExampleLoggingConfiguration(t *testing.T) {
+	path := filepath.Join("..", "..", "configs", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(string(data), "log:\n  level: info\n  accessEnabled: true\n") {
+		t.Fatal("config-center-access 示例 YAML 必须显式展示 info 与 accessEnabled=true")
+	}
+	t.Setenv("ACCESS_DB_DSN", "test-dsn")
+	t.Setenv("CONFIG_SUBSCRIBER_CODE", "example-test")
+	t.Setenv("CONFIG_SUBSCRIBER_SECRET", validSubscriberSecret)
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Log.Level != "info" || !cfg.Log.AccessEnabled {
+		t.Fatalf("example logging defaults: %+v", cfg.Log)
+	}
+}

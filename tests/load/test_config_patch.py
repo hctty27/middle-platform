@@ -28,5 +28,24 @@ class ConfigPatchTests(unittest.TestCase):
             core_settings(fixture, 10, 32)
 
 
+    def test_all_four_yaml_logging_templates_match_confirmed_plan(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        expected = {
+            "config-center": "true",
+            "config-center-access": "true",
+            "sdk-core": "false",
+            "sdk-service": "false",
+        }
+        for module, enabled in expected.items():
+            with self.subTest(service=module):
+                content = (root / module / "configs" / "config.yaml").read_text()
+                # Log is deliberately the last YAML section, present even when it matches defaults.
+                self.assertTrue(
+                    content.endswith(f"log:\n  level: info\n  accessEnabled: {enabled}\n"),
+                    f"{module} template drifted from the approved log configuration",
+                )
+                self.assertEqual(content.count("\nlog:\n"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

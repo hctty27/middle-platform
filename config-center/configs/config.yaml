@@ -7,4 +7,7 @@ database:
 adminAuth:
   secret: ""
 
-# 默认 JSON/stdout、info、500ms 慢请求阈值，正常访问日志开启。
+# 日志固定 JSON/stdout、慢请求阈值 500ms；可调整日志级别和正常请求日志开关。
+log:
+  level: info
+  accessEnabled: true

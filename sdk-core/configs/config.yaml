@@ -7,16 +7,16 @@ database:
 adminAuth:
   secret: ""
 
-# Worker 数与同目标并发控制可调，其余通知 HTTP 池参数固定。
-orderNotify:
-  workers: 4
-  hostConcurrency: 1
-
 # 5s 缓存会延迟配置、停用及密钥变更的可见性；如需实时读取可改为 0s。
 configCache:
   ttl: 5s
   maxEntries: 4096
   maxInflight: 8
+
+# Worker 数与同目标并发控制可调，其余通知 HTTP 池参数固定。
+orderNotify:
+  workers: 4
+  hostConcurrency: 1
 
 log:
   level: info

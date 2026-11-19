@@ -191,3 +191,22 @@ func TestDatabasePoolMaxOpenConns(t *testing.T) {
 		})
 	}
 }
+
+func TestExampleLoggingConfiguration(t *testing.T) {
+	path := filepath.Join("..", "..", "configs", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(string(data), "log:\n  level: info\n  accessEnabled: true\n") {
+		t.Fatal("config-center 示例 YAML 必须显式展示 info 与 accessEnabled=true")
+	}
+	t.Setenv("CONFIG_DB_DSN", "test-dsn")
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Log.Level != "info" || !cfg.Log.AccessEnabled {
+		t.Fatalf("example logging defaults: %+v", cfg.Log)
+	}
+}
