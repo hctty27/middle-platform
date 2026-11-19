@@ -87,7 +87,7 @@ function Get-RestartPlan {
         [pscustomobject]@{ Name = 'sdk-service-1'; Module = 'sdk-service'; Port = 8221 },
         [pscustomobject]@{ Name = 'sdk-service-2'; Module = 'sdk-service'; Port = 8222 },
         [pscustomobject]@{ Name = 'sdk-service-3'; Module = 'sdk-service'; Port = 8223 },
-        [pscustomobject]@{ Name = 'sdk-service-4'; Module = 'sdk-service'; Port = 8224 },
+        [pscustomobject]@{ Name = 'sdk-service-4'; Module = 'sdk-service'; Port = 8224 }
     )
     $expectedByName = @{}
     foreach ($item in $expected) { $expectedByName[$item.Name] = $item }
