@@ -12,7 +12,6 @@ import (
 // PlatformSender 定义向上游平台发送业务消息的能力。
 type PlatformSender interface {
 	Send(context.Context, string, string, string, []byte) error
-	SendEventBestEffort(context.Context, string, string, []byte)
 }
 
 // OutboundService 负责将游戏上报的事件和订阅消息转发给平台。
@@ -23,7 +22,7 @@ type OutboundService struct {
 
 // forward 先检查渠道服务开关和环境绑定，再校验游戏签名。
 // 发往平台时使用渠道密钥重新签名，不透传游戏签名。
-func (s *OutboundService) forward(r *http.Request, env, appID, code string, body []byte, async bool) error {
+func (s *OutboundService) forward(r *http.Request, env, appID, code string, body []byte) error {
 	target, err := s.Routes.LookupService(r.Context(), appID, env, code)
 	if err != nil {
 		return err
@@ -34,19 +33,15 @@ func (s *OutboundService) forward(r *http.Request, env, appID, code string, body
 	if err := auth.VerifyGameRequest(r, appID, target.GameSecret, body, time.Now()); err != nil {
 		return err
 	}
-	if async {
-		go s.Sender.SendEventBestEffort(context.WithoutCancel(r.Context()), appID, target.AppSecret, body)
-		return nil
-	}
 	return s.Sender.Send(r.Context(), code, appID, target.AppSecret, body)
 }
 
 // ReportEvent 转发游戏事件上报请求。
-func (s *OutboundService) ReportEvent(r *http.Request, env, appID string, body []byte, async bool) error {
-	return s.forward(r, env, appID, "event_report", body, async)
+func (s *OutboundService) ReportEvent(r *http.Request, env, appID string, body []byte) error {
+	return s.forward(r, env, appID, "event_report", body)
 }
 
 // SendSubscribe 转发游戏订阅消息推送请求。
 func (s *OutboundService) SendSubscribe(r *http.Request, env, appID string, body []byte) error {
-	return s.forward(r, env, appID, "subscribe_message", body, false)
+	return s.forward(r, env, appID, "subscribe_message", body)
 }

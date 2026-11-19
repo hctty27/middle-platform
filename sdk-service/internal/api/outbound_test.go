@@ -22,12 +22,10 @@ type fakeOutbound struct {
 	raw           string
 	appID         string
 	env           string
-	async         bool
 }
 
-func (f *fakeOutbound) ReportEvent(_ *http.Request, env, appID string, body []byte, async bool) error {
+func (f *fakeOutbound) ReportEvent(_ *http.Request, env, appID string, body []byte) error {
 	f.events++
-	f.async = async
 	f.env, f.appID, f.raw = env, appID, string(body)
 	return nil
 }
@@ -37,20 +35,19 @@ func (f *fakeOutbound) SendSubscribe(_ *http.Request, env, appID string, body []
 	return nil
 }
 
-func TestEventReportMode(t *testing.T) {
+func TestEventReportSyncOnly(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		modes  []string
 		status int
 		calls  int
-		async  bool
 	}{
-		{"default", nil, 200, 1, false},
-		{"sync", []string{"sync"}, 200, 1, false},
-		{"async", []string{"async"}, 202, 1, true},
-		{"unknown", []string{"later"}, 400, 0, false},
-		{"empty", []string{""}, 400, 0, false},
-		{"repeated", []string{"sync", "async"}, 400, 0, false},
+		{"default", nil, 200, 1},
+		{"legacy_sync", []string{"sync"}, 200, 1},
+		{"removed_async", []string{"async"}, 400, 0},
+		{"unknown", []string{"later"}, 400, 0},
+		{"empty", []string{""}, 400, 0},
+		{"repeated", []string{"sync", "async"}, 400, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			outbound := &fakeOutbound{}
@@ -63,8 +60,8 @@ func TestEventReportMode(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
-			if rec.Code != tc.status || outbound.events != tc.calls || outbound.async != tc.async {
-				t.Fatalf("status=%d calls=%d async=%v body=%s", rec.Code, outbound.events, outbound.async, rec.Body.String())
+			if rec.Code != tc.status || outbound.events != tc.calls {
+				t.Fatalf("status=%d calls=%d body=%s", rec.Code, outbound.events, rec.Body.String())
 			}
 		})
 	}
@@ -76,7 +73,7 @@ func (eventRoutes) LookupService(_ context.Context, appID, env, _ string) (model
 	return model.Target{AppID: appID, Env: env, GameSecret: "game-secret", AppSecret: "platform-secret"}, nil
 }
 
-func TestAsyncEventReturnsBeforePlatformResponse(t *testing.T) {
+func TestEventWaitsForPlatformResponse(t *testing.T) {
 	const payload = `{"event":"login","ext":{}}`
 	received := make(chan string, 1)
 	release := make(chan struct{})
@@ -95,13 +92,10 @@ func TestAsyncEventReturnsBeforePlatformResponse(t *testing.T) {
 	outbound := &service.OutboundService{Routes: eventRoutes{}, Sender: publisher}
 	handler := RouterWithPublishers(&fakeChecker{}, fakeDB{}, nil, nil, nil, outbound, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/service/events/test", strings.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/api/service/events/test", strings.NewReader(payload))
 	const appID, nonce = "110006", "0011223344556677"
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Report-Mode", "async")
 	req.Header.Set("x-app-id", appID)
 	req.Header.Set("x-timestamp", ts)
 	req.Header.Set("x-nonce", nonce)
@@ -111,24 +105,30 @@ func TestAsyncEventReturnsBeforePlatformResponse(t *testing.T) {
 	go func() {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
-		cancel()
 		done <- rec
 	}()
-	select {
-	case rec := <-done:
-		if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"message":"accepted"`) {
-			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("异步接口未在平台响应前返回")
-	}
 	select {
 	case body := <-received:
 		if body != payload {
 			t.Fatalf("平台收到的请求体: %s", body)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("平台未收到异步上报")
+		t.Fatal("平台未收到同步上报")
+	}
+	select {
+	case rec := <-done:
+		t.Fatalf("平台响应前不应向游戏返回: status=%d body=%s", rec.Code, rec.Body.String())
+	default:
+	}
+	// Release the upstream response; a failed platform request must reach the game.
+	release <- struct{}{}
+	select {
+	case rec := <-done:
+		if rec.Code != http.StatusBadGateway {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("同步接口未等待并处理平台响应")
 	}
 }
 

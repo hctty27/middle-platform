@@ -38,10 +38,6 @@ func (s *fakePlatformSender) Send(_ context.Context, code, appID, secret string,
 	return nil
 }
 
-func (*fakePlatformSender) SendEventBestEffort(context.Context, string, string, []byte) {
-	panic("unexpected background send")
-}
-
 func TestOutboundServiceChecksSignatureAndSwitch(t *testing.T) {
 	routes := &fakeOutboundRoutes{enabled: true}
 	sender := &fakePlatformSender{}
@@ -63,7 +59,7 @@ func TestOutboundServiceChecksSignatureAndSwitch(t *testing.T) {
 		req.Header.Set("x-nonce", nonce)
 		req.Header.Set("x-signature", sig)
 		invoke := func(r *http.Request, env, appID string, body []byte) error {
-			return svc.ReportEvent(r, env, appID, body, false)
+			return svc.ReportEvent(r, env, appID, body)
 		}
 		if tc.code == "subscribe_message" {
 			invoke = svc.SendSubscribe
@@ -87,11 +83,6 @@ func TestOutboundServiceChecksSignatureAndSwitch(t *testing.T) {
 		req.Header.Set("x-signature", "0000000000000000000000000000000000000000")
 		if err := invoke(req, "test", "110006", body); err != auth.ErrUnauthorized {
 			t.Fatalf("%s 篡改签名未被拒绝: %v", tc.code, err)
-		}
-		if tc.code == "event_report" {
-			if err := svc.ReportEvent(req, "test", "110006", body, true); err != auth.ErrUnauthorized {
-				t.Fatalf("异步事件上报未拒绝非法签名: %v", err)
-			}
 		}
 	}
 }

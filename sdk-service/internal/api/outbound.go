@@ -17,7 +17,7 @@ import (
 
 // EventReporter 定义事件上报的业务入口。
 type EventReporter interface {
-	ReportEvent(r *http.Request, env, appID string, body []byte, async bool) error
+	ReportEvent(r *http.Request, env, appID string, body []byte) error
 }
 
 // SubscribeSender 定义订阅消息推送的业务入口。
@@ -111,19 +111,19 @@ func readOutboundString(raw json.RawMessage, max int, required bool) (string, bo
 }
 
 func serveEventReport(w http.ResponseWriter, r *http.Request, events EventReporter) {
+	// Keep the former explicit "sync" header compatible, but no longer support async mode.
 	modes := r.Header.Values("X-Report-Mode")
-	if len(modes) > 1 || (len(modes) == 1 && modes[0] != "sync" && modes[0] != "async") {
-		writeJSON(w, http.StatusBadRequest, response{Code: 400, Message: "X-Report-Mode 必须为 sync 或 async"})
+	if len(modes) > 1 || (len(modes) == 1 && modes[0] != "sync") {
+		writeJSON(w, http.StatusBadRequest, response{Code: 400, Message: "异步事件上报已移除，X-Report-Mode 仅兼容 sync"})
 		return
 	}
-	async := len(modes) == 1 && modes[0] == "async"
-	serveOutbound(w, r, "event_report", async, func(r *http.Request, env, appID string, body []byte) error {
-		return events.ReportEvent(r, env, appID, body, async)
+	serveOutbound(w, r, "event_report", func(r *http.Request, env, appID string, body []byte) error {
+		return events.ReportEvent(r, env, appID, body)
 	})
 }
 
 // serveOutbound 统一处理环境校验、请求解析、服务错误映射及成功响应。
-func serveOutbound(w http.ResponseWriter, r *http.Request, code string, async bool,
+func serveOutbound(w http.ResponseWriter, r *http.Request, code string,
 	send func(*http.Request, string, string, []byte) error) {
 	env, appID := r.PathValue("env"), r.Header.Get("x-app-id")
 	if (env != "prod" && env != "test" && env != "review") || !appIDPattern.MatchString(appID) {
@@ -162,10 +162,6 @@ func serveOutbound(w http.ResponseWriter, r *http.Request, code string, async bo
 			"渠道上报服务执行失败", "service_code", code, "app_id", appID,
 			"env", env, "status", status, "error", err)
 		writeJSON(w, status, response{Code: status, Message: message})
-		return
-	}
-	if async {
-		writeJSON(w, http.StatusAccepted, response{Code: 0, Message: "accepted", Data: true})
 		return
 	}
 	message := "ok"

@@ -135,19 +135,15 @@ func (p *Publisher) Send(ctx context.Context, code, appID, secret string, body [
 	if code != "event_report" && code != "subscribe_message" {
 		return ErrPublishEndpointMissing
 	}
-	_, err := p.send(ctx, code, appID, secret, body, false)
+	_, err := p.send(ctx, code, appID, secret, body)
 	return err
 }
 
-func (p *Publisher) SendEventBestEffort(ctx context.Context, appID, secret string, body []byte) {
-	_, _ = p.send(ctx, "event_report", appID, secret, body, true)
-}
-
 func (p *Publisher) CheckUser(ctx context.Context, appID, secret string, body []byte) (bool, error) {
-	return p.send(ctx, "user_check", appID, secret, body, false)
+	return p.send(ctx, "user_check", appID, secret, body)
 }
 
-func (p *Publisher) send(ctx context.Context, code, appID, secret string, body []byte, bestEffort bool) (success bool, publishErr error) {
+func (p *Publisher) send(ctx context.Context, code, appID, secret string, body []byte) (success bool, publishErr error) {
 	start := time.Now()
 	status := 0
 	var businessCode *int
@@ -166,9 +162,6 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 		}
 		attrs := []any{"service_code", code, "app_id", appID, "method", http.MethodPost,
 			"path", path, "request_bytes", len(body), "http_status", status, "duration_ms", elapsed.Milliseconds()}
-		if bestEffort {
-			attrs = append(attrs, "report_mode", "async")
-		}
 		if businessCode != nil {
 			attrs = append(attrs, "business_code", *businessCode)
 		}
@@ -222,16 +215,6 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	}
 	defer response.Body.Close()
 	status = response.StatusCode
-	if bestEffort {
-		// Best-effort events do not parse platform business responses or retry.
-		// Drain a small body for connection reuse, then classify HTTP status for logs.
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 8*1024+1))
-		if status < http.StatusOK || status >= http.StatusMultipleChoices {
-			failure = "http_status_error"
-			return false, fmt.Errorf("%w: 平台 HTTP %d", ErrPublishRejected, status)
-		}
-		return true, nil
-	}
 	failure = "http_or_response_read"
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 8*1024+1))
 	loggedBody := raw
