@@ -251,7 +251,7 @@ func eventReport(r *http.Request) bool {
 	return ok && (env == "test" || env == "review" || env == "prod")
 }
 
-// HTTP 统一生成或校验 Request ID，记录状态码和耗时，捕获 panic；不会记录 URL 查询串、请求体或密钥。
+// HTTP 统一生成或校验 Request ID，记录状态码和耗时，捕获 panic；访问日志使用实际请求路径，不记录 URL 查询串或请求体。
 func HTTP(c Config, next http.Handler) http.Handler {
 	threshold, _ := time.ParseDuration(c.SlowThreshold)
 	var successfulConfigReads atomic.Uint64
@@ -304,10 +304,7 @@ func HTTP(c Config, next http.Handler) http.Handler {
 			} else if writer.status >= 400 || slow {
 				level = slog.LevelWarn
 			}
-			path := r.Pattern
-			if path == "" {
-				path = r.URL.EscapedPath()
-			}
+			path := r.URL.EscapedPath()
 			slog.Log(ctx, level, "HTTP 请求",
 				"request_id", id, "method", r.Method, "path", path,
 				"status", writer.status, "duration_ms", elapsed.Milliseconds())
