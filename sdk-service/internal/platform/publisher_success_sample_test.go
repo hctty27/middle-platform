@@ -18,7 +18,7 @@ func TestPublisherSamplesSuccessPerServiceButKeepsFailures(t *testing.T) {
 	p, err := NewPublisherWithOptions(server.URL+"/report/event",
 		server.URL+"/game/subscribe/send-message", server.URL+"/cp/user/check", PublisherOptions{
 			MaxIdlePerHost: 32, SlowThreshold: time.Hour,
-			EventSampleEvery: 10, SuccessSampleEvery: 10,
+			PlatformSuccessSampleEvery: 10,
 		})
 	if err != nil {
 		t.Fatal(err)

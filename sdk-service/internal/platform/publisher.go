@@ -32,12 +32,11 @@ type Publisher struct {
 	client         *http.Client
 	eventClient    *http.Client
 	endpoints      map[string]string
-	eventSample         int
-	successSample       int
-	slowThreshold       time.Duration
-	eventSuccesses      atomic.Uint64
-	userCheckSuccesses  atomic.Uint64
-	subscribeSuccesses  atomic.Uint64
+	platformSuccessSampleEvery int
+	slowThreshold              time.Duration
+	eventSuccesses             atomic.Uint64
+	userCheckSuccesses         atomic.Uint64
+	subscribeSuccesses         atomic.Uint64
 }
 
 // PublisherOptions controls separate transport pools, without adding retries or
@@ -46,9 +45,8 @@ type PublisherOptions struct {
 	IsolateConnections bool
 	MaxIdlePerHost     int
 	EventMaxConns      int
-	EventSampleEvery   int
-	SuccessSampleEvery int
-	SlowThreshold      time.Duration
+	PlatformSuccessSampleEvery int
+	SlowThreshold             time.Duration
 }
 
 // NewPublisherWithOptions keeps the existing endpoint validation and allows
@@ -57,8 +55,7 @@ func NewPublisherWithOptions(eventURL, subscribeURL, userCheckURL string, option
 	if options.MaxIdlePerHost < 1 || options.MaxIdlePerHost > 256 ||
 		options.EventMaxConns < 0 || options.EventMaxConns > 4096 ||
 		(!options.IsolateConnections && options.EventMaxConns != 0) ||
-		options.EventSampleEvery < 0 || options.EventSampleEvery > 10000 ||
-		options.SuccessSampleEvery < 0 || options.SuccessSampleEvery > 10000 ||
+		options.PlatformSuccessSampleEvery < 0 || options.PlatformSuccessSampleEvery > 10000 ||
 		options.SlowThreshold <= 0 {
 		return nil, errors.New("平台连接池或日志采样配置不合法")
 	}
@@ -82,8 +79,7 @@ func NewPublisherWithOptions(eventURL, subscribeURL, userCheckURL string, option
 	if options.IsolateConnections {
 		p.eventClient = makeClient(options.EventMaxConns)
 	}
-	p.eventSample = options.EventSampleEvery
-	p.successSample = options.SuccessSampleEvery
+	p.platformSuccessSampleEvery = options.PlatformSuccessSampleEvery
 	p.slowThreshold = options.SlowThreshold
 	return p, nil
 }
@@ -166,24 +162,21 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	logger := logging.FromContext(ctx)
 	defer func() {
 		elapsed := time.Since(start)
-		// Sample only successful, fast outbound calls. A normal "user does
-		// not exist" response has no error and is eligible for sampling.
-		// Errors and slow calls always retain their diagnostic logs.
+		// Each platform service has its own counter; share a single sampling
+		// interval. Never sample failures or slow outbound calls.
 		if publishErr == nil && status >= http.StatusOK && status < http.StatusMultipleChoices &&
-			p != nil && elapsed < p.slowThreshold {
+			p != nil && p.platformSuccessSampleEvery > 1 && elapsed < p.slowThreshold {
+			var counter *atomic.Uint64
 			switch code {
 			case "event_report":
-				if p.eventSample > 1 && p.eventSuccesses.Add(1)%uint64(p.eventSample) != 0 {
-					return
-				}
+				counter = &p.eventSuccesses
 			case "user_check":
-				if p.successSample > 1 && p.userCheckSuccesses.Add(1)%uint64(p.successSample) != 0 {
-					return
-				}
+				counter = &p.userCheckSuccesses
 			case "subscribe_message":
-				if p.successSample > 1 && p.subscribeSuccesses.Add(1)%uint64(p.successSample) != 0 {
-					return
-				}
+				counter = &p.subscribeSuccesses
+			}
+			if counter != nil && counter.Add(1)%uint64(p.platformSuccessSampleEvery) != 0 {
+				return
 			}
 		}
 		attrs := []any{"service_code", code, "app_id", appID, "method", http.MethodPost,

@@ -90,7 +90,7 @@ func TestBestEffortEventSamplingKeepsHTTPFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	publisher.eventSample = 100
+	publisher.platformSuccessSampleEvery = 100
 	publisher.slowThreshold = time.Hour
 	for _, code := range []int{http.StatusOK, http.StatusAccepted, http.StatusNoContent} {
 		status = code

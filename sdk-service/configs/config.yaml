@@ -36,8 +36,5 @@ log:
   output: stdout
   accessEnabled: false
   slowThreshold: 500ms
-  # 关闭普通成功 HTTP 访问日志；异常与慢请求仍保留。
-  # 1 保留全部平台事件成功日志；大于 1 时仅采样快速成功事件。
-  sdkEventSampleEvery: 1000
-  # 平台核验、订阅及其他高频公开接口的成功日志，每 1000 次保留 1 次。
-  successSampleEvery: 1000
+  # 出站事件、核验、订阅成功日志统一采样；每 1000 次记录 1 次。
+  platformSuccessSampleEvery: 1000

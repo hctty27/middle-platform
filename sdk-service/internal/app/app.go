@@ -106,8 +106,7 @@ func Run(configPath string) error {
 		IsolateConnections: cfg.Platform.IsolateConnections,
 		MaxIdlePerHost:     cfg.Platform.MaxIdlePerHost,
 		EventMaxConns:      cfg.Platform.EventMaxConns,
-		EventSampleEvery:   cfg.Log.SDKEventSampleEvery,
-		SuccessSampleEvery: cfg.Log.SuccessSampleEvery,
+		PlatformSuccessSampleEvery: cfg.Log.PlatformSuccessSampleEvery,
 		SlowThreshold:      slowThreshold,
 	})
 	if err != nil {

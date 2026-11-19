@@ -22,7 +22,7 @@ func TestUserCheckHasIndependentTransport(t *testing.T) {
 	defer close(release)
 	p, err := NewPublisherWithOptions(srv.URL+"/report/event", "", srv.URL+"/cp/user/check", PublisherOptions{
 		IsolateConnections: true, MaxIdlePerHost: 4, EventMaxConns: 1,
-		EventSampleEvery: 1, SlowThreshold: time.Second,
+		PlatformSuccessSampleEvery: 1, SlowThreshold: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func TestPublisherRejectsInvalidPoolSettings(t *testing.T) {
 	for _, options := range []PublisherOptions{
 		{MaxIdlePerHost: 0, SlowThreshold: time.Second},
 		{MaxIdlePerHost: 32, EventMaxConns: 1, SlowThreshold: time.Second},
-		{MaxIdlePerHost: 32, EventSampleEvery: -1, SlowThreshold: time.Second},
+		{MaxIdlePerHost: 32, PlatformSuccessSampleEvery: -1, SlowThreshold: time.Second},
 	} {
 		if _, err := NewPublisherWithOptions("", "", "", options); err == nil {
 			t.Fatal("invalid options accepted")
