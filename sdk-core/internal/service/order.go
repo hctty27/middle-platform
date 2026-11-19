@@ -19,28 +19,7 @@ import (
 
 // ErrInvalidOrder 表示登记或回调的订单参数不符合约束。
 var ErrInvalidOrder = errors.New("订单请求参数不合法")
-var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}package service
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log/slog"
-	"net/http"
-	"regexp"
-	"sync"
-	"time"
-
-	"hitall.com/middle-platform/sdk-core/internal/auth"
-	"hitall.com/middle-platform/sdk-core/internal/model"
-	"hitall.com/middle-platform/sdk-core/internal/payment"
-	"hitall.com/middle-platform/shared/logging"
-)
-
-// ErrInvalidOrder 表示登记或回调的订单参数不符合约束。
-var ErrInvalidOrder = errors.New("订单请求参数不合法")
-)
+var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 // Only accepted business identifiers are included in logs. Never log the raw
 // callback, headers, signing material, notify URL, or untrusted error strings.
