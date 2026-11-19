@@ -64,6 +64,14 @@ jobs:
           for script in ops/monit/check-http-live.sh ops/monit/restart-supervisor-program.sh ops/monit/test-check-http-live.sh ops/monit/test-restart-supervisor-program.sh ops/nginx/upstream-control.sh ops/nginx/test-upstream-control.sh; do
             bash -n "$script"
           done
+      - name: Validate multi-node publishing PowerShell and JSON
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('publish/rolling.ps1', [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+          Get-Content 'publish/rolling.config.example.json' -Raw | ConvertFrom-Json | Out-Null
       - name: Test Nginx upstream drain and restore
         run: bash ops/nginx/test-upstream-control.sh
       - name: Test Monit liveness check
