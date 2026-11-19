@@ -105,6 +105,8 @@ func Load(path string) (Config, error) {
 	if strings.TrimSpace(cfg.Server.Address) == "" {
 		return Config{}, errors.New("必须配置 server.address")
 	}
+	// The idle pool size is fixed by code; clamp it when lowering the tunable open limit.
+	cfg.Database.MaxIdleConns = min(cfg.Database.MaxIdleConns, cfg.Database.MaxOpenConns)
 	if err := validateDB(cfg.Database); err != nil {
 		return Config{}, err
 	}

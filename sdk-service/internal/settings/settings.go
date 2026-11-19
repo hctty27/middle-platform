@@ -73,6 +73,8 @@ func Load(path string) (Config, error) {
 	if strings.TrimSpace(cfg.Server.Address) == "" {
 		return Config{}, errors.New("server.address 不能为空")
 	}
+	// Keep the fixed idle pool consistent when maxOpenConns is tuned downward.
+	cfg.Database.MaxIdleConns = min(cfg.Database.MaxIdleConns, cfg.Database.MaxOpenConns)
 	if cfg.Database.MaxOpenConns < 1 || cfg.Database.MaxIdleConns < 0 ||
 		cfg.Database.MaxIdleConns > cfg.Database.MaxOpenConns {
 		return Config{}, errors.New("数据库连接池配置不合法")

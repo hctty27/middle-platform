@@ -160,11 +160,14 @@ func TestSlimConfigurationRejectsRetiredKeys(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.yaml")
 			data := "database:\n  dsn: test-dsn\n" + key
+			if strings.HasPrefix(key, "database:\n") {
+				data = "database:\n  dsn: test-dsn\n" + strings.TrimPrefix(key, "database:\n")
+			}
 			if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := Load(path); err == nil {
-				t.Fatalf("retired option accepted: %s", key)
+			if _, err := Load(path); err == nil || !strings.Contains(err.Error(), strings.TrimSpace(strings.Split(strings.TrimSpace(strings.SplitN(key, "\n", 2)[1]), ":")[0])) {
+				t.Fatalf("retired option not rejected by name: %s: %v", key, err)
 			}
 		})
 	}

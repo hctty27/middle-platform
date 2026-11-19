@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -10,7 +11,11 @@ func loadPerformanceConfig(t *testing.T, extra string) (Config, error) {
 	t.Helper()
 	t.Setenv("SDK_SERVICE_DB_DSN", "test-dsn")
 	p := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(p, []byte("database:\n  dsn: test-dsn\n"+extra), 0600); err != nil {
+	data := "database:\n  dsn: test-dsn\n" + extra
+	if strings.HasPrefix(extra, "database:\n") {
+		data = "database:\n  dsn: test-dsn\n" + strings.TrimPrefix(extra, "database:\n")
+	}
+	if err := os.WriteFile(p, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return Load(p)
@@ -81,6 +86,12 @@ func TestSlimConfigurationRejectsRetiredKeys(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			if _, err := loadPerformanceConfig(t, key); err == nil {
 				t.Fatalf("retired option accepted: %s", key)
+			} else {
+				lines := strings.Split(strings.TrimSpace(key), "\n")
+				field := strings.TrimSpace(strings.SplitN(lines[len(lines)-1], ":", 2)[0])
+				if !strings.Contains(err.Error(), field) {
+					t.Fatalf("expected retired field %q in error, got %v", field, err)
+				}
 			}
 		})
 	}
