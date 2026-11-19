@@ -160,7 +160,7 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	logger := logging.FromContext(ctx)
 	defer func() {
 		elapsed := time.Since(start)
-		if publishErr == nil && success && status == http.StatusOK && code == "event_report" &&
+		if publishErr == nil && success && status >= http.StatusOK && status < http.StatusMultipleChoices && code == "event_report" &&
 			p != nil && p.eventSample > 1 && elapsed < p.slowThreshold &&
 			p.eventSuccesses.Add(1)%uint64(p.eventSample) != 0 {
 			return
@@ -218,8 +218,13 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	defer response.Body.Close()
 	status = response.StatusCode
 	if bestEffort {
-		// Drain small responses to let the transport reuse the connection.
+		// Best-effort events do not parse platform business responses or retry.
+		// Drain a small body for connection reuse, then classify HTTP status for logs.
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 8*1024+1))
+		if status < http.StatusOK || status >= http.StatusMultipleChoices {
+			failure = "http_status_error"
+			return false, fmt.Errorf("%w: 平台 HTTP %d", ErrPublishRejected, status)
+		}
 		return true, nil
 	}
 	failure = "http_or_response_read"
