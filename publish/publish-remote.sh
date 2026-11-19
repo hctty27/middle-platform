@@ -160,8 +160,8 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
         fi
         case "$program:$port" in
             config-center-1:8201|config-center-2:8202) group=config-center ;;
-            sdk-core-1:8211|sdk-core-2:8212|sdk-core-3:8213|sdk-core-4:8214) group=sdk-core ;;
-            sdk-service-1:8221|sdk-service-2:8222|sdk-service-3:8223|sdk-service-4:8224|sdk-service-5:8225|sdk-service-6:8226|sdk-service-7:8227|sdk-service-8:8228|sdk-service-9:8229|sdk-service-10:8230) group=sdk-service ;;
+            sdk-core-1:8211|sdk-core-2:8212) group=sdk-core ;;
+            sdk-service-1:8221|sdk-service-2:8222|sdk-service-3:8223|sdk-service-4:8224) group=sdk-service ;;
             config-center-access:8291) group=none ;;
             *) printf 'Supervisor process and health port do not match: %s:%s\n' "$program" "$port" >&2; exit 1 ;;
         esac
@@ -183,12 +183,12 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
     case "$service" in
         all)
             required=(config-center-1 config-center-2
-                sdk-core-1 sdk-core-2 sdk-core-3 sdk-core-4
-                sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4 sdk-service-5 sdk-service-6 sdk-service-7 sdk-service-8 sdk-service-9 sdk-service-10)
+                sdk-core-1 sdk-core-2
+                sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4)
             ;;
         config-center) required=(config-center-1 config-center-2) ;;
-        sdk-core) required=(sdk-core-1 sdk-core-2 sdk-core-3 sdk-core-4) ;;
-        sdk-service) required=(sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4 sdk-service-5 sdk-service-6 sdk-service-7 sdk-service-8 sdk-service-9 sdk-service-10) ;;
+        sdk-core) required=(sdk-core-1 sdk-core-2) ;;
+        sdk-service) required=(sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4) ;;
         config-center-access) required=(config-center-access) ;;
     esac
     for required_program in "${required[@]}"; do

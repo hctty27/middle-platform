@@ -16,19 +16,19 @@ export SUPERVISORCTL="$tmp/supervisorctl"
 export SUPERVISOR_LOG="$tmp/supervisor.log"
 
 "$script_dir/restart-supervisor-program.sh" config-center-1
-"$script_dir/restart-supervisor-program.sh" sdk-core-4
+"$script_dir/restart-supervisor-program.sh" sdk-core-2
 "$script_dir/restart-supervisor-program.sh" sdk-service-4
-"$script_dir/restart-supervisor-program.sh" sdk-service-6
+"$script_dir/restart-supervisor-program.sh" sdk-service-3
 "$script_dir/restart-supervisor-program.sh" config-center-access
 
 grep -Fxq 'restart config-center:config-center-1' "$SUPERVISOR_LOG"
-grep -Fxq 'restart sdk-core:sdk-core-4' "$SUPERVISOR_LOG"
+grep -Fxq 'restart sdk-core:sdk-core-2' "$SUPERVISOR_LOG"
 grep -Fxq 'restart sdk-service:sdk-service-4' "$SUPERVISOR_LOG"
-grep -Fxq 'restart sdk-service:sdk-service-6' "$SUPERVISOR_LOG"
+grep -Fxq 'restart sdk-service:sdk-service-3' "$SUPERVISOR_LOG"
 grep -Fxq 'restart config-center-access' "$SUPERVISOR_LOG"
 
-if "$script_dir/restart-supervisor-program.sh" sdk-core-5 >/dev/null 2>&1; then
-    printf 'Expected removed fifth SDK Core instance to be rejected\n' >&2
+if "$script_dir/restart-supervisor-program.sh" sdk-core-3 >/dev/null 2>&1; then
+    printf 'Expected removed third SDK Core instance to be rejected\n' >&2
     exit 1
 fi
 

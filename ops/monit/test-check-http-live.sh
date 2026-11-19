@@ -39,9 +39,9 @@ TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-core-1 8211
 test -s "$CURL_LOG"
 grep -Fxq 'status sdk-core:sdk-core-1' "$SUPERVISOR_LOG"
 TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" config-center-1 8201
-TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-service-6 8226
+TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-service-4 8224
 grep -Fxq 'status config-center:config-center-1' "$SUPERVISOR_LOG"
-grep -Fxq 'status sdk-service:sdk-service-6' "$SUPERVISOR_LOG"
+grep -Fxq 'status sdk-service:sdk-service-4' "$SUPERVISOR_LOG"
 
 # A live deployment holds the shared lock; Monit must skip its check.
 exec 8>"$tmp/publish.lock"
@@ -59,8 +59,8 @@ if TEST_SUPERVISOR_STATE=RUNNING "$script_dir/check-http-live.sh" sdk-core-1 821
     exit 1
 fi
 
-if "$script_dir/check-http-live.sh" sdk-core-5 8215; then
-    printf 'Expected removed fifth SDK Core instance to be rejected\n' >&2
+if "$script_dir/check-http-live.sh" sdk-core-3 8213; then
+    printf 'Expected removed third SDK Core instance to be rejected\n' >&2
     exit 1
 fi
 
