@@ -6,12 +6,12 @@ settings; never rewrite unrelated sections such as orderNotify.
 import re
 
 
-def core_settings(text, access_enabled, max_open, max_idle):
-    if type(access_enabled) is not bool or not (1 <= max_idle <= max_open <= 128):
+def core_settings(text, access_enabled, max_open):
+    if type(access_enabled) is not bool or type(max_open) is not int or not (1 <= max_open <= 128):
         raise ValueError("invalid fixture parameters")
     changes = {
         "log": {"accessEnabled": str(access_enabled).lower()},
-        "database": {"maxOpenConns": str(max_open), "maxIdleConns": str(max_idle)},
+        "database": {"maxOpenConns": str(max_open)},
     }
     sections = {}
     seen = set()
