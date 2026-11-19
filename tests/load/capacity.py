@@ -137,9 +137,9 @@ def stage(label, scenario, target, rate, duration, required=False, profile=None)
 
 
 # Change only the disposable SDK Core YAML; restart all configured SDK Core instances.
-def core_config(sample, max_open=20, max_idle=10):
+def core_config(access_enabled, max_open=20, max_idle=10):
     config = root / "config" / "sdk-core.yaml"
-    config.write_text(core_settings(config.read_text(), sample, max_open, max_idle))
+    config.write_text(core_settings(config.read_text(), access_enabled, max_open, max_idle))
     names = [name for name in servers if name.startswith("sdk-core-")]
     subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *names], check=True)
     for name in names:
@@ -155,14 +155,14 @@ def core_config(sample, max_open=20, max_idle=10):
                 time.sleep(1)
 
 # Same runner, same Nginx, same cached response implementation: isolate the log setting.
-core_config(1)
+core_config(True)
 stage("log-full-warmup", "sdk-config", "direct", 1000, "10s")
 for target in ("nginx", "direct"):
     stage(f"log-full-{target}-3000", "sdk-config", target, 3000, "20s")
-core_config(10)
-stage("log-sampled-warmup", "sdk-config", "direct", 1000, "10s")
+core_config(False)
+stage("log-disabled-warmup", "sdk-config", "direct", 1000, "10s")
 for target in ("nginx", "direct"):
-    stage(f"log-sampled-{target}-3000", "sdk-config", target, 3000, "20s")
+    stage(f"log-disabled-{target}-3000", "sdk-config", target, 3000, "20s")
 
 # Fixed, bounded paired stages; report failing high targets instead of hiding them.
 # Compare one compact sdk-core directly vs via the same Nginx; cluster direct is a single backend.
@@ -181,7 +181,7 @@ for scenario, rate, name in (("sdk-config", 1000, "sdk-core-1"), ("order", 250, 
 # Compare DB pool sizes without changing production defaults or SQL semantics.
 # Both stages use distinct synthetic orders, with identical logger, rate and duration.
 stage("order-pool20-500", "order", "nginx", 500, "30s")
-core_config(10, 32, 16)
+core_config(False, 32, 16)
 stage("order-pool32-500", "order", "nginx", 500, "30s")
 print("\n## Final capacity stage results\n")
 print("| Stage | Target it/s | HTTP req/s | P95 ms | P99 ms | Business failures % | Dropped | Exit | Required |")

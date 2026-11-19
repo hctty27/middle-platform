@@ -53,7 +53,7 @@ def service_config(ttl, isolated, idle, event_cap, sample):
     content = config.read_text()
     for key, value in {
         "ttl": ttl, "isolateConnections": str(isolated).lower(),
-        "maxIdlePerHost": idle, "eventMaxConns": event_cap, "sdkEventSampleEvery": sample,
+        "maxIdlePerHost": idle, "eventMaxConns": event_cap, "platformSuccessSampleEvery": sample,
     }.items():
         content, count = re.subn(r"(?m)^(  " + key + r":)[ \t]*[^#\r\n]+$", lambda m: m.group(1) + " " + str(value), content)
         if count != 1:
