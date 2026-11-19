@@ -113,8 +113,8 @@ func TestOrderStoreLifecycle(t *testing.T) {
 	if err = repo.CompleteNotify(ctx, found.ID, claimed.NotifyAttempts, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.CompleteNotify(ctx, found.ID, claimed.NotifyAttempts, errors.New("late failure")); err != nil {
-		t.Fatal(err)
+	if err = repo.CompleteNotify(ctx, found.ID, claimed.NotifyAttempts, errors.New("late failure")); !errors.Is(err, model.ErrNotifyResultNotApplied) {
+		t.Fatalf("terminal order must reject stale completion, got %v", err)
 	}
 	current, err := repo.ByID(ctx, found.ID)
 	if err != nil {
