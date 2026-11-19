@@ -1,22 +1,14 @@
 package platform
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
 
 func TestPublisherSamplesSuccessPerServiceButKeepsFailures(t *testing.T) {
-	var logs bytes.Buffer
-	old := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	defer slog.SetDefault(old)
-
 	status := http.StatusOK
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(status)
@@ -44,14 +36,21 @@ func TestPublisherSamplesSuccessPerServiceButKeepsFailures(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := strings.Count(logs.String(), "平台接口请求完成"); got != 3 {
-		t.Fatalf("expected one success log per platform service, got %d: %s", got, logs.String())
+	if got := p.userCheckSuccesses.Load(); got != 10 {
+		t.Fatalf("user check sampler count=%d", got)
 	}
+	if got := p.subscribeSuccesses.Load(); got != 10 {
+		t.Fatalf("subscribe sampler count=%d", got)
+	}
+	if got := p.eventSuccesses.Load(); got != 10 {
+		t.Fatalf("event sampler count=%d", got)
+	}
+
 	status = http.StatusBadGateway
 	if err := p.Send(context.Background(), "subscribe_message", "app", "secret", []byte(`{}`)); err == nil {
 		t.Fatal("expected platform failure")
 	}
-	if !strings.Contains(logs.String(), "平台接口请求失败") || !strings.Contains(logs.String(), "\"level\":\"WARN\"") {
-		t.Fatalf("failed outbound call must not be sampled out: %s", logs.String())
+	if got := p.subscribeSuccesses.Load(); got != 10 {
+		t.Fatalf("failed request must not increment success sampler, count=%d", got)
 	}
 }

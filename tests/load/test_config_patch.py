@@ -13,7 +13,7 @@ class ConfigPatchTests(unittest.TestCase):
         self.assertIn("  sdkConfigSampleEvery: 1\n", changed)
         self.assertEqual(text.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0],
                          changed.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0])
-        self.assertEqual(core_settings(changed, 10, 20, 10), text)
+        self.assertEqual(core_settings(changed, 1000, 20, 10), text)
 
     def test_missing_and_duplicate_fail(self):
         fixture = "database:\n  maxOpenConns: 20\n  maxIdleConns: 10\nlog:\n  sdkConfigSampleEvery: 10\n"
