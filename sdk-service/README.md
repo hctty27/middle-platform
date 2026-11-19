@@ -19,7 +19,9 @@ AppID 来自请求头 `x-app-id`。游戏节点的 `gameSecret`、`serviceAdapte
 
 游戏与中台之间的用户核验、事件、订阅及游戏业务回调使用 HMAC-SHA-256，绑定方法、编码路径、AppID、时间戳、nonce 和原始请求体；平台方向仍使用其现有协议。游戏回调 URL 不允许查询串。代理不得改写签名路径；时间窗口不等于 nonce 防重放。
 
-协议参数、签名算法、请求示例及响应结构不在此 README 重复，统一见 [游戏接口](../admin/public/docs/index.html#g-start)、[平台接口](../admin/public/docs/index.html#p-start)、[签名规范](../admin/public/docs/index.html#sig-overview)。
+事件上报支持请求头 `X-Report-Mode: sync`（默认）和 `X-Report-Mode: async`。同步模式等待平台业务成功后返回 `200`，异步模式通过渠道校验和验签后启动一次后台转发并返回 `202`（`code: 0, message: "accepted", data: true`）。`202` 只表示已启动发送任务，不保证平台收到；不入库、不入队、不重试，平台响应不影响接口返回。非法模式返回 `400`，请求体和签名规则不变，订阅消息不受影响。
+
+其余协议参数、签名算法、请求示例及响应结构统一见 [游戏接口](../admin/public/docs/index.html#g-start)、[平台接口](../admin/public/docs/index.html#p-start)、[签名规范](../admin/public/docs/index.html#sig-overview)。
 
 ## 本地启动
 

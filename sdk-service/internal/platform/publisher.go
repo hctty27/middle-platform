@@ -29,12 +29,12 @@ var ErrPublishRejected = errors.New("平台拒绝请求或平台调用失败")
 
 // Publisher 复用 HTTP 客户端并按服务代码选择平台上报地址。
 type Publisher struct {
-	client          *http.Client
-	eventClient     *http.Client
-	endpoints       map[string]string
-	eventSample     int
-	slowThreshold   time.Duration
-	eventSuccesses  atomic.Uint64
+	client         *http.Client
+	eventClient    *http.Client
+	endpoints      map[string]string
+	eventSample    int
+	slowThreshold  time.Duration
+	eventSuccesses atomic.Uint64
 }
 
 // PublisherOptions controls separate transport pools, without adding retries or
@@ -137,15 +137,19 @@ func (p *Publisher) Send(ctx context.Context, code, appID, secret string, body [
 	if code != "event_report" && code != "subscribe_message" {
 		return ErrPublishEndpointMissing
 	}
-	_, err := p.send(ctx, code, appID, secret, body)
+	_, err := p.send(ctx, code, appID, secret, body, false)
 	return err
 }
 
-func (p *Publisher) CheckUser(ctx context.Context, appID, secret string, body []byte) (bool, error) {
-	return p.send(ctx, "user_check", appID, secret, body)
+func (p *Publisher) SendEventBestEffort(ctx context.Context, appID, secret string, body []byte) {
+	_, _ = p.send(ctx, "event_report", appID, secret, body, true)
 }
 
-func (p *Publisher) send(ctx context.Context, code, appID, secret string, body []byte) (success bool, publishErr error) {
+func (p *Publisher) CheckUser(ctx context.Context, appID, secret string, body []byte) (bool, error) {
+	return p.send(ctx, "user_check", appID, secret, body, false)
+}
+
+func (p *Publisher) send(ctx context.Context, code, appID, secret string, body []byte, bestEffort bool) (success bool, publishErr error) {
 	start := time.Now()
 	status := 0
 	var businessCode *int
@@ -156,13 +160,16 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	logger := logging.FromContext(ctx)
 	defer func() {
 		elapsed := time.Since(start)
-		if publishErr == nil && success && code == "event_report" &&
+		if publishErr == nil && success && status == http.StatusOK && code == "event_report" &&
 			p != nil && p.eventSample > 1 && elapsed < p.slowThreshold &&
 			p.eventSuccesses.Add(1)%uint64(p.eventSample) != 0 {
 			return
 		}
 		attrs := []any{"service_code", code, "app_id", appID, "method", http.MethodPost,
 			"path", path, "request_bytes", len(body), "http_status", status, "duration_ms", elapsed.Milliseconds()}
+		if bestEffort {
+			attrs = append(attrs, "report_mode", "async")
+		}
 		if businessCode != nil {
 			attrs = append(attrs, "business_code", *businessCode)
 		}
@@ -210,6 +217,11 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	}
 	defer response.Body.Close()
 	status = response.StatusCode
+	if bestEffort {
+		// Drain small responses to let the transport reuse the connection.
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 8*1024+1))
+		return true, nil
+	}
 	failure = "http_or_response_read"
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 8*1024+1))
 	loggedBody := raw

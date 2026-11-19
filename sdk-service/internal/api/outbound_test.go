@@ -1,10 +1,19 @@
 package api
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"hitall.com/middle-platform/sdk-service/internal/model"
+	"hitall.com/middle-platform/sdk-service/internal/platform"
+	"hitall.com/middle-platform/sdk-service/internal/service"
+	"hitall.com/middle-platform/shared/signature"
 )
 
 type fakeOutbound struct {
@@ -13,10 +22,12 @@ type fakeOutbound struct {
 	raw           string
 	appID         string
 	env           string
+	async         bool
 }
 
-func (f *fakeOutbound) ReportEvent(_ *http.Request, env, appID string, body []byte) error {
+func (f *fakeOutbound) ReportEvent(_ *http.Request, env, appID string, body []byte, async bool) error {
 	f.events++
+	f.async = async
 	f.env, f.appID, f.raw = env, appID, string(body)
 	return nil
 }
@@ -24,6 +35,101 @@ func (f *fakeOutbound) SendSubscribe(_ *http.Request, env, appID string, body []
 	f.subscriptions++
 	f.env, f.appID, f.raw = env, appID, string(body)
 	return nil
+}
+
+func TestEventReportMode(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		modes  []string
+		status int
+		calls  int
+		async  bool
+	}{
+		{"default", nil, 200, 1, false},
+		{"sync", []string{"sync"}, 200, 1, false},
+		{"async", []string{"async"}, 202, 1, true},
+		{"unknown", []string{"later"}, 400, 0, false},
+		{"empty", []string{""}, 400, 0, false},
+		{"repeated", []string{"sync", "async"}, 400, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			outbound := &fakeOutbound{}
+			handler := RouterWithPublishers(&fakeChecker{}, fakeDB{}, nil, nil, nil, outbound, nil)
+			req := httptest.NewRequest(http.MethodPost, "/api/service/events/test", strings.NewReader(`{"event":"login","ext":{}}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("x-app-id", "110006")
+			for _, mode := range tc.modes {
+				req.Header.Add("X-Report-Mode", mode)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.status || outbound.events != tc.calls || outbound.async != tc.async {
+				t.Fatalf("status=%d calls=%d async=%v body=%s", rec.Code, outbound.events, outbound.async, rec.Body.String())
+			}
+		})
+	}
+}
+
+type eventRoutes struct{}
+
+func (eventRoutes) LookupService(_ context.Context, appID, env, _ string) (model.Target, error) {
+	return model.Target{AppID: appID, Env: env, GameSecret: "game-secret", AppSecret: "platform-secret"}, nil
+}
+
+func TestAsyncEventReturnsBeforePlatformResponse(t *testing.T) {
+	const payload = `{"event":"login","ext":{}}`
+	received := make(chan string, 1)
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		received <- string(body)
+		<-release
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer upstream.Close()
+	defer close(release)
+	publisher, err := platform.NewPublisher(upstream.URL+"/report/event", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outbound := &service.OutboundService{Routes: eventRoutes{}, Sender: publisher}
+	handler := RouterWithPublishers(&fakeChecker{}, fakeDB{}, nil, nil, nil, outbound, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/service/events/test", strings.NewReader(payload))
+	const appID, nonce = "110006", "0011223344556677"
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Report-Mode", "async")
+	req.Header.Set("x-app-id", appID)
+	req.Header.Set("x-timestamp", ts)
+	req.Header.Set("x-nonce", nonce)
+	req.Header.Set("x-signature", signature.SignGameRequest([]byte("game-secret"), req.Method, req.URL.EscapedPath(), appID, ts, nonce, []byte(payload)))
+
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		cancel()
+		done <- rec
+	}()
+	select {
+	case rec := <-done:
+		if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"message":"accepted"`) {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("异步接口未在平台响应前返回")
+	}
+	select {
+	case body := <-received:
+		if body != payload {
+			t.Fatalf("平台收到的请求体: %s", body)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("平台未收到异步上报")
+	}
 }
 
 func TestEventAndSubscribeRoutes(t *testing.T) {

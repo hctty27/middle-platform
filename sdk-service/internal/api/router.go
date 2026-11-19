@@ -123,12 +123,12 @@ func routerServices(checker UserChecker, db Pinger, role RoleQuerier, server Ser
 	}
 	if events != nil {
 		registerWithTimeout(mux, "POST /api/service/events/{env}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
-			serveOutbound(w, r, "event_report", events.ReportEvent)
+			serveEventReport(w, r, events)
 		})
 	}
 	if subscriptions != nil {
 		registerWithTimeout(mux, "POST /api/service/subscribe/{env}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
-			serveOutbound(w, r, "subscribe_message", subscriptions.SendSubscribe)
+			serveOutbound(w, r, "subscribe_message", false, subscriptions.SendSubscribe)
 		})
 	}
 	registerWithTimeout(mux, "POST /api/service/user/check/{env}", options.RequestTimeout, func(w http.ResponseWriter, r *http.Request) {
