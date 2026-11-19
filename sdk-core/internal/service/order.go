@@ -14,11 +14,76 @@ import (
 	"hitall.com/middle-platform/sdk-core/internal/auth"
 	"hitall.com/middle-platform/sdk-core/internal/model"
 	"hitall.com/middle-platform/sdk-core/internal/payment"
+	"hitall.com/middle-platform/shared/logging"
 )
 
 // ErrInvalidOrder 表示登记或回调的订单参数不符合约束。
 var ErrInvalidOrder = errors.New("订单请求参数不合法")
-var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+var orderIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}package service
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"regexp"
+	"sync"
+	"time"
+
+	"hitall.com/middle-platform/sdk-core/internal/auth"
+	"hitall.com/middle-platform/sdk-core/internal/model"
+	"hitall.com/middle-platform/sdk-core/internal/payment"
+	"hitall.com/middle-platform/shared/logging"
+)
+
+// ErrInvalidOrder 表示登记或回调的订单参数不符合约束。
+var ErrInvalidOrder = errors.New("订单请求参数不合法")
+)
+
+// Only accepted business identifiers are included in logs. Never log the raw
+// callback, headers, signing material, notify URL, or untrusted error strings.
+func safeOrderLogID(value string) string {
+	if orderIDPattern.MatchString(value) {
+		return value
+	}
+	return ""
+}
+
+func orderLogFailure(err error) string {
+	switch {
+	case errors.Is(err, ErrInvalidOrder):
+		return "invalid_request"
+	case errors.Is(err, model.ErrOrderConflict):
+		return "order_conflict"
+	case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrNotFound):
+		return "not_found"
+	case errors.Is(err, auth.ErrUnauthorized), errors.Is(err, payment.ErrSignature):
+		return "signature_invalid"
+	case errors.Is(err, model.ErrInvalidConfig):
+		return "invalid_config"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	default:
+		return "internal_error"
+	}
+}
+
+func notifyLogFailure(err error) string {
+	switch {
+	case errors.Is(err, model.ErrInvalidConfig):
+		return "invalid_config"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	default:
+		return "notify_failed"
+	}
+}
 
 // OrderConfigReader 保留订单登记所需的游戏密钥和大区通知地址查询。
 type OrderConfigReader interface {
@@ -89,7 +154,34 @@ func (s *OrderService) VerifyRegistration(r *http.Request, body []byte, env, app
 func validEnv(env string) bool { return env == "prod" || env == "test" || env == "review" }
 
 // Register 将游戏订单和大区通知地址存为快照，重复请求必须保持业务参数一致。
-func (s *OrderService) Register(ctx context.Context, env, appid string, req model.RegisterOrder, verified VerifiedRegistration) error {
+func (s *OrderService) Register(ctx context.Context, env, appid string, req model.RegisterOrder, verified VerifiedRegistration) (resultErr error) {
+	started := time.Now()
+	stage := "validate"
+	idempotent := false
+	defer func() {
+		loggedEnv := ""
+		if validEnv(env) {
+			loggedEnv = env
+		}
+		attrs := []any{
+			"app_id", safeOrderLogID(appid),
+			"game_order_id", safeOrderLogID(req.GameOrderID),
+			"env", loggedEnv,
+			"duration_ms", time.Since(started).Milliseconds(),
+		}
+		logger := logging.FromContext(ctx)
+		if resultErr != nil {
+			logger.WarnContext(ctx, "订单登记失败", append(attrs, "stage", stage, "failure", orderLogFailure(resultErr))...)
+			return
+		}
+		if idempotent {
+			logger.InfoContext(ctx, "订单重复登记，幂等返回", attrs...)
+			return
+		}
+		// A concurrent duplicate can be accepted by the store, so do not
+		// claim that this request inserted a new row.
+		logger.InfoContext(ctx, "订单登记已处理", attrs...)
+	}()
 	if !validEnv(env) || !orderIDPattern.MatchString(appid) ||
 		!orderIDPattern.MatchString(req.GameOrderID) || req.Amount <= 0 ||
 		req.Amount > 9007199254740991 || len(req.Attach) > 4096 ||
@@ -98,16 +190,19 @@ func (s *OrderService) Register(ctx context.Context, env, appid string, req mode
 		return ErrInvalidOrder
 	}
 	// 已存在订单的重试不依赖当前大区通知地址，避免配置变更破坏幂等。
+	stage = "find_order"
 	previous, lookupErr := s.Orders.Find(ctx, appid, req.GameOrderID)
 	if lookupErr == nil {
 		if previous.Env != env || previous.Amount != req.Amount || previous.Attach != req.Attach {
 			return model.ErrOrderConflict
 		}
+		idempotent = true
 		return nil
 	}
 	if !errors.Is(lookupErr, model.ErrOrderNotFound) {
 		return lookupErr
 	}
+	stage = "load_notify_config"
 	var config map[string]json.RawMessage
 	if err := json.Unmarshal(verified.Group.RegionSDKConfig, &config); err != nil {
 		return model.ErrInvalidConfig
@@ -123,6 +218,7 @@ func (s *OrderService) Register(ctx context.Context, env, appid string, req mode
 	if err := s.Notifier.ValidateTarget(url); err != nil {
 		return model.ErrInvalidConfig
 	}
+	stage = "persist_order"
 	return s.Orders.Register(ctx, model.Order{
 		AppID: appid, GameID: verified.App.GameID, Env: env, GameOrderID: req.GameOrderID,
 		Amount: req.Amount, Attach: req.Attach, GameNotifyURL: url,
@@ -134,25 +230,59 @@ func (s *OrderService) Register(ctx context.Context, env, appid string, req mode
 // 平台负责核对实际收款；SDK Core 按既有 v1 协议验签并核对登记金额，不发起二次查单。
 // 注意：v1 签名不覆盖 amount/attach/paid_at，金额比较无法证明这些回调字段的完整性。
 func (s *OrderService) Receive(ctx context.Context, appid string, h http.Header,
-	callback model.PaymentCallback) (string, error) {
+	callback model.PaymentCallback) (nonce string, resultErr error) {
+	started := time.Now()
+	stage := "validate"
+	var orderID int64
+	var previouslyPaid bool
+	defer func() {
+		attrs := []any{
+			"app_id", safeOrderLogID(appid),
+			"game_order_id", safeOrderLogID(callback.GameOrderID),
+			"platform_order_no", safeOrderLogID(callback.OrderNo),
+			"duration_ms", time.Since(started).Milliseconds(),
+		}
+		if orderID != 0 {
+			attrs = append(attrs, "order_id", orderID)
+		}
+		logger := logging.FromContext(ctx)
+		if resultErr != nil {
+			logger.WarnContext(ctx, "支付回调处理失败", append(attrs, "stage", stage, "failure", orderLogFailure(resultErr))...)
+			return
+		}
+		if previouslyPaid {
+			logger.InfoContext(ctx, "支付回调幂等确认", attrs...)
+			return
+		}
+		// ConfirmPayment is idempotent under concurrent callbacks; a read
+		// of an unpaid row does not prove that this request changed it.
+		logger.InfoContext(ctx, "支付回调确认完成", attrs...)
+	}()
 	if !orderIDPattern.MatchString(appid) || !orderIDPattern.MatchString(callback.GameOrderID) ||
 		!orderIDPattern.MatchString(callback.OrderNo) || callback.Amount <= 0 {
 		return "", ErrInvalidOrder
 	}
+	stage = "find_order"
 	o, err := s.Orders.Find(ctx, appid, callback.GameOrderID)
 	if err != nil {
 		return "", err
 	}
+	orderID = o.ID
+	previouslyPaid = o.PaymentStatus == 1
+	stage = "load_platform_secret"
 	secret, err := s.PlatformSecretReader.LookupPlatformSecret(ctx, appid)
 	if err != nil {
 		return "", err
 	}
+	stage = "verify_signature"
 	if err = payment.VerifyV1(h, callback, secret); err != nil {
 		return "", err
 	}
+	stage = "verify_order_details"
 	if err = validateCallbackDetails(o, callback); err != nil {
 		return "", err
 	}
+	stage = "parse_paid_at"
 	paidAt, err := time.Parse(time.RFC3339, callback.PaidAt)
 	if err != nil {
 		paidAt, err = time.Parse("2006-01-02 15:04:05Z07", callback.PaidAt)
@@ -161,6 +291,7 @@ func (s *OrderService) Receive(ctx context.Context, appid string, h http.Header,
 		return "", ErrInvalidOrder
 	}
 	paidAt = paidAt.UTC().Truncate(time.Second)
+	stage = "confirm_payment"
 	if err = s.Orders.ConfirmPayment(ctx, o.ID, callback.OrderNo, paidAt); err != nil {
 		return "", err
 	}
@@ -206,8 +337,25 @@ func (s *OrderService) deliverReserved(ctx context.Context, o model.Order, relea
 func (s *OrderService) completeNotify(o model.Order, notifyErr error) error {
 	commitCtx, commitCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer commitCancel()
+	attrs := []any{
+		"order_id", o.ID,
+		"app_id", safeOrderLogID(o.AppID),
+		"game_order_id", safeOrderLogID(o.GameOrderID),
+		"platform_order_no", safeOrderLogID(o.PlatformOrderNo),
+		"attempt", o.NotifyAttempts,
+	}
+	logger := logging.FromContext(commitCtx)
 	if saveErr := s.Orders.CompleteNotify(commitCtx, o.ID, o.NotifyAttempts, notifyErr); saveErr != nil {
+		logger.ErrorContext(commitCtx, "保存发货通知结果失败", append(attrs, "failure", "persist_failed")...)
 		return fmt.Errorf("保存发货通知结果失败: %w", saveErr)
+	}
+	if errors.Is(notifyErr, model.ErrNotifyDeferred) {
+		// A busy local gate is not a remote delivery failure. Avoid log floods.
+		logger.DebugContext(commitCtx, "游戏发货本地延期", attrs...)
+	} else if notifyErr != nil {
+		logger.WarnContext(commitCtx, "游戏发货通知失败", append(attrs, "failure", notifyLogFailure(notifyErr))...)
+	} else {
+		logger.InfoContext(commitCtx, "游戏发货通知完成", attrs...)
 	}
 	return notifyErr
 }
@@ -241,10 +389,7 @@ func (s *OrderService) runNotifyWorker(ctx context.Context, idleInterval time.Du
 		order, err := s.Orders.ClaimDue(jobCtx)
 		cancel()
 		if err == nil && order != nil {
-			if notifyErr := s.deliver(ctx, *order); notifyErr != nil && !errors.Is(notifyErr, model.ErrNotifyDeferred) && ctx.Err() == nil {
-				slog.Warn("游戏发货通知失败", "order_id", order.ID,
-					"attempt", order.NotifyAttempts, "error", notifyErr)
-			}
+			_ = s.deliver(ctx, *order) // completeNotify logs the persisted result.
 			continue
 		}
 		if err != nil && ctx.Err() == nil && time.Since(lastClaimErrorLog) >= 30*time.Second {
