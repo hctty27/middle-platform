@@ -28,6 +28,35 @@
 
 如果这些前置条件未完成，正常发布会在替换应用文件前失败。首次配置 Nginx 与系统服务必须由管理员审核，不会由发布脚本自动覆盖。
 
+## 多机器顺序发布（不控制腾讯云 CLB）
+
+每台服务器依旧使用本机 Nginx + Supervisor 的 2/2/4 滚动更新。`rolling.ps1` 只在发布电脑上**打包一次**，依次调用原有的 `publish.ps1 -SkipBuild`；**不调用 CLB API**，不增加版本目录，也不提供自动回滚。某台发布失败将立即停止，剩余机器不再更新。CLB 本身保持正常转发，因此发布期间仍可能短暂出现请求错误。
+
+先复制两个未跟踪的配置文件：
+
+```powershell
+Copy-Item .\publish\publish.config.example.json .\publish\publish.config.json
+Copy-Item .\publish\rolling.config.example.json .\publish\rolling.config.json
+```
+
+`rolling.config.json` 只需要 `remoteDirectory` 和 `nodes` 数组（至少两台，每台 `name`、`host`、`sshPort`、`user`）。真实服务器清单由 `.gitignore` 排除，请不要提交真实服务器账号和凭据。`publish.config.json` 仍然必须存在，因为原有单机脚本会读取它；建议使用 SSH 密钥认证。
+
+```powershell
+# 只验证本地 JSON 与节点清单，不连接远端
+.\publish\rolling.ps1 -Version v1.0.1 -CheckOnly
+
+# 编译一次，并逐台执行单机安全滚动发布
+.\publish\rolling.ps1 -Version v1.0.1
+
+# 只更新 SDK Service
+.\publish\rolling.ps1 -Version v1.0.2 -Service sdk-service
+
+# 复用 dist 中同版本的现有 amd64 归档
+.\publish\rolling.ps1 -Version v1.0.2 -SkipBuild
+```
+
+为避免冲突，建议只在一台固定的发布电脑或同一个 CI 部署入口执行：脚本只有**本机发布锁**，没有跨电脑的分布式锁。执行前确认每台机器已安装 Nginx、Supervisor、Monit 和 `ops/nginx/upstream-control.sh`，每台 `2/2/4` 实例全部 Ready；单机原有发布逻辑负责各实例 Nginx 摘除、重启和验活，但不会摘除整台 CLB 后端服务器。
+
 ## 使用命令
 
 ```powershell
