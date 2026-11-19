@@ -27,6 +27,7 @@ type Config struct {
 	Output        string `yaml:"output"`
 	AccessEnabled bool   `yaml:"accessEnabled"`
 	SlowThreshold string `yaml:"slowThreshold"`
+	SuccessSampleEvery   int `yaml:"successSampleEvery"`
 	SDKConfigSampleEvery int `yaml:"sdkConfigSampleEvery"`
 	SDKEventSampleEvery int `yaml:"sdkEventSampleEvery"`
 }
@@ -35,7 +36,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Level: "info", Format: "json", Output: "stdout",
-		AccessEnabled: true, SlowThreshold: "500ms", SDKConfigSampleEvery: 1, SDKEventSampleEvery: 1,
+		AccessEnabled: true, SlowThreshold: "500ms", SuccessSampleEvery: 1, SDKConfigSampleEvery: 1, SDKEventSampleEvery: 1,
 	}
 }
 
@@ -60,6 +61,13 @@ func (c *Config) ApplyEnv() error {
 			return fmt.Errorf("LOG_ACCESS_ENABLED 配置不合法: %w", err)
 		}
 		c.AccessEnabled = parsed
+	}
+	if value, ok := os.LookupEnv("LOG_SUCCESS_SAMPLE_EVERY"); ok {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("LOG_SUCCESS_SAMPLE_EVERY 配置不合法: %w", err)
+		}
+		c.SuccessSampleEvery = parsed
 	}
 	if value, ok := os.LookupEnv("LOG_SDK_CONFIG_SAMPLE_EVERY"); ok {
 		parsed, err := strconv.Atoi(value)
@@ -94,6 +102,9 @@ func (c Config) Validate() error {
 	case "stdout", "stderr":
 	default:
 		return fmt.Errorf("log.output 配置不合法: %q", c.Output)
+	}
+	if c.SuccessSampleEvery < 0 || c.SuccessSampleEvery > 10000 {
+		return fmt.Errorf("log.successSampleEvery 必须在 0 到 10000 之间")
 	}
 	if c.SDKConfigSampleEvery < 0 || c.SDKConfigSampleEvery > 10000 {
 		return fmt.Errorf("log.sdkConfigSampleEvery 必须在 0 到 10000 之间")
@@ -251,11 +262,35 @@ func eventReport(r *http.Request) bool {
 	return ok && (env == "test" || env == "review" || env == "prod")
 }
 
+// sampledPublicServiceRoute identifies only high-volume public SDK service routes.
+// The returned index is stable across app IDs and environments, preventing
+// unbounded per-path cardinality and keeping independent per-route counters.
+func sampledPublicServiceRoute(r *http.Request) int {
+	if r.Method != http.MethodPost {
+		return -1
+	}
+	prefixes := [...]string{
+		"/api/service/user/check/",
+		"/api/service/role/query/",
+		"/api/service/server/query/",
+		"/api/service/role/control/",
+		"/api/service/subscribe/",
+	}
+	for i, prefix := range prefixes {
+		if env, ok := strings.CutPrefix(r.URL.Path, prefix); ok &&
+			(env == "test" || env == "review" || env == "prod") {
+			return i
+		}
+	}
+	return -1
+}
+
 // HTTP 统一生成或校验 Request ID，记录状态码和耗时，捕获 panic；访问日志使用实际请求路径，不记录 URL 查询串或请求体。
 func HTTP(c Config, next http.Handler) http.Handler {
 	threshold, _ := time.ParseDuration(c.SlowThreshold)
 	var successfulConfigReads atomic.Uint64
 	var successfulEvents atomic.Uint64
+	var successfulServiceRequests [5]atomic.Uint64
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(RequestIDHeader)
 		if !validRequestID(id) {
@@ -297,6 +332,13 @@ func HTTP(c Config, next http.Handler) http.Handler {
 				c.SDKEventSampleEvery > 1 && eventReport(r) &&
 				successfulEvents.Add(1)%uint64(c.SDKEventSampleEvery) != 0 {
 				return
+			}
+			if !panicked && !slow && writer.status >= 200 && writer.status < 300 &&
+				c.SuccessSampleEvery > 1 {
+				if routeIndex := sampledPublicServiceRoute(r); routeIndex >= 0 &&
+					successfulServiceRequests[routeIndex].Add(1)%uint64(c.SuccessSampleEvery) != 0 {
+					return
+				}
 			}
 			level := slog.LevelInfo
 			if panicked || writer.status >= 500 {

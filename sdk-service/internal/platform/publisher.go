@@ -32,9 +32,12 @@ type Publisher struct {
 	client         *http.Client
 	eventClient    *http.Client
 	endpoints      map[string]string
-	eventSample    int
-	slowThreshold  time.Duration
-	eventSuccesses atomic.Uint64
+	eventSample         int
+	successSample       int
+	slowThreshold       time.Duration
+	eventSuccesses      atomic.Uint64
+	userCheckSuccesses  atomic.Uint64
+	subscribeSuccesses  atomic.Uint64
 }
 
 // PublisherOptions controls separate transport pools, without adding retries or
@@ -44,6 +47,7 @@ type PublisherOptions struct {
 	MaxIdlePerHost     int
 	EventMaxConns      int
 	EventSampleEvery   int
+	SuccessSampleEvery int
 	SlowThreshold      time.Duration
 }
 
@@ -54,6 +58,7 @@ func NewPublisherWithOptions(eventURL, subscribeURL, userCheckURL string, option
 		options.EventMaxConns < 0 || options.EventMaxConns > 4096 ||
 		(!options.IsolateConnections && options.EventMaxConns != 0) ||
 		options.EventSampleEvery < 0 || options.EventSampleEvery > 10000 ||
+		options.SuccessSampleEvery < 0 || options.SuccessSampleEvery > 10000 ||
 		options.SlowThreshold <= 0 {
 		return nil, errors.New("平台连接池或日志采样配置不合法")
 	}
@@ -78,6 +83,7 @@ func NewPublisherWithOptions(eventURL, subscribeURL, userCheckURL string, option
 		p.eventClient = makeClient(options.EventMaxConns)
 	}
 	p.eventSample = options.EventSampleEvery
+	p.successSample = options.SuccessSampleEvery
 	p.slowThreshold = options.SlowThreshold
 	return p, nil
 }
@@ -160,10 +166,25 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	logger := logging.FromContext(ctx)
 	defer func() {
 		elapsed := time.Since(start)
-		if publishErr == nil && success && status >= http.StatusOK && status < http.StatusMultipleChoices && code == "event_report" &&
-			p != nil && p.eventSample > 1 && elapsed < p.slowThreshold &&
-			p.eventSuccesses.Add(1)%uint64(p.eventSample) != 0 {
-			return
+		// Sample only successful, fast outbound calls. A normal "user does
+		// not exist" response has no error and is eligible for sampling.
+		// Errors and slow calls always retain their diagnostic logs.
+		if publishErr == nil && status >= http.StatusOK && status < http.StatusMultipleChoices &&
+			p != nil && elapsed < p.slowThreshold {
+			switch code {
+			case "event_report":
+				if p.eventSample > 1 && p.eventSuccesses.Add(1)%uint64(p.eventSample) != 0 {
+					return
+				}
+			case "user_check":
+				if p.successSample > 1 && p.userCheckSuccesses.Add(1)%uint64(p.successSample) != 0 {
+					return
+				}
+			case "subscribe_message":
+				if p.successSample > 1 && p.subscribeSuccesses.Add(1)%uint64(p.successSample) != 0 {
+					return
+				}
+			}
 		}
 		attrs := []any{"service_code", code, "app_id", appID, "method", http.MethodPost,
 			"path", path, "request_bytes", len(body), "http_status", status, "duration_ms", elapsed.Milliseconds()}
@@ -175,7 +196,11 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 		}
 		if publishErr != nil {
 			attrs = append(attrs, "failure", failure)
-			logger.WarnContext(ctx, "平台接口请求失败", attrs...)
+			if failure == "nonce_generation" || failure == "request_creation" {
+				logger.ErrorContext(ctx, "平台接口请求失败", attrs...)
+			} else {
+				logger.WarnContext(ctx, "平台接口请求失败", attrs...)
+			}
 		} else {
 			logger.InfoContext(ctx, "平台接口请求完成", attrs...)
 		}

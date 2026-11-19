@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"hitall.com/middle-platform/sdk-core/internal/model"
+	"hitall.com/middle-platform/sdk-core/internal/payment"
 )
 
 type businessLogOrderStore struct {
@@ -97,8 +98,8 @@ func TestPaymentOrderRegistrationBusinessLogs(t *testing.T) {
 	if err := svc.Register(context.Background(), "prod", "12345", req, verified); err != nil {
 		t.Fatal(err)
 	}
-	if got := orderLogRecord(t, out)["msg"]; got != "订单重复登记，幂等返回" {
-		t.Fatalf("idempotent registration log: %v", got)
+	if out.Len() != 0 {
+		t.Fatalf("idempotent registration should not emit INFO: %s", out.String())
 	}
 
 	out.Reset()
@@ -193,5 +194,44 @@ func TestPaymentNotifyBusinessLogs(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "sensitive-database-error") {
 		t.Fatalf("sensitive persistence error was logged: %s", out.String())
+	}
+}
+
+func TestOrderLogFailureLevels(t *testing.T) {
+	for _, tc := range []struct {
+		err   error
+		level slog.Level
+	}{
+		{ErrInvalidOrder, slog.LevelInfo},
+		{model.ErrOrderNotFound, slog.LevelInfo},
+		{model.ErrOrderConflict, slog.LevelWarn},
+		{payment.ErrSignature, slog.LevelWarn},
+		{model.ErrInvalidConfig, slog.LevelError},
+		{errors.New("database unavailable"), slog.LevelError},
+	} {
+		if got := orderLogLevel(tc.err); got != tc.level {
+			t.Fatalf("error %v: expected %s, got %s", tc.err, tc.level, got)
+		}
+	}
+}
+
+func TestOrderRegistrationDatabaseFailureIsError(t *testing.T) {
+	out := captureOrderBusinessLogs(t)
+	store := &businessLogOrderStore{findErr: errors.New("private-db-error")}
+	svc := &OrderService{Orders: store}
+	req := model.RegisterOrder{GameOrderID: "game-123", Amount: 600}
+	verified := VerifiedRegistration{
+		AppID: "12345", Env: "prod",
+		App: model.ChannelApp{Code: "12345", GameID: 42},
+	}
+	if err := svc.Register(context.Background(), "prod", "12345", req, verified); err == nil {
+		t.Fatal("database lookup must fail")
+	}
+	record := orderLogRecord(t, out)
+	if record["level"] != "ERROR" || record["failure"] != "internal_error" {
+		t.Fatalf("expected ERROR for database failure: %v", record)
+	}
+	if strings.Contains(out.String(), "private-db-error") {
+		t.Fatalf("database diagnostic should not leak: %s", out.String())
 	}
 }

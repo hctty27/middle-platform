@@ -51,6 +51,19 @@ func orderLogFailure(err error) string {
 	}
 }
 
+// orderLogLevel separates expected business failures from operational faults.
+// Unknown errors are treated as internal failures, not as ordinary WARNs.
+func orderLogLevel(err error) slog.Level {
+	switch orderLogFailure(err) {
+	case "invalid_request", "not_found", "canceled":
+		return slog.LevelInfo
+	case "internal_error", "invalid_config":
+		return slog.LevelError
+	default:
+		return slog.LevelWarn
+	}
+}
+
 func notifyLogFailure(err error) string {
 	switch {
 	case errors.Is(err, model.ErrInvalidConfig):
@@ -150,11 +163,11 @@ func (s *OrderService) Register(ctx context.Context, env, appid string, req mode
 		}
 		logger := logging.FromContext(ctx)
 		if resultErr != nil {
-			logger.WarnContext(ctx, "订单登记失败", append(attrs, "stage", stage, "failure", orderLogFailure(resultErr))...)
+			logger.Log(ctx, orderLogLevel(resultErr), "订单登记失败", append(attrs, "stage", stage, "failure", orderLogFailure(resultErr))...)
 			return
 		}
 		if idempotent {
-			logger.InfoContext(ctx, "订单重复登记，幂等返回", attrs...)
+			logger.DebugContext(ctx, "订单重复登记，幂等返回", attrs...)
 			return
 		}
 		// A concurrent duplicate can be accepted by the store, so do not
@@ -226,11 +239,11 @@ func (s *OrderService) Receive(ctx context.Context, appid string, h http.Header,
 		}
 		logger := logging.FromContext(ctx)
 		if resultErr != nil {
-			logger.WarnContext(ctx, "支付回调处理失败", append(attrs, "stage", stage, "failure", orderLogFailure(resultErr))...)
+			logger.Log(ctx, orderLogLevel(resultErr), "支付回调处理失败", append(attrs, "stage", stage, "failure", orderLogFailure(resultErr))...)
 			return
 		}
 		if previouslyPaid {
-			logger.InfoContext(ctx, "支付回调幂等确认", attrs...)
+			logger.DebugContext(ctx, "支付回调幂等确认", attrs...)
 			return
 		}
 		// ConfirmPayment is idempotent under concurrent callbacks; a read
