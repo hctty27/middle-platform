@@ -174,6 +174,15 @@ func TestPaymentNotifyBusinessLogs(t *testing.T) {
 		t.Fatalf("local gate deferral should not emit an INFO/WARN log: %s", out.String())
 	}
 	out.Reset()
+	store.notifyErr = model.ErrNotifyResultNotApplied
+	if err := svc.completeNotify(order, nil); !errors.Is(err, model.ErrNotifyResultNotApplied) {
+		t.Fatalf("expected stale completion error, got %v", err)
+	}
+	record = orderLogRecord(t, out)
+	if record["level"] != "WARN" || record["msg"] != "发货通知结果未写入" || record["failure"] != "stale_or_completed" {
+		t.Fatalf("stale completion log: %v", record)
+	}
+	out.Reset()
 	store.notifyErr = errors.New("sensitive-database-error")
 	if err := svc.completeNotify(order, nil); err == nil {
 		t.Fatal("expected persistence error")
