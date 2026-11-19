@@ -137,7 +137,7 @@ def stage(label, scenario, target, rate, duration, required=False, profile=None)
 
 
 # Change only the disposable SDK Core YAML; restart all configured SDK Core instances.
-def core_config(access_enabled, max_open=20):
+def core_config(access_enabled, max_open=30):
     config = root / "config" / "sdk-core.yaml"
     config.write_text(core_settings(config.read_text(), access_enabled, max_open))
     names = [name for name in servers if name.startswith("sdk-core-")]
@@ -180,9 +180,9 @@ for scenario, rate, name in (("sdk-config", 1000, "sdk-core-1"), ("order", 250, 
     stage(f"profile-{scenario}", scenario, "nginx", rate, "35s", required=True, profile=name)
 # Compare max-open DB pool sizes; idle connections retain their fixed code default.
 # Both stages use distinct synthetic orders, with identical logger, rate and duration.
-stage("order-pool20-500", "order", "nginx", 500, "30s")
-core_config(False, 32)
-stage("order-pool32-500", "order", "nginx", 500, "30s")
+stage("order-pool30-500", "order", "nginx", 500, "30s")
+core_config(False, 40)
+stage("order-pool40-500", "order", "nginx", 500, "30s")
 print("\n## Final capacity stage results\n")
 print("| Stage | Target it/s | HTTP req/s | P95 ms | P99 ms | Business failures % | Dropped | Exit | Required |")
 print("|---|---:|---:|---:|---:|---:|---:|---:|---|")

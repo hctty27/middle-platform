@@ -14,12 +14,12 @@ class ConfigPatchTests(unittest.TestCase):
         self.assertIn("  accessEnabled: true\n", changed)
         self.assertEqual(text.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0],
                          changed.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0])
-        self.assertEqual(core_settings(changed, False, 20), text)
+        self.assertEqual(core_settings(changed, False, 30), text)
 
     def test_missing_and_duplicate_fail(self):
-        fixture = "database:\n  maxOpenConns: 20\nlog:\n  accessEnabled: false\n"
+        fixture = "database:\n  maxOpenConns: 30\nlog:\n  accessEnabled: false\n"
         with self.assertRaises(RuntimeError):
-            core_settings(fixture.replace("  maxOpenConns: 20\n", ""), True, 32)
+            core_settings(fixture.replace("  maxOpenConns: 30\n", ""), True, 32)
         with self.assertRaises(RuntimeError):
             core_settings(fixture + "  accessEnabled: true\n", True, 32)
         with self.assertRaises(RuntimeError):

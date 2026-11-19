@@ -17,7 +17,7 @@ func TestSingleDatabaseConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Database.MaxOpenConns != 20 {
+	if cfg.Database.MaxOpenConns != 30 {
 		t.Fatalf("unexpected pool default: %d", cfg.Database.MaxOpenConns)
 	}
 	if cfg.OrderNotify.Workers != 4 || cfg.OrderNotify.IdleInterval != "500ms" {

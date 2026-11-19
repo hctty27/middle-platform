@@ -154,3 +154,40 @@ func TestLoadRequiresDefaultYAML(t *testing.T) {
 		t.Fatalf("缺少默认 YAML 时不应退回纯环境变量启动: %v", err)
 	}
 }
+
+// TestDatabasePoolMaxOpenConns verifies that the Config Center pool
+// has a safe default and remains tunable without exposing idle pool internals.
+func TestDatabasePoolMaxOpenConns(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		extra     string
+		want      int
+		wantError bool
+	}{
+		{name: "default", want: 20},
+		{name: "tuned higher", extra: "  maxOpenConns: 40\n", want: 40},
+		{name: "tuned lower", extra: "  maxOpenConns: 3\n", want: 3},
+		{name: "invalid zero", extra: "  maxOpenConns: 0\n", wantError: true},
+		{name: "invalid negative", extra: "  maxOpenConns: -1\n", wantError: true},
+		{name: "invalid text", extra: "  maxOpenConns: nope\n", wantError: true},
+		{name: "retired idle setting", extra: "  maxIdleConns: 10\n", wantError: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			data := "database:\n  dsn: test-dsn\n" + tt.extra
+			if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadFile(path)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("expected invalid configuration to fail: %q", tt.extra)
+				}
+				return
+			}
+			if err != nil || cfg.MaxOpenConns != tt.want {
+				t.Fatalf("MaxOpenConns=%d, want=%d, err=%v", cfg.MaxOpenConns, tt.want, err)
+			}
+		})
+	}
+}

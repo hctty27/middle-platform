@@ -14,6 +14,8 @@
 go run ./cmd/config-center -config configs/config-dev.yaml
 ```
 
+数据库连接池默认每实例最多 20 个开放连接，`database.maxOpenConns` 可从 YAML 调整。最大空闲连接数固定为 `min(10, maxOpenConns)`，连接生命周期固定为 30 分钟，与 SDK Core / SDK Service 统一；连接池配置重启后生效。
+
 检查 `GET /health/ready`。服务启动不自动执行 DDL，节点变更推进 `epoch/revision`；Webhook 只发版本通知，接入方根据修订号异步拉取。渠道包不参与三级节点同步。
 
 ## 内部 UTC 时间
