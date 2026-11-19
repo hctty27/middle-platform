@@ -209,7 +209,7 @@ func (d *Dispatcher) failed(ctx context.Context, job Delivery, reason error) err
 		WHERE subscriber_id=? AND lease_owner=?`,
 		string(message), job.SubscriberID, job.LeaseID)
 	return checkWebhookUpdateResult(result, err)
-
+}
 
 // dispatch 控制单轮任务数量及并发上限。
 // dispatch 并发领取和投递一批到期任务，避免单个回调阻塞其他订阅者。
