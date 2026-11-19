@@ -77,7 +77,7 @@ func TestCompleteNotifyLocalDeferralSQLAndFencing(t *testing.T) {
 		t.Fatal("deferral modified status/token")
 	}
 	// An old success cannot overwrite a newer attempt.
-	if err := store.CompleteNotify(context.Background(), 42, 8, nil); err != nil {
+	if err := store.CompleteNotify(context.Background(), 42, 8, nil); !errors.Is(err, model.ErrNotifyResultNotApplied) {
 		t.Fatal(err)
 	}
 	if stub.status != 2 {
@@ -89,7 +89,7 @@ func TestCompleteNotifyLocalDeferralSQLAndFencing(t *testing.T) {
 	if stub.status != 1 {
 		t.Fatal("current success not persisted")
 	}
-	if err := store.CompleteNotify(context.Background(), 42, 9, model.ErrNotifyDeferred); err != nil {
+	if err := store.CompleteNotify(context.Background(), 42, 9, model.ErrNotifyDeferred); !errors.Is(err, model.ErrNotifyResultNotApplied) {
 		t.Fatal(err)
 	}
 	if stub.status != 1 {
