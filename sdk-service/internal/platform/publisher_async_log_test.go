@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -51,9 +52,27 @@ func TestBestEffortEventHTTPStatusLogs(t *testing.T) {
 			if requests != 1 {
 				t.Fatalf("best-effort mode must not retry: got %d requests", requests)
 			}
+			// Other goroutines may finish logging between test cases. Decode
+			// concatenated JSON records and select this exact async request.
+			decoder := json.NewDecoder(bytes.NewReader(logs.Bytes()))
 			var record map[string]any
-			if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
-				t.Fatalf("invalid log: %v, output=%s", err, logs.String())
+			matches := 0
+			for {
+				var candidate map[string]any
+				err := decoder.Decode(&candidate)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatalf("invalid log JSON: %v, output=%s", err, logs.String())
+				}
+				if candidate["report_mode"] == "async" && candidate["app_id"] == "app-123" {
+					record = candidate
+					matches++
+				}
+			}
+			if matches != 1 {
+				t.Fatalf("expected one matching async request log, got %d: %s", matches, logs.String())
 			}
 			if record["level"] != tc.level || record["msg"] != tc.msg ||
 				record["http_status"] != float64(tc.status) || record["report_mode"] != "async" {
@@ -76,7 +95,7 @@ func TestBestEffortEventHTTPStatusLogs(t *testing.T) {
 	}
 }
 
-func TestBestEffortEventSamplingKeepsHTTPFailures(t *testing.T) {
+func TestBestEffortEventAccessDisabledKeepsHTTPFailures(t *testing.T) {
 	var logs bytes.Buffer
 	oldLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
@@ -90,14 +109,14 @@ func TestBestEffortEventSamplingKeepsHTTPFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	publisher.platformSuccessSampleEvery = 100
+	publisher.accessEnabled = false
 	publisher.slowThreshold = time.Hour
 	for _, code := range []int{http.StatusOK, http.StatusAccepted, http.StatusNoContent} {
 		status = code
 		publisher.SendEventBestEffort(context.Background(), "app", "secret", []byte("{}"))
 	}
 	if logs.Len() != 0 {
-		t.Fatalf("successful fast event should be sampled: %s", logs.String())
+		t.Fatalf("successful fast event should be suppressed: %s", logs.String())
 	}
 	status = http.StatusServiceUnavailable
 	publisher.SendEventBestEffort(context.Background(), "app", "secret", []byte("{}"))

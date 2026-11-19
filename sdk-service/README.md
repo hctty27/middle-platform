@@ -54,4 +54,4 @@ go build ./cmd/sdk-service
 
 `platform.isolateConnections` 默认 `true`：用户核验使用独立 HTTP transport，事件/订阅共用另一 transport。`maxIdlePerHost` 默认 32（范围 1～256），复用长连接；`eventMaxConns` 默认 0（无限制），仅开启隔离时可选 1～4096。设为非零会让事件/订阅按目标等待连接（HTTP/2 多路复用并非请求并发限制），仍受原 5 秒平台预算约束；不主动拒绝、不新增重试。`isolateConnections: false`、`maxIdlePerHost: 2`、`eventMaxConns: 0` 可回退共享连接池行为。两池仍共享进程 CPU、数据库和网络，不是完整隔离。
 
-`log.platformSuccessSampleEvery` / `LOG_PLATFORM_SUCCESS_SAMPLE_EVERY` 是唯一的成功日志采样参数：平台出站的事件、用户核验和订阅消息各自计数，默认及模板为 1000（每 1000 次快速成功保留 1 条）；0/1 可恢复全量。失败和慢调用不采样，异步事件仍不重试、不解析业务响应。`log.accessEnabled: false` 单独关闭正常 HTTP 成功访问日志，错误和慢请求仍记录；开启该开关则 HTTP 访问全量记录。旧的 `sdkEventSampleEvery` / `successSampleEvery` 及对应 `LOG_*` 环境变量已移除，生产私有 YAML 需迁移后再部署。DEBUG 请求/响应日志沿用原行为，配置缓存默认仍为 0s。
+`log.accessEnabled: false` 默认关闭正常的 HTTP 入站成功访问日志，以及平台出站事件上报、用户核验和订阅消息的快速成功日志；HTTP 异常、平台失败和超过 `slowThreshold` 的慢调用照常记录。`accessEnabled: true` 则开启正常请求日志全量输出。订单、支付、发货、配置同步等独立业务日志不受此开关控制。原有全部 `*SampleEvery` 参数已删除，生产私有 YAML 必须移除旧字段，并清理旧的 `LOG_*_SAMPLE_EVERY` 环境变量（残留时会在配置校验阶段报错）。DEBUG 请求/响应内容维持现有行为，配置缓存仍默认 0s。

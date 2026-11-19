@@ -22,7 +22,7 @@ func TestUserCheckHasIndependentTransport(t *testing.T) {
 	defer close(release)
 	p, err := NewPublisherWithOptions(srv.URL+"/report/event", "", srv.URL+"/cp/user/check", PublisherOptions{
 		IsolateConnections: true, MaxIdlePerHost: 4, EventMaxConns: 1,
-		PlatformSuccessSampleEvery: 1, SlowThreshold: time.Second,
+		AccessEnabled: true, SlowThreshold: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)

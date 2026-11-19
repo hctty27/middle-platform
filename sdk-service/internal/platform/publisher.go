@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"hitall.com/middle-platform/shared/logging"
@@ -32,11 +31,8 @@ type Publisher struct {
 	client         *http.Client
 	eventClient    *http.Client
 	endpoints      map[string]string
-	platformSuccessSampleEvery int
-	slowThreshold              time.Duration
-	eventSuccesses             atomic.Uint64
-	userCheckSuccesses         atomic.Uint64
-	subscribeSuccesses         atomic.Uint64
+	accessEnabled bool
+	slowThreshold time.Duration
 }
 
 // PublisherOptions controls separate transport pools, without adding retries or
@@ -45,8 +41,8 @@ type PublisherOptions struct {
 	IsolateConnections bool
 	MaxIdlePerHost     int
 	EventMaxConns      int
-	PlatformSuccessSampleEvery int
-	SlowThreshold             time.Duration
+	AccessEnabled bool
+	SlowThreshold time.Duration
 }
 
 // NewPublisherWithOptions keeps the existing endpoint validation and allows
@@ -55,7 +51,6 @@ func NewPublisherWithOptions(eventURL, subscribeURL, userCheckURL string, option
 	if options.MaxIdlePerHost < 1 || options.MaxIdlePerHost > 256 ||
 		options.EventMaxConns < 0 || options.EventMaxConns > 4096 ||
 		(!options.IsolateConnections && options.EventMaxConns != 0) ||
-		options.PlatformSuccessSampleEvery < 0 || options.PlatformSuccessSampleEvery > 10000 ||
 		options.SlowThreshold <= 0 {
 		return nil, errors.New("平台连接池或日志采样配置不合法")
 	}
@@ -79,7 +74,7 @@ func NewPublisherWithOptions(eventURL, subscribeURL, userCheckURL string, option
 	if options.IsolateConnections {
 		p.eventClient = makeClient(options.EventMaxConns)
 	}
-	p.platformSuccessSampleEvery = options.PlatformSuccessSampleEvery
+	p.accessEnabled = options.AccessEnabled
 	p.slowThreshold = options.SlowThreshold
 	return p, nil
 }
@@ -126,6 +121,7 @@ func NewPublisher(eventURL, subscribeURL string, userCheckURL ...string) (*Publi
 	}
 	return &Publisher{
 		endpoints: endpoints,
+		accessEnabled: true, // Keep legacy constructor behavior for callers without config.
 		client: &http.Client{
 			Timeout:       5 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -162,22 +158,11 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 	logger := logging.FromContext(ctx)
 	defer func() {
 		elapsed := time.Since(start)
-		// Each platform service has its own counter; share a single sampling
-		// interval. Never sample failures or slow outbound calls.
+		// One accessEnabled switch controls normal inbound and outbound request logs.
+		// Failed or slow requests are never suppressed.
 		if publishErr == nil && status >= http.StatusOK && status < http.StatusMultipleChoices &&
-			p != nil && p.platformSuccessSampleEvery > 1 && elapsed < p.slowThreshold {
-			var counter *atomic.Uint64
-			switch code {
-			case "event_report":
-				counter = &p.eventSuccesses
-			case "user_check":
-				counter = &p.userCheckSuccesses
-			case "subscribe_message":
-				counter = &p.subscribeSuccesses
-			}
-			if counter != nil && counter.Add(1)%uint64(p.platformSuccessSampleEvery) != 0 {
-				return
-			}
+			p != nil && !p.accessEnabled && elapsed < p.slowThreshold {
+			return
 		}
 		attrs := []any{"service_code", code, "app_id", appID, "method", http.MethodPost,
 			"path", path, "request_bytes", len(body), "http_status", status, "duration_ms", elapsed.Milliseconds()}
@@ -194,6 +179,8 @@ func (p *Publisher) send(ctx context.Context, code, appID, secret string, body [
 			} else {
 				logger.WarnContext(ctx, "平台接口请求失败", attrs...)
 			}
+		} else if p != nil && p.slowThreshold > 0 && elapsed >= p.slowThreshold {
+			logger.WarnContext(ctx, "平台接口请求过慢", attrs...)
 		} else {
 			logger.InfoContext(ctx, "平台接口请求完成", attrs...)
 		}

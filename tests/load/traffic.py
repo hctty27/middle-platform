@@ -47,13 +47,13 @@ def fmt(v, digits=2):
     return "—" if v is None else f"{v:.{digits}f}"
 
 
-def service_config(ttl, isolated, idle, event_cap, sample):
+def service_config(ttl, isolated, idle, event_cap, access_enabled):
     """Only edit the disposable runner's service YAML, then restart its instances."""
     config = root / "config" / "sdk-service.yaml"
     content = config.read_text()
     for key, value in {
         "ttl": ttl, "isolateConnections": str(isolated).lower(),
-        "maxIdlePerHost": idle, "eventMaxConns": event_cap, "platformSuccessSampleEvery": sample,
+        "maxIdlePerHost": idle, "eventMaxConns": event_cap, "accessEnabled": str(access_enabled).lower(),
     }.items():
         content, count = re.subn(r"(?m)^(  " + key + r":)[ \t]*[^#\r\n]+$", lambda m: m.group(1) + " " + str(value), content)
         if count != 1:
@@ -73,7 +73,7 @@ def service_config(ttl, isolated, idle, event_cap, sample):
                 if attempt == 29:
                     raise
                 time.sleep(1)
-    print(f"Service fixture: ttl={ttl}, isolated={isolated}, idle={idle}, event cap={event_cap}, sample={sample}", flush=True)
+    print(f"Service fixture: ttl={ttl}, isolated={isolated}, idle={idle}, event cap={event_cap}, access_enabled={access_enabled}", flush=True)
 
 
 def runtime_snapshot():
@@ -174,33 +174,33 @@ try:
     elif os.environ.get("LOAD_PROFILE") == "traffic-multi":
         # Uniform cyclic traffic across 16 games, 16 apps each. Both A/B arms
         # use the same app count, connection settings and sampling rate.
-        service_config("0s", True, 32, 0, 10)
+        service_config("0s", True, 32, 0, False)
         stage("multi-no-cache-400", 100, 100, 200, apps=256, required=True)
         stage("multi-no-cache-1000", 250, 250, 500, apps=256)
-        service_config("1s", True, 32, 0, 10)
+        service_config("1s", True, 32, 0, False)
         stage("multi-cache-400", 100, 100, 200, apps=256, required=True)
         stage("multi-cache-1000", 250, 250, 500, apps=256)
         for rate in (500, 750, 1250):
             if not stage(f"multi-cache-{rate*4}", rate, rate, rate*2, apps=256):
                 break
         stage("multi-recovery", 100, 100, 200, apps=256, required=True)
-        service_config("0s", True, 32, 0, 1)
+        service_config("0s", True, 32, 0, False)
     else:
         # Same-instance A/B: keep the production default cache disabled.
-        service_config("0s", False, 2, 0, 1)
+        service_config("0s", False, 2, 0, False)
         stage("ab-legacy-1000", 250, 250, 500)
-        service_config("0s", True, 32, 0, 1)
+        service_config("0s", True, 32, 0, False)
         stage("ab-pools-1000", 250, 250, 500)
-        service_config("0s", True, 32, 0, 10)
-        stage("ab-sampling-1000", 250, 250, 500)
-        service_config("1s", True, 32, 0, 10)
+        service_config("0s", True, 32, 0, True)
+        stage("ab-access-log-on-1000", 250, 250, 500)
+        service_config("1s", True, 32, 0, False)
         stage("ab-cache-1000", 250, 250, 500)
         stage("ab-cache-2000", 500, 500, 1000)
         # Connection cap experiment keeps synchronous completion, never fabricates success.
-        service_config("1s", True, 32, 64, 10)
+        service_config("1s", True, 32, 64, False)
         stage("ab-capped-overload", 100, 100, 2000, delay=50)
         # Restore the conservative production-like settings before required stages.
-        service_config("0s", True, 32, 0, 1)
+        service_config("0s", True, 32, 0, False)
         # A baseline for both critical routes, then independent event traffic.
         stage("critical-baseline", 100, 100, 0, required=True)
         stage("event-only-smoke", 0, 0, 10, required=True, seconds=10)

@@ -36,5 +36,3 @@ log:
   output: stdout
   accessEnabled: false
   slowThreshold: 500ms
-  # 出站事件、核验、订阅成功日志统一采样；每 1000 次记录 1 次。
-  platformSuccessSampleEvery: 1000

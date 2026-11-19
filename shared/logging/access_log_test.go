@@ -79,22 +79,19 @@ func TestAccessDisabledStillRecordsWarningsAndErrors(t *testing.T) {
 	}
 }
 
-func TestPlatformSamplerEnvAndLegacySettings(t *testing.T) {
-	cfg := Default()
-	if cfg.PlatformSuccessSampleEvery != 1000 {
-		t.Fatalf("unexpected default platform sampler: %d", cfg.PlatformSuccessSampleEvery)
-	}
-	t.Setenv("LOG_PLATFORM_SUCCESS_SAMPLE_EVERY", "25")
-	if err := cfg.ApplyEnv(); err != nil || cfg.PlatformSuccessSampleEvery != 25 {
-		t.Fatalf("new platform sampler env not applied: %+v %v", cfg, err)
-	}
-	t.Setenv("LOG_PLATFORM_SUCCESS_SAMPLE_EVERY", "-1")
-	if err := cfg.ApplyEnv(); err == nil {
-		t.Fatal("invalid platform sampling interval accepted")
-	}
-	t.Setenv("LOG_PLATFORM_SUCCESS_SAMPLE_EVERY", "25")
-	t.Setenv("LOG_SDK_EVENT_SAMPLE_EVERY", "10")
-	if err := cfg.ApplyEnv(); err == nil || !strings.Contains(err.Error(), "已废弃") {
-		t.Fatalf("legacy sampling variable must report migration error: %v", err)
+func TestObsoleteSamplingEnvironmentVariablesRejected(t *testing.T) {
+	for _, name := range []string{
+		"LOG_SDK_CONFIG_SAMPLE_EVERY",
+		"LOG_SDK_EVENT_SAMPLE_EVERY",
+		"LOG_SUCCESS_SAMPLE_EVERY",
+		"LOG_PLATFORM_SUCCESS_SAMPLE_EVERY",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "10")
+			cfg := Default()
+			if err := cfg.ApplyEnv(); err == nil || !strings.Contains(err.Error(), "已废弃") {
+				t.Fatalf("old sampling environment variable must fail clearly: %v", err)
+			}
+		})
 	}
 }

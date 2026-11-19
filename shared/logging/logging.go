@@ -27,15 +27,13 @@ type Config struct {
 	Output        string `yaml:"output"`
 	AccessEnabled bool   `yaml:"accessEnabled"`
 	SlowThreshold string `yaml:"slowThreshold"`
-	// PlatformSuccessSampleEvery samples only successful outbound platform calls.
-	PlatformSuccessSampleEvery int `yaml:"platformSuccessSampleEvery"`
 }
 
 // Default 返回统一日志的安全默认值。
 func Default() Config {
 	return Config{
 		Level: "info", Format: "json", Output: "stdout",
-		AccessEnabled: true, SlowThreshold: "500ms", PlatformSuccessSampleEvery: 1000,
+		AccessEnabled: true, SlowThreshold: "500ms"
 	}
 }
 
@@ -61,17 +59,15 @@ func (c *Config) ApplyEnv() error {
 		}
 		c.AccessEnabled = parsed
 	}
-	for _, old := range []string{"LOG_SUCCESS_SAMPLE_EVERY", "LOG_SDK_CONFIG_SAMPLE_EVERY", "LOG_SDK_EVENT_SAMPLE_EVERY"} {
-		if _, set := os.LookupEnv(old); set {
-			return fmt.Errorf("%s 已废弃；HTTP 访问日志使用 LOG_ACCESS_ENABLED，平台成功采样使用 LOG_PLATFORM_SUCCESS_SAMPLE_EVERY", old)
+	for _, old := range []string{
+		"LOG_SUCCESS_SAMPLE_EVERY",
+		"LOG_SDK_CONFIG_SAMPLE_EVERY",
+		"LOG_SDK_EVENT_SAMPLE_EVERY",
+		"LOG_PLATFORM_SUCCESS_SAMPLE_EVERY",
+	} {
+		if _, exists := os.LookupEnv(old); exists {
+			return fmt.Errorf("%s 已废弃，请删除并使用 LOG_ACCESS_ENABLED 控制正常请求日志", old)
 		}
-	}
-	if value, ok := os.LookupEnv("LOG_PLATFORM_SUCCESS_SAMPLE_EVERY"); ok {
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("LOG_PLATFORM_SUCCESS_SAMPLE_EVERY 配置不合法: %w", err)
-		}
-		c.PlatformSuccessSampleEvery = parsed
 	}
 	return c.Validate()
 }
@@ -92,9 +88,6 @@ func (c Config) Validate() error {
 	case "stdout", "stderr":
 	default:
 		return fmt.Errorf("log.output 配置不合法: %q", c.Output)
-	}
-	if c.PlatformSuccessSampleEvery < 0 || c.PlatformSuccessSampleEvery > 10000 {
-		return fmt.Errorf("log.platformSuccessSampleEvery 必须在 0 到 10000 之间")
 	}
 	threshold, err := time.ParseDuration(c.SlowThreshold)
 	if err != nil || threshold <= 0 {
