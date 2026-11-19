@@ -37,10 +37,10 @@ for peer in "${peers[@]}"; do
     case "$group:$port" in
         config-center:8201|config-center:8202)
             expected_count=2; upstream_name=config_center; file="$root/run/nginx/config-center-upstream.conf" ;;
-        sdk-core:8211|sdk-core:8212|sdk-core:8213|sdk-core:8214)
-            expected_count=4; upstream_name=sdk_core; file="$root/run/nginx/sdk-core-upstream.conf" ;;
-        sdk-service:8221|sdk-service:8222|sdk-service:8223|sdk-service:8224|sdk-service:8225|sdk-service:8226|sdk-service:8227|sdk-service:8228|sdk-service:8229|sdk-service:8230)
-            expected_count=10; upstream_name=sdk_service; file="$root/run/nginx/sdk-service-upstream.conf" ;;
+        sdk-core:8211|sdk-core:8212)
+            expected_count=2; upstream_name=sdk_core; file="$root/run/nginx/sdk-core-upstream.conf" ;;
+        sdk-service:8221|sdk-service:8222|sdk-service:8223|sdk-service:8224)
+            expected_count=4; upstream_name=sdk_service; file="$root/run/nginx/sdk-service-upstream.conf" ;;
         *) printf 'Unsupported upstream group or port: %s:%s\n' "$group" "$port" >&2; exit 2 ;;
     esac
     for directory in "$root" "$root/run" "$root/run/nginx"; do

@@ -80,7 +80,7 @@ class RemotePublishTests(unittest.TestCase):
                     recovery_http="200", recovery_fail_on=0, stopped_program=""):
         digest = digest or hashlib.sha256(self.archive.read_bytes()).hexdigest()
         if plan is None:
-            plan = ",".join(f"sdk-core-{i}:{8210 + i}" for i in range(1, 5)) if restart else "-"
+            plan = ",".join(f"sdk-core-{i}:{8210 + i}" for i in range(1, 3)) if restart else "-"
         extra_args = ["1" if restart else "0", service, plan] if service else []
         commands = """
 uname() { printf '%s\\n' "$TEST_MACHINE"; }
@@ -217,7 +217,7 @@ exec bash "$@"
         self.assertEqual(self.nginx_control.read_bytes(), helper_before)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Healthy: sdk-core-1", result.stdout)
-        for i in range(1, 5):
+        for i in range(1, 3):
             self.assertIn(f"Healthy: sdk-core-{i} (port {8210 + i})", result.stdout)
         self.assertIn("Draining sdk-core-1 from Nginx", result.stdout)
         self.assertLess(result.stdout.index("Draining sdk-core-1 from Nginx"),
@@ -225,7 +225,7 @@ exec bash "$@"
         self.assertLess(result.stdout.index("Healthy: sdk-core-1"),
                         result.stdout.index("Restored sdk-core-1 to Nginx traffic"))
         events = self.events.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(sum(line.startswith("validate sdk-core") for line in events), 4)
+        self.assertEqual(sum(line.startswith("validate sdk-core") for line in events), 2)
         self.assertLess(events.index("drain sdk-core 8211"), events.index("restart sdk-core:sdk-core-1"))
         self.assertLess(events.index("restart sdk-core:sdk-core-1"), events.index("enable sdk-core 8211"))
 
@@ -254,23 +254,23 @@ exec bash "$@"
             with self.subTest(plan=plan):
                 self.assert_rejected(service="sdk-core", restart=True, plan=plan)
 
-    def test_sdk_service_eleventh_instance_is_rejected(self):
+    def test_sdk_service_fifth_instance_is_rejected(self):
         self.make_package(frontend=False, only="sdk-service")
-        plan = ",".join(f"sdk-service-{i}:{8220 + i}" for i in range(1, 12))
+        plan = ",".join(f"sdk-service-{i}:{8220 + i}" for i in range(1, 6))
         self.assert_rejected(service="sdk-service", restart=True, plan=plan)
 
     def test_full_publish_restarts_only_configured_instances(self):
         self.make_package(frontend=False)
         full_plan = ",".join(
             [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
-            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 5)] +
-            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 11)]
+            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 3)] +
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)]
         )
         result = self.run_publish(service="all", restart=True, plan=full_plan)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Healthy: config-center-1 (port 8201)", result.stdout)
-        self.assertIn("Healthy: sdk-core-4 (port 8214)", result.stdout)
-        self.assertIn("Healthy: sdk-service-10 (port 8230)", result.stdout)
+        self.assertIn("Healthy: sdk-core-2 (port 8212)", result.stdout)
+        self.assertIn("Healthy: sdk-service-4 (port 8224)", result.stdout)
         self.assertNotIn("Restarting config-center-access", result.stdout)
 
     def enable_batch_helper(self):
@@ -286,31 +286,31 @@ exec bash "$@"
         ))
         self.nginx_control.chmod(0o755)
 
-    def test_batch_full_rollout_has_ten_rounds(self):
+    def test_batch_full_rollout_has_four_rounds(self):
         self.enable_batch_helper()
         self.make_package(frontend=False)
         plan = ",".join(
             [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
-            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 5)] +
-            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 11)])
+            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 3)] +
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)])
         result = self.run_publish(service="all", restart=True, plan=plan)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         events = self.events.read_text(encoding="utf-8").splitlines()
         self.assertEqual(sum(e.startswith("batch validate ") for e in events), 1)
         drains = [e for e in events if e.startswith("batch drain ")]
-        self.assertEqual(len(drains), 10)
+        self.assertEqual(len(drains), 4)
         self.assertEqual(drains[0], "batch drain config-center:8201 sdk-core:8211 sdk-service:8221")
-        self.assertEqual(sum(e.startswith("batch enable ") for e in events), 10)
-        self.assertEqual(sum(e.startswith("restart ") for e in events), 16)
-        self.assertIn("Completed rolling batch 10", result.stdout)
+        self.assertEqual(sum(e.startswith("batch enable ") for e in events), 4)
+        self.assertEqual(sum(e.startswith("restart ") for e in events), 8)
+        self.assertIn("Completed rolling batch 4", result.stdout)
 
     def test_batch_failure_never_starts_next_round(self):
         self.enable_batch_helper()
         self.make_package(frontend=False)
         plan = ",".join(
             [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
-            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 5)] +
-            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 11)])
+            [f"sdk-core-{i}:{8210 + i}" for i in range(1, 3)] +
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)])
         result = self.run_publish(service="all", restart=True, restart_fail=True, plan=plan)
         self.assertNotEqual(result.returncode, 0, result.stdout)
         events = self.events.read_text(encoding="utf-8").splitlines()
@@ -574,15 +574,15 @@ exit $code
         self.assertNotIn("config-center-access:8291", remote_calls[-1])
         self.assertNotIn("sdk-core-3:8213", remote_calls[-1])
 
-    def test_sdk_service_plan_includes_ten_ports(self):
+    def test_sdk_service_plan_includes_four_ports(self):
         self.write_config()
         (self.root / "cli-override.txt").write_text("Service=sdk-service\n", encoding="ascii")
         result, calls = self.invoke("restart-plan")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         remote = [line for line in calls if line.startswith("ssh|")][-1]
-        expected = ",".join(f"sdk-service-{i}:{8220 + i}" for i in range(1, 11))
+        expected = ",".join(f"sdk-service-{i}:{8220 + i}" for i in range(1, 5))
         self.assertIn(expected, remote)
-        self.assertNotIn("sdk-service-11:8231", remote)
+        self.assertNotIn("sdk-service-5:8225", remote)
 
     def test_empty_services_uses_fixed_topology(self):
         self.write_config(services={})
@@ -596,8 +596,8 @@ exit $code
         result, calls = self.invoke("restart-plan")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         remote = [line for line in calls if line.startswith("ssh|")][-1]
-        self.assertIn("sdk-core-4:8214", remote)
-        self.assertIn("sdk-service-10:8230", remote)
+        self.assertIn("sdk-core-2:8212", remote)
+        self.assertIn("sdk-service-4:8224", remote)
         self.assertIn("config-center-access:8291", remote)
 
     def test_access_requires_optional_configuration(self):
@@ -714,14 +714,14 @@ exit $code
 
 
 class DeploymentTopologyTests(unittest.TestCase):
-    def test_supervisor_monit_nginx_and_publish_share_the_2_4_10_topology(self):
+    def test_supervisor_monit_nginx_and_publish_share_the_2_2_4_topology(self):
         root = ROOT
         expected = {}
         for index in range(1, 3):
             expected[f"config-center-{index}"] = ("config-center", 8200 + index)
-        for index in range(1, 5):
+        for index in range(1, 3):
             expected[f"sdk-core-{index}"] = ("sdk-core", 8210 + index)
-        for index in range(1, 11):
+        for index in range(1, 5):
             expected[f"sdk-service-{index}"] = ("sdk-service", 8220 + index)
 
         supervisor = (root / "ops/supervisor/middle-platform.conf").read_text(encoding="utf-8")
@@ -737,10 +737,10 @@ class DeploymentTopologyTests(unittest.TestCase):
             self.assertIn(f"Name = '{name}'; Module = '{module}'; Port = {port}", publish_script)
 
         self.assertFalse((root / "ops/nginx/runtime").exists())
-        self.assertEqual(len(expected), 16)
+        self.assertEqual(len(expected), 8)
         self.assertEqual(config["remoteDirectory"], "/data/middle-platform")
-        self.assertEqual(supervisor.count("user=root"), 16)
-        self.assertEqual(supervisor.count('GOMEMLIMIT="128MiB"'), 16)
+        self.assertEqual(supervisor.count("user=root"), 8)
+        self.assertEqual(supervisor.count('GOMEMLIMIT="128MiB"'), 8)
         for directive in ("startsecs=3", "startretries=5", "stopwaitsecs=40"):
             self.assertEqual(supervisor.splitlines().count(directive), len(expected))
         for group in ("config-center", "sdk-core", "sdk-service"):

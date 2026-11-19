@@ -13,20 +13,12 @@ EOF
 cat > "$root/run/nginx/sdk-core-upstream.conf" <<'EOF'
 server 127.0.0.1:8211 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8212 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8213 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8214 max_fails=1 fail_timeout=10s;
 EOF
 cat > "$root/run/nginx/sdk-service-upstream.conf" <<'EOF'
 server 127.0.0.1:8221 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8222 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8223 max_fails=1 fail_timeout=10s;
 server 127.0.0.1:8224 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8225 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8226 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8227 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8228 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8229 max_fails=1 fail_timeout=10s;
-server 127.0.0.1:8230 max_fails=1 fail_timeout=10s;
 EOF
 cat > "$bin/sudo" <<'EOF'
 #!/usr/bin/env bash
@@ -130,13 +122,13 @@ if "$control" drain config-center 8201 >/dev/null 2>&1; then
     printf 'Refused-to-drain-last-peer test unexpectedly passed\n' >&2
     exit 1
 fi
-if "$control" validate sdk-core 8215 >/dev/null 2>&1; then
-    printf 'Removed fifth SDK Core port unexpectedly validated\n' >&2
+if "$control" validate sdk-core 8213 >/dev/null 2>&1; then
+    printf 'Removed third SDK Core port unexpectedly validated\n' >&2
     exit 1
 fi
-"$control" validate sdk-service 8230
-if "$control" validate sdk-service 8231 >/dev/null 2>&1; then
-    printf 'Unsupported eleventh SDK Service port unexpectedly validated\n' >&2
+"$control" validate sdk-service 8224
+if "$control" validate sdk-service 8225 >/dev/null 2>&1; then
+    printf 'Unsupported fifth SDK Service port unexpectedly validated\n' >&2
     exit 1
 fi
 if "$control" validate config-center 8291 >/dev/null 2>&1; then
@@ -227,7 +219,7 @@ output=$("$control" validate config-center 8201) || status=$?
 reset_upstream
 [[ $("$control" capabilities) == batch-v1 ]]
 read -r before < "$TEST_GENERATION"
-"$control" batch validate config-center:8201 config-center:8202 sdk-core:8211 sdk-core:8212 sdk-core:8213 sdk-core:8214 sdk-service:8221 sdk-service:8222 sdk-service:8223 sdk-service:8224 sdk-service:8225 sdk-service:8226 sdk-service:8227 sdk-service:8228 sdk-service:8229 sdk-service:8230
+"$control" batch validate config-center:8201 config-center:8202 sdk-core:8211 sdk-core:8212 sdk-service:8221 sdk-service:8222 sdk-service:8223 sdk-service:8224
 "$control" batch validate config-center:8201 config-center:8202 sdk-core:8211 sdk-service:8221
 "$control" batch drain config-center:8201 sdk-core:8211 sdk-service:8221
 read -r after < "$TEST_GENERATION"
@@ -244,7 +236,7 @@ if "$control" batch drain config-center:8202 sdk-core:8212; then
     printf 'Batch drained last config-center peer\n' >&2; exit 1
 fi
 grep -Fxq 'server 127.0.0.1:8212 max_fails=1 fail_timeout=10s;' "$root/run/nginx/sdk-core-upstream.conf"
-if "$control" batch drain sdk-core:8212 sdk-core:8213; then
+if "$control" batch drain sdk-core:8211 sdk-core:8212; then
     printf 'Batch accepted two peers of same upstream\n' >&2; exit 1
 fi
 "$control" batch enable config-center:8201 sdk-core:8211 sdk-service:8221
