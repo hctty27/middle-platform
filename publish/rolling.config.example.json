@@ -1,29 +1,17 @@
 {
-  "region": "ap-guangzhou",
-  "loadBalancerId": "lb-xxxxxxxx",
   "remoteDirectory": "/data/middle-platform",
-  "drainSeconds": 90,
-  "bindings": [
-    {
-      "listenerId": "lbl-xxxxxxxx",
-      "backendPort": 443,
-      "locationId": ""
-    }
-  ],
   "nodes": [
     {
       "name": "node-1",
       "host": "10.0.0.11",
       "sshPort": 16333,
-      "user": "deploy",
-      "instanceId": "ins-xxxxxxxx"
+      "user": "deploy"
     },
     {
       "name": "node-2",
       "host": "10.0.0.12",
       "sshPort": 16333,
-      "user": "deploy",
-      "instanceId": "ins-yyyyyyyy"
+      "user": "deploy"
     }
   ]
 }

@@ -72,6 +72,9 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile('publish/rolling.ps1', [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) { $errors | Format-List | Out-String | Write-Error; exit 1 }
           Get-Content 'publish/rolling.config.example.json' -Raw | ConvertFrom-Json | Out-Null
+      - name: Test sequential multi-node rolling publisher
+        shell: pwsh
+        run: ./scripts/test_rolling_publish.ps1
       - name: Test Nginx upstream drain and restore
         run: bash ops/nginx/test-upstream-control.sh
       - name: Test Monit liveness check
@@ -159,6 +162,9 @@ jobs:
       - name: Verify archive timestamps and reproducibility
         shell: pwsh
         run: go test ./publish/package-archive.go ./publish/package-archive_test.go
+      - name: Test sequential multi-node rolling publisher on Windows
+        shell: pwsh
+        run: ./scripts/test_rolling_publish.ps1
       - name: Publishing smoke tests on Windows
         shell: pwsh
         run: python -I scripts/ci_publish_smoke.py
