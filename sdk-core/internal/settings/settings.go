@@ -16,20 +16,20 @@ import (
 type Database struct {
 	DSN             string `yaml:"dsn"`
 	MaxOpenConns    int    `yaml:"maxOpenConns"`
-	MaxIdleConns    int    `yaml:"maxIdleConns"`
-	ConnMaxLifetime string `yaml:"connMaxLifetime"`
+	MaxIdleConns    int    `yaml:"-"`
+	ConnMaxLifetime string `yaml:"-"`
 }
 
 // OrderNotify 保存异步发货任务的并发和空闲轮询参数。
 type OrderNotify struct {
 	Workers             int    `yaml:"workers"`
-	IdleInterval        string `yaml:"idleInterval"`
+	IdleInterval        string `yaml:"-"`
 	HostConcurrency     int    `yaml:"hostConcurrency"`
-	DisableKeepAlives   bool   `yaml:"disableKeepAlives"`
-	MaxIdleConns        int    `yaml:"maxIdleConns"`
-	MaxIdleConnsPerHost int    `yaml:"maxIdleConnsPerHost"`
-	MaxConnsPerHost     int    `yaml:"maxConnsPerHost"`
-	IdleConnTimeout     string `yaml:"idleConnTimeout"`
+	DisableKeepAlives   bool   `yaml:"-"`
+	MaxIdleConns        int    `yaml:"-"`
+	MaxIdleConnsPerHost int    `yaml:"-"`
+	MaxConnsPerHost     int    `yaml:"-"`
+	IdleConnTimeout     string `yaml:"-"`
 }
 
 // Config 保存 SDK Core 的监听、数据库和日志配置。
@@ -37,7 +37,7 @@ type Config struct {
 	Log    logging.Config `yaml:"log"`
 	Server struct {
 		Address        string `yaml:"address"`
-		RequestTimeout string `yaml:"requestTimeout"`
+		RequestTimeout string `yaml:"-"`
 	} `yaml:"server"`
 	Database    Database              `yaml:"database"`
 	OrderNotify OrderNotify           `yaml:"orderNotify"`

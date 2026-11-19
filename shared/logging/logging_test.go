@@ -209,3 +209,15 @@ func TestRequestIDMissing(t *testing.T) {
 	}
 }
 
+
+func TestDeprecatedLogEnvironmentRejected(t *testing.T) {
+	for _, key := range []string{"LOG_FORMAT", "LOG_OUTPUT", "LOG_SLOW_THRESHOLD", "LOG_SUCCESS_SAMPLE_EVERY"} {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv(key, "legacy")
+			cfg := Default()
+			if err := cfg.ApplyEnv(); err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("retired environment variable accepted: %v", err)
+			}
+		})
+	}
+}

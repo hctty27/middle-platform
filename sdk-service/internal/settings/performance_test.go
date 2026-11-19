@@ -30,9 +30,8 @@ func TestPerformanceDefaults(t *testing.T) {
 	if c.ConfigCache.TTL != "1s" || c.Server.RequestTimeout != "13s" {
 		t.Fatalf("custom: %+v", c)
 	}
-	c, err = loadPerformanceConfig(t, "server:\n  requestTimeout: 2s\n")
-	if err != nil || c.Server.RequestTimeout != "2s" {
-		t.Fatalf("explicit timeout: %+v %v", c, err)
+	if _, err := loadPerformanceConfig(t, "server:\n  requestTimeout: 2s\n"); err == nil {
+		t.Fatal("retired explicit server.requestTimeout accepted")
 	}
 }
 func TestAutoBudgetPreservesPlatformTimeout(t *testing.T) {
@@ -66,5 +65,29 @@ func TestPerformanceInvalidConfigurations(t *testing.T) {
 				t.Fatal("accepted invalid settings")
 			}
 		})
+	}
+}
+
+func TestSlimConfigurationRejectsRetiredKeys(t *testing.T) {
+	for _, key := range []string{
+		"database:\n  maxIdleConns: 5\n",
+		"database:\n  connMaxLifetime: 30m\n",
+		"platform:\n  isolateConnections: true\n",
+		"platform:\n  maxIdlePerHost: 32\n",
+		"platform:\n  eventMaxConns: 0\n",
+		"configCache:\n  maxInflight: 8\n",
+		"log:\n  output: stdout\n",
+	} {
+		t.Run(key, func(t *testing.T) {
+			if _, err := loadPerformanceConfig(t, key); err == nil {
+				t.Fatalf("retired option accepted: %s", key)
+			}
+		})
+	}
+}
+func TestDatabaseOpenLimitIsTunable(t *testing.T) {
+	c, err := loadPerformanceConfig(t, "database:\n  maxOpenConns: 16\n")
+	if err != nil || c.Database.MaxOpenConns != 16 || c.Database.MaxIdleConns != 5 {
+		t.Fatalf("database pool: %+v %v", c.Database, err)
 	}
 }
