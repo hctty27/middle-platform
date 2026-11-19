@@ -113,6 +113,42 @@ func TestHTTPLogsWithoutQueryOrBody(t *testing.T) {
 	}
 }
 
+// TestHTTPLogsActualPathWithoutMethodOrQuery keeps method and path separate
+// and records real escaped path parameters instead of ServeMux route patterns.
+func TestHTTPLogsActualPathWithoutMethodOrQuery(t *testing.T) {
+	cases := []struct {
+		name, method, pattern, target, wantPath string
+	}{
+		{"payment", http.MethodPost, "POST /api/core/pay/notify/{appid}", "/api/core/pay/notify/12345?token=hidden", "/api/core/pay/notify/12345"},
+		{"config", http.MethodGet, "GET /api/core/config/{env}/{appid}", "/api/core/config/prod/98765?signature=hidden", "/api/core/config/prod/98765"},
+		{"escaped", http.MethodPost, "POST /api/core/pay/notify/{appid}", "/api/core/pay/notify/12%2F34?token=hidden", "/api/core/pay/notify/12%2F34"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := capture(t)
+			mux := http.NewServeMux()
+			mux.HandleFunc(tc.pattern, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			handler := HTTP(Default(), mux)
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(tc.method, tc.target, nil))
+			var event map[string]any
+			if err := json.Unmarshal(out.Bytes(), &event); err != nil {
+				t.Fatalf("invalid log JSON: %v: %s", err, out.String())
+			}
+			if event["method"] != tc.method || event["path"] != tc.wantPath {
+				t.Fatalf("method/path mismatch: %v", event)
+			}
+			if _, exists := event["route"]; exists {
+				t.Fatalf("unexpected route field: %v", event)
+			}
+			if strings.Contains(out.String(), "hidden") {
+				t.Fatalf("query parameters leaked into log: %s", out.String())
+			}
+		})
+	}
+}
+
 func TestHTTPInvalidIDAndPanic(t *testing.T) {
 	out := capture(t)
 	handler := HTTP(Default(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
