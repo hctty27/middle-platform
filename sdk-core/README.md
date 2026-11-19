@@ -63,4 +63,4 @@ go build ./cmd/sdk-core
 手动补偿只能提前调度已支付、通知失败且尚未到期的订单；最近一次领取后 60 秒内禁止提前调度。条件更新与 Worker 领取互斥，不直接发货、不改变金额、支付状态或尝试序号。成功通知是终态；游戏仍须幂等处理。日志记录请求来源及调度结果，共享管理密钥不提供独立人员身份。已有库低峰手工审核执行 `db/incremental/V0021__config_center_order_admin_indexes.sql`，新库使用全量 SQL。
 
 ## SDK 配置热点路径
-`log.sdkConfigSampleEvery` / `LOG_SDK_CONFIG_SAMPLE_EVERY` 控制快速成功的公开配置 GET 访问日志；模板为 10（每 10 条保留 1 条），缺省或 0/1 保留全量。错误、慢请求及订单/支付/管理请求不采样；Request ID 仍照常返回。修改已有私有配置后重启才生效。成功公开配置的 JSON 响应与 DTO 使用同一个缓存条目和 TTL，保留 `no-store`、原有字段及换行，不增加配置失效延迟。
+生产模板设置 `log.accessEnabled: false`：普通成功的 HTTP 访问日志默认不输出；请求错误、panic 和慢请求仍记录，`X-Request-ID` 照常返回。若显式开启 `accessEnabled: true`，所有 HTTP 访问均记录，不再配置按路由采样；请避免在高 QPS 正式环境长期开启。订单登记、支付确认和发货结果的业务日志由各自业务逻辑控制，不受访问日志开关影响。删除了旧的 `sdkConfigSampleEvery` / `LOG_SDK_CONFIG_SAMPLE_EVERY`，私有 YAML 和环境变量需同步清理，配置变更后重启生效。

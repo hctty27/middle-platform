@@ -41,6 +41,4 @@ log:
   format: json
   output: stdout
   accessEnabled: false
-  # 仅快速且成功的公开 SDK 配置 GET，每 1000 次记录 1 条；1 恢复全量。
-  sdkConfigSampleEvery: 1000
   slowThreshold: 500ms

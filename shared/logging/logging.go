@@ -27,16 +27,13 @@ type Config struct {
 	Output        string `yaml:"output"`
 	AccessEnabled bool   `yaml:"accessEnabled"`
 	SlowThreshold string `yaml:"slowThreshold"`
-	SuccessSampleEvery   int `yaml:"successSampleEvery"`
-	SDKConfigSampleEvery int `yaml:"sdkConfigSampleEvery"`
-	SDKEventSampleEvery int `yaml:"sdkEventSampleEvery"`
 }
 
 // Default 返回统一日志的安全默认值。
 func Default() Config {
 	return Config{
 		Level: "info", Format: "json", Output: "stdout",
-		AccessEnabled: true, SlowThreshold: "500ms", SuccessSampleEvery: 1, SDKConfigSampleEvery: 1, SDKEventSampleEvery: 1,
+		AccessEnabled: true, SlowThreshold: "500ms",
 	}
 }
 
@@ -62,26 +59,15 @@ func (c *Config) ApplyEnv() error {
 		}
 		c.AccessEnabled = parsed
 	}
-	if value, ok := os.LookupEnv("LOG_SUCCESS_SAMPLE_EVERY"); ok {
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("LOG_SUCCESS_SAMPLE_EVERY 配置不合法: %w", err)
+	for _, old := range []string{
+		"LOG_SUCCESS_SAMPLE_EVERY",
+		"LOG_SDK_CONFIG_SAMPLE_EVERY",
+		"LOG_SDK_EVENT_SAMPLE_EVERY",
+		"LOG_PLATFORM_SUCCESS_SAMPLE_EVERY",
+	} {
+		if _, exists := os.LookupEnv(old); exists {
+			return fmt.Errorf("%s 已废弃，请删除并使用 LOG_ACCESS_ENABLED 控制正常请求日志", old)
 		}
-		c.SuccessSampleEvery = parsed
-	}
-	if value, ok := os.LookupEnv("LOG_SDK_CONFIG_SAMPLE_EVERY"); ok {
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("LOG_SDK_CONFIG_SAMPLE_EVERY 配置不合法: %w", err)
-		}
-		c.SDKConfigSampleEvery = parsed
-	}
-	if value, ok := os.LookupEnv("LOG_SDK_EVENT_SAMPLE_EVERY"); ok {
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("LOG_SDK_EVENT_SAMPLE_EVERY 配置不合法: %w", err)
-		}
-		c.SDKEventSampleEvery = parsed
 	}
 	return c.Validate()
 }
@@ -102,15 +88,6 @@ func (c Config) Validate() error {
 	case "stdout", "stderr":
 	default:
 		return fmt.Errorf("log.output 配置不合法: %q", c.Output)
-	}
-	if c.SuccessSampleEvery < 0 || c.SuccessSampleEvery > 10000 {
-		return fmt.Errorf("log.successSampleEvery 必须在 0 到 10000 之间")
-	}
-	if c.SDKConfigSampleEvery < 0 || c.SDKConfigSampleEvery > 10000 {
-		return fmt.Errorf("log.sdkConfigSampleEvery 必须在 0 到 10000 之间")
-	}
-	if c.SDKEventSampleEvery < 0 || c.SDKEventSampleEvery > 10000 {
-		return fmt.Errorf("log.sdkEventSampleEvery 必须在 0 到 10000 之间")
 	}
 	threshold, err := time.ParseDuration(c.SlowThreshold)
 	if err != nil || threshold <= 0 {
@@ -239,58 +216,10 @@ func (w *statusWriter) Write(body []byte) (int, error) {
 // Unwrap 让 http.ResponseController 可以访问底层 ResponseWriter 的可选能力。
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// publicSDKConfigRead limits sampling to the successful public SDK GET route.
-// Only requests with exactly the two expected path segments are eligible.
-func publicSDKConfigRead(r *http.Request) bool {
-	if r.Method != http.MethodGet {
-		return false
-	}
-	path, ok := strings.CutPrefix(r.URL.Path, "/api/core/config/")
-	if !ok {
-		return false
-	}
-	env, app, ok := strings.Cut(path, "/")
-	return ok && (env == "test" || env == "review" || env == "prod") && app != "" && !strings.Contains(app, "/")
-}
-
-// eventReport identifies exactly the public event route.
-func eventReport(r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		return false
-	}
-	env, ok := strings.CutPrefix(r.URL.Path, "/api/service/events/")
-	return ok && (env == "test" || env == "review" || env == "prod")
-}
-
-// sampledPublicServiceRoute identifies only high-volume public SDK service routes.
-// The returned index is stable across app IDs and environments, preventing
-// unbounded per-path cardinality and keeping independent per-route counters.
-func sampledPublicServiceRoute(r *http.Request) int {
-	if r.Method != http.MethodPost {
-		return -1
-	}
-	prefixes := [...]string{
-		"/api/service/user/check/",
-		"/api/service/role/query/",
-		"/api/service/server/query/",
-		"/api/service/role/control/",
-		"/api/service/subscribe/",
-	}
-	for i, prefix := range prefixes {
-		if env, ok := strings.CutPrefix(r.URL.Path, prefix); ok &&
-			(env == "test" || env == "review" || env == "prod") {
-			return i
-		}
-	}
-	return -1
-}
-
 // HTTP 统一生成或校验 Request ID，记录状态码和耗时，捕获 panic；访问日志使用实际请求路径，不记录 URL 查询串或请求体。
 func HTTP(c Config, next http.Handler) http.Handler {
 	threshold, _ := time.ParseDuration(c.SlowThreshold)
-	var successfulConfigReads atomic.Uint64
-	var successfulEvents atomic.Uint64
-	var successfulServiceRequests [5]atomic.Uint64
+	// HTTP 成功访问日志仅由 accessEnabled 控制，不在中间件中做采样。
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(RequestIDHeader)
 		if !validRequestID(id) {
@@ -322,24 +251,7 @@ func HTTP(c Config, next http.Handler) http.Handler {
 			if (r.URL.Path == "/health/live" || r.URL.Path == "/health/ready") && writer.status < 400 && !slow {
 				return
 			}
-			// Keep every error, slow request, panic, order and management access.
-			if !panicked && !slow && writer.status >= 200 && writer.status < 300 &&
-				c.SDKConfigSampleEvery > 1 && publicSDKConfigRead(r) &&
-				successfulConfigReads.Add(1)%uint64(c.SDKConfigSampleEvery) != 0 {
-				return
-			}
-			if !panicked && !slow && writer.status >= 200 && writer.status < 300 &&
-				c.SDKEventSampleEvery > 1 && eventReport(r) &&
-				successfulEvents.Add(1)%uint64(c.SDKEventSampleEvery) != 0 {
-				return
-			}
-			if !panicked && !slow && writer.status >= 200 && writer.status < 300 &&
-				c.SuccessSampleEvery > 1 {
-				if routeIndex := sampledPublicServiceRoute(r); routeIndex >= 0 &&
-					successfulServiceRequests[routeIndex].Add(1)%uint64(c.SuccessSampleEvery) != 0 {
-					return
-				}
-			}
+			// When accessEnabled is false, errors and slow requests are still logged.
 			level := slog.LevelInfo
 			if panicked || writer.status >= 500 {
 				level = slog.LevelError
