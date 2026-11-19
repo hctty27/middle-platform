@@ -346,7 +346,11 @@ func (s *OrderService) completeNotify(o model.Order, notifyErr error) error {
 	}
 	logger := logging.FromContext(commitCtx)
 	if saveErr := s.Orders.CompleteNotify(commitCtx, o.ID, o.NotifyAttempts, notifyErr); saveErr != nil {
-		logger.ErrorContext(commitCtx, "保存发货通知结果失败", append(attrs, "failure", "persist_failed")...)
+		if errors.Is(saveErr, model.ErrNotifyResultNotApplied) {
+			logger.WarnContext(commitCtx, "发货通知结果未写入", append(attrs, "failure", "stale_or_completed")...)
+		} else {
+			logger.ErrorContext(commitCtx, "保存发货通知结果失败", append(attrs, "failure", "persist_failed")...)
+		}
 		return fmt.Errorf("保存发货通知结果失败: %w", saveErr)
 	}
 	if errors.Is(notifyErr, model.ErrNotifyDeferred) {
