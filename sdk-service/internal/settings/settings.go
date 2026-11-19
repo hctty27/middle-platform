@@ -15,15 +15,15 @@ import (
 type Database struct {
 	DSN             string `yaml:"dsn"`
 	MaxOpenConns    int    `yaml:"maxOpenConns"`
-	MaxIdleConns    int    `yaml:"maxIdleConns"`
-	ConnMaxLifetime string `yaml:"connMaxLifetime"`
+	MaxIdleConns    int    `yaml:"-"`
+	ConnMaxLifetime string `yaml:"-"`
 }
 
 // Config 汇总服务监听、数据库、游戏超时、平台地址及日志配置。
 type Config struct {
 	Server struct {
 		Address        string `yaml:"address"`
-		RequestTimeout string `yaml:"requestTimeout"`
+		RequestTimeout string `yaml:"-"`
 	} `yaml:"server"`
 	Database    Database              `yaml:"database"`
 	ConfigCache bootstrap.CacheConfig `yaml:"configCache"`
@@ -34,9 +34,9 @@ type Config struct {
 		EventReportURL      string `yaml:"eventReportURL"`
 		SubscribeMessageURL string `yaml:"subscribeMessageURL"`
 		UserCheckURL        string `yaml:"userCheckURL"`
-		IsolateConnections bool   `yaml:"isolateConnections"`
-		MaxIdlePerHost     int    `yaml:"maxIdlePerHost"`
-		EventMaxConns      int    `yaml:"eventMaxConns"`
+		IsolateConnections bool   `yaml:"-"`
+		MaxIdlePerHost     int    `yaml:"-"`
+		EventMaxConns      int    `yaml:"-"`
 	} `yaml:"platform"`
 	Log logging.Config `yaml:"log"`
 }
@@ -73,6 +73,8 @@ func Load(path string) (Config, error) {
 	if strings.TrimSpace(cfg.Server.Address) == "" {
 		return Config{}, errors.New("server.address 不能为空")
 	}
+	// Keep the fixed idle pool consistent when maxOpenConns is tuned downward.
+	cfg.Database.MaxIdleConns = min(cfg.Database.MaxIdleConns, cfg.Database.MaxOpenConns)
 	if cfg.Database.MaxOpenConns < 1 || cfg.Database.MaxIdleConns < 0 ||
 		cfg.Database.MaxIdleConns > cfg.Database.MaxOpenConns {
 		return Config{}, errors.New("数据库连接池配置不合法")

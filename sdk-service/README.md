@@ -35,12 +35,12 @@ go run ./cmd/sdk-service -config configs/config-dev.yaml
 
 ## 并发保护与缓存一致性
 
-- 不设置六类业务接口的在途额度，不因并发数量主动拒绝请求。`server.requestTimeout: auto` 默认总预算为 `max(game.timeout, 平台固定 5s) + 3s`（默认 `8s`），也可显式设置不超过 `35s` 的正时长；下游单次超时保留原值。context 取消不是强制结束 handler，数据库或下游超时仍可能返回错误。
+- 不设置六类业务接口的在途额度，不因并发数量主动拒绝请求。HTTP 预算固定按 `max(game.timeout, 平台固定 5s) + 3s` 自动计算（默认 `8s`），不再接受 `server.requestTimeout` 显式覆盖；下游单次超时保留原值。context 取消不是强制结束 handler，数据库或下游超时仍可能返回错误。
 - `configCache.ttl` 默认 `0s`，保持实时查库；路由含上下游密钥、启停和用户核验开关，**只有接受旧密钥撤销、停用和核验开关变更的短暂延迟后才能开启**，例如 `1s`。TTL 上限 `5s`，实际可见延迟还包含在途读取时间，不保证即时撤销。
 - 开启后最多缓存 `4096` 条，各服务命名空间合计；最多 `8` 个不同键回源、单次预算 `5s`，同键合并，回源槽满时等待空位，等待受请求取消与超时约束。仅缓存成功值，过期回源失败不使用旧值兜底；TTL 不滑动延长。键隔离 AppID、环境、服务类型，用户核验保留原缺省开关语义。
 - 三级节点 revision 不覆盖渠道、SDK 配置和服务开关的全部修改，不能依赖它保证缓存即时失效。`ttl: 0s` 可回退；不会改变同步接口成功含义，不增加消息队列、落库或自动重试。
 
-新参数见 [示例配置](configs/config.yaml)，通过单份 YAML 调整，现有 DSN/监听/日志环境变量覆盖行为不变，修改后需重启。应按 DB 连接等待、缓存回源等待、下游延迟和 P99 测量调节资源；移除主动拒绝不代表无限处理能力，高峰时可能排队或超时，不能外推为百万级容量。具体灰度与回退边界见 [并发保护运维说明](../admin/public/docs/guide.html#production-capacity)。
+可调整参数见 [示例配置](configs/config.yaml)：数据库最大连接数、游戏超时、缓存 TTL、平台 URL 和日志级别/访问日志开关。HTTP 连接池等采用固定默认值；日志环境变量仅支持 `LOG_LEVEL` 和 `LOG_ACCESS_ENABLED`，修改后需重启。部署新版本前须按 [配置迁移说明](../ops/CONFIGURATION-MIGRATION.md) 清理线上旧字段。应按 DB 连接等待、缓存回源等待、下游延迟和 P99 测量调节资源；移除主动拒绝不代表无限处理能力，高峰时可能排队或超时，不能外推为百万级容量。具体灰度与回退边界见 [并发保护运维说明](../admin/public/docs/guide.html#production-capacity)。
 
 ```bash
 go test -race ./...
@@ -52,6 +52,6 @@ go build ./cmd/sdk-service
 
 ## 平台连接池与事件日志
 
-`platform.isolateConnections` 默认 `true`：用户核验使用独立 HTTP transport，事件/订阅共用另一 transport。`maxIdlePerHost` 默认 32（范围 1～256），复用长连接；`eventMaxConns` 默认 0（无限制），仅开启隔离时可选 1～4096。设为非零会让事件/订阅按目标等待连接（HTTP/2 多路复用并非请求并发限制），仍受原 5 秒平台预算约束；不主动拒绝、不新增重试。`isolateConnections: false`、`maxIdlePerHost: 2`、`eventMaxConns: 0` 可回退共享连接池行为。两池仍共享进程 CPU、数据库和网络，不是完整隔离。
+用户核验使用独立 HTTP transport，事件/订阅共用另一 transport。默认每目标最大空闲连接数固定为 32，事件每目标连接数上限固定为 0（不额外限制）；不主动拒绝、不新增重试。这些参数不再从 YAML 调整。两池仍共享进程 CPU、数据库和网络，不是完整隔离。
 
-`log.accessEnabled: false` 默认关闭正常的 HTTP 入站成功访问日志，以及平台出站事件上报、用户核验和订阅消息的快速成功日志；HTTP 异常、平台失败和超过 `slowThreshold` 的慢调用照常记录。`accessEnabled: true` 则开启正常请求日志全量输出。订单、支付、发货、配置同步等独立业务日志不受此开关控制。原有全部 `*SampleEvery` 参数已删除，生产私有 YAML 必须移除旧字段，并清理旧的 `LOG_*_SAMPLE_EVERY` 环境变量（残留时会在配置校验阶段报错）。DEBUG 请求/响应内容维持现有行为，配置缓存仍默认 0s。
+`log.accessEnabled: false` 默认关闭正常的 HTTP 入站成功访问日志，以及平台出站事件上报、用户核验和订阅消息的快速成功日志；HTTP 异常、平台失败和超过 `slowThreshold` 的慢调用照常记录。`accessEnabled: true` 则开启正常请求日志全量输出。订单、支付、发货、配置同步等独立业务日志不受此开关控制。原有全部 `*SampleEvery` 参数已删除，生产私有 YAML 必须移除旧字段，并清理旧的 `LOG_*_SAMPLE_EVERY`、`LOG_FORMAT`、`LOG_OUTPUT`、`LOG_SLOW_THRESHOLD` 环境变量（残留时会在配置校验阶段报错）。DEBUG 请求/响应内容维持现有行为，配置缓存仍默认 0s。

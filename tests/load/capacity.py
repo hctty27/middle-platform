@@ -137,9 +137,9 @@ def stage(label, scenario, target, rate, duration, required=False, profile=None)
 
 
 # Change only the disposable SDK Core YAML; restart all configured SDK Core instances.
-def core_config(access_enabled, max_open=20, max_idle=10):
+def core_config(access_enabled, max_open=20):
     config = root / "config" / "sdk-core.yaml"
-    config.write_text(core_settings(config.read_text(), access_enabled, max_open, max_idle))
+    config.write_text(core_settings(config.read_text(), access_enabled, max_open))
     names = [name for name in servers if name.startswith("sdk-core-")]
     subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *names], check=True)
     for name in names:
@@ -178,10 +178,10 @@ for target in ("nginx", "direct"):
 for scenario, rate, name in (("sdk-config", 1000, "sdk-core-1"), ("order", 250, "sdk-core-1"),
                              ("user-check", 250, "sdk-service-1"), ("config-sync", 250, "config-center-1")):
     stage(f"profile-{scenario}", scenario, "nginx", rate, "35s", required=True, profile=name)
-# Compare DB pool sizes without changing production defaults or SQL semantics.
+# Compare max-open DB pool sizes; idle connections retain their fixed code default.
 # Both stages use distinct synthetic orders, with identical logger, rate and duration.
 stage("order-pool20-500", "order", "nginx", 500, "30s")
-core_config(False, 32, 16)
+core_config(False, 32)
 stage("order-pool32-500", "order", "nginx", 500, "30s")
 print("\n## Final capacity stage results\n")
 print("| Stage | Target it/s | HTTP req/s | P95 ms | P99 ms | Business failures % | Dropped | Exit | Required |")

@@ -1,31 +1,13 @@
-# 配置接入端：完整配置模板，使用独立 config_access 副本库；复制后的 YAML 不继承本文件。
-server:
-  address: ":8081"
-
-# 本地 MySQL 副本库；新空库先手动执行 db/full/config_access.sql。
+# 配置接入端：复制为独立的 config-prod.yaml；使用 config_access 副本库。
 database:
   dsn: ""
 
-# 配置中心地址只填协议、主机和端口。
 configCenter:
   url: "http://127.0.0.1:8080"
 
-# 接入端身份与密钥必须与配置中心 config_subscriber 中同一条记录一致。
-# 每个接入端使用唯一密钥，长度为 32–255 字节且不得包含首尾空格。
-# 该密钥同时用于主动拉取配置、本地只读查询和接收 Webhook。
+# 与配置中心 config_subscriber 对应记录一致，密钥必须唯一。
 subscriber:
   code: ""
   secret: ""
 
-# 网络超时与定期全量校对周期；收到有效回调仍会立即同步。
-sync:
-  connectTimeout: "2s"
-  requestTimeout: "15s"
-  reconcileInterval: "5m"
-
-log:
-  level: info
-  format: json
-  output: stdout
-  accessEnabled: true
-  slowThreshold: 500ms
+# 同步超时和全量校对周期使用代码默认值：2s、15s、5m。

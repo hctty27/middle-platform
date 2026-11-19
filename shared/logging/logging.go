@@ -20,13 +20,13 @@ import (
 // RequestIDHeader 约定服务间 HTTP 请求追踪所使用的请求头。
 const RequestIDHeader = "X-Request-ID"
 
-// Config 定义日志级别、输出格式、访问日志及慢请求阈值。
+// Config 只暴露日志级别和访问日志开关；格式、输出和慢请求阈值使用固定默认值。
 type Config struct {
 	Level         string `yaml:"level"`
-	Format        string `yaml:"format"`
-	Output        string `yaml:"output"`
+	Format        string `yaml:"-"`
+	Output        string `yaml:"-"`
 	AccessEnabled bool   `yaml:"accessEnabled"`
-	SlowThreshold string `yaml:"slowThreshold"`
+	SlowThreshold string `yaml:"-"`
 }
 
 // Default 返回统一日志的安全默认值。
@@ -37,20 +37,10 @@ func Default() Config {
 	}
 }
 
-// ApplyEnv 保证 LOG_* 环境变量可以覆盖 YAML，并拒绝错误的布尔值。
+// ApplyEnv 仅允许 LOG_LEVEL 和 LOG_ACCESS_ENABLED 覆盖 YAML，拒绝已移除的调优变量。
 func (c *Config) ApplyEnv() error {
-	for _, item := range []struct {
-		key  string
-		dest *string
-	}{
-		{"LOG_LEVEL", &c.Level},
-		{"LOG_FORMAT", &c.Format},
-		{"LOG_OUTPUT", &c.Output},
-		{"LOG_SLOW_THRESHOLD", &c.SlowThreshold},
-	} {
-		if value, ok := os.LookupEnv(item.key); ok {
-			*item.dest = value
-		}
+	if value, ok := os.LookupEnv("LOG_LEVEL"); ok {
+		c.Level = value
 	}
 	if value, ok := os.LookupEnv("LOG_ACCESS_ENABLED"); ok {
 		parsed, err := strconv.ParseBool(value)
@@ -60,13 +50,16 @@ func (c *Config) ApplyEnv() error {
 		c.AccessEnabled = parsed
 	}
 	for _, old := range []string{
+		"LOG_FORMAT",
+		"LOG_OUTPUT",
+		"LOG_SLOW_THRESHOLD",
 		"LOG_SUCCESS_SAMPLE_EVERY",
 		"LOG_SDK_CONFIG_SAMPLE_EVERY",
 		"LOG_SDK_EVENT_SAMPLE_EVERY",
 		"LOG_PLATFORM_SUCCESS_SAMPLE_EVERY",
 	} {
 		if _, exists := os.LookupEnv(old); exists {
-			return fmt.Errorf("%s 已废弃，请删除并使用 LOG_ACCESS_ENABLED 控制正常请求日志", old)
+			return fmt.Errorf("%s 已废弃，请从环境变量中删除；仅保留 LOG_LEVEL 和 LOG_ACCESS_ENABLED", old)
 		}
 	}
 	return c.Validate()

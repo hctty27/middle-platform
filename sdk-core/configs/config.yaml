@@ -1,44 +1,20 @@
-# SDK Core：使用 config_center 同一连接池读取配置、更新订单。
-server:
-  address: ":8082"
-  requestTimeout: 5s
-
-# 配置表只读、game_order 表读写；订单表须提前手动建好。
+# SDK Core：实例地址由 SDK_CORE_ADDR 覆盖，连接池其余参数使用固定默认值。
 database:
   dsn: ""
   maxOpenConns: 20
-  maxIdleConns: 10
-  connMaxLifetime: "30m"
 
-# 异步发货：只读分页预览候选，取得目标额度后才领取；发送完成会唤醒调度。
-orderNotify:
-  workers: 4
-  idleInterval: 500ms
-  # 每目标非阻塞并发；0 关闭。多 Worker 时须小于 workers。
-  hostConcurrency: 1
-  disableKeepAlives: false
-  maxIdleConns: 32
-  maxIdleConnsPerHost: 4
-  maxConnsPerHost: 4
-  idleConnTimeout: 30s
-
-# 公开配置和订单配置分别使用独立缓存（订单缓存含验签/发货密钥）。
-# 停用/解绑/密钥轮换存在 TTL 加在途读取的可见延迟，要求即时生效时设为 0s。
-configCache:
-  ttl: 1s
-  maxEntries: 4096
-  maxInflight: 8
-  loadTimeout: 5s
-
-# 管理接口使用 HMAC-SHA256；与 config-center 的 adminAuth.secret 保持一致。始终验签，密钥至少 32 字节。
 adminAuth:
   secret: ""
 
-# 平台密钥来自 sdk_channel_app.config.appSecret，游戏密钥来自 sdk_node_config 中游戏节点的 gameSecret。
-# 平台 v1 未签名金额字段；SDK Core 不做二次查单，仅校验回调与登记金额一致。
+# Worker 数与同目标并发控制可调，其余通知 HTTP 池参数固定。
+orderNotify:
+  workers: 4
+  hostConcurrency: 1
+
+# 设为 0s 可禁用缓存以缩短配置变更可见延迟。
+configCache:
+  ttl: 1s
+
 log:
   level: info
-  format: json
-  output: stdout
   accessEnabled: false
-  slowThreshold: 500ms

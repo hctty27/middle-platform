@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -10,7 +11,11 @@ func loadPerformanceConfig(t *testing.T, extra string) (Config, error) {
 	t.Helper()
 	t.Setenv("SDK_SERVICE_DB_DSN", "test-dsn")
 	p := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(p, []byte("database:\n  dsn: test-dsn\n"+extra), 0600); err != nil {
+	data := "database:\n  dsn: test-dsn\n" + extra
+	if strings.HasPrefix(extra, "database:\n") {
+		data = "database:\n  dsn: test-dsn\n" + strings.TrimPrefix(extra, "database:\n")
+	}
+	if err := os.WriteFile(p, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return Load(p)
@@ -30,9 +35,8 @@ func TestPerformanceDefaults(t *testing.T) {
 	if c.ConfigCache.TTL != "1s" || c.Server.RequestTimeout != "13s" {
 		t.Fatalf("custom: %+v", c)
 	}
-	c, err = loadPerformanceConfig(t, "server:\n  requestTimeout: 2s\n")
-	if err != nil || c.Server.RequestTimeout != "2s" {
-		t.Fatalf("explicit timeout: %+v %v", c, err)
+	if _, err := loadPerformanceConfig(t, "server:\n  requestTimeout: 2s\n"); err == nil {
+		t.Fatal("retired explicit server.requestTimeout accepted")
 	}
 }
 func TestAutoBudgetPreservesPlatformTimeout(t *testing.T) {
@@ -66,5 +70,35 @@ func TestPerformanceInvalidConfigurations(t *testing.T) {
 				t.Fatal("accepted invalid settings")
 			}
 		})
+	}
+}
+
+func TestSlimConfigurationRejectsRetiredKeys(t *testing.T) {
+	for _, key := range []string{
+		"database:\n  maxIdleConns: 5\n",
+		"database:\n  connMaxLifetime: 30m\n",
+		"platform:\n  isolateConnections: true\n",
+		"platform:\n  maxIdlePerHost: 32\n",
+		"platform:\n  eventMaxConns: 0\n",
+		"configCache:\n  maxInflight: 8\n",
+		"log:\n  output: stdout\n",
+	} {
+		t.Run(key, func(t *testing.T) {
+			if _, err := loadPerformanceConfig(t, key); err == nil {
+				t.Fatalf("retired option accepted: %s", key)
+			} else {
+				lines := strings.Split(strings.TrimSpace(key), "\n")
+				field := strings.TrimSpace(strings.SplitN(lines[len(lines)-1], ":", 2)[0])
+				if !strings.Contains(err.Error(), field) {
+					t.Fatalf("expected retired field %q in error, got %v", field, err)
+				}
+			}
+		})
+	}
+}
+func TestDatabaseOpenLimitIsTunable(t *testing.T) {
+	c, err := loadPerformanceConfig(t, "database:\n  maxOpenConns: 16\n")
+	if err != nil || c.Database.MaxOpenConns != 16 || c.Database.MaxIdleConns != 5 {
+		t.Fatalf("database pool: %+v %v", c.Database, err)
 	}
 }

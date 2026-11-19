@@ -23,11 +23,11 @@ func TestPerformanceDefaultsAndRollback(t *testing.T) {
 	if c.ConfigCache.TTL != "1s" || c.ConfigCache.MaxEntries != 4096 || c.ConfigCache.MaxInflight != 8 || c.Server.RequestTimeout != "5s" || c.OrderNotify.HostConcurrency != 1 || c.OrderNotify.DisableKeepAlives {
 		t.Fatalf("defaults: %+v", c)
 	}
-	c, err = loadPerformanceConfig(t, "configCache:\n  ttl: 0s\norderNotify:\n  workers: 1\n  hostConcurrency: 0\n  disableKeepAlives: true\n")
+	c, err = loadPerformanceConfig(t, "configCache:\n  ttl: 0s\norderNotify:\n  workers: 1\n  hostConcurrency: 0\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.ConfigCache.TTL != "0s" || c.OrderNotify.HostConcurrency != 0 || !c.OrderNotify.DisableKeepAlives {
+	if c.ConfigCache.TTL != "0s" || c.OrderNotify.HostConcurrency != 0 || c.OrderNotify.DisableKeepAlives {
 		t.Fatalf("rollback: %+v", c)
 	}
 }

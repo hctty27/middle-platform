@@ -102,23 +102,22 @@ func TestRemovedAdminAuthEnabledRejected(t *testing.T) {
 	}
 }
 
-// TestOrderNotifyConfiguration 验证发货 Worker 参数可以覆盖默认值，并拒绝危险配置。
+// TestOrderNotifyConfiguration 只允许调整 Worker 和目标并发，其余使用固定默认值。
 func TestOrderNotifyConfiguration(t *testing.T) {
 	cases := []struct {
 		name    string
 		yaml    string
 		workers int
-		idle    string
+		host    int
 		wantErr bool
 	}{
-		{name: "custom", yaml: "orderNotify:\n  workers: 8\n  idleInterval: 1s\n", workers: 8, idle: "1s"},
-		{name: "minimum", yaml: "orderNotify:\n  workers: 1\n  idleInterval: 100ms\n", workers: 1, idle: "100ms"},
-		{name: "maximum", yaml: "orderNotify:\n  workers: 32\n  idleInterval: 10s\n", workers: 32, idle: "10s"},
+		{name: "custom", yaml: "orderNotify:\n  workers: 8\n  hostConcurrency: 2\n", workers: 8, host: 2},
+		{name: "one worker", yaml: "orderNotify:\n  workers: 1\n  hostConcurrency: 0\n", workers: 1, host: 0},
+		{name: "maximum", yaml: "orderNotify:\n  workers: 32\n  hostConcurrency: 1\n", workers: 32, host: 1},
 		{name: "zero workers", yaml: "orderNotify:\n  workers: 0\n", wantErr: true},
 		{name: "too many workers", yaml: "orderNotify:\n  workers: 33\n", wantErr: true},
-		{name: "too short idle", yaml: "orderNotify:\n  idleInterval: 99ms\n", wantErr: true},
-		{name: "too long idle", yaml: "orderNotify:\n  idleInterval: 11s\n", wantErr: true},
-		{name: "invalid duration", yaml: "orderNotify:\n  idleInterval: instant\n", wantErr: true},
+		{name: "negative host limit", yaml: "orderNotify:\n  hostConcurrency: -1\n", wantErr: true},
+		{name: "host limit too large", yaml: "orderNotify:\n  workers: 4\n  hostConcurrency: 4\n", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,9 +136,51 @@ func TestOrderNotifyConfiguration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if cfg.OrderNotify.Workers != tc.workers || cfg.OrderNotify.IdleInterval != tc.idle {
+			if cfg.OrderNotify.Workers != tc.workers || cfg.OrderNotify.HostConcurrency != tc.host ||
+				cfg.OrderNotify.IdleInterval != "500ms" {
 				t.Fatalf("unexpected order notify config: %+v", cfg.OrderNotify)
 			}
 		})
+	}
+}
+
+// Strict YAML parsing must reject retired knobs so old production files are migrated before rollout.
+func TestSlimConfigurationRejectsRetiredKeys(t *testing.T) {
+	for _, key := range []string{
+		"database:\n  maxIdleConns: 10\n",
+		"database:\n  connMaxLifetime: 30m\n",
+		"orderNotify:\n  idleInterval: 500ms\n",
+		"orderNotify:\n  disableKeepAlives: false\n",
+		"orderNotify:\n  maxIdleConns: 32\n",
+		"configCache:\n  maxInflight: 8\n",
+		"server:\n  requestTimeout: 5s\n",
+		"log:\n  format: json\n",
+		"log:\n  slowThreshold: 500ms\n",
+	} {
+		t.Run(key, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			data := "database:\n  dsn: test-dsn\n" + key
+			if strings.HasPrefix(key, "database:\n") {
+				data = "database:\n  dsn: test-dsn\n" + strings.TrimPrefix(key, "database:\n")
+			}
+			if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path); err == nil || !strings.Contains(err.Error(), strings.TrimSpace(strings.Split(strings.TrimSpace(strings.SplitN(key, "\n", 2)[1]), ":")[0])) {
+				t.Fatalf("retired option not rejected by name: %s: %v", key, err)
+			}
+		})
+	}
+}
+
+func TestMaxOpenConnsRemainsConfigurable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	data := "database:\n  dsn: test-dsn\n  maxOpenConns: 24\n"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || cfg.Database.MaxOpenConns != 24 || cfg.Database.MaxIdleConns != 10 {
+		t.Fatalf("database defaults and maxOpenConns: %+v %v", cfg.Database, err)
 	}
 }
