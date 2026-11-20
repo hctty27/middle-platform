@@ -4,9 +4,9 @@
 
 ## 生产实例拓扑
 
-固定的 2/2/4 实例及健康检查端口由发布脚本定义，无需在 `publish.config.json` 中重复配置。实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。
+固定的 2/2/4/1 实例及健康检查端口由发布脚本定义，无需在 `publish.config.json` 中重复配置。实际文件请从 `publish.config.example.json` 复制，再填写 SSH 主机、端口和用户。文件已加入 `.gitignore`，不要提交账号或密码。
 
-如果还需要自动重启不属于 2/2/4 Nginx upstream 的 `config-center-access`，可额外加入：
+如果还需要自动重启不属于 2/2/4/1 Nginx upstream 的 `config-center-access`，可额外加入：
 
 ```json
 "services": { "config-center-access": 8291 }
@@ -24,13 +24,13 @@
 
 项目提供 Nginx、Supervisor 和 Monit 的配置模板及滚动发布控制逻辑，不提供系统服务安装脚本。整个 `ops/` 与 `run/` 均不进入发布包，管理员手动复制、独立维护。首次滚动发布前必须手动部署 `/data/middle-platform/ops/nginx/upstream-control.sh` 并赋予 0755 执行权限；不存在、不可执行或为符号链接时，涉及 Nginx 的滚动发布在替换应用文件前失败。只更新文件（`-SkipRestart`）、只发布管理端或单独重启不经过 Nginx 的 config-center-access 不要求该脚本。
 
-从当前 2/4/10 缩容到 2/2/4 时，先备份 Supervisor 与 Nginx upstream 运行文件并安排维护窗口。修改 Supervisor `[group:...]` 的 `programs` 清单后执行 `reread/update` 可能重启受影响的整组服务；务必完成配置迁移并核验所有 8 个实例 Ready 后，再执行正常的逐实例滚动发布。
+从当前 2/4/10 缩容到 2/2/4/1 时，先备份 Supervisor 与 Nginx upstream 运行文件并安排维护窗口。修改 Supervisor `[group:...]` 的 `programs` 清单后执行 `reread/update` 可能重启受影响的整组服务；务必完成配置迁移并核验所有 9 个实例 Ready 后，再执行正常的逐实例滚动发布。
 
 如果这些前置条件未完成，正常发布会在替换应用文件前失败。首次配置 Nginx 与系统服务必须由管理员审核，不会由发布脚本自动覆盖。
 
 ## 多机器顺序发布（不控制腾讯云 CLB）
 
-每台服务器依旧使用本机 Nginx + Supervisor 的 2/2/4 滚动更新。`rolling.ps1` 只在发布电脑上**打包一次**，依次调用原有的 `publish.ps1 -SkipBuild`；**不调用 CLB API**，不增加版本目录，也不提供自动回滚。某台发布失败将立即停止，剩余机器不再更新。CLB 本身保持正常转发，因此发布期间仍可能短暂出现请求错误。
+每台服务器依旧使用本机 Nginx + Supervisor 的 2/2/4/1 滚动更新。`rolling.ps1` 只在发布电脑上**打包一次**，依次调用原有的 `publish.ps1 -SkipBuild`；**不调用 CLB API**，不增加版本目录，也不提供自动回滚。某台发布失败将立即停止，剩余机器不再更新。CLB 本身保持正常转发，因此发布期间仍可能短暂出现请求错误。
 
 先复制两个未跟踪的配置文件：
 
@@ -55,7 +55,7 @@ Copy-Item .\publish\rolling.config.example.json .\publish\rolling.config.json
 .\publish\rolling.ps1 -Version v1.0.2 -SkipBuild
 ```
 
-为避免冲突，建议只在一台固定的发布电脑或同一个 CI 部署入口执行：脚本只有**本机发布锁**，没有跨电脑的分布式锁。执行前确认每台机器已安装 Nginx、Supervisor、Monit 和 `ops/nginx/upstream-control.sh`，每台 `2/2/4` 实例全部 Ready；单机原有发布逻辑负责各实例 Nginx 摘除、重启和验活，但不会摘除整台 CLB 后端服务器。
+为避免冲突，建议只在一台固定的发布电脑或同一个 CI 部署入口执行：脚本只有**本机发布锁**，没有跨电脑的分布式锁。执行前确认每台机器已安装 Nginx、Supervisor、Monit 和 `ops/nginx/upstream-control.sh`，每台 `2/2/4/1` 实例全部 Ready；单机原有发布逻辑负责各实例 Nginx 摘除、重启和验活，但不会摘除整台 CLB 后端服务器。
 
 ## 使用命令
 
@@ -79,11 +79,11 @@ Copy-Item .\publish\rolling.config.example.json .\publish\rolling.config.json
 .\publish\publish.ps1 -Version v1.0.4 -SkipRestart
 ```
 
-`-Service` 支持 `all`（默认）、`config-center`、`sdk-core`、`sdk-service`、可选的 `config-center-access` 和 `admin`。单独发布后端服务时不构建 Vue；`admin` 只构建前端。兼容 `-SkipFrontend`、`-Arch amd64|arm64`、`-Fast`、`-SkipBuild`、`-SkipRestart` 和覆盖服务器参数。
+`-Service` 支持 `all`（默认）、`config-center`、`sdk-core`、`sdk-service`、`sdk-admin`、可选的 `config-center-access` 和 `admin`。单独发布后端服务时不构建 Vue；`admin` 只构建 Vue 前端，`sdk-admin` 只构建 SDK 管理 Go 服务。兼容 `-SkipFrontend`、`-Arch amd64|arm64`、`-Fast`、`-SkipBuild`、`-SkipRestart` 和覆盖服务器参数。
 
 ## 滚动发布流程
 
-完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/2/4 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的方式滚动更新（仅更新实际运行二进制不一致或无法验证的实例）：
+完整发布会先在本地构建并验证归档；服务器校验 SHA-256、架构、文件类型、服务选择器、全部 2/2/4/1 进程与 Nginx runtime include，再原子替换文件。随后按脚本定义的方式滚动更新（仅更新实际运行二进制不一致或无法验证的实例）：
 
 1. 将当前实例在对应 Nginx upstream 标记为 `down`。
 2. 执行 `nginx -t` 并 graceful reload。
@@ -93,7 +93,7 @@ Copy-Item .\publish\rolling.config.example.json .\publish\rolling.config.json
 6. 移除 `down`，再次校验并 reload Nginx，将实例重新加入流量。
 7. 完成当前实例后才处理下一个实例。
 
-发布前会验证所有 Supervisor program 和 Nginx upstream 配置。若服务器手动安装了新版 upstream-control.sh（支持 batch-v1），全量发布按 config-center / sdk-core / sdk-service 每组每轮至多一个实例并行更新：批量摘除、一次 reload 并等待旧 worker 退出，随后并行重启与连续 Ready 检查，再批量恢复健康实例。2/2/4 拓扑最多四轮。单服务仍逐实例更新；旧版 helper 自动回退到原串行模式。每组拒绝摘除最后一个可用实例；全量并行要求新旧服务版本兼容，且剩余实例能够承担流量。需要避免跨组并行时，分别使用 -Service 发布。若本轮任一实例重启或 Ready 失败，等待本轮任务结束并恢复健康实例，失败实例保持摘除，不启动下一轮。Nginx 操作失败则立即停止。修复原因并确认 Ready 后，管理员再手动恢复该实例。
+发布前会验证所有 Supervisor program 和 Nginx upstream 配置。若服务器手动安装了新版 upstream-control.sh（支持 batch-v1），全量发布按 config-center / sdk-core / sdk-service 每组每轮至多一个实例并行更新；单独重启 sdk-admin-1（不摘除单节点 upstream，管理 API 短暂不可用）：批量摘除、一次 reload 并等待旧 worker 退出，随后并行重启与连续 Ready 检查，再批量恢复健康实例。2/2/4/1 拓扑最多四轮。单服务仍逐实例更新；旧版 helper 自动回退到原串行模式。每组拒绝摘除最后一个可用实例；全量并行要求新旧服务版本兼容，且剩余实例能够承担流量。需要避免跨组并行时，分别使用 -Service 发布。若本轮任一实例重启或 Ready 失败，等待本轮任务结束并恢复健康实例，失败实例保持摘除，不启动下一轮。Nginx 操作失败则立即停止。修复原因并确认 Ready 后，管理员再手动恢复该实例。
 
 这是单机多实例滚动更新，不承诺严格零错误：共享 MySQL 故障、应用逻辑错误、全部实例故障、Nginx reload 失败仍会影响业务。远端发布期间持有 `/data/middle-platform/.publish.lock`；Monit 健康检查和重启共用该锁，发布期间 Monit 跳过本轮检查，Monit 正在重启时发布会在改文件前退出。本流程不提供自动二进制回滚；发布失败时旧进程可能仍在运行，但新二进制文件已原子替换，需人工排查。
 
@@ -117,3 +117,11 @@ bash ops/nginx/test-upstream-control.sh
 ## 配置精简升级提示
 
 新版可调整 YAML 参数缩减为业务地址、密钥、数据库最大连接数、缓存 TTL、回调并发、游戏超时和日志开关等。上线前必须先按 [配置迁移说明](../ops/CONFIGURATION-MIGRATION.md) 清理服务器上的独立配置文件；发布包不会自动覆盖生产 YAML，旧字段在严格解析模式下会阻止服务启动。建议先备份每台机器的 `/data/middle-platform/config/`，预先清理字段后再滚动发布新版二进制。
+
+
+### 首次启用 sdk-admin
+
+1. 填写 `/data/middle-platform/config/sdk-admin.yaml`（数据库 DSN、连接池和与配置中心相同的至少 32 字节 `adminAuth.secret`）。SDK Core 的 YAML 应删除旧 `adminAuth` 段。
+2. 首次通过 `-Service sdk-admin -SkipRestart` 上传二进制；手动安装新版 `ops/supervisor/`、`ops/nginx/`、`ops/monit/` 配置及 `run/nginx/sdk-admin-upstream.conf`，使 `sdk-admin-1` Ready。
+3. 验证受签名的 `/api/sdk/admin/**` 和前端访问后，才使用新版前端及全量发布。`admin/config.js` 可保留现有文件：未设置 `sdkAdminApiBaseUrl` 时默认 `/api/sdk`。
+4. 不再对 `/api/core/admin/**` 提供管理接口；客户端必须同步更新签名路径。

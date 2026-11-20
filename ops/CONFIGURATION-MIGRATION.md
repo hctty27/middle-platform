@@ -56,3 +56,11 @@
 - **两个 SDK 服务在 YAML 未显式填写 `configCache.ttl` 时，默认均为 5s。** 原来 Core 默认为 1s，Service 默认为 0s；这是有意识的行为变化。生产独立 YAML 若仍显式设置 `ttl: 1s` / `ttl: 0s`，会继续覆盖新版默认值。请在每台服务器上调整为 `ttl: 5s` 或删除该字段才能使用新的默认值。
 - **缓存安全告警：** SDK Service 的路由、验签密钥、服务停用和用户核验开关会缓存成功结果；修改后至少考虑 TTL 和在途请求的延迟生效。需要立即停用/撤销的业务可显式将 `ttl` 改为 `0s` 并重启相关服务实例，或补充主动失效机制，不能认为 5s 是严格的最大撤销时限。
 - 旧版本若尚不识别恢复的 YAML 字段，请先部署支持这些字段的新二进制，再向独立 YAML 增加可调参数；保留旧字段的恢复版本同样必须遵守严格 YAML 字段校验。
+
+
+## SDK 管理接口独立服务迁移（2026-11-20）
+
+- SDK Core 不再接受 `adminAuth`；从 `config/sdk-core.yaml` 移除该段。
+- 新建 `config/sdk-admin.yaml`，配置 `database.dsn`、`database.maxOpenConns`、`database.maxIdleConns`、`adminAuth.secret`、日志级别。与 `config-center` 共用管理密钥。
+- 原 `/api/core/admin/**` 已删除；改用 `/api/sdk/admin/**`，前端和客户端必须使用新路径重新计算请求 HMAC。
+- 发布前手动安装 Supervisor、Nginx 及 upstream 运行配置；先启用 sdk-admin 的 Ready，再切换 Vue 前端和删除旧管理入口。

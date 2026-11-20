@@ -75,7 +75,8 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <ul>
 <li><code>config-center</code>：管理基础节点与订阅者，并提供同步版本、变更记录、快照查询。</li>
 <li><code>config-center-access</code>：可选独立接入服务，缓存三级节点，不存储渠道应用，也不向权威库写入。</li>
-<li><code>sdk-core</code>：直接查询权威库，根据环境绑定按需返回固定公开配置字段；管理订单、支付回调、异步发货以及 SDK 专属配置、渠道包和功能开关。</li>
+<li><code>sdk-core</code>：公开 SDK 配置查询、订单登记、支付回调与异步发货 Worker。</li>
+<li><code>sdk-admin</code>：独立管理 SDK 节点配置、渠道包、服务开关和订单查询、补偿调度。</li>
 <li><code>sdk-service</code>：处理平台发起的角色/区服查询和封解禁，以及游戏发起的用户核验、事件上报和订阅消息；游戏侧调用支持默认和定制适配器，业务数据不在此服务落库。</li>
 <li><code>admin</code>：Vue 3 管理界面，管理后台以密钥解锁，管理请求始终使用 <code>adminAuth</code> 签名；生产仍须使用 TLS 与受保护的管理网关。</li>
 </ul>
@@ -117,7 +118,8 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <p>各接口具体签名字段、测试向量和 Java / Go / Node.js 示例统一见 <a href="index.html#sig-overview">签名接入规范</a>；新增业务应复用共享计算函数，但明确指定各自参与签名的字段。</p>
 <h2 id="architecture-6">SDK Core 与 SDK Service 职责</h2>
 <ul>
-<li><code>sdk-core</code>：管理 SDK 节点配置、渠道包、服务开关，并承担配置查询、订单登记、支付回调和游戏发货通知。</li>
+<li><code>sdk-core</code>：负责配置查询、订单登记、支付回调和游戏发货通知。</li>
+<li><code>sdk-admin</code>：负责 SDK 节点配置、渠道包、服务开关和订单管理。</li>
 <li><code>sdk-service</code>：承担平台 → 游戏的查询/封解禁，以及游戏 → 平台的用户核验/事件上报/订阅消息推送。</li>
 <li>事件上报迁移后统一入口为 <code>POST /api/service/events/{env}</code>，订阅消息为 <code>POST /api/service/subscribe/{env}</code>；不保留 Core 旧事件入口。</li>
 <li>两类平台上报均沿用 <code>sdk_service</code> 全局开关和 <code>sdk_service_channel</code> 渠道环境开关，无新建业务数据表。</li>
@@ -135,7 +137,7 @@ blockquote{margin:18px 0;padding:13px 17px;background:var(--subtle);border-left:
 <article class="doc-pane" id="database" data-pane="database" aria-labelledby="tab-database" hidden><div class="eyebrow">DEVELOPER GUIDE / DATABASE</div><p class="pane-subtitle">数据模型、全量 SQL、增量升级与迁移</p><h1>数据库结构与手动 SQL</h1>
 <h2 id="database-1">核心约定</h2>
 <p><strong>所有建表和升级都由管理员人工执行 SQL。</strong> 四个 Go 服务不会在启动时执行 DDL；只校验实际表结构。SQL 随 Linux 发布包一起交付，也可从源码中获取：</p>
-<p>四个 Go 服务（<code>config-center</code>、<code>config-center-access</code>、<code>sdk-core</code>、<code>sdk-service</code>）统一设置 DB 驱动 <code>ParseTime=true</code>、<code>Loc=UTC</code>，每条 MySQL 连接的会话 <code>time_zone='+00:00'</code>；各自连接池与连接、读写超时配置保持不变。所有业务时间列统一为 <code>DATETIME(0)</code>，SQL 当前时间使用 <code>UTC_TIMESTAMP()</code>。已有库分别执行 V0019（<code>config_center</code>）和 V0020（<code>config_access</code>）；迁移先截断历史小数秒，再降低字段精度，不四舍五入。V0016、V0017 是历史毫秒迁移，不再是最终精度。接口格式以<a href="index.html#s-intro">权威接口文档的内部时间约定</a>为准，发布与历史边界见<a href="#production-11">内部 UTC 与秒级时间升级</a>。</p>
+<p>五个 Go 服务（<code>config-center</code>、<code>config-center-access</code>、<code>sdk-core</code>、<code>sdk-service</code>、<code>sdk-admin</code>）统一设置 DB 驱动 <code>ParseTime=true</code>、<code>Loc=UTC</code>，每条 MySQL 连接的会话 <code>time_zone='+00:00'</code>；各自连接池与连接、读写超时配置保持不变。所有业务时间列统一为 <code>DATETIME(0)</code>，SQL 当前时间使用 <code>UTC_TIMESTAMP()</code>。已有库分别执行 V0019（<code>config_center</code>）和 V0020（<code>config_access</code>）；迁移先截断历史小数秒，再降低字段精度，不四舍五入。V0016、V0017 是历史毫秒迁移，不再是最终精度。接口格式以<a href="index.html#s-intro">权威接口文档的内部时间约定</a>为准，发布与历史边界见<a href="#production-11">内部 UTC 与秒级时间升级</a>。</p>
 <div class="table-scroll"><table><thead><tr><th scope="col">场景</th><th scope="col">手工执行的 SQL</th></tr></thead><tbody><tr><td>新建空的 <code>config_center</code></td><td><code>sql/full/config_center.sql</code></td></tr><tr><td>新建空的 <code>config_access</code></td><td><code>sql/full/config_access.sql</code></td></tr><tr><td>已有库缺少订单表</td><td><code>sql/incremental/V0001__add_game_order.sql</code></td></tr><tr><td>已有库缺少 SDK 服务表</td><td><code>sql/incremental/V0002__add_sdk_services.sql</code></td></tr><tr><td>旧通用服务绑定表迁移（特定旧结构）</td><td><code>sql/incremental/V0003__migrate_sdk_service_channel.sql</code></td></tr><tr><td>历史脚本：旧版核验用户信息目录（新版本不要执行）</td><td><code>sql/incremental/V0004__add_sdk_user_check.sql</code></td></tr><tr><td>已有服务表缺少角色查询目录</td><td><code>sql/incremental/V0005__add_sdk_role_query.sql</code></td></tr><tr><td>已有服务表缺少区服查询目录</td><td><code>sql/incremental/V0006__add_sdk_server_query.sql</code></td></tr><tr><td>已有服务表缺少封禁与解禁目录</td><td><code>sql/incremental/V0007__add_sdk_role_control.sql</code></td></tr><tr><td>已有服务表缺少订阅消息目录</td><td><code>sql/incremental/V0008__add_sdk_subscribe_message.sql</code></td></tr><tr><td>旧版本 SDK 专属配置迁移（需停服备份）</td><td><code>sql/incremental/V0009__migrate_sdk_node_config.sql</code></td></tr><tr><td>SDK 迁移验证完成后的旧字段清理</td><td><code>sql/incremental/V0010__cleanup_legacy_sdk_fields.sql</code></td></tr><tr><td>已有游戏节点缺少运营地区字段</td><td><code>sql/incremental/V0011__add_game_market_type.sql</code></td></tr><tr><td>将订阅者 Webhook 密钥升级为双向同步签名密钥</td><td><code>sql/incremental/V0012__rename_webhook_secret_to_signing_secret.sql</code></td></tr><tr><td>历史迁移：config_center 时间列收成毫秒（最终秒级精度由 V0019 统一）</td><td><code>sql/incremental/V0016__config_center_millisecond_timestamps.sql</code></td></tr><tr><td>历史迁移：config_access 时间列收成毫秒（最终秒级精度由 V0020 统一）</td><td><code>sql/incremental/V0017__config_access_millisecond_timestamps.sql</code></td></tr><tr><td>已有 config_access 缺少游戏运营地区</td><td><code>sql/incremental/V0018__add_config_access_game_market_type.sql</code></td></tr><tr><td>config_center 时间列统一为秒级</td><td><code>sql/incremental/V0019__config_center_second_timestamps.sql</code></td></tr><tr><td>config_access 时间列统一为秒级</td><td><code>sql/incremental/V0020__config_access_second_timestamps.sql</code></td></tr><tr><td>订单管理查询索引（已有 config_center 库）</td><td><code>sql/incremental/V0021__config_center_order_admin_indexes.sql</code></td></tr></tbody></table></div>
 <p>订单管理索引仅在确认缺失时于低峰手工执行 V0021；上线前用 EXPLAIN ANALYZE 与混合负载评估写入成本。管理查询每实例最多 2 个在途，预算 3 秒，统计缓存 60 秒；统计超时不影响业务接口。不得对已有配置数据的库再次执行 <code>db/full/</code> 中的全量 SQL。执行前备份，确认 MySQL 8.0+、目标库名称、当前表结构及 SQL 内容。初始化 SQL 不包含 <code>DROP TABLE</code>。已有库应先核对当前表定义、备份及 SQL 内容，切勿在结构不明的库上盲目执行初始化或增量 SQL。</p>
 <h2 id="database-2">SQL 目录与增量编号</h2>
@@ -182,7 +184,7 @@ SELECT COUNT(*) FROM config_center.config_node;</code></pre></div>
 <li><code>sdk_service_channel</code> 使用 <code>(service_id, channel_app_id, env)</code> 唯一约束，<code>env</code> 只能是 <code>prod/test/review</code>。</li>
 <li><code>event_report</code>、<code>subscribe_message</code>、<code>role_query</code>、<code>server_query</code> 与 <code>role_control</code> 均要求服务全局开关、渠道包环境开关同时启用；无渠道环境绑定即默认关闭。</li>
 <li><code>sdk_service_channel.config</code> 为 JSON 对象；当前事件上报不使用事件级规则，不持久化和自动重试。</li>
-<li>SDK Core 的管理接口为 <code>GET /api/core/admin/services</code>、<code>PUT /api/core/admin/services/{id}</code> 和渠道包 <code>/api/core/admin/channel-apps/{id}/services</code> 系列，详见 <a href="index.html#a-sdk-start">管理接口</a>。</li>
+<li>SDK Admin 的管理接口为 <code>GET /api/sdk/admin/services</code>、<code>PUT /api/sdk/admin/services/{id}</code> 和渠道包 <code>/api/sdk/admin/channel-apps/{id}/services</code> 系列，详见 <a href="index.html#a-sdk-start">管理接口</a>。</li>
 <li>充值订单和发货通知不依赖功能开关。</li>
 </ul>
 <ul>
@@ -195,7 +197,7 @@ SELECT COUNT(*) FROM config_center.config_node;</code></pre></div>
 <li>在维护窗口停止旧版本 <code>config-center</code>、所有 <code>sdk-core-*</code>、<code>sdk-service</code> 与管理端写操作；备份 <code>config_center</code> 并核对真实字段。</li>
 <li><strong>已有库</strong>执行 <code>db/incremental/V0009__migrate_sdk_node_config.sql</code>。该脚本创建 <code>sdk_node_config</code>、复制已知的游戏/大区 SDK 字段，并将 <code>config_channel_app</code> 改名为 <code>sdk_channel_app</code>。保留旧 <code>config_node.config</code> JSON 供比较，禁止对已经迁移的库重复执行。</li>
 <li>对比游戏密钥、适配器、五类回调地址、渠道包数量/ID、环境绑定及功能开关，检查是否存在未归类的自定义 SDK 字段。确认没有遗漏后再升级二进制与前端。</li>
-<li>同时切换 <code>config-center</code>、全部 <code>sdk-core</code>、<code>sdk-service</code>，不能保留混合新旧版本；Nginx 新增对 <code>/api/core/admin/</code> 的保护。验证配置查询、订单登记/回调/发货、角色与区服查询、封解禁、事件与订阅消息。</li>
+<li>同时切换 <code>config-center</code>、全部 <code>sdk-core</code>、<code>sdk-service</code>，不能保留混合新旧版本；Nginx 新增对 <code>/api/sdk/admin/</code> 的保护。验证配置查询、订单登记/回调/发货、角色与区服查询、封解禁、事件与订阅消息。</li>
 <li>验证通过后，在单独维护窗口人工执行 <code>db/incremental/V0010__cleanup_legacy_sdk_fields.sql</code>。清理后校验配置快照和日志不再包含 SDK 密钥。不得通过自动启动逻辑执行 DDL。</li>
 </ol>
 <p><strong>注意</strong>：MySQL DDL 隐式提交，迁移脚本不是单事务；重命名表前应确认目标表不存在，失败时人工核对已执行步骤。仅对已知 SDK 字段自动搬迁，未知自定义键需人工识别及处理。密钥迁移不可输出明文到 CI 或审计日志。</p></article>
@@ -216,7 +218,7 @@ CREATE DATABASE IF NOT EXISTS config_access
 <p>打开第一个 PowerShell 终端：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell">cd config-center
 Copy-Item configs/config.yaml configs/config-dev.yaml</code></pre></div>
-<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code> 和 <code>adminAuth.secret</code>。管理密钥须与 SDK Core 的 <code>adminAuth.secret</code> 一致；配置同步密钥不再配置为全局项，而是从 <code>config_subscriber.signing_secret</code> 中按接入端编码读取；每条记录必须使用唯一的 32–255 字节密钥。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终验签。Vue 管理页面输入管理密钥后自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问。
+<p>修改 <code>configs/config-dev.yaml</code> 中的 <code>database.dsn</code> 和 <code>adminAuth.secret</code>。管理密钥须与 SDK Admin 的 <code>adminAuth.secret</code> 一致；配置同步密钥不再配置为全局项，而是从 <code>config_subscriber.signing_secret</code> 中按接入端编码读取；每条记录必须使用唯一的 32–255 字节密钥。管理读写路由和 Webhook Worker 会在启动时自动注册；管理接口始终验签。Vue 管理页面输入管理密钥后自动签名，不需要新增账号或登录服务；生产须经受保护的 HTTPS 网关访问。
 <p>对<strong>新空库先手动执行 SQL，再启动</strong>：</p>
 <div class="code-card"><div class="code-header"><span>powershell</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-powershell"># 先在数据库工具中执行 db/full/config_center.sql（仅新库）
 go run ./cmd/config-center -config configs/config-dev.yaml</code></pre></div>
@@ -428,7 +430,7 @@ sudo supervisorctl tail -f config-center:config-center-1</code></pre></div>
 }
 # 以下 location 仅放在对外 SDK API 对应的 server 中
 # 必须放在通用 /api/core/ 路由之前：SDK 管理接口不能通过公开 SDK 网关访问。
-location ^~ /api/core/admin/ {
+location ^~ /api/sdk/admin/ {
     return 403;
 }
 location ^~ /api/core/ {
@@ -444,9 +446,10 @@ location ^~ /api/service/ {
 <div class="code-card"><div class="code-header"><span>js</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-js">window.__MIDDLE_PLATFORM_CONFIG__ = {
   apiBaseUrl: &#39;/api/config&#39;,
   sdkApiBaseUrl: &#39;/api/core&#39;,
-  sdkServiceApiBaseUrl: &#39;/api/service&#39;
+  sdkServiceApiBaseUrl: &#39;/api/service&#39;,
+  sdkAdminApiBaseUrl: &#39;/api/sdk&#39;
 }</code></pre></div>
-<p>注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。<code>apiBaseUrl</code> 指向配置中心，<code>sdkApiBaseUrl</code> 指向 SDK Core，<code>sdkServiceApiBaseUrl</code> 指向 SDK Service。发行平台模拟页面会调用 SDK Service 的核验/查询/封解禁接口，以及 SDK Core 的支付回调接口；默认使用同源路径，避免浏览器跨域。管理页面只可通过内网/受认证的独立网关访问，不得通过公开 SDK 网关访问 <code>/api/core/admin/</code>。</p>
+<p>注意：此文件是浏览器能读取的公开配置，不要加入密码、访问令牌或 Webhook 密钥。<code>apiBaseUrl</code> 指向配置中心，<code>sdkApiBaseUrl</code> 指向 SDK Core，<code>sdkServiceApiBaseUrl</code> 指向 SDK Service。发行平台模拟页面会调用 SDK Service 的核验/查询/封解禁接口，以及 SDK Core 的支付回调接口；默认使用同源路径，避免浏览器跨域。管理页面只可通过内网/受认证的独立网关访问，不得通过公开 SDK 网关访问 <code>/api/sdk/admin/</code>。</p>
 <p>为了确保更新 <code>admin/</code> 静态资源时不覆盖生产配置，建议在正式服务器将配置长期保存于 <code>/data/middle-platform/config/admin.js</code>：</p>
 <div class="code-card"><div class="code-header"><span>bash</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button></div><pre><code class="language-bash">cp -n /data/middle-platform/admin/config.js /data/middle-platform/config/admin.js
 vi /data/middle-platform/config/admin.js</code></pre></div>
@@ -531,12 +534,12 @@ curl -i https://zk.skybluek.com/admin/config.js</code></pre></div>
 </ol>
 <p>发布不执行 SQL、不自动修改服务器 YAML，也不会自动变更 Nginx；必须按以上顺序人工部署。</p>
 <h2 id="production-10">SDK 管理接口的 Nginx 隔离</h2>
-<p>SDK Core 进程中同时存在公开业务路由和 <code>/api/core/admin/</code> 管理路由。<strong>管理路由始终使用 <code>adminAuth.secret</code> 签名，管理页面使用相同密钥解锁（没有账号/RBAC）</strong>。生产环境仍应使用两个受网络隔离的网关入口：</p>
+<p>SDK Core 进程中同时存在公开业务路由和 <code>/api/sdk/admin/</code> 管理路由。<strong>管理路由始终使用 <code>adminAuth.secret</code> 签名，管理页面使用相同密钥解锁（没有账号/RBAC）</strong>。生产环境仍应使用两个受网络隔离的网关入口：</p>
 <ul>
-<li>公共 SDK server：如上所示，用 <code>location ^~ /api/core/admin/ { return 403; }</code> 拒绝管理前缀，再代理 <code>/api/core/</code> 业务。</li>
-<li>独立管理 server：仅可信内网、VPN 或带认证的网关可以访问，允许 <code>/api/core/admin/</code> 反向代理到 <code>sdk_core</code>；后台静态页面及 <code>/api/config/admin/</code> 也由该入口保护。</li>
+<li>公共 SDK server：如上所示，用 <code>location ^~ /api/sdk/admin/ { return 403; }</code> 拒绝管理前缀，再代理 <code>/api/core/</code> 业务。</li>
+<li>独立管理 server：仅可信内网、VPN 或带认证的网关可以访问，允许 <code>/api/sdk/admin/</code> 反向代理到 <code>sdk_core</code>；后台静态页面及 <code>/api/config/admin/</code> 也由该入口保护。</li>
 </ul>
-<p>确保配置文件中带 <code>/sdk</code> 外部前缀时，先在对应外层 location 显式拒绝 <code>/sdk/api/core/admin/</code>，不能只拦截内部路径。请验证未认证的外部请求无法访问管理接口后才开始切流；单纯隐藏管理页面不足以保障安全。</p>
+<p>确保配置文件中带 <code>/sdk</code> 外部前缀时，先在对应外层 location 显式拒绝 <code>/sdk/api/sdk/admin/</code>，不能只拦截内部路径。请验证未认证的外部请求无法访问管理接口后才开始切流；单纯隐藏管理页面不足以保障安全。</p>
 <h2 id="production-11">内部 UTC 与秒级时间升级</h2>
 <p>本次同时统一内部 UTC 时区与秒级精度：数据库使用 <code>DATETIME(0)</code>，内部 API 使用 UTC RFC3339 秒级时间并以 <code>Z</code> 结尾；外部 HMAC 时间戳继续使用 Unix 秒，不改变签名协议。</p>
 <ol>
@@ -685,3 +688,4 @@ sudo monit status</code></pre></div>
 })();
 </script>
 </body></html>
+<!-- SDK 管理独立服务新增模块：sdk-admin，生产默认端口 8231，单实例重启管理 API 暂时不可用；非管理 API 继续归 sdk-core。 -->
