@@ -8,6 +8,7 @@ declare global {
     __MIDDLE_PLATFORM_CONFIG__?: {
       apiBaseUrl?: string
       sdkApiBaseUrl?: string
+      sdkAdminApiBaseUrl?: string
       sdkServiceApiBaseUrl?: string
     }
   }
@@ -21,6 +22,13 @@ const sdkBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.sdkApiBaseUrl?.trim()
 
 export const sdkApi = axios.create({
   baseURL: sdkBaseUrl.replace(/\/+$/, ''),
+  timeout: 10000
+})
+
+const sdkAdminBaseUrl = window.__MIDDLE_PLATFORM_CONFIG__?.sdkAdminApiBaseUrl?.trim() || '/api/sdk'
+
+export const sdkAdminApi = axios.create({
+  baseURL: sdkAdminBaseUrl.replace(/\/+$/, ''),
   timeout: 10000
 })
 
@@ -41,7 +49,7 @@ export const api = axios.create({
 function attachAdminSigning(client: AxiosInstance): void {
   client.interceptors.request.use(async config => {
     const fullURL = new URL(client.getUri(config), window.location.href)
-    const match = fullURL.pathname.match(/\/api\/(?:config|core)\/admin(?:\/|$)/)
+    const match = fullURL.pathname.match(/\/api\/(?:config|sdk)\/admin(?:\/|$)/)
     if (!match || match.index === undefined) return config
 
     const secret = getAdminSecret()
@@ -70,7 +78,7 @@ function attachAdminSigning(client: AxiosInstance): void {
 }
 
 attachAdminSigning(api)
-attachAdminSigning(sdkApi)
+attachAdminSigning(sdkAdminApi)
 
 interface ApiErrorPayload {
   code?: unknown

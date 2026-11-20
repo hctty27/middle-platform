@@ -42,9 +42,6 @@ type Config struct {
 	Database    Database              `yaml:"database"`
 	OrderNotify OrderNotify           `yaml:"orderNotify"`
 	ConfigCache bootstrap.CacheConfig `yaml:"configCache"`
-	AdminAuth   struct {
-		Secret string `yaml:"secret"`
-	} `yaml:"adminAuth"`
 }
 
 func defaultDB() Database {
@@ -92,9 +89,6 @@ func Load(path string) (Config, error) {
 	}
 	if v, ok := os.LookupEnv("SDK_CORE_ADDR"); ok {
 		cfg.Server.Address = v
-	}
-	if v, ok := os.LookupEnv("ADMIN_AUTH_SECRET"); ok {
-		cfg.AdminAuth.Secret = v
 	}
 	if err := cfg.Log.ApplyEnv(); err != nil {
 		return Config{}, err

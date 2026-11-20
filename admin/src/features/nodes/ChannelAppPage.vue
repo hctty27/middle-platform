@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { confirmDiscardChanges, registerUnsavedChecker } from '../../app/unsavedChanges'
-import { sdkApi, apiErrorMessage } from '../../api/http'
+import { sdkAdminApi, apiErrorMessage } from '../../api/http'
 import ConfigSchemaEditor from '../../components/ConfigSchemaEditor.vue'
 import ServiceBindingPanel from '../services/ServiceBindingPanel.vue'
 import { getConfigSchema, parseConfigObject, validateConfigAgainstSchema } from '../../api/configSchemaApi'
@@ -58,7 +58,7 @@ async function loadApps() {
   if (!props.gameId) { apps.value = []; active.value = null; return }
   loading.value = true
   try {
-    const { data } = await sdkApi.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: props.gameId } })
+    const { data } = await sdkAdminApi.get<ChannelApp[]>('/admin/channel-apps', { params: { gameId: props.gameId } })
     if (request !== sequence) return
     apps.value = data
     active.value = data.find(item => item.id === active.value?.id) ?? data[0] ?? null
@@ -74,7 +74,7 @@ async function loadOptions(env: RegionEnvType, keyword = '') {
   const request = ++groupSequences[env]
   groupLoading[env] = true
   try {
-    const { data } = await sdkApi.get<GroupOption[]>('/admin/channel-apps/server-groups', {
+    const { data } = await sdkAdminApi.get<GroupOption[]>('/admin/channel-apps/server-groups', {
       params: { gameId: props.gameId, envType: env, keyword }
     })
     if (request === groupSequences[env]) groupOptions[env] = data
@@ -107,8 +107,8 @@ async function saveApp() {
   saving.value = true
   try {
     const payload = { ...form.value, gameId: props.gameId }
-    if (editing.value) await sdkApi.put(`/admin/channel-apps/${editing.value}`, payload)
-    else await sdkApi.post('/admin/channel-apps', payload)
+    if (editing.value) await sdkAdminApi.put(`/admin/channel-apps/${editing.value}`, payload)
+    else await sdkAdminApi.post('/admin/channel-apps', payload)
     originalForm.value = JSON.stringify(form.value)
     visible.value = false
     await loadApps()
@@ -122,7 +122,7 @@ async function deleteApp(app: ChannelApp) {
   try { await ElMessageBox.confirm(`删除「${app.name}」？请先清空三个环境的区服组绑定。`,
     '删除渠道应用', { type: 'warning' }) } catch { return }
   try {
-    await sdkApi.delete(`/admin/channel-apps/${app.id}`)
+    await sdkAdminApi.delete(`/admin/channel-apps/${app.id}`)
     active.value = null
     await loadApps()
     emit('changed')

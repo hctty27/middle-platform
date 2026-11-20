@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirmDiscardChanges, registerUnsavedChecker } from '../../app/unsavedChanges'
-import { sdkApi, apiErrorMessage } from '../../api/http'
+import { sdkAdminApi, apiErrorMessage } from '../../api/http'
 
 type Env = 'prod' | 'test' | 'review'
 interface ServiceEntry {
@@ -46,7 +46,7 @@ async function load() {
   const request = ++sequence
   loading.value = true
   try {
-    const { data } = await sdkApi.get<ServiceEntry[]>(endpoint.value, {
+    const { data } = await sdkAdminApi.get<ServiceEntry[]>(endpoint.value, {
       params: { env: env.value }
     })
     if (request !== sequence) return
@@ -77,13 +77,13 @@ async function save(item: EditableEntry) {
   savingId.value = item.serviceId
   const selectedEnv = env.value
   try {
-    await sdkApi.put(`${endpoint.value}/${item.serviceId}`, {
+    await sdkAdminApi.put(`${endpoint.value}/${item.serviceId}`, {
       enabled: item.enabled, config
     }, { params: { env: selectedEnv } })
     savedById.value = { ...savedById.value, [item.serviceId]: snapshot(item) }
     // 单独刷新已保存服务的生效状态，不覆盖同页其他尚未保存的服务。
     try {
-      const { data } = await sdkApi.get<ServiceEntry[]>(endpoint.value, { params: { env: selectedEnv } })
+      const { data } = await sdkAdminApi.get<ServiceEntry[]>(endpoint.value, { params: { env: selectedEnv } })
       const updated = data.find(entry => entry.serviceId === item.serviceId)
       if (updated) {
         item.globalEnabled = updated.globalEnabled

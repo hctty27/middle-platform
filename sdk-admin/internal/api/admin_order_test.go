@@ -59,7 +59,7 @@ func TestAdminOrderFilter(t *testing.T) {
 func TestAdminOrderRouteRejectsInvalidScope(t *testing.T) {
 	mux:=http.NewServeMux()
 	registerAdminOrderRoutes(mux,nil)
-	for _,p:=range []string{"/api/core/admin/orders","/api/core/admin/orders/stats","/api/core/admin/orders/123"} {
+	for _,p:=range []string{"/api/sdk/admin/orders","/api/sdk/admin/orders/stats","/api/sdk/admin/orders/123"} {
 		rec:=httptest.NewRecorder()
 		mux.ServeHTTP(rec,httptest.NewRequest(http.MethodGet,p,nil))
 		if rec.Code!=400 {t.Fatalf("%s: %d",p,rec.Code)}
@@ -69,8 +69,8 @@ func TestAdminOrderRouteRejectsInvalidScope(t *testing.T) {
 // Only use the disposable CI DSN. A session-local temporary table shadows game_order
 // without touching the persistent table used by the store package's tests.
 func TestAdminOrderRetryMySQL(t *testing.T) {
-	dsn:=os.Getenv("TEST_SDK_CORE_DB_DSN")
-	if dsn=="" {t.Skip("TEST_SDK_CORE_DB_DSN not configured")}
+	dsn:=os.Getenv("TEST_SDK_ADMIN_DB_DSN")
+	if dsn=="" {t.Skip("TEST_SDK_ADMIN_DB_DSN not configured")}
 	db,err:=sql.Open("mysql",dsn)
 	if err!=nil {t.Fatal(err)}
 	defer db.Close()
@@ -95,7 +95,7 @@ func TestAdminOrderRetryMySQL(t *testing.T) {
 	}
 	for _,tc:=range cases {
 		rec:=httptest.NewRecorder()
-		mux.ServeHTTP(rec,httptest.NewRequest(http.MethodPost,"/api/core/admin/orders/"+tc.path,nil))
+		mux.ServeHTTP(rec,httptest.NewRequest(http.MethodPost,"/api/sdk/admin/orders/"+tc.path,nil))
 		if rec.Code!=tc.want {t.Fatalf("%s got %d: %s",tc.path,rec.Code,rec.Body.String())}
 	}
 	var attempts int

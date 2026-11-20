@@ -33,7 +33,7 @@ func main() {
 func writeArchive(source, output string) (err error) {
 	// 全量包与单模块包共用归档格式；单独发布管理端时可以没有 bin 文件。
 	hasExecutable := false
-	for _, name := range []string{"config-center", "config-center-access", "sdk-core", "sdk-service"} {
+	for _, name := range []string{"config-center", "config-center-access", "sdk-core", "sdk-service", "sdk-admin"} {
 		info, statErr := os.Stat(filepath.Join(source, "bin", name))
 		if errors.Is(statErr, os.ErrNotExist) {
 			continue

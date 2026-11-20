@@ -14,7 +14,7 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 PUBLISH = ROOT / "publish"
 ARCHIVE = "middle-platform-smoke-linux-amd64.tar.gz"
-BINARIES = ("config-center", "config-center-access", "sdk-core", "sdk-service")
+BINARIES = ("config-center", "config-center-access", "sdk-core", "sdk-service", "sdk-admin")
 
 
 def find_bash():
@@ -259,12 +259,26 @@ exec bash "$@"
         plan = ",".join(f"sdk-service-{i}:{8220 + i}" for i in range(1, 6))
         self.assert_rejected(service="sdk-service", restart=True, plan=plan)
 
+    def test_sdk_admin_single_instance_restart_keeps_upstream_available(self):
+        # A one-peer management upstream cannot be drained safely.
+        self.make_package(frontend=False, only="sdk-admin")
+        result = self.run_publish(service="sdk-admin", restart=True,
+                                  plan="sdk-admin-1:8231")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Healthy: sdk-admin-1 (port 8231)", result.stdout)
+        events = self.events.read_text(encoding="utf-8").splitlines()
+        self.assertIn("validate sdk-admin 8231", events)
+        self.assertIn("restart sdk-admin:sdk-admin-1", events)
+        self.assertNotIn("drain sdk-admin 8231", events)
+        self.assertNotIn("enable sdk-admin 8231", events)
+
     def test_full_publish_restarts_only_configured_instances(self):
         self.make_package(frontend=False)
         full_plan = ",".join(
             [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
             [f"sdk-core-{i}:{8210 + i}" for i in range(1, 3)] +
-            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)]
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)] +
+            ["sdk-admin-1:8231"]
         )
         result = self.run_publish(service="all", restart=True, plan=full_plan)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -292,7 +306,8 @@ exec bash "$@"
         plan = ",".join(
             [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
             [f"sdk-core-{i}:{8210 + i}" for i in range(1, 3)] +
-            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)])
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)] +
+            ["sdk-admin-1:8231"])
         result = self.run_publish(service="all", restart=True, plan=plan)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         events = self.events.read_text(encoding="utf-8").splitlines()
@@ -301,7 +316,7 @@ exec bash "$@"
         self.assertEqual(len(drains), 4)
         self.assertEqual(drains[0], "batch drain config-center:8201 sdk-core:8211 sdk-service:8221")
         self.assertEqual(sum(e.startswith("batch enable ") for e in events), 4)
-        self.assertEqual(sum(e.startswith("restart ") for e in events), 8)
+        self.assertEqual(sum(e.startswith("restart ") for e in events), 9)
         self.assertIn("Completed rolling batch 4", result.stdout)
 
     def test_batch_failure_never_starts_next_round(self):
@@ -310,7 +325,8 @@ exec bash "$@"
         plan = ",".join(
             [f"config-center-{i}:{8200 + i}" for i in range(1, 3)] +
             [f"sdk-core-{i}:{8210 + i}" for i in range(1, 3)] +
-            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)])
+            [f"sdk-service-{i}:{8220 + i}" for i in range(1, 5)] +
+            ["sdk-admin-1:8231"])
         result = self.run_publish(service="all", restart=True, restart_fail=True, plan=plan)
         self.assertNotEqual(result.returncode, 0, result.stdout)
         events = self.events.read_text(encoding="utf-8").splitlines()
@@ -724,6 +740,8 @@ class DeploymentTopologyTests(unittest.TestCase):
         for index in range(1, 5):
             expected[f"sdk-service-{index}"] = ("sdk-service", 8220 + index)
 
+        expected["sdk-admin-1"] = ("sdk-admin", 8231)
+
         supervisor = (root / "ops/supervisor/middle-platform.conf").read_text(encoding="utf-8")
         monit = (root / "ops/monit/middle-platform.conf").read_text(encoding="utf-8")
         config = json.loads((root / "publish/publish.config.example.json").read_text(encoding="utf-8"))
@@ -737,13 +755,13 @@ class DeploymentTopologyTests(unittest.TestCase):
             self.assertIn(f"Name = '{name}'; Module = '{module}'; Port = {port}", publish_script)
 
         self.assertFalse((root / "ops/nginx/runtime").exists())
-        self.assertEqual(len(expected), 8)
+        self.assertEqual(len(expected), 9)
         self.assertEqual(config["remoteDirectory"], "/data/middle-platform")
-        self.assertEqual(supervisor.count("user=root"), 8)
-        self.assertEqual(supervisor.count('GOMEMLIMIT="128MiB"'), 8)
+        self.assertEqual(supervisor.count("user=root"), 9)
+        self.assertEqual(supervisor.count('GOMEMLIMIT="128MiB"'), 9)
         for directive in ("startsecs=3", "startretries=5", "stopwaitsecs=40"):
             self.assertEqual(supervisor.splitlines().count(directive), len(expected))
-        for group in ("config-center", "sdk-core", "sdk-service"):
+        for group in ("config-center", "sdk-core", "sdk-service", "sdk-admin"):
             self.assertIn(f"[group:{group}]", supervisor)
         check_script = (root / "ops/monit/check-http-live.sh").read_text(encoding="utf-8")
         restart_script = (root / "ops/monit/restart-supervisor-program.sh").read_text(encoding="utf-8")
@@ -753,12 +771,14 @@ class DeploymentTopologyTests(unittest.TestCase):
         self.assertIn("upstream config_center", nginx_config)
         self.assertIn("upstream sdk_core", nginx_config)
         self.assertIn("upstream sdk_service", nginx_config)
+        self.assertIn("upstream sdk_admin", nginx_config)
         self.assertIn("include /data/middle-platform/run/nginx/config-center-upstream.conf;", nginx_config)
         self.assertIn("include /data/middle-platform/run/nginx/sdk-core-upstream.conf;", nginx_config)
         self.assertIn("include /data/middle-platform/run/nginx/sdk-service-upstream.conf;", nginx_config)
         self.assertIn("location ^~ /api/config/", nginx_config)
         self.assertIn("location ^~ /api/core/", nginx_config)
         self.assertIn("location ^~ /api/service/", nginx_config)
+        self.assertIn("location ^~ /api/sdk/admin/", nginx_config)
         self.assertIn("proxy_next_upstream error timeout invalid_header http_502 http_504;", nginx_config)
         self.assertFalse((root / "ops/nginx/middle-platform-upstreams.conf").exists())
         self.assertFalse((root / "ops/nginx/middle-platform-locations.conf").exists())

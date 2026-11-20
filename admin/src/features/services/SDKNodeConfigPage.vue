@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElTree } from 'element-plus'
 import type { LoadFunction } from 'element-plus'
 import { confirmDiscardChanges, registerUnsavedChecker } from '../../app/unsavedChanges'
-import { sdkApi, apiErrorMessage } from '../../api/http'
+import { sdkAdminApi, apiErrorMessage } from '../../api/http'
 import { nodeApi } from '../../api/nodeApi'
 import type { NodeMatch, NodeRecord, NodeSummary, NodeType } from '../nodes/types'
 import { regionEnvLabels } from '../nodes/types'
@@ -98,7 +98,7 @@ async function loadConfig() {
   }
   configLoading.value = true
   try {
-    const { data } = await sdkApi.get<NodeSDKConfig>('/admin/node-configs/' + node.id)
+    const { data } = await sdkAdminApi.get<NodeSDKConfig>('/admin/node-configs/' + node.id)
     if (request !== configSequence) return
     rawConfig.value = JSON.stringify(JSON.parse(data.config), null, 2)
     savedConfig.value = rawConfig.value
@@ -228,7 +228,7 @@ async function save() {
       ElMessage.warning(error instanceof Error ? error.message : 'SDK 配置不合法')
       return
     }
-    await sdkApi.put('/admin/node-configs/' + node.id, { config: rawConfig.value })
+    await sdkAdminApi.put('/admin/node-configs/' + node.id, { config: rawConfig.value })
     ElMessage.success('SDK 配置已保存')
     savedConfig.value = rawConfig.value
     await loadConfig()

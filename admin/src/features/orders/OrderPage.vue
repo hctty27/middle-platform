@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { sdkApi, apiErrorMessage } from '../../api/http'
+import { sdkAdminApi, apiErrorMessage } from '../../api/http'
 
 const props = defineProps<{ gameId: number | null }>()
 interface Order {
@@ -103,7 +103,7 @@ async function loadList(cursor = '') {
   listController = controller
   loading.value = true
   try {
-    const { data } = await sdkApi.get('/admin/orders', { params: { ...active.value, ...(cursor ? { cursor } : {}) }, signal: controller.signal })
+    const { data } = await sdkAdminApi.get('/admin/orders', { params: { ...active.value, ...(cursor ? { cursor } : {}) }, signal: controller.signal })
     if (seq !== listSeq) return false
     items.value = data.data.items
     nextCursor.value = data.data.nextCursor
@@ -127,7 +127,7 @@ async function loadStats() {
   statController = controller
   statsLoading.value = true
   try {
-    const { data } = await sdkApi.get('/admin/orders/stats', { params: { gameId, env, appid }, signal: controller.signal })
+    const { data } = await sdkAdminApi.get('/admin/orders/stats', { params: { gameId, env, appid }, signal: controller.signal })
     if (seq === statSeq) stats.value = data.data
   } catch (e) {
     if (seq === statSeq) ElMessage.warning(apiErrorMessage(e, '订单统计暂不可用'))
@@ -172,7 +172,7 @@ async function openDetail(row: Order) {
   const controller = new AbortController()
   detailController = controller
   try {
-    const { data } = await sdkApi.get('/admin/orders/' + encodeURIComponent(row.id), { params: { gameId }, signal: controller.signal })
+    const { data } = await sdkAdminApi.get('/admin/orders/' + encodeURIComponent(row.id), { params: { gameId }, signal: controller.signal })
     if (seq === detailSeq && gameId === props.gameId) detail.value = data.data
   } catch (e) {
     if (seq === detailSeq) ElMessage.error(apiErrorMessage(e, '查询订单详情失败'))
@@ -190,7 +190,7 @@ async function retry() {
   if (gameId !== props.gameId || detail.value?.id !== row.id || retrying.value) return
   retrying.value = true
   try {
-    await sdkApi.post('/admin/orders/' + encodeURIComponent(row.id) + '/retry', undefined, { params: { gameId } })
+    await sdkAdminApi.post('/admin/orders/' + encodeURIComponent(row.id) + '/retry', undefined, { params: { gameId } })
     ElMessage.success('已安排发货补偿')
     if (props.gameId === gameId && drawer.value && detail.value?.id === row.id) {
       void openDetail(row)

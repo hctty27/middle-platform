@@ -38,11 +38,11 @@ func TestSDKAdminRouteRegistration(t *testing.T) {
 		method, path string
 		status       int
 	}{
-		{"GET", "/api/core/admin/node-configs/invalid", 400},
-		{"PUT", "/api/core/admin/node-configs/0", 400},
-		{"GET", "/api/core/admin/channel-apps/server-groups?envType=wrong", 400},
-		{"GET", "/api/core/admin/channel-apps", 400},
-		{"GET", "/api/core/admin/unknown", 404},
+		{"GET", "/api/sdk/admin/node-configs/invalid", 400},
+		{"PUT", "/api/sdk/admin/node-configs/0", 400},
+		{"GET", "/api/sdk/admin/channel-apps/server-groups?envType=wrong", 400},
+		{"GET", "/api/sdk/admin/channel-apps", 400},
+		{"GET", "/api/sdk/admin/unknown", 404},
 	}
 	for _, tc := range cases {
 		rec := httptest.NewRecorder()
@@ -70,7 +70,7 @@ func TestSDKConfigSchemaRoute(t *testing.T) {
 	mux := http.NewServeMux()
 	registerAdminRoutes(mux, nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/core/admin/config-schema/region", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/sdk/admin/config-schema/region", nil))
 	if rec.Code != 200 {
 		t.Fatalf("unexpected status %d: %s", rec.Code, rec.Body.String())
 	}
@@ -87,7 +87,7 @@ func TestSDKConfigSchemaRoute(t *testing.T) {
 		t.Fatalf("invalid schema: %+v", payload)
 	}
 	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/core/admin/config-schema/channel_app", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/sdk/admin/config-schema/channel_app", nil))
 	if rec.Code != 200 {
 		t.Fatalf("channel app schema status %d", rec.Code)
 	}

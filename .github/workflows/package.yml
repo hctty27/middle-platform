@@ -9,6 +9,7 @@ on:
       - 'config-center-access/**'
       - 'sdk-core/**'
       - 'sdk-service/**'
+      - 'sdk-admin/**'
       - 'shared/**'
       - 'admin/**'
       - 'publish/**'
@@ -24,6 +25,7 @@ on:
       - 'config-center-access/**'
       - 'sdk-core/**'
       - 'sdk-service/**'
+      - 'sdk-admin/**'
       - 'shared/**'
       - 'admin/**'
       - 'publish/**'
@@ -91,12 +93,12 @@ jobs:
           tarball="dist/middle-platform-${GITHUB_SHA}-linux-amd64.tar.gz"
           test -s "$tarball"
           entries="$(tar -tzf "$tarball")"
-          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
+          for item in bin/ bin/config-center bin/config-center-access bin/sdk-core bin/sdk-service bin/sdk-admin sql/ sql/full/ sql/full/config_center.sql sql/full/config_access.sql sql/incremental/ admin/ admin/index.html admin/config.js admin/docs/ admin/docs/index.html admin/docs/guide.html; do
             grep -Fx "$item" <<< "$entries"
           done
           while IFS= read -r item; do
             case "$item" in
-              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|bin/sdk-service|sql/|sql/full/|sql/full/*|sql/incremental/|sql/incremental/*|admin/|admin/*) ;;
+              bin/|bin/config-center|bin/config-center-access|bin/sdk-core|bin/sdk-service|bin/sdk-admin|sql/|sql/full/|sql/full/*|sql/incremental/|sql/incremental/*|admin/|admin/*) ;;
               *) echo "Unexpected archive entry: $item" >&2; exit 1 ;;
             esac
           done <<< "$entries"
@@ -108,7 +110,7 @@ jobs:
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
           tar -xzf "$tarball" -C "$tmpdir"
-          for binary in config-center config-center-access sdk-core sdk-service; do
+          for binary in config-center config-center-access sdk-core sdk-service sdk-admin; do
             test -x "$tmpdir/bin/$binary"
             test "$(stat -c %a "$tmpdir/bin/$binary")" = "755"
             file "$tmpdir/bin/$binary" | grep -E 'ELF 64-bit .*x86-64'
@@ -176,7 +178,7 @@ jobs:
           $names = @(& tar -tzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to read tar.gz' }
           if ($names | Where-Object { $_ -notmatch '^(bin|sql|admin)/' }) { throw 'Unexpected archive entry: only bin/, sql/ and admin/ are allowed' }
-          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql')) {
+          foreach ($name in @('bin/config-center', 'bin/config-center-access', 'bin/sdk-core', 'bin/sdk-service', 'bin/sdk-admin', 'sql/full/config_center.sql', 'sql/full/config_access.sql', 'sql/incremental/V0001__add_game_order.sql')) {
             if ($name -notin $names) { throw "Missing binary: $name" }
           }
           foreach ($sqlFile in @(Get-ChildItem -LiteralPath 'db/full', 'db/incremental' -File -Filter '*.sql')) {
@@ -187,7 +189,7 @@ jobs:
           if (@(Get-ChildItem dist -Directory).Count -ne 0) { throw 'Unexpected dist directories' }
           $details = @(& tar -tvzf $archive)
           if ($LASTEXITCODE -ne 0) { throw 'Failed to inspect tar permissions' }
-          foreach ($name in @('config-center', 'config-center-access', 'sdk-core', 'sdk-service')) {
+          foreach ($name in @('config-center', 'config-center-access', 'sdk-core', 'sdk-service', 'sdk-admin')) {
             if (-not ($details | Where-Object { $_ -match '^-rwxr-xr-x\s' -and $_.Trim().EndsWith("bin/$name") })) {
               throw "Missing executable permission in tar header: bin/$name"
             }

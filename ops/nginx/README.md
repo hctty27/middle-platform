@@ -1,6 +1,6 @@
 # Nginx 单文件站点配置与滚动发布
 
-本配置适用于 `/data/middle-platform` 单机部署。站点配置统一维护在 `middle-platform.conf`，包含三组 upstream、HTTP/HTTPS、SSL、API 路由、代理公共参数和 Vue 管理后台。
+本配置适用于 `/data/middle-platform` 单机部署。站点配置统一维护在 `middle-platform.conf`，包含四组 upstream、HTTP/HTTPS、SSL、API 路由、代理公共参数和 Vue 管理后台。
 
 ## 监听队列与突发建连
 
@@ -25,17 +25,18 @@ sysctl -n net.core.somaxconn
 | `config_center` | `config-center-1..2` | 8201–8202 |
 | `sdk_core` | `sdk-core-1..2` | 8211–8212 |
 | `sdk_service` | `sdk-service-1..4` | 8221–8224 |
+| `sdk_admin` | `sdk-admin-1` | 8231 |
 
-Supervisor 使用 `config-center`、`sdk-core`、`sdk-service` 三个异构分组；进程名带组前缀，例如 `sdk-core:sdk-core-1`。所有 Go 实例只监听 loopback，Nginx 是唯一公网入口。当前 2/2/4 拓扑不包含可选的 `config-center-access`。
+Supervisor 使用 `config-center`、`sdk-core`、`sdk-service`、`sdk-admin` 四个分组；进程名带组前缀，例如 `sdk-core:sdk-core-1`。所有 Go 实例只监听 loopback，Nginx 是唯一公网入口。当前 2/2/4 拓扑不包含可选的 `config-center-access`。
 
 ## 配置文件结构
 
-- `middle-platform.conf`：唯一需要维护的 Nginx 站点配置，包含三个 upstream 定义、80/443 server、三个 API location 和管理后台。
-- [`run/nginx/`](../../run/nginx/)：Git 仓库根目录下的三个 upstream 初始配置，仅供首次部署时手动复制或参考，不进入发布包。
-- `/data/middle-platform/run/nginx/*.conf`：服务器上的三个动态 upstream 实例列表，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。服务器运行状态独立于仓库初始配置。
+- `middle-platform.conf`：唯一需要维护的 Nginx 站点配置，包含四个 upstream 定义、80/443 server、四个 API location 和管理后台。
+- [`run/nginx/`](../../run/nginx/)：Git 仓库根目录下的四个 upstream 初始配置，仅供首次部署时手动复制或参考，不进入发布包。
+- `/data/middle-platform/run/nginx/*.conf`：服务器上的四个动态 upstream 实例列表，由 `upstream-control.sh` 在滚动发布时添加或移除 `down`。服务器运行状态独立于仓库初始配置。
 - `upstream-control.sh`：负责校验、摘除、恢复 upstream 实例。仓库整个 `ops/` 不进入发布包；首次部署须手动复制该脚本到服务器 `/data/middle-platform/ops/nginx/upstream-control.sh`，设置 0755 执行权限。日常发布使用服务器现有脚本，不覆盖它。
 
-站点配置中的三个 upstream 块直接写在 `middle-platform.conf`。块内只通过 `include` 引用服务器运行时实例列表，以便滚动发布可以安全地摘除单个实例，而不改写整份站点配置。
+站点配置中的四个 upstream 块直接写在 `middle-platform.conf`。块内只通过 `include` 引用服务器运行时实例列表，以便滚动发布可以安全地摘除单个实例，而不改写整份站点配置。
 
 ## 手动配置
 
@@ -69,7 +70,7 @@ if sudo test -f "$legacy_upstream"; then
 fi
 ```
 
-如果 `nginx -T` 显示其他文件仍定义了这三个 upstream，也必须先备份并停用对应旧定义。不要删除备份；确认新配置通过 `nginx -t` 且业务正常后，再按运维保留策略清理。
+如果 `nginx -T` 显示其他文件仍定义了这四个 upstream，也必须先备份并停用对应旧定义。不要删除备份；确认新配置通过 `nginx -t` 且业务正常后，再按运维保留策略清理。
 
 1. 确认 `/etc/nginx/nginx.conf` 的 `http {}` 中包含：
 
@@ -166,7 +167,7 @@ deploy ALL=(root) NOPASSWD: /usr/sbin/nginx -t, /usr/sbin/nginx -T, /usr/bin/sys
 
 ## 被动健康检查与请求重试
 
-三个 upstream 使用 `least_conn`、`max_fails=1 fail_timeout=10s`，keepalive 分别为 Config Center 8、SDK Core 16、SDK Service 16。keepalive 是每个 worker 的空闲连接缓存上限，不是总连接池。
+四个 upstream 使用 `least_conn`、`max_fails=1 fail_timeout=10s`，keepalive 分别为 Config Center 8、SDK Core 16、SDK Service 16。keepalive 是每个 worker 的空闲连接缓存上限，不是总连接池。
 
 Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败窗口内暂时避开故障实例；它不会主动轮询 `/health/ready`。HTTP 503 会直接返回，不作为 upstream 摘除条件，避免共享 MySQL 故障导致全部实例被误摘除。
 
@@ -223,3 +224,10 @@ sudo systemctl restart nginx
 重启 Nginx 才会让新进程取得 `TZ=Asia/Shanghai`；安排在维护窗口执行，可能造成短暂入口中断。若 unit 名称不同，按实际名称调整 drop-in 目录和重启命令。此设置只改变 Nginx 进程的日志时区，不修改操作系统时区，也不影响 Go 服务的显式日志时区。
 
 该重启与[监听队列与突发建连](#监听队列与突发建连)中的 `restart nginx` 是同一操作，建议在同一次维护窗口中一并完成 sysctl、时区 drop-in 和站点配置的更新。
+
+
+## SDK Admin 管理入口
+
+- `/api/sdk/admin/**` 转发到单实例 `sdk_admin`，并通过 HMAC 验证，反向代理 `proxy_pass http://sdk_admin;` 不重写签名路径。
+- 首次启用前手动复制 `run/nginx/sdk-admin-upstream.conf` 到服务器运行时 `run/nginx/`，同步站点配置，执行 `nginx -t` 后 reload。
+- 单实例滚动发布时不能摘除唯一后端，重启期间 SDK 管理 API 会短暂返回错误。需要管理接口无中断发布时，应先扩容到至少两实例并相应调整发布脚本与 upstream 控制逻辑。

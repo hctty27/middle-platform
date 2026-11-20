@@ -11,7 +11,7 @@ param(
 
     [switch]$SkipFrontend,
 
-    [ValidateSet('all', 'config-center', 'config-center-access', 'sdk-core', 'sdk-service', 'admin')]
+    [ValidateSet('all', 'config-center', 'config-center-access', 'sdk-core', 'sdk-service', 'sdk-admin', 'admin')]
     [string]$Service = 'all',
 
     [switch]$Fast
@@ -152,7 +152,8 @@ try {
         @{ Module = 'config-center';        Command = 'config-center';        Output = 'config-center' },
         @{ Module = 'config-center-access'; Command = 'config-center-access'; Output = 'config-center-access' },
         @{ Module = 'sdk-core';             Command = 'sdk-core';             Output = 'sdk-core' },
-        @{ Module = 'sdk-service';          Command = 'sdk-service';          Output = 'sdk-service' }
+        @{ Module = 'sdk-service';          Command = 'sdk-service';          Output = 'sdk-service' },
+        @{ Module = 'sdk-admin';            Command = 'sdk-admin';            Output = 'sdk-admin' }
     )
 
     if ($Service -eq 'admin') {

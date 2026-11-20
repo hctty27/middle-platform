@@ -1,7 +1,7 @@
 package api
 
 import (
-	"hitall.com/middle-platform/sdk-core/internal/configschema"
+	"hitall.com/middle-platform/sdk-admin/internal/configschema"
 	"net/http"
 )
 

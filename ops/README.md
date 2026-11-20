@@ -11,18 +11,19 @@
 | 配置中心 | `config-center:config-center-1..2` | 2 | 8201–8202 |
 | SDK Core | `sdk-core:sdk-core-1..2` | 2 | 8211–8212 |
 | SDK Service | `sdk-service:sdk-service-1..4` | 4 | 8221–8224 |
+| SDK Admin | `sdk-admin:sdk-admin-1` | 1 | 8231 |
 
-三个服务组均只监听 `127.0.0.1`，由本机 Nginx 接收外部流量。多个 Config Center 和 SDK Core 实例通过共享 MySQL 协调：Webhook 投递使用数据库租约，SDK Core 订单发货使用行锁、`SKIP LOCKED` 和租约。SDK Core 的 `orderNotify.workers` 是每进程配置，2 个实例会把总 Worker 数放大为单实例值的 2 倍，请按 MySQL 与游戏回调承载能力配置。
+四个服务组均只监听 `127.0.0.1`，由本机 Nginx 接收外部流量。多个 Config Center 和 SDK Core 实例通过共享 MySQL 协调：Webhook 投递使用数据库租约，SDK Core 订单发货使用行锁、`SKIP LOCKED` 和租约。SDK Core 的 `orderNotify.workers` 是每进程配置，2 个实例会把总 Worker 数放大为单实例值的 2 倍，请按 MySQL 与游戏回调承载能力配置。
 
-`config-center-access` 不属于当前 2/2/4 拓扑，保持可选且默认不启用。
+`config-center-access` 不属于当前 2/2/4/1 拓扑，保持可选且默认不启用。
 
 ### MySQL 连接池容量
 
-当前代码的每实例连接池上限为 Config Center 20、SDK Core 20、SDK Service 10。按 2/2/4 计算，理论最大连接数为：
+示例配置的每实例连接池上限为 Config Center 20、SDK Core 30、SDK Service 10、SDK Admin 10。按 2/2/4/1 计算，理论最大连接数为：
 
-`2 × 20 + 2 × 20 + 4 × 10 = 120`
+`2 × 20 + 2 × 30 + 4 × 10 + 1 × 10 = 150`
 
-这是连接池上限之和，不代表启动后立即建立 120 条连接。MySQL `max_connections` 还要为管理连接、迁移工具、监控和其他应用预留余量。上线前请按实际 DSN、并发和 MySQL 规格核对；不要只按单实例配置估算。
+这是连接池上限之和，不代表启动后立即建立 150 条连接。MySQL `max_connections` 还要为管理连接、迁移工具、监控和其他应用预留余量。上线前请按实际 DSN、并发和 MySQL 规格核对；不要只按单实例配置估算。
 
 SDK Core 的 `orderNotify.workers: 4` 是每进程配置，2 个实例最多同时运行 8 个发货 Worker；Config Center 每实例 Webhook 并发为 4，2 个实例合计最多 8 个投递并发。
 
@@ -32,11 +33,11 @@ SDK Core 的 `orderNotify.workers: 4` 是每进程配置，2 个实例最多同�
 
 本部署按要求让 Go 实例以 `root` 运行：Supervisor 的 systemd unit 必须由 root 启动，模板中的每个 program 显式设置 `user=root`。SSH 发布账号仍建议使用独立的 `deploy` 用户，不要为了运行 Go 程序而开放 root SSH 登录。root 运行会扩大应用漏洞的影响范围，请确保二进制、YAML、日志目录和发布权限只允许可信管理员修改。
 
-8 个 Go 实例的 Supervisor 环境变量都设置 `GOMEMLIMIT=128MiB`，软限制预算合计 1024 MiB。它不是 RSS/cgroup 硬上限；Go Runtime 管理的内存会更积极触发 GC，但二进制映射、内核代管内存和部分外部内存不在该限制内。若要硬性隔离，后续仍需单独配置 cgroup v2。
+9 个 Go 实例的 Supervisor 环境变量都设置 `GOMEMLIMIT=128MiB`，软限制预算合计 1152 MiB。它不是 RSS/cgroup 硬上限；Go Runtime 管理的内存会更积极触发 GC，但二进制映射、内核代管内存和部分外部内存不在该限制内。若要硬性隔离，后续仍需单独配置 cgroup v2。
 
-Supervisor 使用三个异构分组：`config-center`、`sdk-core`、`sdk-service`。组内进程名在 Supervisor 中带组前缀，例如 `config-center:config-center-1`。可以使用 `supervisorctl status config-center:*`、`supervisorctl restart sdk-core:*` 等命令按组管理。
+Supervisor 使用四个异构分组：`config-center`、`sdk-core`、`sdk-service`、`sdk-admin`。组内进程名在 Supervisor 中带组前缀，例如 `config-center:config-center-1`。可以使用 `supervisorctl status config-center:*`、`supervisorctl restart sdk-core:*` 等命令按组管理。
 
-**从现有单机 2/4/10 缩容到 2/2/4 时注意：** 修改 Supervisor 分组的 `programs` 会让受影响分组在 `supervisorctl update` 时重新部署，不能按无损逐实例滚动发布处理。请先备份配置并安排维护窗口，确认全部 8 个进程 RUNNING 和 Ready，再启用新的 Nginx upstream 和后续滚动发布。
+**从现有单机 2/4/10 缩容到 2/2/4/1 时注意：** 修改 Supervisor 分组的 `programs` 会让受影响分组在 `supervisorctl update` 时重新部署，不能按无损逐实例滚动发布处理。请先备份配置并安排维护窗口，确认全部 9 个进程 RUNNING 和 Ready，再启用新的 Nginx upstream 和后续滚动发布。
 
 如果服务器已有同名 program，先备份并合并配置，不要重复定义。SSH 发布用户也必须能够通过 Supervisor control socket 执行 `supervisorctl status/restart`；按实际发行版配置 socket 所属组和权限，不要把管理 socket 暴露给普通业务用户。完成配置后：
 
@@ -50,7 +51,7 @@ Supervisor 自身由 systemd 管理并设置开机启动。Debian/Ubuntu 常见 
 
 模板采用 `autorestart=unexpected`、`startsecs=3`、`startretries=5`、`stopsignal=TERM`、`stopwaitsecs=40` 和 `stopasgroup=true`。正常 SIGTERM 退出不会被当成异常退出重新拉起。`startsecs=3` 仅缩短 Supervisor 的进程存活确认时间，不代表业务已就绪；发布脚本仍会要求 `/health/ready` 连续 3 次成功。Go HTTP 优雅关闭超时为 30 秒，Supervisor 最多等待 40 秒后才会强制终止。
 
-**应用此配置前请注意：** `ops/` 不随发布包上传，提交到仓库不会自动更改服务器的 Supervisor 配置。需人工将模板更新到服务器实际加载的配置文件，并在维护窗口执行 `supervisorctl reread`、`supervisorctl update`；`update` 会重启受影响的进程组。本次三个服务组的实例数量与分组成员发生变化，不能当作逐实例无损滚动更新。应用后用 `supervisorctl status` 和各实例 `/health/ready` 验证状态。
+**应用此配置前请注意：** `ops/` 不随发布包上传，提交到仓库不会自动更改服务器的 Supervisor 配置。需人工将模板更新到服务器实际加载的配置文件，并在维护窗口执行 `supervisorctl reread`、`supervisorctl update`；`update` 会重启受影响的进程组。本次四个服务组的实例数量与分组成员发生变化，不能当作逐实例无损滚动更新。应用后用 `supervisorctl status` 和各实例 `/health/ready` 验证状态。
 
 ## Monit
 
@@ -79,7 +80,7 @@ Monit 每 10 秒检查一次，连续 3 个周期 Liveness 失败后才重启实
 
 ## Nginx 与安全滚动发布
 
-Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform.conf)，同一个文件内包含三组 upstream、HTTP/HTTPS、SSL、API location、公共代理参数和 Vue 管理后台。三个 upstream 初始配置保存在 Git 仓库根目录 [`run/nginx/`](../run/nginx/)，仅供首次部署手动复制或参考，不随发布包交付；服务器实际运行状态保存在 `/data/middle-platform/run/nginx/`，由滚动发布控制脚本维护。首次创建方式见 [Nginx 运维说明](nginx/README.md)。
+Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform.conf)，同一个文件内包含四组 upstream、HTTP/HTTPS、SSL、API location、公共代理参数和 Vue 管理后台。四个 upstream 初始配置保存在 Git 仓库根目录 [`run/nginx/`](../run/nginx/)，仅供首次部署手动复制或参考，不随发布包交付；服务器实际运行状态保存在 `/data/middle-platform/run/nginx/`，由滚动发布控制脚本维护。首次创建方式见 [Nginx 运维说明](nginx/README.md)。
 
 项目不提供 Nginx 或 Supervisor 的安装脚本，也不会自动覆盖系统配置。管理员手动将站点配置复制到 `/etc/nginx/conf.d/middle-platform.conf`，按 Nginx 运维说明创建三个动态 upstream 状态文件，并在 `/etc/nginx/nginx.conf` 的 main context 设置 `worker_shutdown_timeout 75s`。Supervisor 继续使用本目录的单文件模板 `supervisor/middle-platform.conf`，由管理员按服务器现有 Supervisor 配置方式加载。
 
@@ -91,11 +92,11 @@ Nginx 站点配置统一为 [`nginx/middle-platform.conf`](nginx/middle-platform
 
 SSH 发布用户必须拥有动态 upstream 状态目录和共享发布锁的写权限，并拥有受限的免密 sudo 权限，只允许执行实际路径下的 `nginx -t`、`nginx -T` 和 `systemctl reload nginx`。不要授予部署用户不受限制的 sudo。
 
-发布前在本地 `publish/publish.config.json` 配置 SSH 连接信息，`remoteDirectory` 使用 `/data/middle-platform`。固定的 2/2/4 实例清单由发布脚本定义，无需重复配置；可选的 `config-center-access` 可通过 `services` 配置。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。发布前可自动恢复选中范围内已标记 down 且 Supervisor RUNNING、连续 3 次 Ready 返回 HTTP 200 的实例，并确认 Nginx worker 换代；健康、配置或恢复检查失败则在替换应用文件前停止。维护期间不要发布仍需人为摘除的服务。若实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。请手动同步新版 `ops/nginx/upstream-control.sh` 以启用恢复功能。
+发布前在本地 `publish/publish.config.json` 配置 SSH 连接信息，`remoteDirectory` 使用 `/data/middle-platform`。固定的 2/2/4/1 实例清单由发布脚本定义，无需重复配置；可选的 `config-center-access` 可通过 `services` 配置。默认发布会按实例逐个滚动，不执行 `supervisorctl restart all`。发布前可自动恢复选中范围内已标记 down 且 Supervisor RUNNING、连续 3 次 Ready 返回 HTTP 200 的实例，并确认 Nginx worker 换代；健康、配置或恢复检查失败则在替换应用文件前停止。维护期间不要发布仍需人为摘除的服务。若实例重启或 Ready 失败，发布停止并保持该实例从 Nginx 摘除；不会自动回滚二进制。请手动同步新版 `ops/nginx/upstream-control.sh` 以启用恢复功能。
 
 ## 日志时间规范
 
-四个 Go 服务（Config Center、可选 Config Center Access、SDK Core、SDK Service）共用 `shared/logging`：日志记录自身的时间统一输出为北京时间（`Asia/Shanghai`，`+08:00`），精确到毫秒。Supervisor 收集的应用 stdout 日志保留该时间文本。Nginx access log 使用 `$time_iso8601`，并通过 `ops/systemd/nginx.service.d/10-timezone.conf` 将 `TZ=Asia/Shanghai` 仅设置给 Nginx 进程；安装步骤见 [Nginx 运维说明](nginx/README.md)。这不会修改服务器全局时区。
+五个 Go 服务（Config Center、可选 Config Center Access、SDK Core、SDK Service）共用 `shared/logging`：日志记录自身的时间统一输出为北京时间（`Asia/Shanghai`，`+08:00`），精确到毫秒。Supervisor 收集的应用 stdout 日志保留该时间文本。Nginx access log 使用 `$time_iso8601`，并通过 `ops/systemd/nginx.service.d/10-timezone.conf` 将 `TZ=Asia/Shanghai` 仅设置给 Nginx 进程；安装步骤见 [Nginx 运维说明](nginx/README.md)。这不会修改服务器全局时区。
 
 systemd journal 的时间显示遵循主机本地时区；如果主机时区不是北京时间，可在查看时临时指定，不必修改系统设置：
 
@@ -107,11 +108,12 @@ TZ=Asia/Shanghai journalctl -u nginx -u supervisor -u supervisord -u monit -n 10
 
 ## 健康检查与数据库边界
 
-四个 Go 服务都提供 `/health/live` 和 `/health/ready`。当前 2/2/4 对外流量由 Nginx 路由：
+五个 Go 服务都提供 `/health/live` 和 `/health/ready`。当前 2/2/4/1 对外流量由 Nginx 路由：
 
 - `/api/config/` → Config Center
 - `/api/core/` → SDK Core
 - `/api/service/` → SDK Service
+- `/api/sdk/admin/` → SDK Admin
 
 健康探针直接访问各实例本机端口，例如：
 
@@ -125,3 +127,6 @@ curl -i http://127.0.0.1:8211/health/ready
 在预发布环境演练进程崩溃、HTTP 假死、MySQL 短暂断连、SIGTERM 和 Worker 任务恢复。不要在生产环境用真实订单做故障注入。
 
 本阶段是单机多进程滚动部署，不提供跨机器故障切换、MySQL 高可用、自动二进制回滚或严格零错误保证。
+
+
+SDK Admin 单实例 `8231` 在重启时管理 API 会短暂不可用；发布脚本不会强行摘除唯一 upstream 节点。首次部署必须先手工准备 `config/sdk-admin.yaml`（与配置中心相同的管理密钥）、`run/nginx/sdk-admin-upstream.conf` 和 Supervisor/Monit/Nginx 运行配置；因为 `ops/` 不随发布包上传，更新仓库不会修改线上系统配置。

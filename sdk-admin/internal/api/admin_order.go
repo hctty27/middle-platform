@@ -66,10 +66,10 @@ type adminOrders struct {
 
 func registerAdminOrderRoutes(mux *http.ServeMux, db *sql.DB) {
 	a := &adminOrders{db:db,gate:make(chan struct{},2),stats:make(map[string]orderStatsEntry)}
-	mux.HandleFunc("GET /api/core/admin/orders",a.limit(a.list))
-	mux.HandleFunc("GET /api/core/admin/orders/stats",a.limit(a.statistics))
-	mux.HandleFunc("GET /api/core/admin/orders/{id}",a.limit(a.detail))
-	mux.HandleFunc("POST /api/core/admin/orders/{id}/retry",a.limit(a.retry))
+	mux.HandleFunc("GET /api/sdk/admin/orders",a.limit(a.list))
+	mux.HandleFunc("GET /api/sdk/admin/orders/stats",a.limit(a.statistics))
+	mux.HandleFunc("GET /api/sdk/admin/orders/{id}",a.limit(a.detail))
+	mux.HandleFunc("POST /api/sdk/admin/orders/{id}/retry",a.limit(a.retry))
 }
 
 func orderAdminError(w http.ResponseWriter, status int, message string) {

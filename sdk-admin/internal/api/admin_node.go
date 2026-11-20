@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"hitall.com/middle-platform/sdk-core/internal/configschema"
+	"hitall.com/middle-platform/sdk-admin/internal/configschema"
 	"io"
 	"net/http"
 	"strconv"
@@ -17,9 +17,9 @@ type adminStore struct{ db *sql.DB }
 
 func registerAdminRoutes(mux *http.ServeMux, db *sql.DB) {
 	h := &adminStore{db: db}
-	mux.HandleFunc("GET /api/core/admin/config-schema/{nodeType}", getConfigSchema)
-	mux.HandleFunc("GET /api/core/admin/node-configs/{id}", h.getNodeConfig)
-	mux.HandleFunc("PUT /api/core/admin/node-configs/{id}", h.putNodeConfig)
+	mux.HandleFunc("GET /api/sdk/admin/config-schema/{nodeType}", getConfigSchema)
+	mux.HandleFunc("GET /api/sdk/admin/node-configs/{id}", h.getNodeConfig)
+	mux.HandleFunc("PUT /api/sdk/admin/node-configs/{id}", h.putNodeConfig)
 	registerChannelAdminRoutes(mux, h)
 	registerServiceAdminRoutes(mux, h)
 }

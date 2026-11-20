@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[A-Za-z0-9._-]+$')]
     [string]$Version,
-    [ValidateSet('all', 'config-center', 'config-center-access', 'sdk-core', 'sdk-service', 'admin')]
+    [ValidateSet('all', 'config-center', 'config-center-access', 'sdk-core', 'sdk-service', 'sdk-admin', 'admin')]
     [string]$Service = 'all',
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'rolling.config.json'),
     [switch]$SkipBuild,

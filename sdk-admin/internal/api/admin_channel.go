@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"hitall.com/middle-platform/sdk-core/internal/configschema"
+	"hitall.com/middle-platform/sdk-admin/internal/configschema"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,12 +45,12 @@ const channelColumns = "id,game_id,code,name,status,config,remark,prod_server_gr
 
 // registerChannelAdminRoutes 注册渠道包管理及环境区服组绑定查询接口。
 func registerChannelAdminRoutes(mux *http.ServeMux, h *adminStore) {
-	mux.HandleFunc("GET /api/core/admin/channel-apps", h.channelApps)
-	mux.HandleFunc("POST /api/core/admin/channel-apps", h.createChannelApp)
-	mux.HandleFunc("PUT /api/core/admin/channel-apps/{id}", h.updateChannelApp)
-	mux.HandleFunc("DELETE /api/core/admin/channel-apps/{id}", h.deleteChannelApp)
-	mux.HandleFunc("GET /api/core/admin/channel-apps/server-groups", h.serverGroupOptions)
-	mux.HandleFunc("GET /api/core/admin/server-groups/{id}/channel-apps", h.serverGroupBindings)
+	mux.HandleFunc("GET /api/sdk/admin/channel-apps", h.channelApps)
+	mux.HandleFunc("POST /api/sdk/admin/channel-apps", h.createChannelApp)
+	mux.HandleFunc("PUT /api/sdk/admin/channel-apps/{id}", h.updateChannelApp)
+	mux.HandleFunc("DELETE /api/sdk/admin/channel-apps/{id}", h.deleteChannelApp)
+	mux.HandleFunc("GET /api/sdk/admin/channel-apps/server-groups", h.serverGroupOptions)
+	mux.HandleFunc("GET /api/sdk/admin/server-groups/{id}/channel-apps", h.serverGroupBindings)
 }
 
 // scanChannel 将数据库可空字段转换为管理接口的可选 JSON 字段。

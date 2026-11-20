@@ -9,6 +9,7 @@ case "$1" in
     config-center-[12]) supervisor_process="config-center:$1" ;;
     sdk-core-[1-2]) supervisor_process="sdk-core:$1" ;;
     sdk-service-[1-4]) supervisor_process="sdk-service:$1" ;;
+    sdk-admin-1) supervisor_process="sdk-admin:$1" ;;
     config-center-access) supervisor_process=$1 ;;
     *) printf 'Invalid Supervisor program name\n' >&2; exit 2 ;;
 esac

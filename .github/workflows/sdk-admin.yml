@@ -1,0 +1,48 @@
+name: sdk-admin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdk-admin/**'
+      - 'shared/**'
+      - '.github/workflows/sdk-admin.yml'
+  pull_request:
+    paths:
+      - 'sdk-admin/**'
+      - 'shared/**'
+      - '.github/workflows/sdk-admin.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      GOWORK: off
+      TEST_SDK_ADMIN_DB_DSN: root:sdk-admin-test@tcp(127.0.0.1:3306)/sdk_admin_test?parseTime=true&loc=UTC
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize test MySQL
+        run: |
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'sdk-admin-test';"
+          mysql -uroot -psdk-admin-test -e "CREATE DATABASE sdk_admin_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: sdk-admin/go.mod
+          cache-dependency-path: |
+            sdk-admin/go.sum
+            shared/go.sum
+      - name: Check module files
+        working-directory: sdk-admin
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: Tests with race detector
+        working-directory: sdk-admin
+        run: go test -race ./...
+      - name: Vet and build
+        working-directory: sdk-admin
+        run: |
+          go vet ./...
+          go build ./cmd/sdk-admin

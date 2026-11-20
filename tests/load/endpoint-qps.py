@@ -102,11 +102,11 @@ def reset_auth_nonce_cache(case_id):
         name = "config-center"
     elif case_id.startswith("core-") and case_id not in (
         "core-config", "core-order-register", "core-payment-duplicate"):
-        name = "sdk-core"
+        name = "sdk-admin"
     if not name:
         return
-    count = 2 if name == "config-center" else (4 if os.environ["LOAD_TOPOLOGY"] == "cluster" else 1)
-    first = 8201 if name == "config-center" else 8211
+    count = 2 if name == "config-center" else 1
+    first = 8201 if name == "config-center" else 8231
     programs = [f"{name}-{i+1}" for i in range(count)]
     subprocess.run(["supervisorctl", "-c", str(root / "supervisor.conf"), "restart", *programs],
                    check=True, timeout=60, stdout=subprocess.DEVNULL)

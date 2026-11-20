@@ -9,10 +9,10 @@ ROUTERS = (
     "config-center-access/internal/api/router.go",
     "sdk-core/internal/api/router.go",
     "sdk-core/internal/api/order.go",
-    "sdk-core/internal/api/admin_channel.go",
-    "sdk-core/internal/api/admin_node.go",
-    "sdk-core/internal/api/admin_order.go",
-    "sdk-core/internal/api/admin_service.go",
+    "sdk-admin/internal/api/admin_channel.go",
+    "sdk-admin/internal/api/admin_node.go",
+    "sdk-admin/internal/api/admin_order.go",
+    "sdk-admin/internal/api/admin_service.go",
     "sdk-service/internal/api/router.go",
 )
 CHI = re.compile(r'\br\.(Get|Post|Put|Patch|Delete)\("(/[^"]+)"')

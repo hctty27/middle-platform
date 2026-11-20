@@ -22,7 +22,7 @@ case "$action" in validate|drain|enable|recover) ;; *) printf 'Invalid upstream 
 declare -A selected_peers=() selected_groups=()
 groups=() ports=() files=() upstream_names=() targets=() downs=()
 for peer in "${peers[@]}"; do
-    if [[ ! "$peer" =~ ^(config-center|sdk-core|sdk-service):([0-9]+)$ ]]; then
+    if [[ ! "$peer" =~ ^(config-center|sdk-core|sdk-service|sdk-admin):([0-9]+)$ ]]; then
         printf 'Unsupported upstream group or port: %s\n' "$peer" >&2
         exit 2
     fi
@@ -41,6 +41,8 @@ for peer in "${peers[@]}"; do
             expected_count=2; upstream_name=sdk_core; file="$root/run/nginx/sdk-core-upstream.conf" ;;
         sdk-service:8221|sdk-service:8222|sdk-service:8223|sdk-service:8224)
             expected_count=4; upstream_name=sdk_service; file="$root/run/nginx/sdk-service-upstream.conf" ;;
+        sdk-admin:8231)
+            expected_count=1; upstream_name=sdk_admin; file="$root/run/nginx/sdk-admin-upstream.conf" ;;
         *) printf 'Unsupported upstream group or port: %s:%s\n' "$group" "$port" >&2; exit 2 ;;
     esac
     for directory in "$root" "$root/run" "$root/run/nginx"; do

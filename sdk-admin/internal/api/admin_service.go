@@ -22,10 +22,10 @@ type serviceEntry struct {
 func validAdminEnv(env string) bool { return env == "prod" || env == "test" || env == "review" }
 
 func registerServiceAdminRoutes(mux *http.ServeMux, h *adminStore) {
-	mux.HandleFunc("GET /api/core/admin/services", h.services)
-	mux.HandleFunc("PUT /api/core/admin/services/{id}", h.updateService)
-	mux.HandleFunc("GET /api/core/admin/channel-apps/{id}/services", h.channelServices)
-	mux.HandleFunc("PUT /api/core/admin/channel-apps/{id}/services/{serviceId}", h.updateChannelService)
+	mux.HandleFunc("GET /api/sdk/admin/services", h.services)
+	mux.HandleFunc("PUT /api/sdk/admin/services/{id}", h.updateService)
+	mux.HandleFunc("GET /api/sdk/admin/channel-apps/{id}/services", h.channelServices)
+	mux.HandleFunc("PUT /api/sdk/admin/channel-apps/{id}/services/{serviceId}", h.updateChannelService)
 }
 func (h *adminStore) services(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.QueryContext(r.Context(), `SELECT id,code,name,description,enabled,created_at,updated_at FROM sdk_service ORDER BY id`)
