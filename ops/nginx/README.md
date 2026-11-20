@@ -167,7 +167,7 @@ deploy ALL=(root) NOPASSWD: /usr/sbin/nginx -t, /usr/sbin/nginx -T, /usr/bin/sys
 
 ## 被动健康检查与请求重试
 
-四个 upstream 使用 `least_conn`、`max_fails=1 fail_timeout=10s`，keepalive 分别为 Config Center 8、SDK Core 16、SDK Service 16。keepalive 是每个 worker 的空闲连接缓存上限，不是总连接池。
+`config_center`、`sdk_core`、`sdk_service` 使用 `least_conn`；四组 upstream 的实例均配置 `max_fails=1 fail_timeout=10s`。keepalive 分别为 Config Center 16、SDK Core 64、SDK Service 64、SDK Admin 8。keepalive 是每个 worker 的空闲连接缓存上限，不是总连接池。
 
 Nginx Open Source 观察真实代理请求的连接/超时失败，并在失败窗口内暂时避开故障实例；它不会主动轮询 `/health/ready`。HTTP 503 会直接返回，不作为 upstream 摘除条件，避免共享 MySQL 故障导致全部实例被误摘除。
 
