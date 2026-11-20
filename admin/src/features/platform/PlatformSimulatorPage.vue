@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { apiErrorMessage, sdkApi, sdkServiceApi } from '../../api/http'
+import { apiErrorMessage, sdkApi, sdkAdminApi, sdkServiceApi } from '../../api/http'
 import { generateNonce, signPaymentCallback, signServiceRequest } from './signature'
 
 type Environment = 'test' | 'review' | 'prod'
@@ -425,7 +425,7 @@ async function loadApps(): Promise<void> {
 
   loadingApps.value = true
   try {
-    const { data } = await sdkApi.get<ChannelApp[]>('/admin/channel-apps', {
+    const { data } = await sdkAdminApi.get<ChannelApp[]>('/admin/channel-apps', {
       params: { gameId: props.gameId }
     })
     if (request !== appRequestSequence) return

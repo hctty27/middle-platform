@@ -1,4 +1,4 @@
-import { api, sdkApi } from './http'
+import { api, sdkAdminApi } from './http'
 
 export type ConfigScope = 'base' | 'sdk'
 export interface FieldSchema {
@@ -33,7 +33,7 @@ export function getConfigSchema(scope: ConfigScope, nodeType: string): Promise<S
   const key = scope + ':' + nodeType
   const existing = cached.get(key)
   if (existing) return existing
-  const client = scope === 'sdk' ? sdkApi : api
+  const client = scope === 'sdk' ? sdkAdminApi : api
   const request = client.get<SchemaResponse>('/admin/config-schema/' + encodeURIComponent(nodeType))
     .then(response => response.data)
     .catch((error: unknown) => { cached.delete(key); throw error })
