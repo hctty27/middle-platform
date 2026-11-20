@@ -259,6 +259,19 @@ exec bash "$@"
         plan = ",".join(f"sdk-service-{i}:{8220 + i}" for i in range(1, 6))
         self.assert_rejected(service="sdk-service", restart=True, plan=plan)
 
+    def test_sdk_admin_single_instance_restart_keeps_upstream_available(self):
+        # A one-peer management upstream cannot be drained safely.
+        self.make_package(frontend=False, only="sdk-admin")
+        result = self.run_publish(service="sdk-admin", restart=True,
+                                  plan="sdk-admin-1:8231")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Healthy: sdk-admin-1 (port 8231)", result.stdout)
+        events = self.events.read_text(encoding="utf-8").splitlines()
+        self.assertIn("validate sdk-admin 8231", events)
+        self.assertIn("restart sdk-admin:sdk-admin-1", events)
+        self.assertNotIn("drain sdk-admin 8231", events)
+        self.assertNotIn("enable sdk-admin 8231", events)
+
     def test_full_publish_restarts_only_configured_instances(self):
         self.make_package(frontend=False)
         full_plan = ",".join(
