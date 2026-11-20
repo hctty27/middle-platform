@@ -20,7 +20,6 @@ import (
 	"hitall.com/middle-platform/sdk-core/internal/store"
 	"hitall.com/middle-platform/shared/bootstrap"
 	"hitall.com/middle-platform/shared/logging"
-	"hitall.com/middle-platform/shared/signature"
 )
 
 func openDB(cfg settings.Database) (*sql.DB, error) {
@@ -127,11 +126,7 @@ func Run(configPath string) error {
 	server := &http.Server{
 		Addr: cfg.Server.Address,
 		Handler: logging.HTTP(cfg.Log, health.Middleware(
-			signature.AdminMiddleware(
-				api.RouterWithAdminOptions(service.NewConfigService(publicReader), db, routerOptions, orders),
-				"/api/core/admin",
-				cfg.AdminAuth.Secret,
-			),
+			api.RouterWithOptions(service.NewConfigService(publicReader), db, routerOptions, orders),
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

@@ -67,29 +67,6 @@ func TestMigratedEventReportURLRejected(t *testing.T) {
 	}
 }
 
-func TestAdminSecretConfiguration(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	data := "database:\n  dsn: test-dsn\nadminAuth:\n  secret: file-secret-0123456789abcdef0123456789\n"
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.AdminAuth.Secret != "file-secret-0123456789abcdef0123456789" {
-		t.Fatal("YAML 管理密钥加载失败")
-	}
-	t.Setenv("ADMIN_AUTH_SECRET", "env-secret-0123456789abcdef0123456789")
-	cfg, err = Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.AdminAuth.Secret != "env-secret-0123456789abcdef0123456789" {
-		t.Fatal("管理密钥环境变量覆盖失败")
-	}
-}
-
 func TestRemovedAdminAuthEnabledRejected(t *testing.T) {
 	for _, enabled := range []string{"true", "false"} {
 		path := filepath.Join(t.TempDir(), "config.yaml")

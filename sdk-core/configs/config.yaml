@@ -4,9 +4,6 @@ database:
   maxOpenConns: 30
   maxIdleConns: 10
 
-adminAuth:
-  secret: ""
-
 # 5s 缓存会延迟配置、停用及密钥变更的可见性；如需实时读取可改为 0s。
 configCache:
   ttl: 5s

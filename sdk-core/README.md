@@ -1,6 +1,6 @@
 # sdk-core · SDK 核心服务
 
-直接访问共享权威库 `config_center`，负责 SDK 节点配置、渠道包与功能开关管理，以及配置查询、订单登记、平台支付回调和异步游戏发货。事件上报与订阅消息已归 `sdk-service` 处理。
+直接访问共享权威库 `config_center`，负责 SDK 配置查询、订单登记、平台支付回调和异步游戏发货。事件上报与订阅消息已归 `sdk-service` 处理。
 
 ## 主要入口
 
@@ -9,13 +9,6 @@
 | GET | `/api/core/config/{env}/{appid}` | 获取 SDK 配置 |
 | POST | `/api/core/orders/{env}/{appid}` | 登记游戏订单 |
 | POST | `/api/core/pay/notify/{appid}` | 平台支付回调 |
-| GET/PUT | `/api/core/admin/node-configs/{id}` | SDK 节点配置管理 |
-| GET/POST | `/api/core/admin/channel-apps` | 渠道包查询与新增 |
-| GET/PUT | `/api/core/admin/services[/{id}]` | 服务开关查询与更新 |
-| GET | `/api/core/admin/orders` | 按游戏查询订单（游标分页） |
-| GET | `/api/core/admin/orders/stats` | 今日订单统计及历史发货积压 |
-| GET | `/api/core/admin/orders/{id}` | 订单详情 |
-| POST | `/api/core/admin/orders/{id}/retry` | 提前安排失败订单补偿 |
 
 游戏主动登记订单及中台发货通知均使用 HMAC-SHA-256，绑定方法、编码路径、AppID、时间戳、nonce 和原始请求体。代理不得改写签名路径；时间窗口不等于 nonce 防重放。
 
@@ -33,7 +26,7 @@ go run ./cmd/sdk-core -config configs/config-dev.yaml
 
 新库按 [数据库文档](../admin/public/docs/guide.html#database) 初始化，旧库手动检查增量 SQL；服务不会执行 DDL。订单与发货必须幂等，支付回调是否已成功完成需基于持久化状态判断。公开配置接口固定返回 `snKey`、`zoneKey` 和可选 `tsKey`，直接读取所需数据库字段，不再使用响应映射文件。需要增加公开字段时同步更新查询、DTO、测试和接口文档。
 
-`/api/core/admin/**` 始终使用 HMAC-SHA256，密钥为 `adminAuth.secret`，至少 32 字节，并与配置中心使用相同管理密钥；生产仍需网关隔离并启用 HTTPS，不应公开暴露管理路由。
+SDK 管理接口已迁移至独立的 `sdk-admin` 模块，路径为 `/api/sdk/admin/**`。SDK Core 不再加载管理密钥或注册管理路由。
 
 ## 并发保护与回退
 
@@ -58,9 +51,8 @@ go build ./cmd/sdk-core
 
 ## 订单管理
 
-订单管理复用 `game_order`、管理 HMAC 和现有 Worker。列表不指定日期时查询全部历史订单，每页 20 条（最多 100）；日期区间按北京时间展示和选择，不限制跨度，显式传入日期须成对且结束晚于开始；所有查询必填 `gameId`，环境和 AppID 可筛选。统计仅按游戏、环境、AppID，今日支付基于 `paid_at`，积压含历史订单，进程内缓存 60 秒（最多 256 个键）。四个接口共用独立的每实例 2 个在途额度和 3 秒请求预算，不改变公开接口的并发策略。429 表示订单管理繁忙，503 表示数据库或查询不可用。
+订单管理页面与管理 API 已迁移至独立的 `sdk-admin` 模块。订单登记、支付确认、游戏发货及持久化补偿 Worker 继续由 SDK Core 承担。手动补偿由 SDK Admin 更新任务调度时间，SDK Core Worker 读取同一数据库后执行。
 
-手动补偿只能提前调度已支付、通知失败且尚未到期的订单；最近一次领取后 60 秒内禁止提前调度。条件更新与 Worker 领取互斥，不直接发货、不改变金额、支付状态或尝试序号。成功通知是终态；游戏仍须幂等处理。日志记录请求来源及调度结果，共享管理密钥不提供独立人员身份。已有库低峰手工审核执行 `db/incremental/V0021__config_center_order_admin_indexes.sql`，新库使用全量 SQL。
 
 ## SDK 配置热点路径
 生产模板设置 `log.accessEnabled: false`：普通成功的 HTTP 访问日志默认不输出；请求错误、panic 和慢请求仍记录，`X-Request-ID` 照常返回。若显式开启 `accessEnabled: true`，所有 HTTP 访问均记录，不再配置按路由采样；请避免在高 QPS 正式环境长期开启。订单登记、支付确认和发货结果的业务日志由各自业务逻辑控制，不受访问日志开关影响。删除了旧的 `sdkConfigSampleEvery` / `LOG_SDK_CONFIG_SAMPLE_EVERY`，私有 YAML 和环境变量需同步清理，配置变更后重启生效。
