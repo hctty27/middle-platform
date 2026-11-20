@@ -230,7 +230,7 @@ func (a *adminOrders) statistics(w http.ResponseWriter,r *http.Request) {
 	if err!=nil {orderAdminDBError(w,r,err);return}
 	a.mu.Lock()
 	if len(a.stats)>=256 {clear(a.stats)}
-	a.stats[key]=orderStatsEntry{value:s,expires:now.Add(time.Minute)}
+	a.stats[key]=orderStatsEntry{value:s,expires:now.Add(5*time.Second)}
 	a.mu.Unlock()
 	writeJSON(w,200,response{Code:0,Message:"success",Data:s})
 }
