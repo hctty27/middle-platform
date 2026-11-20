@@ -1,0 +1,12 @@
+# SDK Admin：独立管理流量，建议仅监听本机，并通过受控 Nginx 网关访问。
+database:
+  dsn: ""
+  maxOpenConns: 10
+  maxIdleConns: 5
+
+adminAuth:
+  secret: ""
+
+log:
+  level: info
+  accessEnabled: false
