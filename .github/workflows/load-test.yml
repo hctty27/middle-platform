@@ -41,6 +41,7 @@ on:
       - '.github/workflows/load-test.yml'
       - 'tests/load/**'
       - 'sdk-core/**'
+      - 'sdk-admin/**'
       - 'sdk-service/**'
       - 'config-center/**'
       - 'shared/**'

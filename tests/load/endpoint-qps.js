@@ -109,28 +109,28 @@ function requestPlan(seq) {
   case 'config-switch-subscriber': return { ...base, mode:'admin',
     path:'/api/config/admin/subscribers/'+localSubscriber+'/enabled', body:{enabled:false} };
   case 'config-delete-subscriber': return { ...base, mode:'admin', path:'/api/config/admin/subscribers/'+group };
-  case 'core-schema': return { ...base, mode:'admin', path:'/api/core/admin/config-schema/game' };
-  case 'core-node-config': return { ...base, mode:'admin', path:'/api/core/admin/node-configs/1' };
-  case 'core-node-config-update': return { ...base, mode:'admin', path:'/api/core/admin/node-configs/1',
+  case 'core-schema': return { ...base, mode:'admin', path:'/api/sdk/admin/config-schema/game' };
+  case 'core-node-config': return { ...base, mode:'admin', path:'/api/sdk/admin/node-configs/1' };
+  case 'core-node-config-update': return { ...base, mode:'admin', path:'/api/sdk/admin/node-configs/1',
     body:{config:'{"gameSecret":"runner-load-game-only"}'} };
-  case 'core-channels': return { ...base, mode:'admin', path:'/api/core/admin/channel-apps?gameId=1' };
+  case 'core-channels': return { ...base, mode:'admin', path:'/api/sdk/admin/channel-apps?gameId=1' };
   case 'core-server-groups': return { ...base, mode:'admin',
-    path:'/api/core/admin/channel-apps/server-groups?envType=test&gameId=1' };
-  case 'core-server-bound': return { ...base, mode:'admin', path:'/api/core/admin/server-groups/3/channel-apps' };
-  case 'core-create-channel': return { ...base, mode:'admin', path:'/api/core/admin/channel-apps',
+    path:'/api/sdk/admin/channel-apps/server-groups?envType=test&gameId=1' };
+  case 'core-server-bound': return { ...base, mode:'admin', path:'/api/sdk/admin/server-groups/3/channel-apps' };
+  case 'core-create-channel': return { ...base, mode:'admin', path:'/api/sdk/admin/channel-apps',
     body:{gameId:1,code:'qps-app-'+unique,name:'QPS channel',status:1,
       config:'{"appSecret":"runner-qps-platform-only"}',testServerGroupId:3} };
-  case 'core-update-channel': return { ...base, mode:'admin', path:'/api/core/admin/channel-apps/1',
+  case 'core-update-channel': return { ...base, mode:'admin', path:'/api/sdk/admin/channel-apps/1',
     body:{name:'Load App',status:1,
       config:'{"appSecret":"runner-load-platform-only","tsKey":"load-ts"}',testServerGroupId:3} };
-  case 'core-delete-channel': return { ...base, mode:'admin', path:'/api/core/admin/channel-apps/'+group };
-  case 'core-services': return { ...base, mode:'admin', path:'/api/core/admin/services' };
+  case 'core-delete-channel': return { ...base, mode:'admin', path:'/api/sdk/admin/channel-apps/'+group };
+  case 'core-services': return { ...base, mode:'admin', path:'/api/sdk/admin/services' };
   case 'core-switch-service': return { ...base, mode:'admin',
-    path:'/api/core/admin/services/'+roleServiceID, body:{enabled:true} };
+    path:'/api/sdk/admin/services/'+roleServiceID, body:{enabled:true} };
   case 'core-channel-services': return { ...base, mode:'admin',
-    path:'/api/core/admin/channel-apps/1/services?env=test' };
+    path:'/api/sdk/admin/channel-apps/1/services?env=test' };
   case 'core-switch-channel-service': return { ...base, mode:'admin',
-    path:'/api/core/admin/channel-apps/1/services/'+roleServiceID+'?env=test',
+    path:'/api/sdk/admin/channel-apps/1/services/'+roleServiceID+'?env=test',
     body:{enabled:true,config:{}} };
   case 'core-config': return { ...base, path:'/api/core/config/test/'+app };
   case 'service-user-check': return { ...base, mode:'game', path:'/api/service/user/check/test',
@@ -150,10 +150,10 @@ function requestPlan(seq) {
   case 'core-payment-duplicate': return { ...base, mode:'payment', path:'/api/core/pay/notify/'+app,
     body:{order_no:platformOrderNO,game_order_id:gameOrderID,
       amount:orderAmount,attach:'runner-test',paid_at:new Date().toISOString()} };
-  case 'core-orders': return { ...base, mode:'admin', path:'/api/core/admin/orders?gameId=1&pageSize=20' };
-  case 'core-order-stats': return { ...base, mode:'admin', path:'/api/core/admin/orders/stats?gameId=1' };
-  case 'core-order-detail': return { ...base, mode:'admin', path:'/api/core/admin/orders/'+order+'?gameId=1' };
-  case 'core-order-retry-reject': return { ...base, mode:'admin', path:'/api/core/admin/orders/'+order+'/retry?gameId=1' };
+  case 'core-orders': return { ...base, mode:'admin', path:'/api/sdk/admin/orders?gameId=1&pageSize=20' };
+  case 'core-order-stats': return { ...base, mode:'admin', path:'/api/sdk/admin/orders/stats?gameId=1' };
+  case 'core-order-detail': return { ...base, mode:'admin', path:'/api/sdk/admin/orders/'+order+'?gameId=1' };
+  case 'core-order-retry-reject': return { ...base, mode:'admin', path:'/api/sdk/admin/orders/'+order+'/retry?gameId=1' };
   case 'access-webhook': return { ...base, origin:access, mode:'access', path:'/internal/config/callback',
     body:{epoch:currentEpoch,revision:currentRevision} };
   case 'access-revision': return { ...base, origin:access, mode:'access', path:'/api/access/revision' };

@@ -8,7 +8,7 @@ mkdir -p "$LOAD_DIR"/{bin,config,logs,results}
 export GOWORK=off
 build_flags=()
 if [[ "$LOAD_PROFILE" == capacity || "$LOAD_PROFILE" == traffic-multi ]]; then build_flags=(-tags loadtest); fi
-for svc in config-center sdk-core sdk-service; do
+for svc in config-center sdk-core sdk-service sdk-admin; do
   (cd "$svc" && go build "${build_flags[@]}" -trimpath -o "$LOAD_DIR/bin/$svc" "./cmd/$svc")
   cp "$svc/configs/config.yaml" "$LOAD_DIR/config/$svc.yaml"
 done
@@ -25,7 +25,7 @@ if [[ "$LOAD_PROFILE" == traffic-multi || "$LOAD_PROFILE" == traffic-quick ]]; t
   [[ "$count" == 512 ]] || { echo "::error::Missing multi-channel fixtures"; exit 1; }
 fi
 export CONFIG_DB_DSN='root:runner-load-only@tcp(127.0.0.1:3306)/config_center?parseTime=true&loc=UTC'
-export SDK_CORE_DB_DSN="$CONFIG_DB_DSN" SDK_SERVICE_DB_DSN="$CONFIG_DB_DSN"
+export SDK_CORE_DB_DSN="$CONFIG_DB_DSN" SDK_SERVICE_DB_DSN="$CONFIG_DB_DSN" SDK_ADMIN_DB_DSN="$CONFIG_DB_DSN"
 export ADMIN_AUTH_SECRET='runner-load-admin-only-0123456789abcdef'
 # Keep service defaults; only point the platform URL at our local mock.
 sed -i 's|userCheckURL: ""|userCheckURL: "http://127.0.0.1:8290/cp/user/check"|' "$LOAD_DIR/config/sdk-service.yaml"

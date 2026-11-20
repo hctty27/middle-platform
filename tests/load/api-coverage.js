@@ -103,7 +103,7 @@ function write(route, path, body, mode = 'admin', status = 204, predicate = null
 
 export default function () {
   // Health endpoints, including the optional config-center-access replica.
-  for (const port of [8201, 8211, 8221, 8081]) {
+  for (const port of [8201, 8211, 8221, 8231, 8081]) {
     const origin = 'http://127.0.0.1:' + port;
     test('GET /health/live', '/health/live', null, '', 200, good, null, origin);
     test('GET /health/ready', '/health/ready', null, '', 200, good, null, origin);
@@ -166,40 +166,40 @@ export default function () {
     '/api/config/admin/subscribers/' + row.id + '/enabled', { enabled: false });
   write('DELETE /api/config/admin/subscribers/{id}', '/api/config/admin/subscribers/' + row.id, null);
 
-  // SDK Core management: schema, node config, channel CRUD, bindings and service switches.
-  get('GET /api/core/admin/config-schema/{nodeType}', '/api/core/admin/config-schema/game', 'admin',
+  // SDK Admin management: schema, node config, channel CRUD, bindings and service switches.
+  get('GET /api/sdk/admin/config-schema/{nodeType}', '/api/sdk/admin/config-schema/game', 'admin',
     d => d && d.nodeType === 'game');
-  get('GET /api/core/admin/node-configs/{id}', '/api/core/admin/node-configs/' + game, 'admin', good);
-  write('PUT /api/core/admin/node-configs/{id}', '/api/core/admin/node-configs/' + game,
+  get('GET /api/sdk/admin/node-configs/{id}', '/api/sdk/admin/node-configs/' + game, 'admin', good);
+  write('PUT /api/sdk/admin/node-configs/{id}', '/api/sdk/admin/node-configs/' + game,
     { config: '{"gameSecret":"runner-full-api-game-only"}' }, 'admin', 200, good);
-  get('GET /api/core/admin/channel-apps', '/api/core/admin/channel-apps?gameId=1', 'admin', list);
-  get('GET /api/core/admin/channel-apps/server-groups',
-    '/api/core/admin/channel-apps/server-groups?envType=test&gameId=1', 'admin', list);
-  get('GET /api/core/admin/server-groups/{id}/channel-apps',
-    '/api/core/admin/server-groups/3/channel-apps', 'admin', list);
-  const channel = idOf(write('POST /api/core/admin/channel-apps', '/api/core/admin/channel-apps', {
+  get('GET /api/sdk/admin/channel-apps', '/api/sdk/admin/channel-apps?gameId=1', 'admin', list);
+  get('GET /api/sdk/admin/channel-apps/server-groups',
+    '/api/sdk/admin/channel-apps/server-groups?envType=test&gameId=1', 'admin', list);
+  get('GET /api/sdk/admin/server-groups/{id}/channel-apps',
+    '/api/sdk/admin/server-groups/3/channel-apps', 'admin', list);
+  const channel = idOf(write('POST /api/sdk/admin/channel-apps', '/api/sdk/admin/channel-apps', {
     gameId: game, code: 'cov-app-' + suffix, name: 'Coverage channel', status: 1,
     config: '{"appSecret":"runner-full-api-app-only"}', testServerGroupId: group,
   }, 'admin', 201, good), 'channel');
-  write('PUT /api/core/admin/channel-apps/{id}', '/api/core/admin/channel-apps/' + channel, {
+  write('PUT /api/sdk/admin/channel-apps/{id}', '/api/sdk/admin/channel-apps/' + channel, {
     name: 'Coverage channel updated', status: 1, config: '{"appSecret":"runner-full-api-app-only"}',
     testServerGroupId: group,
   }, 'admin', 200, good);
-  const services = get('GET /api/core/admin/services', '/api/core/admin/services', 'admin', list).data || [];
+  const services = get('GET /api/sdk/admin/services', '/api/sdk/admin/services', 'admin', list).data || [];
   const role = services.find(x => x.code === 'role_query');
   if (!role) throw new Error('role_query catalog fixture missing');
-  write('PUT /api/core/admin/services/{id}', '/api/core/admin/services/' + role.id, { enabled: true });
-  get('GET /api/core/admin/channel-apps/{id}/services',
-    '/api/core/admin/channel-apps/' + channel + '/services?env=test', 'admin', list);
-  write('PUT /api/core/admin/channel-apps/{id}/services/{serviceId}',
-    '/api/core/admin/channel-apps/' + channel + '/services/' + role.id + '?env=test',
+  write('PUT /api/sdk/admin/services/{id}', '/api/sdk/admin/services/' + role.id, { enabled: true });
+  get('GET /api/sdk/admin/channel-apps/{id}/services',
+    '/api/sdk/admin/channel-apps/' + channel + '/services?env=test', 'admin', list);
+  write('PUT /api/sdk/admin/channel-apps/{id}/services/{serviceId}',
+    '/api/sdk/admin/channel-apps/' + channel + '/services/' + role.id + '?env=test',
     { enabled: true, config: {} });
   // Detach before deleting the channel, group, region and game.
-  write('PUT /api/core/admin/channel-apps/{id}', '/api/core/admin/channel-apps/' + channel,
+  write('PUT /api/sdk/admin/channel-apps/{id}', '/api/sdk/admin/channel-apps/' + channel,
     { name: 'Coverage channel updated', status: 1,
       config: '{"appSecret":"runner-full-api-app-only"}', testServerGroupId: null },
     'admin', 200, good);
-  write('DELETE /api/core/admin/channel-apps/{id}', '/api/core/admin/channel-apps/' + channel, null);
+  write('DELETE /api/sdk/admin/channel-apps/{id}', '/api/sdk/admin/channel-apps/' + channel, null);
   write('DELETE /api/config/admin/nodes/{id}', '/api/config/admin/nodes/' + group, null);
   write('DELETE /api/config/admin/nodes/{id}', '/api/config/admin/nodes/' + region, null);
   write('DELETE /api/config/admin/nodes/{id}', '/api/config/admin/nodes/' + game, null);
@@ -238,19 +238,19 @@ export default function () {
     'payment', 200, (_d, r) => /^[0-9a-f]{16}$/.test(r.body),
     { orderNo, orderID });
   if (!payment.ok) throw new Error('payment fixture missing');
-  const orders = get('GET /api/core/admin/orders',
-    '/api/core/admin/orders?gameId=1&gameOrderId=' + orderID, 'admin',
+  const orders = get('GET /api/sdk/admin/orders',
+    '/api/sdk/admin/orders?gameId=1&gameOrderId=' + orderID, 'admin',
     d => success(d) && Array.isArray(d.data.items)).data;
   if (!orders || !orders.data.items.length) throw new Error('order missing in admin list');
   const storedID = orders.data.items[0].id;
-  get('GET /api/core/admin/orders/stats', '/api/core/admin/orders/stats?gameId=1', 'admin',
+  get('GET /api/sdk/admin/orders/stats', '/api/sdk/admin/orders/stats?gameId=1', 'admin',
     d => success(d) && typeof d.data.registered === 'number');
-  get('GET /api/core/admin/orders/{id}', '/api/core/admin/orders/' + storedID + '?gameId=1',
+  get('GET /api/sdk/admin/orders/{id}', '/api/sdk/admin/orders/' + storedID + '?gameId=1',
     'admin', d => success(d) && d.data.gameOrderId === orderID);
   // On a fully delivered order, retry correctly rejects with 409; the happy
   // path is separately verified in dedicated order-worker integration tests.
-  test('POST /api/core/admin/orders/{id}/retry',
-    '/api/core/admin/orders/' + storedID + '/retry?gameId=1',
+  test('POST /api/sdk/admin/orders/{id}/retry',
+    '/api/sdk/admin/orders/' + storedID + '/retry?gameId=1',
     null, 'admin', 409, d => d && d.code === 409);
 
   // Confirm changes, then verify the optional replica read and signed webhook.

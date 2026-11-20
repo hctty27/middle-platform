@@ -5,11 +5,12 @@ import sys
 
 root = pathlib.Path(sys.argv[1]).resolve()
 mode = sys.argv[2]
-counts = {"compact": (2, 1, 1), "cluster": (2, 4, 6)}[mode]
+counts = {"compact": (2, 1, 1, 1), "cluster": (2, 4, 6, 1)}[mode]
 services = (
     ("config-center", "CONFIG_GO_ADDR", 8201, "config"),
     ("sdk-core", "SDK_CORE_ADDR", 8211, "core"),
     ("sdk-service", "SDK_SERVICE_ADDR", 8221, "service"),
+    ("sdk-admin", "SDK_ADMIN_ADDR", 8231, "sdk/admin"),
 )
 supervisor = [
     f"[unix_http_server]\nfile={root}/supervisor.sock\nchmod=0700",

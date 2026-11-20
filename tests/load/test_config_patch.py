@@ -12,8 +12,8 @@ class ConfigPatchTests(unittest.TestCase):
         self.assertIn("  maxOpenConns: 32\n", changed)
         self.assertIn("  maxIdleConns: 10\n", changed)
         self.assertIn("  accessEnabled: true\n", changed)
-        self.assertEqual(text.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0],
-                         changed.split("orderNotify:\n", 1)[1].split("configCache:\n", 1)[0])
+        self.assertEqual(text.split("orderNotify:\n", 1)[1].split("\nlog:\n", 1)[0],
+                         changed.split("orderNotify:\n", 1)[1].split("\nlog:\n", 1)[0])
         self.assertEqual(core_settings(changed, False, 30), text)
 
     def test_missing_and_duplicate_fail(self):
@@ -28,13 +28,14 @@ class ConfigPatchTests(unittest.TestCase):
             core_settings(fixture, 10, 32)
 
 
-    def test_all_four_yaml_logging_templates_match_confirmed_plan(self):
+    def test_all_five_yaml_logging_templates_match_confirmed_plan(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         expected = {
             "config-center": "true",
             "config-center-access": "true",
             "sdk-core": "false",
             "sdk-service": "false",
+            "sdk-admin": "false",
         }
         for module, enabled in expected.items():
             with self.subTest(service=module):
