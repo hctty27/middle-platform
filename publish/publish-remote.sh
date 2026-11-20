@@ -13,7 +13,7 @@ restart=${4:-0}
 service=${5:-all}
 plan=${6:--}
 case "$service" in
-    all|config-center|config-center-access|sdk-core|sdk-service|admin) ;;
+    all|config-center|config-center-access|sdk-core|sdk-service|sdk-admin|admin) ;;
     *) printf 'Invalid service selector\n' >&2; exit 2 ;;
 esac
 [[ "$restart" == 0 || "$restart" == 1 ]] || { printf 'Invalid restart flag\n' >&2; exit 2; }
@@ -72,7 +72,7 @@ done < "$stage/types"
 mkdir -- "$stage/unpacked"
 tar --no-same-owner -xzpf "$archive" -C "$stage/unpacked"
 has_binary=0
-for binary in config-center config-center-access sdk-core sdk-service; do
+for binary in config-center config-center-access sdk-core sdk-service sdk-admin; do
     if [[ -e "$stage/unpacked/bin/$binary" ]]; then
         if [[ ! -f "$stage/unpacked/bin/$binary" || ! -x "$stage/unpacked/bin/$binary" ]]; then
             printf 'Missing or non-executable binary: %s\n' "$binary" >&2
@@ -147,7 +147,7 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
     declare -A seen=()
     IFS=',' read -r -a requested <<< "$plan"
     for entry in "${requested[@]}"; do
-        if [[ ! "$entry" =~ ^(config-center-access|config-center|sdk-core|sdk-service)(-[1-9][0-9]*)?:([0-9]{1,5})$ ]]; then
+        if [[ ! "$entry" =~ ^(config-center-access|config-center|sdk-core|sdk-service|sdk-admin)(-[1-9][0-9]*)?:([0-9]{1,5})$ ]]; then
             printf 'Invalid Supervisor plan entry: %s\n' "$entry" >&2
             exit 1
         fi
@@ -163,6 +163,7 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
             sdk-core-1:8211|sdk-core-2:8212) group=sdk-core ;;
             sdk-service-1:8221|sdk-service-2:8222|sdk-service-3:8223|sdk-service-4:8224) group=sdk-service ;;
             config-center-access:8291) group=none ;;
+            sdk-admin-1:8231) group=sdk-admin ;;
             *) printf 'Supervisor process and health port do not match: %s:%s\n' "$program" "$port" >&2; exit 1 ;;
         esac
         if [[ -n "${seen[$program]:-}" ]]; then
@@ -184,11 +185,13 @@ if [[ "$restart" == 1 && "$service" != admin ]]; then
         all)
             required=(config-center-1 config-center-2
                 sdk-core-1 sdk-core-2
-                sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4)
+                sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4
+                sdk-admin-1)
             ;;
         config-center) required=(config-center-1 config-center-2) ;;
         sdk-core) required=(sdk-core-1 sdk-core-2) ;;
         sdk-service) required=(sdk-service-1 sdk-service-2 sdk-service-3 sdk-service-4) ;;
+        sdk-admin) required=(sdk-admin-1) ;;
         config-center-access) required=(config-center-access) ;;
     esac
     for required_program in "${required[@]}"; do
@@ -428,12 +431,14 @@ rollout_one() {
     port=${ports[$index]}
     group=${groups[$index]}
     if ! needs_restart "$index"; then return 0; fi
-    if [[ "$group" != none ]]; then
+    # sdk-admin currently has only one peer: do not drain the sole upstream.
+    # Its restart has a brief management-only outage; other service groups remain online.
+    if [[ "$group" != none && "$group" != sdk-admin ]]; then
         printf 'Draining %s from Nginx...\n' "$program"
         run_nginx_control drain "$group" "$port"
     fi
     restart_instance "$index" || exit 1
-    if [[ "$group" != none ]]; then
+    if [[ "$group" != none && "$group" != sdk-admin ]]; then
         run_nginx_control enable "$group" "$port"
         printf 'Restored %s to Nginx traffic\n' "$program"
     fi
@@ -453,7 +458,7 @@ if [[ -n "${programs[0]:-}" ]]; then
         pending=()
         access_indices=()
         for index in "${!programs[@]}"; do
-            if [[ "${groups[$index]}" == none ]]; then
+            if [[ "${groups[$index]}" == none || "${groups[$index]}" == sdk-admin ]]; then
                 access_indices+=("$index")
             else
                 pending+=("$index")
