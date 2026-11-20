@@ -4,7 +4,6 @@ package settings
 import (
  "errors"
  "fmt"
- "os"
  "strings"
 
  "hitall.com/middle-platform/shared/bootstrap"
